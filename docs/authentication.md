@@ -27,7 +27,7 @@ curl -X POST http://127.0.0.1:3000/v1/bootstrap \
   --data '{"legalName":"NIQ","displayName":"NIQ","slug":"niq","adminEmail":"admin@example.com","adminDisplayName":"NIQ Admin","adminPassword":"replace-with-a-strong-local-password","userLimit":null}'
 ```
 
-After it succeeds, sign in at `POST /v1/auth/sign-in`, read the development OTP from the API console, and submit it to `POST /v1/auth/mfa/verify`. The browser frontend will perform these calls once connected.
+After it succeeds, sign in through the browser, read the development OTP from the API console, and complete the MFA screen. The frontend validates and performs the sign-in, MFA, invitation-acceptance, session-check and sign-out calls through the corresponding `/v1/auth/*` endpoints.
 
 ## Security boundaries
 

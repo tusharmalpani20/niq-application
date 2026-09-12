@@ -33,4 +33,6 @@ This is a foundation, not a production-ready clinical system. Local authenticati
 
 Clinical scoring belongs exclusively to the scoring service and no temporary score is calculated here.
 
+The current clinical workspace screens are a responsive workflow prototype backed by pseudonymous sample rows. Authentication is connected to the API; patient, assessment, facility, user and branding screens must be connected to their repositories before production use. The agreed frontend direction is React/Vite with Zod at transport boundaries, TanStack Router/Query/Table, React Hook Form, and shadcn/Tailwind components. The prototype intentionally does not claim that migration is complete.
+
 See [Architecture](docs/architecture.md), [Compliance baseline](docs/compliance-baseline.md), and [Deployment](docs/deployment.md).
