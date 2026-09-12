@@ -17,6 +17,7 @@ const app = createApp({
   sessionCookieName: config.SESSION_COOKIE_NAME,
   secureCookies: config.NODE_ENV === "production",
   bootstrapToken: config.BOOTSTRAP_TOKEN,
+  exposeDevelopmentTokens: config.NODE_ENV !== "production",
 });
 
 console.log(JSON.stringify({

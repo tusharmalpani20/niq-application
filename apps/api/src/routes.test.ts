@@ -64,4 +64,15 @@ describe("local authentication routes", () => {
     const response = await app.request("/v1/bootstrap", { method: "POST", headers: { "content-type": "application/json", "x-bootstrap-token": "wrong" }, body: JSON.stringify({ legalName: "NIQ Private Limited", displayName: "NIQ", slug: "niq", adminEmail: "admin@example.com", adminDisplayName: "NIQ Admin", adminPassword: "a very secure password", userLimit: null }) });
     expect(response.status).toBe(403);
   });
+
+  test("does not expose invitation activation tokens outside development", async () => {
+    const app = createApp({ allowedOrigin: "https://app.example.com", authMode: "local", checkDatabase: async () => true, service: fakeService() });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/invitations`, {
+      method: "POST",
+      headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      body: JSON.stringify({ email: "user@example.com", role: "MEDICAL", facilityIds: [] }),
+    });
+    expect(response.status).toBe(201);
+    expect((await response.json()).activationToken).toBeUndefined();
+  });
 });

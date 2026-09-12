@@ -1,4 +1,17 @@
-import { apiErrorSchema, signInRequestSchema, type ApiError, type SignInRequest } from "@niq/application-contracts";
+import {
+  acceptInvitationSchema,
+  apiErrorSchema,
+  authenticationResponseSchema,
+  invitationAcceptanceResponseSchema,
+  signInRequestSchema,
+  signInResponseSchema,
+  verifyMfaRequestSchema,
+  type AcceptInvitation,
+  type ApiError,
+  type AuthenticatedUser,
+  type SignInRequest,
+  type VerifyMfaRequest,
+} from "@niq/application-contracts";
 
 export class ApiRequestError extends Error {
   constructor(public readonly response: ApiError) {
@@ -7,8 +20,18 @@ export class ApiRequestError extends Error {
 }
 
 export type SignInResult =
-  | { nextStep: "MFA_REQUIRED"; challengeId: string }
-  | { nextStep: "AUTHENTICATED" };
+  | { nextStep: "MFA_REQUIRED"; challengeToken: string }
+  | { nextStep: "AUTHENTICATED"; user: AuthenticatedUser };
+
+async function responseBody(response: Response): Promise<unknown> {
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const parsed = apiErrorSchema.safeParse(body);
+    if (parsed.success) throw new ApiRequestError(parsed.data);
+    throw new Error("The service returned an unexpected response.");
+  }
+  return body;
+}
 
 export async function signIn(input: SignInRequest): Promise<SignInResult> {
   const request = signInRequestSchema.parse(input);
@@ -18,16 +41,37 @@ export async function signIn(input: SignInRequest): Promise<SignInResult> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(request),
   });
-  const body: unknown = await response.json();
+  const result = signInResponseSchema.parse(await responseBody(response));
+  if ("mfaRequired" in result) return { nextStep: "MFA_REQUIRED", challengeToken: result.challengeToken };
+  return { nextStep: "AUTHENTICATED", user: result.user };
+}
 
-  if (!response.ok) {
-    const parsed = apiErrorSchema.safeParse(body);
-    if (parsed.success) throw new ApiRequestError(parsed.data);
-    throw new Error("The service returned an unexpected response.");
-  }
+export async function verifyMfa(input: VerifyMfaRequest): Promise<AuthenticatedUser> {
+  const response = await fetch("/api/v1/auth/mfa/verify", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(verifyMfaRequestSchema.parse(input)),
+  });
+  return authenticationResponseSchema.parse(await responseBody(response)).user;
+}
 
-  const result = body as Partial<SignInResult>;
-  if (result.nextStep === "MFA_REQUIRED" && typeof result.challengeId === "string") return { nextStep: result.nextStep, challengeId: result.challengeId };
-  if (result.nextStep === "AUTHENTICATED") return { nextStep: result.nextStep };
-  throw new Error("The service returned an unexpected authentication response.");
+export async function acceptInvitation(input: AcceptInvitation): Promise<void> {
+  const response = await fetch("/api/v1/auth/invitations/accept", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(acceptInvitationSchema.parse(input)),
+  });
+  invitationAcceptanceResponseSchema.parse(await responseBody(response));
+}
+
+export async function getCurrentUser(): Promise<AuthenticatedUser> {
+  const response = await fetch("/api/v1/auth/me", { credentials: "include" });
+  return authenticationResponseSchema.parse(await responseBody(response)).user;
+}
+
+export async function signOut(): Promise<void> {
+  const response = await fetch("/api/v1/auth/sign-out", { method: "POST", credentials: "include" });
+  if (!response.ok && response.status !== 401) await responseBody(response);
 }

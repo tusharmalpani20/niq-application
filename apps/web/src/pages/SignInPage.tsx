@@ -17,7 +17,7 @@ export function SignInPage() {
 
     try {
       const result = await signIn({ email: String(data.get("email")), password: String(data.get("password")) });
-      if (result.nextStep === "MFA_REQUIRED") navigate("/verify", { state: { challengeId: result.challengeId, email: String(data.get("email")) } });
+      if (result.nextStep === "MFA_REQUIRED") navigate("/verify", { state: { challengeToken: result.challengeToken, email: String(data.get("email")) } });
       else navigate("/");
     } catch (error) {
       setMessage(error instanceof ApiRequestError ? error.message : "Sign in is temporarily unavailable. Please try again later.");

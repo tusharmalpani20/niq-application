@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { AppShell } from "./components/AppShell";
+import { AuthenticatedShell } from "./components/AuthenticatedShell";
 import { BrandingProvider } from "./lib/branding-context";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { AssessmentDetailPage, AssessmentsPage, StartAssessmentPage } from "./pages/AssessmentsPage";
@@ -18,7 +18,7 @@ export function App() {
         <Route path="/sign-in" element={<SignInPage />} />
         <Route path="/verify" element={<VerifyMfaPage />} />
         <Route path="/invite/:token" element={<AcceptInvitePage />} />
-        <Route element={<AppShell />}>
+        <Route element={<AuthenticatedShell />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/facilities" element={<FacilitiesPage />} />
           <Route path="/users" element={<UsersPage />} />

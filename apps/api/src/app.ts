@@ -19,6 +19,7 @@ export type AppDependencies = {
   sessionCookieName?: string;
   secureCookies?: boolean;
   bootstrapToken?: string;
+  exposeDevelopmentTokens?: boolean;
 };
 type AppEnvironment = { Variables: { requestId: string; principal: Principal } };
 const idParamsSchema = z.object({ organizationId: idSchema, facilityId: idSchema.optional(), membershipId: idSchema.optional() });
@@ -94,7 +95,10 @@ export function createApp(dependencies: AppDependencies) {
   app.post("/v1/organizations/:organizationId/facilities", zValidator("param", idParamsSchema, validationFailure), zValidator("json", createFacilitySchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.createFacility(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("json"), requestContext(context))), 201));
   app.patch("/v1/organizations/:organizationId/facilities/:facilityId", zValidator("param", idParamsSchema, validationFailure), zValidator("json", updateFacilitySchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.updateFacility(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").facilityId!, context.req.valid("json"), requestContext(context)))));
   app.get("/v1/organizations/:organizationId/users", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json({ items: await dependencies.service!.listUsers(context.get("principal"), context.req.valid("param").organizationId) }));
-  app.post("/v1/organizations/:organizationId/invitations", zValidator("param", idParamsSchema, validationFailure), zValidator("json", createInvitationSchema, validationFailure), async (context) => context.json(await dependencies.service!.inviteUser(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("json"), requestContext(context)), 201));
+  app.post("/v1/organizations/:organizationId/invitations", zValidator("param", idParamsSchema, validationFailure), zValidator("json", createInvitationSchema, validationFailure), async (context) => {
+    const result = await dependencies.service!.inviteUser(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("json"), requestContext(context));
+    return context.json({ invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens ? { activationToken: result.token } : {}) }, 201);
+  });
   app.patch("/v1/organizations/:organizationId/users/:membershipId", zValidator("param", idParamsSchema, validationFailure), zValidator("json", updateUserStatusSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.setUserActive(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").membershipId!, context.req.valid("json").active, requestContext(context)))));
   app.notFound((context) => context.json(errorBody("NOT_FOUND", "The requested resource was not found.", context.get("requestId")), 404));
   app.onError((error, context) => {

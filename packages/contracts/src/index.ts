@@ -40,6 +40,31 @@ export const verifyMfaRequestSchema = z.object({
   otp: z.string().regex(/^\d{6}$/),
 });
 
+export const authenticatedUserSchema = z.object({
+  userId: idSchema,
+  organizationId: idSchema,
+  membershipId: idSchema,
+  email: z.email(),
+  displayName: z.string().min(1).max(120),
+  role: z.enum(["ORGANIZATION_ADMIN", "MEDICAL", "SUPPORT"]),
+  platformRole: z.enum(["USER", "NIQ_ADMIN"]),
+});
+
+export const signInResponseSchema = z.union([
+  z.object({
+    mfaRequired: z.literal(true),
+    challengeToken: z.string().min(32).max(512),
+    expiresAt: z.iso.datetime(),
+  }),
+  z.object({ user: authenticatedUserSchema }),
+]);
+
+export const authenticationResponseSchema = z.object({ user: authenticatedUserSchema });
+
+export const invitationAcceptanceResponseSchema = authenticationResponseSchema.extend({
+  signInRequired: z.literal(true),
+});
+
 export const acceptInvitationSchema = z.object({
   token: z.string().min(32).max(512),
   displayName: z.string().trim().min(2).max(120),
@@ -145,6 +170,7 @@ export type CreateOrganization = z.infer<typeof createOrganizationSchema>;
 export type CreatePatient = z.infer<typeof createPatientSchema>;
 export type MeasurementProvenance = z.infer<typeof measurementProvenanceSchema>;
 export type SignInRequest = z.infer<typeof signInRequestSchema>;
+export type AuthenticatedUser = z.infer<typeof authenticatedUserSchema>;
 export type AcceptInvitation = z.infer<typeof acceptInvitationSchema>;
 export type BootstrapAdmin = z.infer<typeof bootstrapAdminSchema>;
 export type CreateInvitation = z.infer<typeof createInvitationSchema>;

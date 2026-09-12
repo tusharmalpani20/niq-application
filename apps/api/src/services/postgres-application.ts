@@ -17,7 +17,7 @@ import {
   organizations,
   users,
 } from "../db/schema";
-import { hashPassword, keyedHash, randomOtp, randomToken, verifyPassword } from "../security/tokens";
+import { hashPassword, keyedHash, randomOtp, randomToken, secureEqual, verifyPassword } from "../security/tokens";
 import type { ApplicationService, OtpDelivery, Principal, RequestContext, SessionResult, SignInResult } from "./application";
 import { ServiceError } from "./application";
 
@@ -126,7 +126,7 @@ export class PostgresApplicationService implements ApplicationService {
       const [challenge] = await tx.select().from(mfaChallenges).where(and(eq(mfaChallenges.challengeTokenHash, challengeHash), isNull(mfaChallenges.consumedAt))).for("update").limit(1);
       if (!challenge || challenge.expiresAt <= new Date() || challenge.attempts >= challenge.maxAttempts) throw new ServiceError("INVALID_OR_EXPIRED_TOKEN", "The MFA challenge is invalid or expired.");
       const otpHash = await keyedHash(input.otp, this.config.SESSION_SECRET);
-      if (otpHash !== challenge.otpHash) {
+      if (!secureEqual(otpHash, challenge.otpHash)) {
         await tx.update(mfaChallenges).set({ attempts: challenge.attempts + 1, updatedAt: new Date() }).where(eq(mfaChallenges.id, challenge.id));
         await this.audit(tx, challenge.organizationId, context, "AUTH_MFA_FAILED", "user", challenge.userId);
         return null;
