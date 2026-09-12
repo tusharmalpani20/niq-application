@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { canReserveUserSeat, canRetryScoring, createEntityId } from "./index";
+import { canReserveUserSeat, canRetryScoring, createEntityId, normalizeEmail, requiresMfa } from "./index";
 
 describe("user entitlements", () => {
   test("pending invitations reserve seats", () => {
@@ -32,5 +32,14 @@ describe("entity identifiers", () => {
 
   test("encodes creation time in the sortable prefix", () => {
     expect(createEntityId(1_000).slice(0, 10) < createEntityId(2_000).slice(0, 10)).toBe(true);
+  });
+});
+
+describe("identity policy", () => {
+  test("normalizes email and requires MFA for privileged users", () => {
+    expect(normalizeEmail(" Admin@Example.COM ")).toBe("admin@example.com");
+    expect(requiresMfa("ORGANIZATION_ADMIN")).toBe(true);
+    expect(requiresMfa("MEDICAL")).toBe(false);
+    expect(requiresMfa("MEDICAL", true)).toBe(true);
   });
 });

@@ -14,4 +14,12 @@ describe("configuration", () => {
     expect(config.APP_REGION).toBe("india");
     expect(config.DEPLOYMENT_MODE).toBe("niq-hosted");
   });
+
+  test("refuses development OTP disclosure in production", () => {
+    expect(() => loadApplicationConfig({
+      NODE_ENV: "production", DATABASE_URL: "postgres://localhost/niq",
+      SESSION_SECRET: "a-production-secret-with-32-chars", BOOTSTRAP_TOKEN: "b".repeat(32),
+      AUTH_MODE: "local", DEV_OTP_DELIVERY: "true",
+    })).toThrow("Development OTP delivery is forbidden in production");
+  });
 });

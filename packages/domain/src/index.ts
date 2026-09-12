@@ -22,6 +22,18 @@ export function canRetryScoring(status: string): boolean {
   return retryableScoringStatuses.has(status);
 }
 
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+export function requiresMfa(role: "ORGANIZATION_ADMIN" | "MEDICAL" | "SUPPORT", platformAdmin = false): boolean {
+  return platformAdmin || role === "ORGANIZATION_ADMIN";
+}
+
+export function hasOrganizationAdminAccess(role: string, active: boolean): boolean {
+  return active && role === "ORGANIZATION_ADMIN";
+}
+
 const crockfordBase32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 function encodeBase32(value: bigint, length: number): string {

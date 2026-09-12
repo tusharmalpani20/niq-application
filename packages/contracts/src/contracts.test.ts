@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createAssessmentSchema, createOrganizationSchema, createPatientSchema, measurementProvenanceSchema } from "./index";
+import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, measurementProvenanceSchema } from "./index";
 
 const organizationId = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patientId = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
@@ -40,5 +40,10 @@ describe("application contracts", () => {
     expect(createAssessmentSchema.safeParse(assessment).success).toBe(true);
     expect(createAssessmentSchema.safeParse({ ...assessment, patientId: patientId.toLowerCase() }).success).toBe(false);
     expect(createAssessmentSchema.safeParse({ ...assessment, patientId: "c19124fc-dbbb-4b20-a32d-c856be748b9c" }).success).toBe(false);
+  });
+
+  test("requires strong invitation activation passwords", () => {
+    expect(acceptInvitationSchema.safeParse({ token: "t".repeat(32), displayName: "Test User", password: "short" }).success).toBe(false);
+    expect(acceptInvitationSchema.safeParse({ token: "t".repeat(32), displayName: "Test User", password: "a-long-local-password" }).success).toBe(true);
   });
 });

@@ -5,9 +5,16 @@ import { z } from "zod";
 export const idSchema = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/, "Expected an uppercase ULID");
 
 export const errorCodeSchema = z.enum([
+  "ACCOUNT_LOCKED",
   "AUTH_NOT_CONFIGURED",
+  "AUTHENTICATION_REQUIRED",
+  "CONFLICT",
   "FORBIDDEN",
   "INTERNAL_ERROR",
+  "INVALID_CREDENTIALS",
+  "INVALID_OR_EXPIRED_TOKEN",
+  "MFA_REQUIRED",
+  "RATE_LIMITED",
   "NOT_FOUND",
   "SCORING_UNAVAILABLE",
   "USER_LIMIT_REACHED",
@@ -28,6 +35,21 @@ export const signInRequestSchema = z.object({
   password: z.string().min(1).max(256),
 });
 
+export const verifyMfaRequestSchema = z.object({
+  challengeToken: z.string().min(32).max(512),
+  otp: z.string().regex(/^\d{6}$/),
+});
+
+export const acceptInvitationSchema = z.object({
+  token: z.string().min(32).max(512),
+  displayName: z.string().trim().min(2).max(120),
+  password: z.string().min(12).max(256),
+});
+
+export const membershipRoleSchema = z.enum(["ORGANIZATION_ADMIN", "MEDICAL", "SUPPORT"]);
+export const organizationStatusSchema = z.enum(["ACTIVE", "SUSPENDED", "CLOSED"]);
+export const facilityStatusSchema = z.enum(["ACTIVE", "INACTIVE"]);
+
 export const createOrganizationSchema = z.object({
   legalName: z.string().trim().min(2).max(200),
   displayName: z.string().trim().min(2).max(120),
@@ -37,10 +59,41 @@ export const createOrganizationSchema = z.object({
 });
 
 export const createFacilitySchema = z.object({
-  organizationId: idSchema,
   name: z.string().trim().min(2).max(160),
   code: z.string().trim().min(1).max(40),
   timezone: z.string().trim().min(1).max(80).default("Asia/Kolkata"),
+});
+
+export const updateOrganizationSchema = z.object({
+  displayName: z.string().trim().min(2).max(120).optional(),
+  logoObjectKey: z.string().trim().max(500).nullable().optional(),
+  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  status: organizationStatusSchema.optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field is required");
+
+export const updateFacilitySchema = z.object({
+  name: z.string().trim().min(2).max(160).optional(),
+  code: z.string().trim().min(1).max(40).optional(),
+  timezone: z.string().trim().min(1).max(80).optional(),
+  status: facilityStatusSchema.optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field is required");
+
+export const createInvitationSchema = z.object({
+  email: z.email().max(320),
+  role: membershipRoleSchema.default("MEDICAL"),
+  facilityIds: z.array(idSchema).max(100).default([]),
+});
+
+export const updateUserStatusSchema = z.object({
+  active: z.boolean(),
+});
+
+export const bootstrapAdminSchema = createOrganizationSchema.extend({
+  adminEmail: z.email().max(320),
+  adminDisplayName: z.string().trim().min(2).max(120),
+  adminPassword: z.string().min(12).max(256),
+  userLimit: z.number().int().min(1).nullable().default(null),
 });
 
 export const patientSexSchema = z.enum(["FEMALE", "MALE", "OTHER", "UNKNOWN"]);
@@ -92,3 +145,9 @@ export type CreateOrganization = z.infer<typeof createOrganizationSchema>;
 export type CreatePatient = z.infer<typeof createPatientSchema>;
 export type MeasurementProvenance = z.infer<typeof measurementProvenanceSchema>;
 export type SignInRequest = z.infer<typeof signInRequestSchema>;
+export type AcceptInvitation = z.infer<typeof acceptInvitationSchema>;
+export type BootstrapAdmin = z.infer<typeof bootstrapAdminSchema>;
+export type CreateInvitation = z.infer<typeof createInvitationSchema>;
+export type UpdateFacility = z.infer<typeof updateFacilitySchema>;
+export type UpdateOrganization = z.infer<typeof updateOrganizationSchema>;
+export type VerifyMfaRequest = z.infer<typeof verifyMfaRequestSchema>;
