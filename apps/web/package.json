@@ -1,0 +1,29 @@
+{
+  "name": "@niq/application-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "check": "tsc -b --pretty false",
+    "dev": "vite --host 0.0.0.0",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@niq/application-contracts": "workspace:*",
+    "@vitejs/plugin-react": "5.0.2",
+    "vite": "7.1.4",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "react-router-dom": "7.8.2"
+  },
+  "devDependencies": {
+    "@testing-library/react": "16.3.0",
+    "@types/bun": "1.2.21",
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "jsdom": "26.1.0",
+    "typescript": "5.9.2"
+  }
+}

@@ -1,0 +1,76 @@
+name: niq-application
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: niq_application
+      POSTGRES_USER: niq
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-locally}
+    volumes:
+      - application-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U niq -d niq_application"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [private]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      APP_REGION: ${APP_REGION:-india}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-on-prem}
+      API_HOST: 0.0.0.0
+      API_PORT: 3000
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+      DATABASE_URL: postgres://niq:${POSTGRES_PASSWORD:-change-me-locally}@postgres:5432/niq_application
+      DATABASE_SSL: "false"
+      AUTH_MODE: ${AUTH_MODE:-disabled}
+      SESSION_SECRET: ${SESSION_SECRET:-replace-this-development-only-secret}
+      SCORING_API_URL: ${SCORING_API_URL:-}
+      SCORING_CLIENT_ID: ${SCORING_CLIENT_ID:-}
+      SCORING_DEPLOYMENT_ID: ${SCORING_DEPLOYMENT_ID:-}
+      SCORING_CLIENT_SECRET: ${SCORING_CLIENT_SECRET:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports: ["3000:3000"]
+    networks: [private, edge]
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migrations
+    environment:
+      DATABASE_URL: postgres://niq:${POSTGRES_PASSWORD:-change-me-locally}@postgres:5432/niq_application
+      DATABASE_SSL: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [private]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on: [api]
+    ports: ["8080:8080"]
+    networks: [edge]
+
+networks:
+  private:
+    internal: true
+  edge:
+
+volumes:
+  application-postgres:
