@@ -34,6 +34,7 @@ const entityId = (name: string) => varchar(name, { length: 26 });
 export const organizationStatus = pgEnum("organization_status", ["ACTIVE", "SUSPENDED", "CLOSED"]);
 export const facilityStatus = pgEnum("facility_status", ["ACTIVE", "INACTIVE"]);
 export const userStatus = pgEnum("user_status", ["INVITED", "ACTIVE", "SUSPENDED", "DEACTIVATED"]);
+export const platformRole = pgEnum("platform_role", ["USER", "NIQ_ADMIN"]);
 export const membershipRole = pgEnum("membership_role", ["ORGANIZATION_ADMIN", "MEDICAL", "SUPPORT"]);
 export const invitationStatus = pgEnum("invitation_status", ["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]);
 export const patientSex = pgEnum("patient_sex", ["FEMALE", "MALE", "OTHER", "UNKNOWN"]);
@@ -99,6 +100,8 @@ export const users = pgTable(
     email: text("email").notNull(),
     displayName: text("display_name").notNull(),
     passwordHash: text("password_hash"),
+    platformRole: platformRole("platform_role").notNull().default("USER"),
+    mfaEnabled: boolean("mfa_enabled").notNull().default(false),
     status: userStatus("status").notNull().default("INVITED"),
     lastSignedInAt: timestamp("last_signed_in_at", { withTimezone: true }),
     ...timestamps,
@@ -121,6 +124,7 @@ export const organizationMemberships = pgTable(
   },
   (table) => [
     uniqueIndex("organization_memberships_org_id_uidx").on(table.organizationId, table.id),
+    uniqueIndex("organization_memberships_org_id_user_uidx").on(table.organizationId, table.id, table.userId),
     uniqueIndex("organization_memberships_org_user_uidx").on(table.organizationId, table.userId),
     index("organization_memberships_user_idx").on(table.userId),
     check("organization_memberships_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
@@ -163,10 +167,12 @@ export const invitations = pgTable(
     status: invitationStatus("status").notNull().default("PENDING"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     invitedByMembershipId: entityId("invited_by_membership_id"),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
     uniqueIndex("invitations_token_hash_uidx").on(table.tokenHash),
+    uniqueIndex("invitations_org_id_uidx").on(table.organizationId, table.id),
     uniqueIndex("invitations_pending_org_email_uidx")
       .on(table.organizationId, sql`lower(${table.email})`)
       .where(sql`${table.status} = 'PENDING'`),
@@ -178,6 +184,89 @@ export const invitations = pgTable(
     }),
     check("invitations_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
   ],
+);
+
+export const invitationFacilities = pgTable(
+  "invitation_facilities",
+  {
+    id: entityId("id").primaryKey(),
+    organizationId: entityId("organization_id").notNull().references(() => organizations.id),
+    invitationId: entityId("invitation_id").notNull(),
+    facilityId: entityId("facility_id").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("invitation_facilities_invitation_facility_uidx").on(table.invitationId, table.facilityId),
+    foreignKey({
+      name: "invitation_facilities_org_invitation_fk",
+      columns: [table.organizationId, table.invitationId],
+      foreignColumns: [invitations.organizationId, invitations.id],
+    }),
+    foreignKey({
+      name: "invitation_facilities_org_facility_fk",
+      columns: [table.organizationId, table.facilityId],
+      foreignColumns: [facilities.organizationId, facilities.id],
+    }),
+    check("invitation_facilities_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
+  ],
+);
+
+export const authSessions = pgTable(
+  "auth_sessions",
+  {
+    id: entityId("id").primaryKey(),
+    userId: entityId("user_id").notNull().references(() => users.id),
+    organizationId: entityId("organization_id").notNull().references(() => organizations.id),
+    membershipId: entityId("membership_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("auth_sessions_token_hash_uidx").on(table.tokenHash),
+    index("auth_sessions_user_idx").on(table.userId),
+    index("auth_sessions_expiry_idx").on(table.expiresAt),
+    foreignKey({ name: "auth_sessions_org_membership_user_fk", columns: [table.organizationId, table.membershipId, table.userId], foreignColumns: [organizationMemberships.organizationId, organizationMemberships.id, organizationMemberships.userId] }),
+    check("auth_sessions_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
+  ],
+);
+
+export const mfaChallenges = pgTable(
+  "mfa_challenges",
+  {
+    id: entityId("id").primaryKey(),
+    userId: entityId("user_id").notNull().references(() => users.id),
+    organizationId: entityId("organization_id").notNull().references(() => organizations.id),
+    membershipId: entityId("membership_id").notNull(),
+    challengeTokenHash: text("challenge_token_hash").notNull(),
+    otpHash: text("otp_hash").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("mfa_challenges_token_hash_uidx").on(table.challengeTokenHash),
+    index("mfa_challenges_user_idx").on(table.userId),
+    foreignKey({ name: "mfa_challenges_org_membership_user_fk", columns: [table.organizationId, table.membershipId, table.userId], foreignColumns: [organizationMemberships.organizationId, organizationMemberships.id, organizationMemberships.userId] }),
+    check("mfa_challenges_attempts_ck", sql`${table.attempts} >= 0 AND ${table.maxAttempts} >= 1`),
+    check("mfa_challenges_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
+  ],
+);
+
+export const authenticationFailures = pgTable(
+  "authentication_failures",
+  {
+    principalHash: varchar("principal_hash", { length: 64 }).primaryKey(),
+    failedAttempts: integer("failed_attempts").notNull().default(0),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull().defaultNow(),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [check("authentication_failures_count_ck", sql`${table.failedAttempts} >= 0`)],
 );
 
 export const organizationEntitlements = pgTable(

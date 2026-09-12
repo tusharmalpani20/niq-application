@@ -4,12 +4,15 @@ import {
   assessmentAnswers,
   assessments,
   auditEvents,
+  authSessions,
   invitations,
+  invitationFacilities,
   measurements,
   patients,
   questionnaireDefinitions,
   scoringRequests,
   scoringResults,
+  mfaChallenges,
 } from "./schema";
 
 function foreignKeyNames(table: Parameters<typeof getTableConfig>[0]): string[] {
@@ -51,6 +54,12 @@ describe("tenant data invariants", () => {
     expect(id?.hasDefault).toBe(false);
     expect(getTableConfig(patients).checks.map((constraint) => constraint.name)).toContain("patients_id_ulid_ck");
   });
+
+  test("session and MFA identities are tied to the same tenant membership and user", () => {
+    expect(foreignKeyNames(authSessions)).toContain("auth_sessions_org_membership_user_fk");
+    expect(foreignKeyNames(mfaChallenges)).toContain("mfa_challenges_org_membership_user_fk");
+    expect(foreignKeyNames(invitationFacilities)).toContain("invitation_facilities_org_facility_fk");
+  });
 });
 
 describe("migration-only safeguards", () => {
@@ -63,5 +72,14 @@ describe("migration-only safeguards", () => {
     expect(migration).toContain("REVOKE UPDATE, DELETE, TRUNCATE ON audit_events FROM PUBLIC");
     expect(migration).toContain('"id" varchar(26) PRIMARY KEY NOT NULL');
     expect(migration).not.toContain("gen_random_uuid()");
+  });
+
+  test("authentication migration keeps only hashes and creates tenant-safe foreign keys", async () => {
+    const migration = await Bun.file("./drizzle/0001_auth_foundation.sql").text();
+    expect(migration).toContain('"token_hash" text NOT NULL');
+    expect(migration).toContain('"otp_hash" text NOT NULL');
+    expect(migration).not.toContain('"token" text');
+    expect(migration).not.toContain('"otp" text');
+    expect(migration.indexOf("organization_memberships_org_id_user_uidx")).toBeLessThan(migration.indexOf("auth_sessions_org_membership_user_fk"));
   });
 });
