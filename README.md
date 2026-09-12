@@ -14,11 +14,10 @@ The initial Drizzle migration is committed under `apps/api/drizzle`; `/ready` re
 
 ## Local development
 
-Prerequisites: Bun 1.4, Docker and Docker Compose.
+Prerequisites: Bun 1.4 and PostgreSQL 16 or later. The application does not start or manage PostgreSQL.
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres
 bun install
 bun run db:migrate
 bun run dev
@@ -30,6 +29,8 @@ The API listens on `http://localhost:3000` and the web application on `http://lo
 
 ## Important status
 
-This is a foundation, not a production-ready clinical system. Authentication is deliberately disabled until the identity, MFA, password recovery and session-management decisions are approved. The sign-in route returns a structured `AUTH_NOT_CONFIGURED` response. Clinical scoring belongs exclusively to the scoring service and no temporary score is calculated here.
+This is a foundation, not a production-ready clinical system. Local authentication is invite-only. Passwords use Argon2id, sessions and invitation tokens are stored only as keyed hashes, and administrator sign-in requires an OTP challenge. `DEV_OTP_DELIVERY=true` prints OTPs for local development and is rejected in production. See [Authentication and onboarding](docs/authentication.md).
+
+Clinical scoring belongs exclusively to the scoring service and no temporary score is calculated here.
 
 See [Architecture](docs/architecture.md), [Compliance baseline](docs/compliance-baseline.md), and [Deployment](docs/deployment.md).
