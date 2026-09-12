@@ -1,9 +1,13 @@
 import { type FormEvent, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ApiRequestError, signIn } from "../lib/api";
+import { useBranding } from "../lib/branding-context";
 
 export function SignInPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { branding } = useBranding();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -12,7 +16,9 @@ export function SignInPage() {
     const data = new FormData(event.currentTarget);
 
     try {
-      await signIn({ email: String(data.get("email")), password: String(data.get("password")) });
+      const result = await signIn({ email: String(data.get("email")), password: String(data.get("password")) });
+      if (result.nextStep === "MFA_REQUIRED") navigate("/verify", { state: { challengeId: result.challengeId, email: String(data.get("email")) } });
+      else navigate("/");
     } catch (error) {
       setMessage(error instanceof ApiRequestError ? error.message : "Sign in is temporarily unavailable. Please try again later.");
     } finally {
@@ -23,12 +29,12 @@ export function SignInPage() {
   return (
     <main className="sign-in-shell">
       <section className="welcome-panel" aria-labelledby="welcome-heading">
-        <div className="brand-lockup" aria-label="NIQ">
+        <div className="brand-lockup" aria-label={branding.displayName}>
           <span className="brand-mark">N</span>
-          <span>NIQ</span>
+          <span>{branding.displayName}</span>
         </div>
         <div className="welcome-copy">
-          <p className="eyebrow">Clinical nutrition intelligence</p>
+          <p className="eyebrow">NIQ · Clinical nutrition intelligence</p>
           <h1 id="welcome-heading">Clearer assessment.<br />More thoughtful care.</h1>
           <p>One secure workspace for oncology nutrition assessment, review and follow-up.</p>
         </div>

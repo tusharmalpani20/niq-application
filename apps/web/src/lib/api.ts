@@ -6,7 +6,11 @@ export class ApiRequestError extends Error {
   }
 }
 
-export async function signIn(input: SignInRequest): Promise<never> {
+export type SignInResult =
+  | { nextStep: "MFA_REQUIRED"; challengeId: string }
+  | { nextStep: "AUTHENTICATED" };
+
+export async function signIn(input: SignInRequest): Promise<SignInResult> {
   const request = signInRequestSchema.parse(input);
   const response = await fetch("/api/v1/auth/sign-in", {
     method: "POST",
@@ -22,5 +26,8 @@ export async function signIn(input: SignInRequest): Promise<never> {
     throw new Error("The service returned an unexpected response.");
   }
 
-  throw new Error("Authentication response handling is not configured.");
+  const result = body as Partial<SignInResult>;
+  if (result.nextStep === "MFA_REQUIRED" && typeof result.challengeId === "string") return { nextStep: result.nextStep, challengeId: result.challengeId };
+  if (result.nextStep === "AUTHENTICATED") return { nextStep: result.nextStep };
+  throw new Error("The service returned an unexpected authentication response.");
 }

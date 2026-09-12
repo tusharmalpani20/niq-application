@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { toBrandCssVariables } from "./branding";
+import { normalizeBranding, toBrandCssVariables } from "./branding";
 
 describe("tenant branding", () => {
   test("maps approved colors to application theme variables", () => {
@@ -11,5 +11,10 @@ describe("tenant branding", () => {
 
   test("rejects values that could inject arbitrary CSS", () => {
     expect(() => toBrandCssVariables({ primaryColor: "red; display:none", secondaryColor: "#0E9384" })).toThrow();
+  });
+
+  test("trims a tenant name and provides a safe pre-login fallback", () => {
+    expect(normalizeBranding({ displayName: "  Apollo Group  ", primaryColor: "#175CD3", secondaryColor: "#0E9384" }).displayName).toBe("Apollo Group");
+    expect(normalizeBranding({ primaryColor: "#175CD3", secondaryColor: "#0E9384" }).displayName).toBe("NIQ");
   });
 });

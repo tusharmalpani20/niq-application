@@ -1,0 +1,12 @@
+import { type FormEvent, useState } from "react";
+import { PageHeader } from "../components/Page";
+import { useBranding } from "../lib/branding-context";
+
+export function BrandingPage() {
+  const { branding, updateBranding, resetBranding }=useBranding(); const [saved,setSaved]=useState(false);
+  function submit(event: FormEvent<HTMLFormElement>){event.preventDefault();const data=new FormData(event.currentTarget);updateBranding({displayName:String(data.get("displayName")),primaryColor:String(data.get("primaryColor")),secondaryColor:String(data.get("secondaryColor"))});setSaved(true);window.setTimeout(()=>setSaved(false),1200)}
+  return <><PageHeader eyebrow="Organization settings" title="Branding" description="Apply your organization’s identity after users sign in."/>
+    <div className="branding-grid"><form className="surface branding-form" onSubmit={submit}><div className="section-heading"><div><p className="page-eyebrow">Theme</p><h2>Organization identity</h2></div></div><label>Display name<input name="displayName" defaultValue={branding.displayName} required/></label><div className="color-grid"><label>Primary colour<div className="color-input"><input name="primaryColor" type="color" defaultValue={branding.primaryColor}/><span>{branding.primaryColor}</span></div></label><label>Secondary colour<div className="color-input"><input name="secondaryColor" type="color" defaultValue={branding.secondaryColor}/><span>{branding.secondaryColor}</span></div></label></div><label>Organization logo<div className="upload-area"><strong>Upload a PNG or SVG</strong><span>Maximum 2 MB. A square or horizontal transparent logo works best.</span><input type="file" accept="image/png,image/svg+xml"/></div></label><div className="form-actions spread"><button type="button" className="btn btn-outline" onClick={resetBranding}>Reset</button><button className="btn btn-primary">{saved ? "Saved" : "Save branding"}</button></div></form>
+      <aside className="surface preview-panel"><p className="page-eyebrow">Live preview</p><div className="brand-preview"><div className="preview-sidebar"><div className="brand-logo">N</div><strong>{branding.displayName}</strong><span/><span/><span/></div><div className="preview-content"><div className="preview-header"/><div className="preview-heading"/><div className="preview-cards"><i/><i/><i/></div><button>Primary action</button></div></div><p className="muted">On shared sign-in URLs, NIQ branding is shown until the organization is identified.</p></aside>
+    </div></>;
+}

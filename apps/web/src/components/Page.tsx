@@ -1,0 +1,5 @@
+import type { ReactNode } from "react";
+export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: ReactNode }) { return <header className="page-header"><div><p className="page-eyebrow">{eyebrow}</p><h1>{title}</h1>{description && <p className="page-description">{description}</p>}</div>{action && <div className="page-actions">{action}</div>}</header>; }
+export function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) { return <div className="empty-state"><span className="empty-symbol">+</span><h3>{title}</h3><p>{description}</p>{action}</div>; }
+export function ErrorState({ retry }: { retry?: () => void }) { return <div className="notice notice-error" role="alert"><strong>We couldn’t load this information.</strong><span>Please try again. No changes were lost.</span>{retry && <button className="btn btn-small btn-outline" onClick={retry}>Retry</button>}</div>; }
+export function LoadingState({ label = "Loading" }: { label?: string }) { return <div className="loading-state" role="status"><span className="spinner" />{label}…</div>; }
