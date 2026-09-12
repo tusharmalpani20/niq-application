@@ -1,0 +1,14 @@
+{
+  "name": "@niq/application-contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "check": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": { "zod": "4.1.5" },
+  "devDependencies": { "typescript": "5.9.2" }
+}
