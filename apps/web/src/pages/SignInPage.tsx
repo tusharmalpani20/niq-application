@@ -29,7 +29,7 @@ export function SignInPage() {
   return (
     <main className="sign-in-shell">
       <section className="welcome-panel" aria-labelledby="welcome-heading">
-        <div className="brand-lockup" aria-label={branding.displayName}>
+        <div className="brand-lockup" role="img" aria-label={branding.displayName}>
           <span className="brand-mark">N</span>
           <span>{branding.displayName}</span>
         </div>
