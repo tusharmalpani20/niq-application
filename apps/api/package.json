@@ -1,0 +1,30 @@
+{
+  "name": "@niq/application-api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target bun --sourcemap=external",
+    "check": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "dev": "bun --watch src/index.ts",
+    "start": "bun dist/index.js",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "0.7.2",
+    "@niq/application-config": "workspace:*",
+    "@niq/application-contracts": "workspace:*",
+    "@niq/application-domain": "workspace:*",
+    "drizzle-orm": "0.44.5",
+    "hono": "4.9.6",
+    "postgres": "3.4.7",
+    "zod": "4.1.5"
+  },
+  "devDependencies": {
+    "@types/bun": "1.2.21",
+    "drizzle-kit": "0.31.4",
+    "typescript": "5.9.2"
+  }
+}
