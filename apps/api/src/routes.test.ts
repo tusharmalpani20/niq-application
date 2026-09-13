@@ -20,6 +20,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     resendMfa: async () => ({ challengeToken: "y".repeat(43), expiresAt: new Date(Date.now() + 60_000), resendAvailableAt: new Date(Date.now() + 30_000), attemptsRemaining: 5, resendsRemaining: 2 }),
     signOut: async () => {}, acceptInvitation: async () => principal, bootstrap: async () => principal,
     createOrganization: async () => ({}), listOrganizations: async () => [], getOrganization: async () => ({}), updateOrganization: async () => ({}),
+    onboardOrganization: async () => ({ organization: {}, invitation: {}, token: "invite-token" }),
     createFacility: async () => ({}), listFacilities: async () => [], updateFacility: async () => ({}),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
     ...overrides,
@@ -89,5 +90,31 @@ describe("local authentication routes", () => {
     });
     expect(response.status).toBe(201);
     expect((await response.json()).activationToken).toBeUndefined();
+  });
+
+  test("returns a first-admin activation token only in development onboarding", async () => {
+    const niqAdmin = { ...principal, platformRole: "NIQ_ADMIN" as const };
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173",
+      authMode: "local",
+      checkDatabase: async () => true,
+      exposeDevelopmentTokens: true,
+      service: fakeService({
+        authenticate: async () => niqAdmin,
+        onboardOrganization: async () => ({ organization: { id: "01J00000000000000000000004" }, invitation: { id: "01J00000000000000000000005" }, token: "local-invite-token" }),
+      }),
+    });
+    const response = await app.request("/v1/organizations/onboard", {
+      method: "POST",
+      headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      body: JSON.stringify({
+        legalName: "Apollo Hospitals Enterprise Limited",
+        displayName: "Apollo Hospitals",
+        slug: "apollo-hospitals",
+        firstAdminEmail: "admin@apollo.example",
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect((await response.json()).activationToken).toBe("local-invite-token");
   });
 });

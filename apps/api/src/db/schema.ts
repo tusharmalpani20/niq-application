@@ -32,6 +32,7 @@ const timestamps = {
 const entityId = (name: string) => varchar(name, { length: 26 });
 
 export const organizationStatus = pgEnum("organization_status", ["ACTIVE", "SUSPENDED", "CLOSED"]);
+export const deploymentMode = pgEnum("deployment_mode", ["NIQ_HOSTED", "CLIENT_CLOUD", "ON_PREM"]);
 export const facilityStatus = pgEnum("facility_status", ["ACTIVE", "INACTIVE"]);
 export const userStatus = pgEnum("user_status", ["INVITED", "ACTIVE", "SUSPENDED", "DEACTIVATED"]);
 export const platformRole = pgEnum("platform_role", ["USER", "NIQ_ADMIN"]);
@@ -66,6 +67,9 @@ export const organizations = pgTable(
     logoObjectKey: text("logo_object_key"),
     primaryColor: text("primary_color").notNull().default("#175CD3"),
     secondaryColor: text("secondary_color").notNull().default("#0E9384"),
+    deploymentMode: deploymentMode("deployment_mode").notNull().default("NIQ_HOSTED"),
+    scoringEnabled: boolean("scoring_enabled").notNull().default(true),
+    faceScanEnabled: boolean("face_scan_enabled").notNull().default(true),
     ...timestamps,
   },
   (table) => [
@@ -277,6 +281,8 @@ export const organizationEntitlements = pgTable(
     id: entityId("id").primaryKey(),
     organizationId: entityId("organization_id").notNull().references(() => organizations.id),
     userLimit: integer("user_limit"),
+    scoringMonthlyLimit: integer("scoring_monthly_limit"),
+    faceScanMonthlyLimit: integer("face_scan_monthly_limit"),
     effectiveFrom: timestamp("effective_from", { withTimezone: true }).notNull().defaultNow(),
     effectiveUntil: timestamp("effective_until", { withTimezone: true }),
     changedByMembershipId: entityId("changed_by_membership_id"),
@@ -291,6 +297,8 @@ export const organizationEntitlements = pgTable(
       foreignColumns: [organizationMemberships.organizationId, organizationMemberships.id],
     }),
     check("organization_entitlements_user_limit_ck", sql`${table.userLimit} IS NULL OR ${table.userLimit} >= 0`),
+    check("organization_entitlements_scoring_limit_ck", sql`${table.scoringMonthlyLimit} IS NULL OR ${table.scoringMonthlyLimit} >= 0`),
+    check("organization_entitlements_face_scan_limit_ck", sql`${table.faceScanMonthlyLimit} IS NULL OR ${table.faceScanMonthlyLimit} >= 0`),
     check("organization_entitlements_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
   ],
 );

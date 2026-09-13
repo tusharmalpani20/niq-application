@@ -86,6 +86,7 @@ export const acceptInvitationSchema = z.object({
 export const membershipRoleSchema = z.enum(["ORGANIZATION_ADMIN", "MEDICAL", "SUPPORT"]);
 export const organizationStatusSchema = z.enum(["ACTIVE", "SUSPENDED", "CLOSED"]);
 export const facilityStatusSchema = z.enum(["ACTIVE", "INACTIVE"]);
+export const deploymentModeSchema = z.enum(["NIQ_HOSTED", "CLIENT_CLOUD", "ON_PREM"]);
 
 export const organizationSchema = z.object({
   id: idSchema,
@@ -95,6 +96,9 @@ export const organizationSchema = z.object({
   logoObjectKey: z.string().nullable(),
   primaryColor: z.string(),
   secondaryColor: z.string(),
+  deploymentMode: deploymentModeSchema,
+  scoringEnabled: z.boolean(),
+  faceScanEnabled: z.boolean(),
   status: organizationStatusSchema,
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -108,6 +112,28 @@ export const createOrganizationSchema = z.object({
   slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(80),
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#175CD3"),
   secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#0E9384"),
+});
+
+const optionalMonthlyLimitSchema = z.number().int().min(1).nullable().default(null);
+
+export const onboardOrganizationSchema = createOrganizationSchema.extend({
+  deploymentMode: deploymentModeSchema.default("NIQ_HOSTED"),
+  scoringEnabled: z.boolean().default(true),
+  faceScanEnabled: z.boolean().default(true),
+  userLimit: optionalMonthlyLimitSchema,
+  scoringMonthlyLimit: optionalMonthlyLimitSchema,
+  faceScanMonthlyLimit: optionalMonthlyLimitSchema,
+  firstAdminEmail: z.email().max(320),
+});
+
+export const onboardOrganizationResponseSchema = z.object({
+  organization: organizationSchema,
+  invitation: z.object({
+    id: idSchema,
+    email: z.email(),
+    expiresAt: z.coerce.date(),
+  }),
+  activationToken: z.string().optional(),
 });
 
 export const createFacilitySchema = z.object({
@@ -201,6 +227,8 @@ export type AuthenticatedUser = z.infer<typeof authenticatedUserSchema>;
 export type AcceptInvitation = z.infer<typeof acceptInvitationSchema>;
 export type BootstrapAdmin = z.infer<typeof bootstrapAdminSchema>;
 export type Organization = z.infer<typeof organizationSchema>;
+export type OnboardOrganization = z.infer<typeof onboardOrganizationSchema>;
+export type OnboardOrganizationResponse = z.infer<typeof onboardOrganizationResponseSchema>;
 export type CreateInvitation = z.infer<typeof createInvitationSchema>;
 export type UpdateFacility = z.infer<typeof updateFacilitySchema>;
 export type UpdateOrganization = z.infer<typeof updateOrganizationSchema>;

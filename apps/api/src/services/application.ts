@@ -4,6 +4,7 @@ import type {
   CreateFacility,
   CreateInvitation,
   CreateOrganization,
+  OnboardOrganization,
   ResendMfaRequest,
   SignInRequest,
   UpdateFacility,
@@ -65,6 +66,7 @@ export interface ApplicationService {
   acceptInvitation(input: AcceptInvitation, context: RequestContext): Promise<Principal>;
   bootstrap(input: BootstrapAdmin, context: RequestContext): Promise<Principal>;
   createOrganization(actor: Principal, input: CreateOrganization, context: RequestContext): Promise<unknown>;
+  onboardOrganization(actor: Principal, input: OnboardOrganization, context: RequestContext): Promise<{ organization: unknown; invitation: unknown; token: string }>;
   listOrganizations(actor: Principal): Promise<unknown[]>;
   getOrganization(actor: Principal, organizationId: string): Promise<unknown>;
   updateOrganization(actor: Principal, organizationId: string, input: UpdateOrganization, context: RequestContext): Promise<unknown>;

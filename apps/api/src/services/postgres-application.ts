@@ -1,5 +1,5 @@
 import type { ApplicationConfig } from "@niq/application-config";
-import type { AcceptInvitation, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
+import type { AcceptInvitation, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, OnboardOrganization, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
 import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
@@ -281,6 +281,61 @@ export class PostgresApplicationService implements ApplicationService {
     if (!created) throw new Error("Organization insert failed");
     await this.audit(this.db, created.id, context, "ORGANIZATION_CREATED", "organization", created.id, undefined, { actorUserId: actor.userId });
     return created;
+  }
+  async onboardOrganization(actor: Principal, input: OnboardOrganization, context: RequestContext) {
+    if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");
+    const organizationId = createEntityId();
+    const invitationId = createEntityId();
+    const token = randomToken();
+    const expiresAt = new Date(Date.now() + this.config.INVITATION_TTL_HOURS * 3_600_000);
+    const email = normalizeEmail(input.firstAdminEmail);
+
+    try {
+      return await this.db.transaction(async (tx) => {
+        const existingUser = await tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+        if (existingUser.length) throw new ServiceError("CONFLICT", "An account already exists for the first administrator email.");
+        const [organization] = await tx.insert(organizations).values({
+          id: organizationId,
+          legalName: input.legalName,
+          displayName: input.displayName,
+          slug: input.slug,
+          primaryColor: input.primaryColor,
+          secondaryColor: input.secondaryColor,
+          deploymentMode: input.deploymentMode,
+          scoringEnabled: input.scoringEnabled,
+          faceScanEnabled: input.faceScanEnabled,
+        }).returning();
+        if (!organization) throw new Error("Organization insert failed");
+        await tx.insert(organizationEntitlements).values({
+          id: createEntityId(),
+          organizationId,
+          userLimit: input.userLimit,
+          scoringMonthlyLimit: input.scoringMonthlyLimit,
+          faceScanMonthlyLimit: input.faceScanMonthlyLimit,
+          reason: "Initial client onboarding",
+        });
+        const [invitation] = await tx.insert(invitations).values({
+          id: invitationId,
+          organizationId,
+          email,
+          role: "ORGANIZATION_ADMIN",
+          tokenHash: await keyedHash(token, this.config.SESSION_SECRET),
+          expiresAt,
+        }).returning();
+        if (!invitation) throw new Error("Invitation insert failed");
+        await this.audit(tx, organizationId, context, "ORGANIZATION_ONBOARDED", "organization", organizationId, undefined, {
+          actorUserId: actor.userId,
+          deploymentMode: input.deploymentMode,
+          firstAdminInvitationId: invitationId,
+        });
+        return { organization, invitation, token };
+      });
+    } catch (error) {
+      if (error instanceof ServiceError) throw error;
+      if (databaseCode(error) === "23505") throw new ServiceError("CONFLICT", "The organization slug or administrator email is already in use.");
+      if (databaseCode(error) === "23514" && String(error).includes("user limit")) throw new ServiceError("USER_LIMIT_REACHED", "The organization user limit must allow its first administrator.");
+      throw error;
+    }
   }
   async listOrganizations(actor: Principal) {
     if (actor.platformRole === "NIQ_ADMIN") return this.db.select().from(organizations).orderBy(organizations.displayName);

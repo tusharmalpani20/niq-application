@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { acceptInvitationSchema, bootstrapAdminSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, idSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
+import { acceptInvitationSchema, bootstrapAdminSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, idSchema, onboardOrganizationSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
@@ -106,6 +106,10 @@ export function createApp(dependencies: AppDependencies) {
     deleteCookie(context, cookieName, { path: "/", secure: dependencies.secureCookies ?? false }); return context.body(null, 204);
   });
   app.get("/v1/organizations", async (context) => context.json({ items: await dependencies.service!.listOrganizations(context.get("principal")) }));
+  app.post("/v1/organizations/onboard", zValidator("json", onboardOrganizationSchema, validationFailure), async (context) => {
+    const result = await dependencies.service!.onboardOrganization(context.get("principal"), context.req.valid("json"), requestContext(context));
+    return context.json({ organization: result.organization, invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens ? { activationToken: result.token } : {}) }, 201);
+  });
   app.post("/v1/organizations", zValidator("json", createOrganizationSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.createOrganization(context.get("principal"), context.req.valid("json"), requestContext(context))), 201));
   app.get("/v1/organizations/:organizationId", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.getOrganization(context.get("principal"), context.req.valid("param").organizationId))));
   app.patch("/v1/organizations/:organizationId", zValidator("param", idParamsSchema, validationFailure), zValidator("json", updateOrganizationSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.updateOrganization(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("json"), requestContext(context)))));

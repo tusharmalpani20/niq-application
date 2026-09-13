@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, measurementProvenanceSchema, signInResponseSchema } from "./index";
+import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, measurementProvenanceSchema, onboardOrganizationSchema, signInResponseSchema } from "./index";
 
 const organizationId = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patientId = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
@@ -56,5 +56,20 @@ describe("application contracts", () => {
       attemptsRemaining: 5,
       resendsRemaining: 3,
     }).success).toBe(true);
+  });
+
+  test("defaults new client organizations to enabled NIQ hosting with unlimited usage", () => {
+    const result = onboardOrganizationSchema.parse({
+      legalName: "Apollo Hospitals Enterprise Limited",
+      displayName: "Apollo Hospitals",
+      slug: "apollo-hospitals",
+      firstAdminEmail: "admin@apollo.example",
+    });
+    expect(result.deploymentMode).toBe("NIQ_HOSTED");
+    expect(result.userLimit).toBeNull();
+    expect(result.scoringMonthlyLimit).toBeNull();
+    expect(result.faceScanMonthlyLimit).toBeNull();
+    expect(result.scoringEnabled).toBe(true);
+    expect(result.faceScanEnabled).toBe(true);
   });
 });
