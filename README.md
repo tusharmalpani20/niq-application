@@ -23,6 +23,8 @@ bun run db:migrate
 bun run dev
 ```
 
+The commented [`.env.example`](.env.example) is the canonical reference for every environment variable, its valid values, default, and security constraints. Scoring customer/deployment identity is provisioned through the scoring activation workflow, not through application environment variables.
+
 Use `bun run db:generate` only after intentionally changing the Drizzle schema.
 
 The API listens on `http://localhost:3000` and the web application on `http://localhost:5173` by default.

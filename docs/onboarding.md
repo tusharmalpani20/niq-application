@@ -8,7 +8,7 @@ NIQ is a controlled B2B product; there is no public organization signup.
 4. The administrator invites medical users. Active users plus pending invitations consume the organization limit; deactivated users do not.
 5. Patients do not receive accounts in Phase 1.
 
-On-premises bootstrap should eventually exchange a single-use NIQ activation token for a deployment identity. That provisioning API is intentionally absent until the central scoring identity protocol is agreed.
+Scoring-service access uses a separate activation flow. An NIQ operator provisions the customer and deployment in the central scoring platform, then issues a short-lived, single-use activation token. The application exchanges that token server-to-server and receives its deployment credential once. The scoring platform API already supports this protocol; the application-side activation screen and encrypted credential store are still pending. Until those are implemented, scoring integration must remain unavailable rather than accepting a long-lived credential through the browser or storing one in browser storage.
 
 ## Authentication acceptance gate
 
