@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { normalizeBranding, type TenantBranding } from "./branding";
-const defaultBranding: Required<TenantBranding> = { displayName: "NIQ", primaryColor: "#176b70", secondaryColor: "#14636a" };
+const defaultBranding: Required<TenantBranding> = { displayName: "NIQ", primaryColor: "#176b70", secondaryColor: "#2a8e94" };
 type BrandingValue = { branding: Required<TenantBranding>; updateBranding: (next: TenantBranding) => void; resetBranding: () => void };
 const BrandingContext = createContext<BrandingValue | null>(null);
 export function BrandingProvider({ children }: { children: ReactNode }) {
