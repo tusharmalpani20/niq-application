@@ -1,0 +1,2 @@
+ALTER TABLE "scoring_connections" ADD COLUMN "scoring_organization_id" varchar(26) NOT NULL;--> statement-breakpoint
+ALTER TABLE "scoring_connections" ADD CONSTRAINT "scoring_connections_scoring_org_id_ulid_ck" CHECK ("scoring_connections"."scoring_organization_id" ~ '^[0-9A-HJKMNP-TV-Z]{26}$');

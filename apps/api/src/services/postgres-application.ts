@@ -28,6 +28,7 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Executor = Database | Transaction;
 const scoringActivationResponseSchema = z.object({
   deploymentId: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
+  organizationId: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
   credential: z.string().min(32),
 });
 
@@ -365,7 +366,7 @@ export class PostgresApplicationService implements ApplicationService {
       )).orderBy(desc(organizationEntitlements.effectiveFrom), desc(organizationEntitlements.createdAt)).limit(1),
       this.db.select({ id: invitations.id, email: invitations.email, role: invitations.role, status: invitations.status, expiresAt: invitations.expiresAt })
         .from(invitations).where(eq(invitations.organizationId, organizationId)).orderBy(desc(invitations.createdAt)),
-      this.db.select({ deploymentId: scoringConnections.deploymentId, keyVersion: scoringConnections.keyVersion, activatedAt: scoringConnections.activatedAt })
+      this.db.select({ deploymentId: scoringConnections.deploymentId, scoringOrganizationId: scoringConnections.scoringOrganizationId, keyVersion: scoringConnections.keyVersion, activatedAt: scoringConnections.activatedAt })
         .from(scoringConnections).where(eq(scoringConnections.organizationId, organizationId)).limit(1),
     ]);
     return { organization, entitlement: entitlement ?? null, invitations: organizationInvitations, scoringConnection: scoringConnection ?? null };
@@ -383,7 +384,7 @@ export class PostgresApplicationService implements ApplicationService {
       response = await fetch(new URL("/v1/activate", this.config.SCORING_API_URL), {
         method: "POST",
         headers: { "content-type": "application/json", "x-request-id": context.requestId },
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, organizationReference: organizationId }),
         signal: AbortSignal.timeout(this.config.SCORING_TIMEOUT_MS),
       });
     } catch {
@@ -397,13 +398,13 @@ export class PostgresApplicationService implements ApplicationService {
     const encrypted = encryptCredential(parsed.data.credential, this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY);
     const activatedAt = new Date();
     const [connection] = await this.db.insert(scoringConnections).values({
-      id: createEntityId(), organizationId, deploymentId: parsed.data.deploymentId,
+      id: createEntityId(), organizationId, deploymentId: parsed.data.deploymentId, scoringOrganizationId: parsed.data.organizationId,
       encryptedCredential: encrypted.ciphertext, credentialIv: encrypted.iv,
       keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION, activatedAt,
     }).onConflictDoUpdate({
       target: scoringConnections.organizationId,
-      set: { deploymentId: parsed.data.deploymentId, encryptedCredential: encrypted.ciphertext, credentialIv: encrypted.iv, keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION, activatedAt, updatedAt: activatedAt },
-    }).returning({ deploymentId: scoringConnections.deploymentId, keyVersion: scoringConnections.keyVersion, activatedAt: scoringConnections.activatedAt });
+      set: { deploymentId: parsed.data.deploymentId, scoringOrganizationId: parsed.data.organizationId, encryptedCredential: encrypted.ciphertext, credentialIv: encrypted.iv, keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION, activatedAt, updatedAt: activatedAt },
+    }).returning({ deploymentId: scoringConnections.deploymentId, scoringOrganizationId: scoringConnections.scoringOrganizationId, keyVersion: scoringConnections.keyVersion, activatedAt: scoringConnections.activatedAt });
     await this.audit(this.db, organizationId, context, "SCORING_CONNECTION_ACTIVATED", "scoring_connection", connection?.deploymentId, undefined, { actorUserId: actor.userId, keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION });
     return { connection };
   }

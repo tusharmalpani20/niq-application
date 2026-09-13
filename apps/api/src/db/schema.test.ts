@@ -73,6 +73,7 @@ describe("tenant data invariants", () => {
   });
 
   test("scoring credentials are stored only as encrypted bytes", () => {
+    expect(scoringConnections.scoringOrganizationId.notNull).toBe(true);
     expect(scoringConnections.encryptedCredential.notNull).toBe(true);
     expect(scoringConnections.credentialIv.notNull).toBe(true);
     expect("credential" in scoringConnections).toBe(false);
@@ -139,5 +140,11 @@ describe("migration-only safeguards", () => {
     expect(migration).toContain('"encrypted_credential" "bytea" NOT NULL');
     expect(migration).toContain('"credential_iv" "bytea" NOT NULL');
     expect(migration).not.toContain('\n\t"credential" ');
+  });
+
+  test("scoring organization mapping migration stores a required ULID", async () => {
+    const migration = await Bun.file("./drizzle/0005_tense_wild_pack.sql").text();
+    expect(migration).toContain('"scoring_organization_id" varchar(26) NOT NULL');
+    expect(migration).toContain("scoring_connections_scoring_org_id_ulid_ck");
   });
 });

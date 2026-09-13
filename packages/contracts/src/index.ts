@@ -139,6 +139,7 @@ export const onboardOrganizationResponseSchema = z.object({
 export const activateScoringSchema = z.object({ activationToken: z.string().min(48).max(256) });
 export const scoringConnectionSchema = z.object({
   deploymentId: idSchema,
+  scoringOrganizationId: idSchema,
   keyVersion: z.string(),
   activatedAt: z.coerce.date(),
 });

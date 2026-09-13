@@ -125,7 +125,7 @@ describe("local authentication routes", () => {
       allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
       service: fakeService({
         authenticate: async () => niqAdmin,
-        activateScoring: async () => ({ connection: { deploymentId: "01J00000000000000000000006", keyVersion: "local-v1", activatedAt: new Date() } }),
+        activateScoring: async () => ({ connection: { deploymentId: "01J00000000000000000000006", scoringOrganizationId: "01J00000000000000000000007", keyVersion: "local-v1", activatedAt: new Date() } }),
       }),
     });
     const response = await app.request(`/v1/organizations/${principal.organizationId}/scoring/activate`, {
@@ -136,6 +136,7 @@ describe("local authentication routes", () => {
     expect(response.status).toBe(201);
     const body = await response.json();
     expect(body.connection.deploymentId).toBe("01J00000000000000000000006");
+    expect(body.connection.scoringOrganizationId).toBe("01J00000000000000000000007");
     expect(body.credential).toBeUndefined();
   });
 });

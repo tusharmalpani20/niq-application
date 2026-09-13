@@ -84,6 +84,7 @@ export const scoringConnections = pgTable(
     id: entityId("id").primaryKey(),
     organizationId: entityId("organization_id").notNull().references(() => organizations.id),
     deploymentId: entityId("deployment_id").notNull(),
+    scoringOrganizationId: entityId("scoring_organization_id").notNull(),
     encryptedCredential: encryptedBytes("encrypted_credential").notNull(),
     credentialIv: encryptedBytes("credential_iv").notNull(),
     keyVersion: text("key_version").notNull(),
@@ -94,6 +95,7 @@ export const scoringConnections = pgTable(
     uniqueIndex("scoring_connections_organization_uidx").on(table.organizationId),
     check("scoring_connections_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
     check("scoring_connections_deployment_id_ulid_ck", sql`${table.deploymentId} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
+    check("scoring_connections_scoring_org_id_ulid_ck", sql`${table.scoringOrganizationId} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
   ],
 );
 
