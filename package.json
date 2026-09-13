@@ -6,7 +6,7 @@
   "scripts": {
     "build": "turbo run build",
     "check": "turbo run check",
-    "dev": "turbo run dev --parallel",
+    "dev": "turbo run dev --parallel --env-mode=loose",
     "test": "turbo run test",
     "db:generate": "bun --filter @niq/application-api db:generate",
     "db:migrate": "bun --filter @niq/application-api db:migrate"
