@@ -1,6 +1,6 @@
 import type { AuthenticatedUser } from "@niq/application-contracts";
 import { useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { signOut } from "../lib/api";
 import { Icon } from "../lib/icons";
 
@@ -20,7 +20,7 @@ export function PlatformAdminShell({ user }: { user: AuthenticatedUser }) {
 
   return <div className={`app-shell admin-shell ${collapsed ? "is-nav-collapsed" : ""}`}>
     <aside className={`sidebar admin-sidebar ${collapsed ? "is-collapsed" : ""}`}>
-      <div className="sidebar-brand">{collapsed ? <button className="brand-logo brand-expand-button" type="button" aria-label="Expand navigation" aria-expanded="false" title="Expand navigation" onClick={() => setCollapsed(false)}>N</button> : <><div className="brand-logo">N</div><div className="sidebar-label"><strong>NIQ Admin</strong></div><button className="sidebar-collapse-button" type="button" aria-label="Collapse navigation" aria-expanded="true" onClick={() => setCollapsed(true)}><Icon name="chevronLeft" size={16} /></button></>}</div>
+      <div className="sidebar-brand">{collapsed ? <button className="brand-logo brand-expand-button" type="button" aria-label="Expand navigation" aria-expanded="false" title="Expand navigation" onClick={() => setCollapsed(false)}>N</button> : <><Link className="brand-logo brand-home-link" to="/admin/organizations" aria-label="NIQ Admin home" title="NIQ Admin home">N</Link><div className="sidebar-label"><strong>NIQ</strong></div><button className="sidebar-collapse-button" type="button" aria-label="Collapse navigation" aria-expanded="true" onClick={() => setCollapsed(true)}><Icon name="chevronLeft" size={16} /></button></>}</div>
       <nav aria-label="Platform navigation">{navigation.map((item) => <NavLink key={item.to} to={item.to} title={collapsed ? item.label : undefined} className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}><Icon name={item.icon} /><span className="sidebar-label">{item.label}</span></NavLink>)}</nav>
       <div className="sidebar-user"><div className="avatar">{initials}</div><div className="sidebar-label"><strong>{user.displayName}</strong></div><button className="icon-button" type="button" title="Sign out" aria-label="Sign out" onClick={handleSignOut}><Icon name="logout" size={18} /></button></div>
     </aside>

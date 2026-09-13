@@ -284,6 +284,7 @@ a { color: inherit; }
 .admin-sidebar .sidebar-brand { padding: 0 .25rem; }
 .admin-sidebar .sidebar-brand strong { color: var(--ink); }
 .admin-sidebar .brand-logo { box-shadow: none; }
+.brand-home-link { text-decoration: none; }
 .brand-expand-button { padding: 0; border: 0; cursor: pointer; }
 .brand-expand-button:hover,
 .brand-expand-button:focus-visible { box-shadow: 0 0 0 4px var(--primary-soft); }
