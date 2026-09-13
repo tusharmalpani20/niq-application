@@ -1,6 +1,7 @@
 import { Fragment, type ClipboardEvent, type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ApiRequestError, resendMfa, verifyMfa } from "../lib/api";
+import { authenticatedLandingPath } from "../lib/auth-routing";
 
 type ChallengeState = {
   email: string;
@@ -84,8 +85,8 @@ export function VerifyMfaPage() {
     setMessage(null);
     setNotice(null);
     try {
-      await verifyMfa({ challengeToken: challenge.challengeToken, otp: digits.join("") });
-      navigate("/");
+      const user = await verifyMfa({ challengeToken: challenge.challengeToken, otp: digits.join("") });
+      navigate(authenticatedLandingPath(user));
     } catch (error) {
       if (error instanceof ApiRequestError) {
         const attemptsRemaining = numericDetail(error, "attemptsRemaining");

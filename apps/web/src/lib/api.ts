@@ -3,6 +3,7 @@ import {
   apiErrorSchema,
   authenticationResponseSchema,
   invitationAcceptanceResponseSchema,
+  organizationListResponseSchema,
   resendMfaRequestSchema,
   resendMfaResponseSchema,
   signInRequestSchema,
@@ -11,6 +12,7 @@ import {
   type AcceptInvitation,
   type ApiError,
   type AuthenticatedUser,
+  type Organization,
   type SignInRequest,
   type VerifyMfaRequest,
 } from "@niq/application-contracts";
@@ -93,4 +95,9 @@ export async function getCurrentUser(): Promise<AuthenticatedUser> {
 export async function signOut(): Promise<void> {
   const response = await fetch("/api/v1/auth/sign-out", { method: "POST", credentials: "include" });
   if (!response.ok && response.status !== 401) await responseBody(response);
+}
+
+export async function listOrganizations(): Promise<Organization[]> {
+  const response = await fetch("/api/v1/organizations", { credentials: "include" });
+  return organizationListResponseSchema.parse(await responseBody(response)).items;
 }

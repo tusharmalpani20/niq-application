@@ -172,6 +172,7 @@ a { color: inherit; }
 .status-badge[data-status="under-review"] { color: #6751a4; background: #f0edfb; }
 .status-badge[data-status="pending-scoring"], .status-badge[data-status="invited"] { color: #966300; background: #fff7df; }
 .status-badge[data-status="scoring-unavailable"] { color: #a43f3f; background: #fff0ef; }
+.status-badge[data-status="suspended"], .status-badge[data-status="closed"] { color: #a43f3f; background: #fff0ef; }
 .health-list { display: grid; }
 .health-list > div { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .55rem; padding: .7rem 0; border-top: 1px solid #edf1f2; }
 .health-list strong { font-size: .78rem; }.health-list em { color: var(--ink-muted); font-size: .7rem; font-style: normal; }

@@ -87,6 +87,21 @@ export const membershipRoleSchema = z.enum(["ORGANIZATION_ADMIN", "MEDICAL", "SU
 export const organizationStatusSchema = z.enum(["ACTIVE", "SUSPENDED", "CLOSED"]);
 export const facilityStatusSchema = z.enum(["ACTIVE", "INACTIVE"]);
 
+export const organizationSchema = z.object({
+  id: idSchema,
+  legalName: z.string(),
+  displayName: z.string(),
+  slug: z.string(),
+  logoObjectKey: z.string().nullable(),
+  primaryColor: z.string(),
+  secondaryColor: z.string(),
+  status: organizationStatusSchema,
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+
+export const organizationListResponseSchema = z.object({ items: z.array(organizationSchema) });
+
 export const createOrganizationSchema = z.object({
   legalName: z.string().trim().min(2).max(200),
   displayName: z.string().trim().min(2).max(120),
@@ -185,6 +200,7 @@ export type SignInRequest = z.infer<typeof signInRequestSchema>;
 export type AuthenticatedUser = z.infer<typeof authenticatedUserSchema>;
 export type AcceptInvitation = z.infer<typeof acceptInvitationSchema>;
 export type BootstrapAdmin = z.infer<typeof bootstrapAdminSchema>;
+export type Organization = z.infer<typeof organizationSchema>;
 export type CreateInvitation = z.infer<typeof createInvitationSchema>;
 export type UpdateFacility = z.infer<typeof updateFacilitySchema>;
 export type UpdateOrganization = z.infer<typeof updateOrganizationSchema>;

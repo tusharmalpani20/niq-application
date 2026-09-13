@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiRequestError, signIn } from "../lib/api";
+import { authenticatedLandingPath } from "../lib/auth-routing";
 
 export function SignInPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -16,7 +17,7 @@ export function SignInPage() {
     try {
       const result = await signIn({ email: String(data.get("email")), password: String(data.get("password")) });
       if (result.nextStep === "MFA_REQUIRED") navigate("/verify", { state: { ...result, email: String(data.get("email")) } });
-      else navigate("/");
+      else navigate(authenticatedLandingPath(result.user));
     } catch (error) {
       setMessage(error instanceof ApiRequestError ? error.message : "Sign in is temporarily unavailable. Please try again later.");
     } finally {
