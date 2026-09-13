@@ -1,6 +1,15 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { OnboardOrganizationResponse } from "@niq/application-contracts";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { ApiRequestError, onboardOrganization } from "../lib/api";
 import { PageHeader } from "../components/Page";
 import { Icon } from "../lib/icons";
@@ -97,44 +106,38 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
   if (created) {
     const invitationUrl = created.activationToken ? `${window.location.origin}/invite/${created.activationToken}` : null;
     return <section className="onboarding-success"><div className="success-icon"><Icon name="check" /></div><div><h2>{created.organization.displayName} created</h2><p>The organization, usage limits and administrator invitation were saved together.</p></div>
-      {invitationUrl ? <label>Local invitation link<textarea readOnly value={invitationUrl} /><span className="field-help">Visible only in development. Production delivery will use the configured notification provider.</span></label> : <div className="notice notice-info"><div><strong>Invitation created</strong><span>The delivery provider will send the activation link to {created.invitation.email}.</span></div></div>}
-      <div className="form-actions">{onCancel ? <button className="btn btn-outline" type="button" onClick={onCancel}>Close</button> : <Link className="btn btn-outline" to="/admin/organizations">All organizations</Link>}<Link className="btn btn-primary" to={`/admin/organizations/${created.organization.id}`}>Manage organization</Link></div>
+      {invitationUrl ? <Field><FieldLabel>Local invitation link</FieldLabel><Textarea readOnly value={invitationUrl} /><FieldDescription>Visible only in development. Production delivery will use the configured notification provider.</FieldDescription></Field> : <Alert><AlertDescription>The delivery provider will send the activation link to {created.invitation.email}.</AlertDescription></Alert>}
+      <div className="form-actions">{onCancel ? <Button variant="outline" type="button" onPress={onCancel}>Close</Button> : <Link className={buttonVariants({ variant: "outline" })} to="/admin/organizations">All organizations</Link>}<Link className={buttonVariants()} to={`/admin/organizations/${created.organization.id}`}>Manage organization</Link></div>
     </section>;
   }
 
   return <form ref={formRef} className="admin-onboarding-form onboarding-wizard" onSubmit={submit} onChange={markDirty}>
-    <div className="onboarding-tabs" role="tablist" aria-label="Organization setup steps">{steps.map((label, index) => <button key={label} role="tab" type="button" aria-selected={step === index} className={step === index ? "active" : index < step ? "complete" : ""} disabled={index > furthestStep} onClick={() => setStep(index as Step)}><span>{index < step ? <Icon name="check" size={14} /> : index + 1}</span><strong>{label}</strong></button>)}</div>
+    <Tabs selectedKey={step} onSelectionChange={(key) => setStep(Number(key) as Step)} className="min-h-0 min-w-0 flex-1 gap-0">
+    <TabsList className="onboarding-tabs h-auto w-full min-w-0 rounded-none border-b bg-muted/40 p-2" aria-label="Organization setup steps">{steps.map((label, index) => <TabsTrigger id={index} key={label} isDisabled={index > furthestStep} className="h-12 min-w-0 gap-2 overflow-hidden"><span className="grid size-6 shrink-0 place-items-center rounded-full border text-xs">{index < step ? <Icon name="check" size={14} /> : index + 1}</span><strong className="truncate">{label}</strong></TabsTrigger>)}</TabsList>
 
-    <div className="onboarding-panel" role="tabpanel" hidden={step !== 0} data-onboarding-step="0">
+    <TabsContent id={0} className="onboarding-panel" data-onboarding-step="0">
       <div className="wizard-heading"><h2>Organization details</h2><p>Set up the client account and invite its first administrator.</p></div>
-      <div className="field-grid">
-        <label>Display name<input name="displayName" required minLength={2} value={displayName} placeholder="Apollo Hospitals" onChange={(event) => { const value = event.target.value; setDisplayName(value); if (!slugEdited) setSlug(organizationUrlName(value)); }} /></label>
-        <label>Legal name<input name="legalName" required minLength={2} placeholder="Apollo Hospitals Enterprise Ltd." /></label>
-        <label>URL name<input name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" value={slug} placeholder="apollo-hospitals" aria-describedby="url-name-help" onChange={(event) => { setSlugEdited(true); setSlug(organizationUrlName(event.target.value)); }} /><small id="url-name-help" className="field-help">Used in organization links. You can edit it.</small></label>
-        <label>First administrator email<input name="firstAdminEmail" type="email" required placeholder="admin@hospital.org" /></label>
-      </div>
-    </div>
+      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Display name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Apollo Hospitals" onChange={(event) => { const value = event.target.value; setDisplayName(value); if (!slugEdited) setSlug(organizationUrlName(value)); }} /></Field><Field><FieldLabel htmlFor="legalName">Legal name</FieldLabel><Input id="legalName" name="legalName" required minLength={2} placeholder="Apollo Hospitals Enterprise Ltd." /></Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" value={slug} placeholder="apollo-hospitals" onChange={(event) => { setSlugEdited(true); setSlug(organizationUrlName(event.target.value)); }} /><FieldDescription>Used in organization links. You can edit it.</FieldDescription></Field><Field><FieldLabel htmlFor="firstAdminEmail">First administrator email</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required placeholder="admin@hospital.org" /></Field></FieldGroup>
+    </TabsContent>
 
-    <div className="onboarding-panel" role="tabpanel" hidden={step !== 1} data-onboarding-step="1">
+    <TabsContent id={1} className="onboarding-panel" data-onboarding-step="1">
       <div className="wizard-heading"><h2>Deployment and usage</h2><p>Choose where the application runs and set any account limits.</p></div>
-      <fieldset className="wizard-fieldset"><legend>Deployment type</legend><div className="deployment-choice-grid">{deploymentOptions.map((option) => <label className="deployment-choice" key={option.value}><input type="radio" name="deploymentMode" value={option.value} defaultChecked={option.value === "NIQ_HOSTED"} /><span className="choice-mark" /><span><strong>{option.label}</strong><small>{option.help}</small></span></label>)}</div></fieldset>
-      <div className="service-toggle-grid">
-        <label className="switch-row"><span><strong>Scoring</strong><small>Allow this organization to request scores</small></span><input name="scoringEnabled" type="checkbox" defaultChecked /><i aria-hidden="true" /></label>
-        <label className="switch-row"><span><strong>Face scan</strong><small>Allow automated face-scan requests</small></span><input name="faceScanEnabled" type="checkbox" defaultChecked /><i aria-hidden="true" /></label>
-      </div>
-      <fieldset className="wizard-fieldset"><legend>Usage limits</legend><div className="wizard-limit-list">{limitFields.map((field) => <div className="wizard-limit-row" key={field.name}><div><strong>{field.label}</strong><small>{field.help}</small></div>{!unlimited[field.name] && <label className="limit-value"><span className="sr-only">{field.label} limit</span><input name={field.name} type="number" inputMode="numeric" min="1" defaultValue="100" required /><em>{field.unit}</em></label>}<label className="unlimited-toggle"><input type="checkbox" checked={unlimited[field.name]} onChange={(event) => setUnlimited((current) => ({ ...current, [field.name]: event.target.checked }))} /><span>Unlimited</span></label></div>)}</div></fieldset>
-    </div>
+      <FieldSet className="wizard-fieldset"><FieldLegend>Deployment type</FieldLegend><RadioGroup name="deploymentMode" defaultValue="NIQ_HOSTED" className="deployment-choice-grid">{deploymentOptions.map((option) => <FieldLabel className="deployment-choice" key={option.value}><RadioGroupItem value={option.value} /><span><strong>{option.label}</strong><small>{option.help}</small></span></FieldLabel>)}</RadioGroup></FieldSet>
+      <div className="service-toggle-grid"><Field orientation="horizontal" className="switch-row"><FieldLabel className="grid flex-1 gap-1"><strong>Scoring</strong><small>Allow this organization to request scores</small></FieldLabel><Switch name="scoringEnabled" defaultSelected aria-label="Enable scoring" /></Field><Field orientation="horizontal" className="switch-row"><FieldLabel className="grid flex-1 gap-1"><strong>Face scan</strong><small>Allow automated face-scan requests</small></FieldLabel><Switch name="faceScanEnabled" defaultSelected aria-label="Enable face scan" /></Field></div>
+      <FieldSet className="wizard-fieldset"><FieldLegend>Usage limits</FieldLegend><div className="wizard-limit-list">{limitFields.map((field) => <div className="wizard-limit-row" key={field.name}><div><strong>{field.label}</strong><small>{field.help}</small></div>{!unlimited[field.name] && <div className="limit-value"><Input aria-label={`${field.label} limit`} name={field.name} type="number" inputMode="numeric" min="1" defaultValue="100" required /><em>{field.unit}</em></div>}<Checkbox isSelected={unlimited[field.name]} onChange={(selected) => setUnlimited((current) => ({ ...current, [field.name]: selected }))}>Unlimited</Checkbox></div>)}</div></FieldSet>
+    </TabsContent>
 
-    <div className="onboarding-panel" role="tabpanel" hidden={step !== 2} data-onboarding-step="2">
+    <TabsContent id={2} className="onboarding-panel" data-onboarding-step="2">
       <div className="wizard-heading"><h2>Branding</h2><p>Add the organization’s logo and colours. These appear after its users sign in.</p></div>
       <div className="branding-wizard-grid">
-        <div className="logo-field"><span className="field-label">Organization logo <small>Optional</small></span><label className="logo-dropzone"><input type="file" accept={ORGANIZATION_LOGO_ACCEPT} onChange={(event) => chooseLogo(event.target.files?.[0] ?? null)} /><span className="logo-preview">{logoPreview ? <img src={logoPreview} alt="Organization logo preview" /> : <Icon name="building" size={26} />}</span><span><strong>{logo ? logo.name : "Choose a logo"}</strong><small>PNG, JPEG or WebP · maximum 2 MB</small></span></label>{logoMessage && <p className="error-message" role="alert">{logoMessage}</p>}</div>
+        <Field className="logo-field"><FieldLabel>Organization logo <small>Optional</small></FieldLabel><label className="logo-dropzone"><input type="file" accept={ORGANIZATION_LOGO_ACCEPT} onChange={(event) => chooseLogo(event.target.files?.[0] ?? null)} /><span className="logo-preview">{logoPreview ? <img src={logoPreview} alt="Organization logo preview" /> : <Icon name="building" size={26} />}</span><span><strong>{logo ? logo.name : "Choose a logo"}</strong><small>PNG, JPEG or WebP · maximum 2 MB</small></span></label>{logoMessage && <Alert variant="destructive"><AlertDescription>{logoMessage}</AlertDescription></Alert>}</Field>
         <div className="brand-colour-grid"><label>Primary colour<span className="brand-colour-input"><input name="primaryColor" type="color" value={primaryColor} onChange={(event) => setPrimaryColor(event.target.value.toUpperCase())} /><span>{primaryColor}</span></span></label><label>Secondary colour<span className="brand-colour-input"><input name="secondaryColor" type="color" value={secondaryColor} onChange={(event) => setSecondaryColor(event.target.value.toUpperCase())} /><span>{secondaryColor}</span></span></label></div>
       </div>
-    </div>
+    </TabsContent>
+    </Tabs>
 
-    {message && <p className="error-message onboarding-error" role="alert">{message}</p>}
-    <footer className="form-footer wizard-footer"><div>{onCancel ? <button className="btn btn-outline" type="button" onClick={onCancel}>Cancel</button> : <Link className="btn btn-outline" to="/admin/organizations">Cancel</Link>}</div><div>{step > 0 && <button className="btn btn-outline" type="button" onClick={() => setStep((step - 1) as Step)}>Back</button>}{step < 2 ? <button key="continue" className="btn btn-primary" type="button" onClick={(event) => { event.preventDefault(); moveNext(); }}>Continue</button> : <button key="submit" className="btn btn-primary" type="submit" disabled={busy}>{busy ? "Creating…" : "Create organization"}</button>}</div></footer>
+    {message && <Alert variant="destructive" className="onboarding-error"><AlertDescription>{message}</AlertDescription></Alert>}
+    <footer className="form-footer wizard-footer"><div>{onCancel ? <Button variant="outline" type="button" onPress={onCancel}>Cancel</Button> : <Link className={buttonVariants({ variant: "outline" })} to="/admin/organizations">Cancel</Link>}</div><div>{step > 0 && <Button variant="outline" type="button" onPress={() => setStep((step - 1) as Step)}>Back</Button>}{step < 2 ? <Button key="continue" type="button" onPress={moveNext}>Continue</Button> : <Button key="submit" type="submit" isDisabled={busy}>{busy ? "Creating…" : "Create organization"}</Button>}</div></footer>
   </form>;
 }
 

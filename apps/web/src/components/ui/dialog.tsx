@@ -63,12 +63,14 @@ function Dialog({
   children,
   showCloseButton = true,
   isDismissable = true,
+  ariaLabel,
   ...props
 }: Omit<ModalOverlayPrimitiveProps, "className" | "children"> &
   Pick<React.ComponentProps<typeof ModalPrimitive>, "isDismissable"> & {
     className?: string
     children: React.ReactNode
     showCloseButton?: boolean
+    ariaLabel?: string
   }) {
   return (
     <DialogOverlay isDismissable={isDismissable} {...props}>
@@ -80,6 +82,7 @@ function Dialog({
         )}
       >
         <DialogPrimitive
+          aria-label={ariaLabel}
           data-slot="dialog"
           className="[display:inherit] [gap:inherit] outline-none"
         >

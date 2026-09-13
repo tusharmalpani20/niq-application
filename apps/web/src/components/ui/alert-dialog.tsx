@@ -47,12 +47,14 @@ function AlertDialog({
   className,
   size = "default",
   children,
+  ariaLabel,
   ...props
 }: Omit<ModalOverlayPrimitiveProps, "className" | "children"> &
   Pick<React.ComponentProps<typeof ModalPrimitive>, "isDismissable"> & {
     className?: string
     size?: "default" | "sm"
     children: React.ReactNode
+    ariaLabel?: string
   }) {
   return (
     <AlertDialogOverlay {...props}>
@@ -65,6 +67,7 @@ function AlertDialog({
         )}
       >
         <AlertDialogPrimitive
+          aria-label={ariaLabel}
           data-slot="alert-dialog"
           role="alertdialog"
           className="[display:inherit] [gap:inherit] outline-none"

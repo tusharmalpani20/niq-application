@@ -1,5 +1,9 @@
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { ApiRequestError, signIn } from "../lib/api";
 import { authenticatedLandingPath } from "../lib/auth-routing";
 
@@ -43,20 +47,14 @@ export function SignInPage() {
           <h2 id="sign-in-heading">Welcome back</h2>
 
           <form className="sign-in-form" onSubmit={handleSubmit} noValidate>
-            <label htmlFor="email">Email</label>
-            <input id="email" name="email" type="email" autoComplete="username" required placeholder="name@example.com" />
-
-            <div className="password-row">
-              <label htmlFor="password">Password</label>
-              <button type="button" className="text-button" disabled title="Password recovery is not configured yet">Forgot password?</button>
-            </div>
-            <input id="password" name="password" type="password" autoComplete="current-password" required />
-
-            {message && <div className="form-message" role="alert">{message}</div>}
-
-            <button className="submit-button" type="submit" disabled={isSubmitting}>
+            <FieldGroup>
+              <Field><FieldLabel htmlFor="email">Email</FieldLabel><Input className="h-12" id="email" name="email" type="email" autoComplete="username" required placeholder="name@example.com" /></Field>
+              <Field><div className="password-row"><FieldLabel htmlFor="password">Password</FieldLabel><Button type="button" variant="link" size="sm" isDisabled>Forgot password?</Button></div><Input className="h-12" id="password" name="password" type="password" autoComplete="current-password" required /></Field>
+            </FieldGroup>
+            {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
+            <Button className="h-12 w-full text-base" type="submit" isDisabled={isSubmitting}>
               {isSubmitting ? "Signing in…" : "Sign in securely"}
-            </button>
+            </Button>
           </form>
 
           <p className="support-copy">Need access? Contact your organization administrator.</p>
