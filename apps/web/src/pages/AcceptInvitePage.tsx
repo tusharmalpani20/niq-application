@@ -18,7 +18,7 @@ export function AcceptInvitePage() {
     } finally { setBusy(false); }
   }
   return <main className="auth-page"><section className="auth-card auth-card-wide" aria-labelledby="invite-title">
-    <div className="brand-logo auth-logo">N</div><p className="page-eyebrow">Invitation from Apollo Group</p><h1 id="invite-title">Create your NIQ account</h1>
+    <div className="brand-logo auth-logo">N</div><p className="page-eyebrow">NIQ invitation</p><h1 id="invite-title">Create your NIQ account</h1>
     {done ? <div className="success-panel"><span className="success-icon">✓</span><h2>Account ready</h2><p>Your password has been saved. Sign in to finish setting up multi-factor authentication.</p><Link className="btn btn-primary" to="/sign-in">Continue to sign in</Link></div> : <>
       <p className="auth-intro">Complete your secure, invitation-only account setup.</p>
       <form onSubmit={submit}><label>Full name<input name="name" autoComplete="name" required /></label>

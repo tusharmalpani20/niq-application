@@ -5,7 +5,7 @@ import { PageHeader } from "../components/Page";
 import { StatusBadge } from "../components/StatusBadge";
 
 export function DashboardPage() {
-  return <><PageHeader eyebrow="Saturday, 13 September" title="Good morning, Ananya" description="Here is what needs attention across Apollo Group today." action={<Link className="btn btn-primary" to="/assessments/new"><Icon name="plus" size={18} />Start assessment</Link>} />
+  return <><PageHeader eyebrow="Saturday, 13 September" title="Good morning, Ananya" description="Here is what needs attention across your organization today." action={<Link className="btn btn-primary" to="/assessments/new"><Icon name="plus" size={18} />Start assessment</Link>} />
     <section className="metric-grid" aria-label="Organization summary">
       <article className="metric-card"><span>Active patients</span><strong>248</strong><em>Across 3 facilities</em></article>
       <article className="metric-card"><span>Assessments this month</span><strong>84</strong><em>12 awaiting review</em></article>

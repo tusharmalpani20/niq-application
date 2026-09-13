@@ -1,13 +1,11 @@
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiRequestError, signIn } from "../lib/api";
-import { useBranding } from "../lib/branding-context";
 
 export function SignInPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { branding } = useBranding();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -29,16 +27,14 @@ export function SignInPage() {
   return (
     <main className="sign-in-shell">
       <section className="welcome-panel" aria-labelledby="welcome-heading">
-        <div className="brand-lockup" role="img" aria-label={branding.displayName}>
+        <div className="brand-lockup" role="img" aria-label="NIQ">
           <span className="brand-mark">N</span>
-          <span>{branding.displayName}</span>
         </div>
         <div className="welcome-copy">
           <p className="eyebrow">NIQ · Clinical nutrition intelligence</p>
           <h1 id="welcome-heading">Clearer assessment.<br />More thoughtful care.</h1>
           <p>One secure workspace for oncology nutrition assessment, review and follow-up.</p>
         </div>
-        <p className="privacy-note">Patient information is visible only to authorized members of your organization.</p>
       </section>
 
       <section className="form-panel" aria-labelledby="sign-in-heading">

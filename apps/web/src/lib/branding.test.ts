@@ -14,7 +14,7 @@ describe("tenant branding", () => {
   });
 
   test("trims a tenant name and provides a safe pre-login fallback", () => {
-    expect(normalizeBranding({ displayName: "  Apollo Group  ", primaryColor: "#175CD3", secondaryColor: "#0E9384" }).displayName).toBe("Apollo Group");
+    expect(normalizeBranding({ displayName: "  Example Health  ", primaryColor: "#175CD3", secondaryColor: "#0E9384" }).displayName).toBe("Example Health");
     expect(normalizeBranding({ primaryColor: "#175CD3", secondaryColor: "#0E9384" }).displayName).toBe("NIQ");
   });
 });
