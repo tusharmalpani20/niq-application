@@ -284,6 +284,9 @@ a { color: inherit; }
 .admin-sidebar .sidebar-brand { padding: 0 .25rem; }
 .admin-sidebar .sidebar-brand strong { color: var(--ink); }
 .admin-sidebar .brand-logo { box-shadow: none; }
+.brand-expand-button { padding: 0; border: 0; cursor: pointer; }
+.brand-expand-button:hover,
+.brand-expand-button:focus-visible { box-shadow: 0 0 0 4px var(--primary-soft); }
 .admin-sidebar nav { margin-top: 1.5rem; }
 .admin-sidebar .nav-item { position: relative; color: var(--ink-soft); }
 .admin-sidebar .nav-item:hover { color: var(--primary); background: var(--primary-soft); }
@@ -295,8 +298,7 @@ a { color: inherit; }
 .admin-shell.is-nav-collapsed .admin-sidebar { width: 72px; }
 .admin-shell.is-nav-collapsed .app-main { margin-left: 72px; }
 .admin-sidebar.is-collapsed .sidebar-label { display: none; }
-.admin-sidebar.is-collapsed .sidebar-brand { flex-direction: column; justify-content: center; gap: .65rem; padding: 0; }
-.admin-sidebar.is-collapsed .sidebar-collapse-button { order: -1; margin: 0; }
+.admin-sidebar.is-collapsed .sidebar-brand { justify-content: center; padding: 0; }
 .admin-sidebar.is-collapsed .brand-logo { width: 2.35rem; height: 2.35rem; }
 .admin-sidebar.is-collapsed .nav-item { justify-content: center; padding-inline: 0; }
 .admin-sidebar.is-collapsed .sidebar-user { display: flex; flex-direction: column; gap: .55rem; padding: 1rem 0 0; }
