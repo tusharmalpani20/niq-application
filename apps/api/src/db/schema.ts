@@ -78,6 +78,25 @@ export const organizations = pgTable(
   ],
 );
 
+export const organizationBrandAssets = pgTable(
+  "organization_brand_assets",
+  {
+    id: entityId("id").primaryKey(),
+    organizationId: entityId("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    content: encryptedBytes("content").notNull(),
+    mimeType: text("mime_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    sha256: varchar("sha256", { length: 64 }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("organization_brand_assets_org_uidx").on(table.organizationId),
+    check("organization_brand_assets_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
+    check("organization_brand_assets_size_ck", sql`${table.byteSize} > 0 AND ${table.byteSize} <= 2097152`),
+    check("organization_brand_assets_mime_ck", sql`${table.mimeType} IN ('image/png', 'image/jpeg', 'image/webp')`),
+  ],
+);
+
 export const scoringConnections = pgTable(
   "scoring_connections",
   {

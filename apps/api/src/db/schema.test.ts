@@ -15,6 +15,7 @@ import {
   scoringConnections,
   mfaChallenges,
   organizationEntitlements,
+  organizationBrandAssets,
   organizations,
 } from "./schema";
 
@@ -70,6 +71,12 @@ describe("tenant data invariants", () => {
     expect(organizations.faceScanEnabled.notNull).toBe(true);
     expect("scoringMonthlyLimit" in organizationEntitlements).toBe(true);
     expect("faceScanMonthlyLimit" in organizationEntitlements).toBe(true);
+  });
+
+  test("organization logos are tenant-bound binary assets", () => {
+    expect(organizationBrandAssets.content.notNull).toBe(true);
+    expect(organizationBrandAssets.organizationId.notNull).toBe(true);
+    expect(organizationBrandAssets.byteSize.notNull).toBe(true);
   });
 
   test("scoring credentials are stored only as encrypted bytes", () => {
@@ -146,5 +153,13 @@ describe("migration-only safeguards", () => {
     const migration = await Bun.file("./drizzle/0005_tense_wild_pack.sql").text();
     expect(migration).toContain('"scoring_organization_id" varchar(26) NOT NULL');
     expect(migration).toContain("scoring_connections_scoring_org_id_ulid_ck");
+  });
+
+  test("organization logo migration limits and tenant-binds stored image data", async () => {
+    const migration = await Bun.file("./drizzle/0006_shiny_blonde_phantom.sql").text();
+    expect(migration).toContain('CREATE TABLE "organization_brand_assets"');
+    expect(migration).toContain('"byte_size" <= 2097152');
+    expect(migration).toContain('CREATE UNIQUE INDEX "organization_brand_assets_org_uidx"');
+    expect(migration).toContain("ON DELETE cascade");
   });
 });

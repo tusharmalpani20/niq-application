@@ -71,5 +71,12 @@ describe("application contracts", () => {
     expect(result.faceScanMonthlyLimit).toBeNull();
     expect(result.scoringEnabled).toBe(true);
     expect(result.faceScanEnabled).toBe(true);
+    expect(result.logo).toBeNull();
+  });
+
+  test("accepts only supported organization logo formats", () => {
+    const base = { legalName: "Apollo Hospitals", displayName: "Apollo", slug: "apollo", firstAdminEmail: "admin@apollo.example" };
+    expect(onboardOrganizationSchema.safeParse({ ...base, logo: { mimeType: "image/png", contentBase64: "iVBORw0KGgo=" } }).success).toBe(true);
+    expect(onboardOrganizationSchema.safeParse({ ...base, logo: { mimeType: "image/svg+xml", contentBase64: "PHN2Zz4=" } }).success).toBe(false);
   });
 });

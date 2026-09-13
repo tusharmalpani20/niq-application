@@ -14,12 +14,14 @@ import {
   invitations,
   mfaChallenges,
   organizationEntitlements,
+  organizationBrandAssets,
   organizationMemberships,
   organizations,
   scoringConnections,
   users,
 } from "../db/schema";
 import { encryptCredential } from "../security/credential-encryption";
+import { decodeOrganizationLogo, InvalidOrganizationLogoError } from "../security/organization-logo";
 import { hashPassword, keyedHash, randomOtp, randomToken, secureEqual, verifyPassword } from "../security/tokens";
 import type { ApplicationService, MfaChallengeResult, OtpDelivery, Principal, RequestContext, SessionResult, SignInResult } from "./application";
 import { ServiceError } from "./application";
@@ -297,6 +299,14 @@ export class PostgresApplicationService implements ApplicationService {
     const token = randomToken();
     const expiresAt = new Date(Date.now() + this.config.INVITATION_TTL_HOURS * 3_600_000);
     const email = normalizeEmail(input.firstAdminEmail);
+    let logo: ReturnType<typeof decodeOrganizationLogo>;
+    try {
+      logo = decodeOrganizationLogo(input.logo);
+    } catch (error) {
+      if (error instanceof InvalidOrganizationLogoError) throw new ServiceError("VALIDATION_ERROR", error.message);
+      throw error;
+    }
+    const logoAssetId = logo ? createEntityId() : null;
 
     try {
       return await this.db.transaction(async (tx) => {
@@ -312,8 +322,10 @@ export class PostgresApplicationService implements ApplicationService {
           deploymentMode: input.deploymentMode,
           scoringEnabled: input.scoringEnabled,
           faceScanEnabled: input.faceScanEnabled,
+          logoObjectKey: logoAssetId ? `database:${logoAssetId}` : null,
         }).returning();
         if (!organization) throw new Error("Organization insert failed");
+        if (logo && logoAssetId) await tx.insert(organizationBrandAssets).values({ id: logoAssetId, organizationId, content: logo.data, mimeType: logo.mimeType, byteSize: logo.data.byteLength, sha256: logo.sha256 });
         await tx.insert(organizationEntitlements).values({
           id: createEntityId(),
           organizationId,
@@ -370,6 +382,13 @@ export class PostgresApplicationService implements ApplicationService {
         .from(scoringConnections).where(eq(scoringConnections.organizationId, organizationId)).limit(1),
     ]);
     return { organization, entitlement: entitlement ?? null, invitations: organizationInvitations, scoringConnection: scoringConnection ?? null };
+  }
+
+  async getOrganizationLogo(actor: Principal, organizationId: string) {
+    this.ensureOrganizationAccess(actor, organizationId);
+    const [asset] = await this.db.select({ data: organizationBrandAssets.content, mimeType: organizationBrandAssets.mimeType, etag: organizationBrandAssets.sha256 }).from(organizationBrandAssets).where(eq(organizationBrandAssets.organizationId, organizationId)).limit(1);
+    if (!asset) throw new ServiceError("NOT_FOUND", "Organization logo not found.");
+    return asset;
   }
   async activateScoring(actor: Principal, organizationId: string, input: ActivateScoring, context: RequestContext) {
     if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");

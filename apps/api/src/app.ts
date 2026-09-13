@@ -111,6 +111,11 @@ export function createApp(dependencies: AppDependencies) {
     return context.json({ organization: result.organization, invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens ? { activationToken: result.token } : {}) }, 201);
   });
   app.post("/v1/organizations", zValidator("json", createOrganizationSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.createOrganization(context.get("principal"), context.req.valid("json"), requestContext(context))), 201));
+  app.get("/v1/organizations/:organizationId/logo", zValidator("param", idParamsSchema, validationFailure), async (context) => {
+    const asset = await dependencies.service!.getOrganizationLogo(context.get("principal"), context.req.valid("param").organizationId);
+    const body = asset.data.buffer.slice(asset.data.byteOffset, asset.data.byteOffset + asset.data.byteLength) as ArrayBuffer;
+    return new Response(body, { headers: { "content-type": asset.mimeType, "cache-control": "private, max-age=300", etag: `\"${asset.etag}\"`, "x-content-type-options": "nosniff" } });
+  });
   app.get("/v1/organizations/:organizationId", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.getOrganization(context.get("principal"), context.req.valid("param").organizationId))));
   app.patch("/v1/organizations/:organizationId", zValidator("param", idParamsSchema, validationFailure), zValidator("json", updateOrganizationSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.updateOrganization(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("json"), requestContext(context)))));
   app.post("/v1/organizations/:organizationId/scoring/activate", zValidator("param", idParamsSchema, validationFailure), zValidator("json", activateScoringSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.activateScoring(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("json"), requestContext(context))), 201));
@@ -126,7 +131,7 @@ export function createApp(dependencies: AppDependencies) {
   app.notFound((context) => context.json(errorBody("NOT_FOUND", "The requested resource was not found.", context.get("requestId")), 404));
   app.onError((error, context) => {
     if (error instanceof ServiceError) {
-      const status = error.code === "FORBIDDEN" ? 403 : error.code === "NOT_FOUND" ? 404 : error.code === "USER_LIMIT_REACHED" ? 409 : error.code === "ACCOUNT_LOCKED" ? 423 : error.code === "RATE_LIMITED" ? 429 : error.code === "INVALID_CREDENTIALS" ? 401 : 409;
+      const status = error.code === "FORBIDDEN" ? 403 : error.code === "NOT_FOUND" ? 404 : error.code === "VALIDATION_ERROR" ? 400 : error.code === "USER_LIMIT_REACHED" ? 409 : error.code === "ACCOUNT_LOCKED" ? 423 : error.code === "RATE_LIMITED" ? 429 : error.code === "INVALID_CREDENTIALS" ? 401 : 409;
       return context.json(errorBody(error.code, error.message, context.get("requestId"), error.details), error.code === "SCORING_UNAVAILABLE" ? 503 : status);
     }
     console.error(JSON.stringify({ level: "error", requestId: context.get("requestId"), message: error.message }));

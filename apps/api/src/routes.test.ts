@@ -19,7 +19,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     verifyMfa: async () => ({ token: "valid-session", expiresAt: new Date(Date.now() + 60_000), principal }),
     resendMfa: async () => ({ challengeToken: "y".repeat(43), expiresAt: new Date(Date.now() + 60_000), resendAvailableAt: new Date(Date.now() + 30_000), attemptsRemaining: 5, resendsRemaining: 2 }),
     signOut: async () => {}, acceptInvitation: async () => principal, bootstrap: async () => principal,
-    createOrganization: async () => ({}), listOrganizations: async () => [], getOrganization: async () => ({}), updateOrganization: async () => ({}),
+    createOrganization: async () => ({}), listOrganizations: async () => [], getOrganization: async () => ({}), getOrganizationLogo: async () => ({ data: new Uint8Array([1, 2, 3]), mimeType: "image/png", etag: "abc" }), updateOrganization: async () => ({}),
     onboardOrganization: async () => ({ organization: {}, invitation: {}, token: "invite-token" }),
     activateScoring: async () => ({ connection: {} }),
     createFacility: async () => ({}), listFacilities: async () => [], updateFacility: async () => ({}),
@@ -117,6 +117,15 @@ describe("local authentication routes", () => {
     });
     expect(response.status).toBe(201);
     expect((await response.json()).activationToken).toBe("local-invite-token");
+  });
+
+  test("serves organization logos as private, non-sniffable assets", async () => {
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService() });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/logo`, { headers: { cookie: "niq_session=valid-session" } });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    expect(response.headers.get("cache-control")).toContain("private");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
   });
 
   test("returns scoring connection metadata without exposing the credential", async () => {

@@ -115,6 +115,10 @@ export const createOrganizationSchema = z.object({
 });
 
 const optionalMonthlyLimitSchema = z.number().int().min(1).nullable().default(null);
+export const organizationLogoUploadSchema = z.object({
+  mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+  contentBase64: z.string().regex(/^[A-Za-z0-9+/]+={0,2}$/, "Expected base64-encoded image data").max(2_796_204),
+});
 
 export const onboardOrganizationSchema = createOrganizationSchema.extend({
   deploymentMode: deploymentModeSchema.default("NIQ_HOSTED"),
@@ -124,6 +128,7 @@ export const onboardOrganizationSchema = createOrganizationSchema.extend({
   scoringMonthlyLimit: optionalMonthlyLimitSchema,
   faceScanMonthlyLimit: optionalMonthlyLimitSchema,
   firstAdminEmail: z.email().max(320),
+  logo: organizationLogoUploadSchema.nullable().default(null),
 });
 
 export const onboardOrganizationResponseSchema = z.object({

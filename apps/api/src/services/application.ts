@@ -47,7 +47,8 @@ export class ServiceError extends Error {
       | "NOT_FOUND"
       | "RATE_LIMITED"
       | "SCORING_UNAVAILABLE"
-      | "USER_LIMIT_REACHED",
+      | "USER_LIMIT_REACHED"
+      | "VALIDATION_ERROR",
     message: string,
     readonly details?: Record<string, unknown>,
   ) {
@@ -72,6 +73,7 @@ export interface ApplicationService {
   activateScoring(actor: Principal, organizationId: string, input: ActivateScoring, context: RequestContext): Promise<unknown>;
   listOrganizations(actor: Principal): Promise<unknown[]>;
   getOrganization(actor: Principal, organizationId: string): Promise<unknown>;
+  getOrganizationLogo(actor: Principal, organizationId: string): Promise<{ data: Uint8Array; mimeType: string; etag: string }>;
   updateOrganization(actor: Principal, organizationId: string, input: UpdateOrganization, context: RequestContext): Promise<unknown>;
   createFacility(actor: Principal, organizationId: string, input: CreateFacility, context: RequestContext): Promise<unknown>;
   listFacilities(actor: Principal, organizationId: string): Promise<unknown[]>;

@@ -38,6 +38,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated }: { onCancel?:
         userLimit: limit("userLimit"),
         scoringMonthlyLimit: limit("scoringMonthlyLimit"),
         faceScanMonthlyLimit: limit("faceScanMonthlyLimit"),
+        logo: null,
       });
       setCreated(result);
       onCreated?.();

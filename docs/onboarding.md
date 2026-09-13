@@ -14,6 +14,8 @@ Scoring-service access uses a separate activation flow. An NIQ operator provisio
 
 The bootstrap account has `platformRole=NIQ_ADMIN`. After password and MFA verification it is routed to `/admin/organizations`; organization users are routed to the clinical workspace. The NIQ administrator creates an organization, initial entitlement and first organization-administrator invitation atomically. Development may expose the one-time invitation URL on screen; production must deliver it through the approved notification adapter.
 
+The administrator may add a PNG, JPEG or WebP organization logo during onboarding. Logos are limited to 2 MB, their actual file signature is checked against the declared type, and the initial implementation stores the tenant-bound binary in PostgreSQL so the same deployment package works in NIQ-hosted, client-cloud and on-premises environments. The authenticated logo endpoint returns private, non-sniffable responses; logos are not embedded in organization list responses.
+
 ## Authentication acceptance gate
 
 Before enabling `AUTH_MODE=local` or `AUTH_MODE=oidc`, implement and review:
