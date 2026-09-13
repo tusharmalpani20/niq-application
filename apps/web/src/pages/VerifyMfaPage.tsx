@@ -1,4 +1,4 @@
-import { type ClipboardEvent, type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { Fragment, type ClipboardEvent, type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ApiRequestError, resendMfa, verifyMfa } from "../lib/api";
 
@@ -127,8 +127,7 @@ export function VerifyMfaPage() {
     <p className="auth-intro">Enter the six-digit code sent to <strong>{challenge?.email ?? "your email"}</strong>.</p>
     <form onSubmit={submit}><label htmlFor="otp-0">Verification code</label>
       <div className="otp-group" role="group" aria-label="Six-digit verification code" onPaste={handlePaste}>
-        {digits.map((digit, index) => <span className="otp-slot" key={index}>
-          {index === 3 && <span className="otp-separator" aria-hidden="true">–</span>}
+        {digits.map((digit, index) => <Fragment key={index}>
           <input
             ref={(element) => { inputs.current[index] = element; }}
             id={`otp-${index}`}
@@ -143,7 +142,8 @@ export function VerifyMfaPage() {
             onKeyDown={(event) => handleKeyDown(index, event)}
             required
           />
-        </span>)}
+          {index === 2 && <span className="otp-separator" aria-hidden="true">–</span>}
+        </Fragment>)}
       </div>
       <button className="text-button auth-resend" type="button" onClick={resend} disabled={!challenge || resending || resendIn > 0 || challenge.resendsRemaining === 0}>
         {resending ? "Sending…" : challenge?.resendsRemaining === 0 ? "Resend limit reached" : resendIn > 0 ? `Resend in ${duration(resendIn)}` : "Resend code"}
