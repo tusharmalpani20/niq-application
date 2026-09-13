@@ -64,6 +64,7 @@ function Sheet({
   children,
   side = "right",
   showCloseButton = true,
+  ariaLabel,
   ...props
 }: Omit<ModalOverlayPrimitiveProps, "className" | "children"> &
   Pick<React.ComponentProps<typeof ModalPrimitive>, "isDismissable"> & {
@@ -71,6 +72,7 @@ function Sheet({
     children: React.ReactNode
     side?: "top" | "right" | "bottom" | "left"
     showCloseButton?: boolean
+    ariaLabel?: string
   }) {
   return (
     <SheetOverlay {...props}>
@@ -83,6 +85,7 @@ function Sheet({
         )}
       >
         <SheetPrimitive
+          aria-label={ariaLabel}
           data-slot="sheet"
           className="[display:inherit] h-full max-h-[inherit] [flex-direction:inherit] [gap:inherit] outline-none"
         >

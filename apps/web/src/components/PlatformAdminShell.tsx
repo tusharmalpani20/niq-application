@@ -1,29 +1,66 @@
 import type { AuthenticatedUser } from "@niq/application-contracts";
-import { useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { LogOut } from "lucide-react";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import {
+  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
+  SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
+  SidebarProvider, SidebarRail, SidebarTrigger, useSidebar,
+} from "@/components/ui/sidebar";
 import { signOut } from "../lib/api";
 import { Icon } from "../lib/icons";
 
-const navigation = [
-  { to: "/admin/organizations", label: "Organizations", icon: "building" },
-];
+const navigation = [{ to: "/admin/organizations", label: "Organizations", icon: "building" }];
 
-export function PlatformAdminShell({ user }: { user: AuthenticatedUser }) {
-  const [collapsed, setCollapsed] = useState(() => window.matchMedia("(max-width: 820px)").matches);
+function AdminSidebar({ user, onSignOut }: { user: AuthenticatedUser; onSignOut: () => void }) {
+  const { isMobile, state, setOpen, setOpenMobile } = useSidebar();
+  const location = useLocation();
   const navigate = useNavigate();
+  const collapsed = state === "collapsed" && !isMobile;
   const initials = user.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 
-  async function handleSignOut() {
-    await signOut().catch(() => undefined);
-    navigate("/sign-in", { replace: true });
+  function go(to: string) {
+    navigate(to);
+    setOpenMobile(false);
   }
 
-  return <div className={`app-shell admin-shell ${collapsed ? "is-nav-collapsed" : ""}`}>
-    <aside className={`sidebar admin-sidebar ${collapsed ? "is-collapsed" : ""}`}>
-      <div className="sidebar-brand">{collapsed ? <button className="brand-logo brand-expand-button" type="button" aria-label="Expand navigation" aria-expanded="false" title="Expand navigation" onClick={() => setCollapsed(false)}>N</button> : <><Link className="brand-logo brand-home-link" to="/admin/organizations" aria-label="NIQ Admin home" title="NIQ Admin home">N</Link><div className="sidebar-label"><strong>NIQ</strong></div><button className="sidebar-collapse-button" type="button" aria-label="Collapse navigation" aria-expanded="true" onClick={() => setCollapsed(true)}><Icon name="chevronLeft" size={16} /></button></>}</div>
-      <nav aria-label="Platform navigation">{navigation.map((item) => <NavLink key={item.to} to={item.to} title={collapsed ? item.label : undefined} className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}><Icon name={item.icon} /><span className="sidebar-label">{item.label}</span></NavLink>)}</nav>
-      <div className="sidebar-user"><div className="avatar">{initials}</div><div className="sidebar-label"><strong>{user.displayName}</strong></div><button className="icon-button" type="button" title="Sign out" aria-label="Sign out" onClick={handleSignOut}><Icon name="logout" size={18} /></button></div>
-    </aside>
-    <div className="app-main"><main className="content"><Outlet /></main></div>
-  </div>;
+  return <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+    <SidebarHeader className="p-3">
+      <div className="flex h-11 items-center gap-2">
+        {collapsed
+          ? <Button variant="ghost" size="icon" className="size-10 rounded-xl rounded-bl-sm bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground" aria-label="Expand navigation" onPress={() => setOpen(true)}>N</Button>
+          : <><Link className="grid size-10 shrink-0 place-items-center rounded-xl rounded-bl-sm bg-primary font-bold text-primary-foreground" to="/admin/organizations" aria-label="NIQ home">N</Link><strong className="min-w-0 flex-1 truncate text-sm">NIQ</strong><SidebarTrigger aria-label="Collapse navigation" /></>}
+      </div>
+    </SidebarHeader>
+    <SidebarContent><SidebarGroup><SidebarGroupContent><SidebarMenu>
+      {navigation.map((item) => <SidebarMenuItem key={item.to}>
+        <SidebarMenuButton isActive={location.pathname.startsWith(item.to)} tooltip={item.label} onPress={() => go(item.to)} className="h-10 text-sm">
+          <Icon name={item.icon} /><span>{item.label}</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>)}
+    </SidebarMenu></SidebarGroupContent></SidebarGroup></SidebarContent>
+    <SidebarFooter className="border-t border-sidebar-border p-3">
+      <div className="flex items-center gap-2 overflow-hidden">
+        <Avatar className="size-9 shrink-0"><AvatarFallback>{initials}</AvatarFallback></Avatar>
+        <strong className="min-w-0 flex-1 truncate text-xs group-data-[collapsible=icon]:hidden">{user.displayName}</strong>
+        <Button variant="ghost" size="icon-sm" aria-label="Sign out" onPress={onSignOut}><LogOut /></Button>
+      </div>
+    </SidebarFooter>
+    <SidebarRail />
+  </Sidebar>;
+}
+
+export function PlatformAdminShell({ user }: { user: AuthenticatedUser }) {
+  const navigate = useNavigate();
+  async function handleSignOut() { await signOut().catch(() => undefined); navigate("/sign-in", { replace: true }); }
+  return <SidebarProvider defaultOpen={!window.matchMedia("(max-width: 820px)").matches}>
+    <AdminSidebar user={user} onSignOut={handleSignOut} />
+    <SidebarInset className="min-w-0">
+      <header className="flex h-14 shrink-0 items-center border-b border-border px-4 md:hidden">
+        <SidebarTrigger aria-label="Open navigation" />
+      </header>
+      <main className="content"><Outlet /></main>
+    </SidebarInset>
+  </SidebarProvider>;
 }

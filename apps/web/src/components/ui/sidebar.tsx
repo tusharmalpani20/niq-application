@@ -185,6 +185,7 @@ function Sidebar({
   if (isMobile) {
     return (
       <Sheet
+        ariaLabel="Navigation"
         isOpen={openMobile}
         onOpenChange={setOpenMobile}
         dir={dir}
@@ -520,7 +521,7 @@ function SidebarMenuButton({
       />
     )
 
-  if (!tooltip) {
+  if (!tooltip || state !== "collapsed" || isMobile) {
     return comp
   }
 
@@ -531,7 +532,7 @@ function SidebarMenuButton({
   }
 
   return (
-    <TooltipTrigger isDisabled={state !== "collapsed" || isMobile}>
+    <TooltipTrigger>
       {comp}
       <Tooltip placement="right" {...tooltip} />
     </TooltipTrigger>
