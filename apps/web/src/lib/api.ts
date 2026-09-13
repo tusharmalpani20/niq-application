@@ -4,6 +4,9 @@ import {
   authenticationResponseSchema,
   invitationAcceptanceResponseSchema,
   organizationListResponseSchema,
+  organizationDetailsResponseSchema,
+  onboardOrganizationResponseSchema,
+  onboardOrganizationSchema,
   resendMfaRequestSchema,
   resendMfaResponseSchema,
   signInRequestSchema,
@@ -13,6 +16,9 @@ import {
   type ApiError,
   type AuthenticatedUser,
   type Organization,
+  type OrganizationDetails,
+  type OnboardOrganization,
+  type OnboardOrganizationResponse,
   type SignInRequest,
   type VerifyMfaRequest,
 } from "@niq/application-contracts";
@@ -100,4 +106,19 @@ export async function signOut(): Promise<void> {
 export async function listOrganizations(): Promise<Organization[]> {
   const response = await fetch("/api/v1/organizations", { credentials: "include" });
   return organizationListResponseSchema.parse(await responseBody(response)).items;
+}
+
+export async function onboardOrganization(input: OnboardOrganization): Promise<OnboardOrganizationResponse> {
+  const response = await fetch("/api/v1/organizations/onboard", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(onboardOrganizationSchema.parse(input)),
+  });
+  return onboardOrganizationResponseSchema.parse(await responseBody(response));
+}
+
+export async function getOrganization(organizationId: string): Promise<OrganizationDetails> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}`, { credentials: "include" });
+  return organizationDetailsResponseSchema.parse(await responseBody(response));
 }

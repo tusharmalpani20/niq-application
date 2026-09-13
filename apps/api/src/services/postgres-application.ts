@@ -1,7 +1,7 @@
 import type { ApplicationConfig } from "@niq/application-config";
 import type { AcceptInvitation, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, OnboardOrganization, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
-import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import {
   auditEvents,
@@ -343,8 +343,23 @@ export class PostgresApplicationService implements ApplicationService {
   }
   async getOrganization(actor: Principal, organizationId: string) {
     this.ensureOrganizationAccess(actor, organizationId);
-    const [result] = await this.db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1);
-    if (!result) throw new ServiceError("NOT_FOUND", "Organization not found."); return result;
+    const [organization] = await this.db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1);
+    if (!organization) throw new ServiceError("NOT_FOUND", "Organization not found.");
+    const [entitlement, organizationInvitations] = await Promise.all([
+      this.db.select({
+        userLimit: organizationEntitlements.userLimit,
+        scoringMonthlyLimit: organizationEntitlements.scoringMonthlyLimit,
+        faceScanMonthlyLimit: organizationEntitlements.faceScanMonthlyLimit,
+        effectiveFrom: organizationEntitlements.effectiveFrom,
+      }).from(organizationEntitlements).where(and(
+        eq(organizationEntitlements.organizationId, organizationId),
+        sql`${organizationEntitlements.effectiveFrom} <= now()`,
+        sql`(${organizationEntitlements.effectiveUntil} IS NULL OR ${organizationEntitlements.effectiveUntil} > now())`,
+      )).orderBy(desc(organizationEntitlements.effectiveFrom), desc(organizationEntitlements.createdAt)).limit(1),
+      this.db.select({ id: invitations.id, email: invitations.email, role: invitations.role, status: invitations.status, expiresAt: invitations.expiresAt })
+        .from(invitations).where(eq(invitations.organizationId, organizationId)).orderBy(desc(invitations.createdAt)),
+    ]);
+    return { organization, entitlement: entitlement ?? null, invitations: organizationInvitations };
   }
   async updateOrganization(actor: Principal, organizationId: string, input: UpdateOrganization, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true);

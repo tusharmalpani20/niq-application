@@ -136,6 +136,23 @@ export const onboardOrganizationResponseSchema = z.object({
   activationToken: z.string().optional(),
 });
 
+export const organizationDetailsResponseSchema = z.object({
+  organization: organizationSchema,
+  entitlement: z.object({
+    userLimit: z.number().int().nullable(),
+    scoringMonthlyLimit: z.number().int().nullable(),
+    faceScanMonthlyLimit: z.number().int().nullable(),
+    effectiveFrom: z.coerce.date(),
+  }).nullable(),
+  invitations: z.array(z.object({
+    id: idSchema,
+    email: z.email(),
+    role: membershipRoleSchema,
+    status: z.enum(["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]),
+    expiresAt: z.coerce.date(),
+  })),
+});
+
 export const createFacilitySchema = z.object({
   name: z.string().trim().min(2).max(160),
   code: z.string().trim().min(1).max(40),
@@ -229,6 +246,7 @@ export type BootstrapAdmin = z.infer<typeof bootstrapAdminSchema>;
 export type Organization = z.infer<typeof organizationSchema>;
 export type OnboardOrganization = z.infer<typeof onboardOrganizationSchema>;
 export type OnboardOrganizationResponse = z.infer<typeof onboardOrganizationResponseSchema>;
+export type OrganizationDetails = z.infer<typeof organizationDetailsResponseSchema>;
 export type CreateInvitation = z.infer<typeof createInvitationSchema>;
 export type UpdateFacility = z.infer<typeof updateFacilitySchema>;
 export type UpdateOrganization = z.infer<typeof updateOrganizationSchema>;
