@@ -1,5 +1,6 @@
 import type {
   AcceptInvitation,
+  ActivateScoring,
   BootstrapAdmin,
   CreateFacility,
   CreateInvitation,
@@ -45,6 +46,7 @@ export class ServiceError extends Error {
       | "INVALID_OR_EXPIRED_TOKEN"
       | "NOT_FOUND"
       | "RATE_LIMITED"
+      | "SCORING_UNAVAILABLE"
       | "USER_LIMIT_REACHED",
     message: string,
     readonly details?: Record<string, unknown>,
@@ -67,6 +69,7 @@ export interface ApplicationService {
   bootstrap(input: BootstrapAdmin, context: RequestContext): Promise<Principal>;
   createOrganization(actor: Principal, input: CreateOrganization, context: RequestContext): Promise<unknown>;
   onboardOrganization(actor: Principal, input: OnboardOrganization, context: RequestContext): Promise<{ organization: unknown; invitation: unknown; token: string }>;
+  activateScoring(actor: Principal, organizationId: string, input: ActivateScoring, context: RequestContext): Promise<unknown>;
   listOrganizations(actor: Principal): Promise<unknown[]>;
   getOrganization(actor: Principal, organizationId: string): Promise<unknown>;
   updateOrganization(actor: Principal, organizationId: string, input: UpdateOrganization, context: RequestContext): Promise<unknown>;

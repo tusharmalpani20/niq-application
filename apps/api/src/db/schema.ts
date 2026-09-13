@@ -78,6 +78,25 @@ export const organizations = pgTable(
   ],
 );
 
+export const scoringConnections = pgTable(
+  "scoring_connections",
+  {
+    id: entityId("id").primaryKey(),
+    organizationId: entityId("organization_id").notNull().references(() => organizations.id),
+    deploymentId: entityId("deployment_id").notNull(),
+    encryptedCredential: encryptedBytes("encrypted_credential").notNull(),
+    credentialIv: encryptedBytes("credential_iv").notNull(),
+    keyVersion: text("key_version").notNull(),
+    activatedAt: timestamp("activated_at", { withTimezone: true }).notNull().defaultNow(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("scoring_connections_organization_uidx").on(table.organizationId),
+    check("scoring_connections_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
+    check("scoring_connections_deployment_id_ulid_ck", sql`${table.deploymentId} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
+  ],
+);
+
 export const facilities = pgTable(
   "facilities",
   {

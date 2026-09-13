@@ -10,6 +10,13 @@ const optionalUrl = z.preprocess(
   z.url().optional(),
 );
 
+const optionalEncryptionKey = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().refine((value) => {
+    try { return Buffer.from(value, "base64").length === 32; } catch { return false; }
+  }, "Must be a base64-encoded 32-byte key").optional(),
+);
+
 export const applicationConfigSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   APP_REGION: z.enum(["india", "us", "eu"]).default("india"),
@@ -21,6 +28,8 @@ export const applicationConfigSchema = z.object({
   DATABASE_SSL: booleanFromString,
   SCORING_API_URL: optionalUrl,
   SCORING_TIMEOUT_MS: z.coerce.number().int().positive().max(60_000).default(10_000),
+  SCORING_CREDENTIAL_ENCRYPTION_KEY: optionalEncryptionKey,
+  SCORING_CREDENTIAL_KEY_VERSION: z.string().trim().min(1).max(64).default("local-v1"),
   AUTH_MODE: z.enum(["disabled", "local", "oidc"]).default("disabled"),
   SESSION_SECRET: z.string().min(32),
   SESSION_COOKIE_NAME: z.string().regex(/^[A-Za-z0-9_-]+$/).default("niq_session"),
@@ -41,6 +50,9 @@ export const applicationConfigSchema = z.object({
   }
   if (value.NODE_ENV === "production" && value.AUTH_MODE === "local" && !value.BOOTSTRAP_TOKEN) {
     context.addIssue({ code: "custom", path: ["BOOTSTRAP_TOKEN"], message: "A bootstrap token is required for initial production setup" });
+  }
+  if (value.NODE_ENV === "production" && value.SCORING_API_URL && !value.SCORING_CREDENTIAL_ENCRYPTION_KEY) {
+    context.addIssue({ code: "custom", path: ["SCORING_CREDENTIAL_ENCRYPTION_KEY"], message: "A credential encryption key is required when scoring is configured" });
   }
 });
 

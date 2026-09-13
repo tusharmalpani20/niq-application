@@ -1,7 +1,8 @@
 import type { ApplicationConfig } from "@niq/application-config";
-import type { AcceptInvitation, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, OnboardOrganization, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
+import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, OnboardOrganization, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
 import { and, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { z } from "zod";
 import type { Database } from "../db/client";
 import {
   auditEvents,
@@ -15,14 +16,20 @@ import {
   organizationEntitlements,
   organizationMemberships,
   organizations,
+  scoringConnections,
   users,
 } from "../db/schema";
+import { encryptCredential } from "../security/credential-encryption";
 import { hashPassword, keyedHash, randomOtp, randomToken, secureEqual, verifyPassword } from "../security/tokens";
 import type { ApplicationService, MfaChallengeResult, OtpDelivery, Principal, RequestContext, SessionResult, SignInResult } from "./application";
 import { ServiceError } from "./application";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Executor = Database | Transaction;
+const scoringActivationResponseSchema = z.object({
+  deploymentId: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
+  credential: z.string().min(32),
+});
 
 function databaseCode(error: unknown): string | undefined {
   return typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined;
@@ -33,7 +40,7 @@ export class PostgresApplicationService implements ApplicationService {
 
   private async audit(executor: Executor, organizationId: string, context: RequestContext, action: string, resourceType: string, resourceId?: string, actor?: Principal, metadata: Record<string, unknown> = {}) {
     await executor.insert(auditEvents).values({
-      id: createEntityId(), organizationId, actorMembershipId: actor?.membershipId, actorType: actor ? "USER" : "SYSTEM",
+      id: createEntityId(), organizationId, actorMembershipId: actor?.membershipId, actorType: actor ? "USER" : ("actorUserId" in metadata ? "NIQ_ADMIN" : "SYSTEM"),
       action, resourceType, resourceId, requestId: context.requestId,
       ipAddressHash: context.ipAddress ? await keyedHash(context.ipAddress, this.config.SESSION_SECRET) : undefined,
       metadata,
@@ -345,7 +352,7 @@ export class PostgresApplicationService implements ApplicationService {
     this.ensureOrganizationAccess(actor, organizationId);
     const [organization] = await this.db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1);
     if (!organization) throw new ServiceError("NOT_FOUND", "Organization not found.");
-    const [entitlement, organizationInvitations] = await Promise.all([
+    const [entitlement, organizationInvitations, scoringConnection] = await Promise.all([
       this.db.select({
         userLimit: organizationEntitlements.userLimit,
         scoringMonthlyLimit: organizationEntitlements.scoringMonthlyLimit,
@@ -358,8 +365,47 @@ export class PostgresApplicationService implements ApplicationService {
       )).orderBy(desc(organizationEntitlements.effectiveFrom), desc(organizationEntitlements.createdAt)).limit(1),
       this.db.select({ id: invitations.id, email: invitations.email, role: invitations.role, status: invitations.status, expiresAt: invitations.expiresAt })
         .from(invitations).where(eq(invitations.organizationId, organizationId)).orderBy(desc(invitations.createdAt)),
+      this.db.select({ deploymentId: scoringConnections.deploymentId, keyVersion: scoringConnections.keyVersion, activatedAt: scoringConnections.activatedAt })
+        .from(scoringConnections).where(eq(scoringConnections.organizationId, organizationId)).limit(1),
     ]);
-    return { organization, entitlement: entitlement ?? null, invitations: organizationInvitations };
+    return { organization, entitlement: entitlement ?? null, invitations: organizationInvitations, scoringConnection: scoringConnection ?? null };
+  }
+  async activateScoring(actor: Principal, organizationId: string, input: ActivateScoring, context: RequestContext) {
+    if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");
+    if (!this.config.SCORING_API_URL || !this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY) {
+      throw new ServiceError("SCORING_UNAVAILABLE", "Scoring activation is not configured for this application installation.");
+    }
+    const [organization] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
+    if (!organization) throw new ServiceError("NOT_FOUND", "Organization not found.");
+
+    let response: Response;
+    try {
+      response = await fetch(new URL("/v1/activate", this.config.SCORING_API_URL), {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-request-id": context.requestId },
+        body: JSON.stringify(input),
+        signal: AbortSignal.timeout(this.config.SCORING_TIMEOUT_MS),
+      });
+    } catch {
+      throw new ServiceError("SCORING_UNAVAILABLE", "The scoring service could not be reached.");
+    }
+    if (response.status === 401) throw new ServiceError("INVALID_OR_EXPIRED_TOKEN", "The scoring activation token is invalid or expired.");
+    if (!response.ok) throw new ServiceError("SCORING_UNAVAILABLE", "The scoring service could not complete activation.");
+    const parsed = scoringActivationResponseSchema.safeParse(await response.json().catch(() => null));
+    if (!parsed.success) throw new ServiceError("SCORING_UNAVAILABLE", "The scoring service returned an invalid activation response.");
+
+    const encrypted = encryptCredential(parsed.data.credential, this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY);
+    const activatedAt = new Date();
+    const [connection] = await this.db.insert(scoringConnections).values({
+      id: createEntityId(), organizationId, deploymentId: parsed.data.deploymentId,
+      encryptedCredential: encrypted.ciphertext, credentialIv: encrypted.iv,
+      keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION, activatedAt,
+    }).onConflictDoUpdate({
+      target: scoringConnections.organizationId,
+      set: { deploymentId: parsed.data.deploymentId, encryptedCredential: encrypted.ciphertext, credentialIv: encrypted.iv, keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION, activatedAt, updatedAt: activatedAt },
+    }).returning({ deploymentId: scoringConnections.deploymentId, keyVersion: scoringConnections.keyVersion, activatedAt: scoringConnections.activatedAt });
+    await this.audit(this.db, organizationId, context, "SCORING_CONNECTION_ACTIVATED", "scoring_connection", connection?.deploymentId, undefined, { actorUserId: actor.userId, keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION });
+    return { connection };
   }
   async updateOrganization(actor: Principal, organizationId: string, input: UpdateOrganization, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true);

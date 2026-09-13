@@ -12,6 +12,7 @@ import {
   questionnaireDefinitions,
   scoringRequests,
   scoringResults,
+  scoringConnections,
   mfaChallenges,
   organizationEntitlements,
   organizations,
@@ -70,6 +71,12 @@ describe("tenant data invariants", () => {
     expect("scoringMonthlyLimit" in organizationEntitlements).toBe(true);
     expect("faceScanMonthlyLimit" in organizationEntitlements).toBe(true);
   });
+
+  test("scoring credentials are stored only as encrypted bytes", () => {
+    expect(scoringConnections.encryptedCredential.notNull).toBe(true);
+    expect(scoringConnections.credentialIv.notNull).toBe(true);
+    expect("credential" in scoringConnections).toBe(false);
+  });
 });
 
 describe("migration-only safeguards", () => {
@@ -125,5 +132,12 @@ describe("migration-only safeguards", () => {
     expect(migration).toContain('"face_scan_monthly_limit"');
     expect(migration).toContain('"scoring_enabled" boolean DEFAULT true NOT NULL');
     expect(migration).toContain('"face_scan_enabled" boolean DEFAULT true NOT NULL');
+  });
+
+  test("scoring connection migration never creates a plaintext credential column", async () => {
+    const migration = await Bun.file("./drizzle/0004_high_the_professor.sql").text();
+    expect(migration).toContain('"encrypted_credential" "bytea" NOT NULL');
+    expect(migration).toContain('"credential_iv" "bytea" NOT NULL');
+    expect(migration).not.toContain('\n\t"credential" ');
   });
 });

@@ -136,6 +136,14 @@ export const onboardOrganizationResponseSchema = z.object({
   activationToken: z.string().optional(),
 });
 
+export const activateScoringSchema = z.object({ activationToken: z.string().min(48).max(256) });
+export const scoringConnectionSchema = z.object({
+  deploymentId: idSchema,
+  keyVersion: z.string(),
+  activatedAt: z.coerce.date(),
+});
+export const activateScoringResponseSchema = z.object({ connection: scoringConnectionSchema });
+
 export const organizationDetailsResponseSchema = z.object({
   organization: organizationSchema,
   entitlement: z.object({
@@ -151,6 +159,7 @@ export const organizationDetailsResponseSchema = z.object({
     status: z.enum(["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]),
     expiresAt: z.coerce.date(),
   })),
+  scoringConnection: scoringConnectionSchema.nullable(),
 });
 
 export const createFacilitySchema = z.object({
@@ -247,6 +256,8 @@ export type Organization = z.infer<typeof organizationSchema>;
 export type OnboardOrganization = z.infer<typeof onboardOrganizationSchema>;
 export type OnboardOrganizationResponse = z.infer<typeof onboardOrganizationResponseSchema>;
 export type OrganizationDetails = z.infer<typeof organizationDetailsResponseSchema>;
+export type ActivateScoring = z.infer<typeof activateScoringSchema>;
+export type ScoringConnection = z.infer<typeof scoringConnectionSchema>;
 export type CreateInvitation = z.infer<typeof createInvitationSchema>;
 export type UpdateFacility = z.infer<typeof updateFacilitySchema>;
 export type UpdateOrganization = z.infer<typeof updateOrganizationSchema>;

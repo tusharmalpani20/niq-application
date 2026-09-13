@@ -1,5 +1,7 @@
 import {
   acceptInvitationSchema,
+  activateScoringResponseSchema,
+  activateScoringSchema,
   apiErrorSchema,
   authenticationResponseSchema,
   invitationAcceptanceResponseSchema,
@@ -13,6 +15,7 @@ import {
   signInResponseSchema,
   verifyMfaRequestSchema,
   type AcceptInvitation,
+  type ActivateScoring,
   type ApiError,
   type AuthenticatedUser,
   type Organization,
@@ -121,4 +124,14 @@ export async function onboardOrganization(input: OnboardOrganization): Promise<O
 export async function getOrganization(organizationId: string): Promise<OrganizationDetails> {
   const response = await fetch(`/api/v1/organizations/${organizationId}`, { credentials: "include" });
   return organizationDetailsResponseSchema.parse(await responseBody(response));
+}
+
+export async function activateScoring(organizationId: string, input: ActivateScoring) {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/scoring/activate`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(activateScoringSchema.parse(input)),
+  });
+  return activateScoringResponseSchema.parse(await responseBody(response)).connection;
 }

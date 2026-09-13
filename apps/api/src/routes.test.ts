@@ -21,6 +21,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     signOut: async () => {}, acceptInvitation: async () => principal, bootstrap: async () => principal,
     createOrganization: async () => ({}), listOrganizations: async () => [], getOrganization: async () => ({}), updateOrganization: async () => ({}),
     onboardOrganization: async () => ({ organization: {}, invitation: {}, token: "invite-token" }),
+    activateScoring: async () => ({ connection: {} }),
     createFacility: async () => ({}), listFacilities: async () => [], updateFacility: async () => ({}),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
     ...overrides,
@@ -116,5 +117,25 @@ describe("local authentication routes", () => {
     });
     expect(response.status).toBe(201);
     expect((await response.json()).activationToken).toBe("local-invite-token");
+  });
+
+  test("returns scoring connection metadata without exposing the credential", async () => {
+    const niqAdmin = { ...principal, platformRole: "NIQ_ADMIN" as const };
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({
+        authenticate: async () => niqAdmin,
+        activateScoring: async () => ({ connection: { deploymentId: "01J00000000000000000000006", keyVersion: "local-v1", activatedAt: new Date() } }),
+      }),
+    });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/scoring/activate`, {
+      method: "POST",
+      headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      body: JSON.stringify({ activationToken: `niq_act_${"x".repeat(48)}` }),
+    });
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.connection.deploymentId).toBe("01J00000000000000000000006");
+    expect(body.credential).toBeUndefined();
   });
 });

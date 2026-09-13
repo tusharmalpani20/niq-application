@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { acceptInvitationSchema, bootstrapAdminSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, idSchema, onboardOrganizationSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
+import { acceptInvitationSchema, activateScoringSchema, bootstrapAdminSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, idSchema, onboardOrganizationSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
@@ -113,6 +113,7 @@ export function createApp(dependencies: AppDependencies) {
   app.post("/v1/organizations", zValidator("json", createOrganizationSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.createOrganization(context.get("principal"), context.req.valid("json"), requestContext(context))), 201));
   app.get("/v1/organizations/:organizationId", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.getOrganization(context.get("principal"), context.req.valid("param").organizationId))));
   app.patch("/v1/organizations/:organizationId", zValidator("param", idParamsSchema, validationFailure), zValidator("json", updateOrganizationSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.updateOrganization(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("json"), requestContext(context)))));
+  app.post("/v1/organizations/:organizationId/scoring/activate", zValidator("param", idParamsSchema, validationFailure), zValidator("json", activateScoringSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.activateScoring(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("json"), requestContext(context))), 201));
   app.get("/v1/organizations/:organizationId/facilities", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json({ items: await dependencies.service!.listFacilities(context.get("principal"), context.req.valid("param").organizationId) }));
   app.post("/v1/organizations/:organizationId/facilities", zValidator("param", idParamsSchema, validationFailure), zValidator("json", createFacilitySchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.createFacility(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("json"), requestContext(context))), 201));
   app.patch("/v1/organizations/:organizationId/facilities/:facilityId", zValidator("param", idParamsSchema, validationFailure), zValidator("json", updateFacilitySchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.updateFacility(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").facilityId!, context.req.valid("json"), requestContext(context)))));
@@ -126,7 +127,7 @@ export function createApp(dependencies: AppDependencies) {
   app.onError((error, context) => {
     if (error instanceof ServiceError) {
       const status = error.code === "FORBIDDEN" ? 403 : error.code === "NOT_FOUND" ? 404 : error.code === "USER_LIMIT_REACHED" ? 409 : error.code === "ACCOUNT_LOCKED" ? 423 : error.code === "RATE_LIMITED" ? 429 : error.code === "INVALID_CREDENTIALS" ? 401 : 409;
-      return context.json(errorBody(error.code, error.message, context.get("requestId"), error.details), status);
+      return context.json(errorBody(error.code, error.message, context.get("requestId"), error.details), error.code === "SCORING_UNAVAILABLE" ? 503 : status);
     }
     console.error(JSON.stringify({ level: "error", requestId: context.get("requestId"), message: error.message }));
     return context.json(errorBody("INTERNAL_ERROR", "An unexpected error occurred.", context.get("requestId")), 500);

@@ -8,7 +8,11 @@ NIQ is a controlled B2B product; there is no public organization signup.
 4. The administrator invites medical users. Active users plus pending invitations consume the organization limit; deactivated users do not.
 5. Patients do not receive accounts in Phase 1.
 
-Scoring-service access uses a separate activation flow. An NIQ operator provisions the customer and deployment in the central scoring platform, then issues a short-lived, single-use activation token. The application exchanges that token server-to-server and receives its deployment credential once. The scoring platform API already supports this protocol; the application-side activation screen and encrypted credential store are still pending. Until those are implemented, scoring integration must remain unavailable rather than accepting a long-lived credential through the browser or storing one in browser storage.
+Scoring-service access uses a separate activation flow. An NIQ operator provisions the customer and deployment in the central scoring platform, then issues a short-lived, single-use activation token. The NIQ application administrator enters that token on the organization detail screen. The application backend exchanges it server-to-server and stores the resulting deployment credential using AES-256-GCM with a separately configured encryption key. The browser receives only connection metadata and never receives the permanent credential. Scoring remains unavailable when the scoring URL or encryption key is not configured.
+
+## NIQ administrator flow
+
+The bootstrap account has `platformRole=NIQ_ADMIN`. After password and MFA verification it is routed to `/admin/organizations`; organization users are routed to the clinical workspace. The NIQ administrator creates an organization, initial entitlement and first organization-administrator invitation atomically. Development may expose the one-time invitation URL on screen; production must deliver it through the approved notification adapter.
 
 ## Authentication acceptance gate
 
