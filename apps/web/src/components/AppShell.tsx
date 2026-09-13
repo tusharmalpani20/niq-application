@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
-  SidebarProvider, SidebarRail, SidebarTrigger, useSidebar,
+  SidebarProvider, SidebarTrigger, useSidebar,
 } from "@/components/ui/sidebar";
 import { signOut } from "../lib/api";
 import { useBranding } from "../lib/branding-context";
@@ -33,8 +33,8 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
   function go(to: string) { navigate(to); setOpenMobile(false); }
 
   return <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-    <SidebarHeader className="p-3">
-      <div className="flex h-11 items-center gap-2">
+    <SidebarHeader className="p-3 group-data-[collapsible=icon]:p-1">
+      <div className="flex h-11 items-center gap-2 group-data-[collapsible=icon]:justify-center">
         {collapsed
           ? <Button variant="ghost" size="icon" className="size-10 rounded-xl rounded-bl-sm bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground" aria-label="Expand navigation" onPress={() => setOpen(true)}>N</Button>
           : <><Link className="grid size-10 shrink-0 place-items-center rounded-xl rounded-bl-sm bg-primary font-bold text-primary-foreground" to="/" aria-label={`${branding.displayName} home`}>N</Link><div className="grid min-w-0 flex-1"><strong className="truncate text-sm">{branding.displayName}</strong><span className="truncate text-xs text-muted-foreground">Nutrition intelligence</span></div><SidebarTrigger aria-label="Collapse navigation" /></>}
@@ -47,14 +47,13 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
         </SidebarMenuButton>
       </SidebarMenuItem>)}
     </SidebarMenu></SidebarGroupContent></SidebarGroup></SidebarContent>
-    <SidebarFooter className="border-t border-sidebar-border p-3">
-      <div className="flex items-center gap-2 overflow-hidden">
+    <SidebarFooter className="border-t border-sidebar-border p-3 group-data-[collapsible=icon]:p-1">
+      <div className="flex items-center gap-2 overflow-hidden group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
         <Avatar className="size-9 shrink-0"><AvatarFallback>{initials}</AvatarFallback></Avatar>
         <div className="grid min-w-0 flex-1 group-data-[collapsible=icon]:hidden"><strong className="truncate text-xs">{user.displayName}</strong><span className="truncate text-[.68rem] text-muted-foreground">{user.role === "ORGANIZATION_ADMIN" ? "Organization admin" : user.role === "MEDICAL" ? "Medical user" : "Support user"}</span></div>
         <Button variant="ghost" size="icon-sm" aria-label="Sign out" onPress={onSignOut}><LogOut /></Button>
       </div>
     </SidebarFooter>
-    <SidebarRail />
   </Sidebar>;
 }
 

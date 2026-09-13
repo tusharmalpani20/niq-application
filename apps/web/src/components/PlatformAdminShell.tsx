@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
-  SidebarProvider, SidebarRail, SidebarTrigger, useSidebar,
+  SidebarProvider, SidebarTrigger, useSidebar,
 } from "@/components/ui/sidebar";
 import { signOut } from "../lib/api";
 import { Icon } from "../lib/icons";
@@ -26,8 +26,8 @@ function AdminSidebar({ user, onSignOut }: { user: AuthenticatedUser; onSignOut:
   }
 
   return <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-    <SidebarHeader className="p-3">
-      <div className="flex h-11 items-center gap-2">
+    <SidebarHeader className="p-3 group-data-[collapsible=icon]:p-1">
+      <div className="flex h-11 items-center gap-2 group-data-[collapsible=icon]:justify-center">
         {collapsed
           ? <Button variant="ghost" size="icon" className="size-10 rounded-xl rounded-bl-sm bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground" aria-label="Expand navigation" onPress={() => setOpen(true)}>N</Button>
           : <><Link className="grid size-10 shrink-0 place-items-center rounded-xl rounded-bl-sm bg-primary font-bold text-primary-foreground" to="/admin/organizations" aria-label="NIQ home">N</Link><strong className="min-w-0 flex-1 truncate text-sm">NIQ</strong><SidebarTrigger aria-label="Collapse navigation" /></>}
@@ -40,14 +40,13 @@ function AdminSidebar({ user, onSignOut }: { user: AuthenticatedUser; onSignOut:
         </SidebarMenuButton>
       </SidebarMenuItem>)}
     </SidebarMenu></SidebarGroupContent></SidebarGroup></SidebarContent>
-    <SidebarFooter className="border-t border-sidebar-border p-3">
-      <div className="flex items-center gap-2 overflow-hidden">
+    <SidebarFooter className="border-t border-sidebar-border p-3 group-data-[collapsible=icon]:p-1">
+      <div className="flex items-center gap-2 overflow-hidden group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
         <Avatar className="size-9 shrink-0"><AvatarFallback>{initials}</AvatarFallback></Avatar>
         <strong className="min-w-0 flex-1 truncate text-xs group-data-[collapsible=icon]:hidden">{user.displayName}</strong>
         <Button variant="ghost" size="icon-sm" aria-label="Sign out" onPress={onSignOut}><LogOut /></Button>
       </div>
     </SidebarFooter>
-    <SidebarRail />
   </Sidebar>;
 }
 
