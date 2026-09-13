@@ -43,7 +43,6 @@ export function SignInPage() {
 
       <section className="form-panel" aria-labelledby="sign-in-heading">
         <div className="form-container">
-          <p className="eyebrow">Secure workspace</p>
           <h2 id="sign-in-heading">Welcome back</h2>
           <p className="form-intro">Use the account provided by your organization.</p>
 
