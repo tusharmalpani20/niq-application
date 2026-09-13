@@ -15,6 +15,9 @@ Set `DEV_OTP_DELIVERY=true` only on a developer workstation. The OTP is emitted 
 - Sessions expire after the configured TTL and are revoked on sign-out or membership deactivation.
 - Password failures are keyed by an HMAC of normalized email, and temporary lockout is shared across API replicas through PostgreSQL.
 - MFA challenges are one-time, expire quickly, and stop accepting guesses at the configured attempt limit.
+- The verification screen uses server-issued expiry and retry counts. Resending is
+  cooldown-protected, capped per challenge, rotates both the challenge token and
+  OTP, and invalidates the previous code.
 
 ## Local bootstrap example
 
