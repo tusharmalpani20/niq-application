@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, measurementProvenanceSchema } from "./index";
+import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, measurementProvenanceSchema, signInResponseSchema } from "./index";
 
 const organizationId = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patientId = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
@@ -45,5 +45,16 @@ describe("application contracts", () => {
   test("requires strong invitation activation passwords", () => {
     expect(acceptInvitationSchema.safeParse({ token: "t".repeat(32), displayName: "Test User", password: "short" }).success).toBe(false);
     expect(acceptInvitationSchema.safeParse({ token: "t".repeat(32), displayName: "Test User", password: "a-long-local-password" }).success).toBe(true);
+  });
+
+  test("requires server-issued MFA expiry and retry limits", () => {
+    expect(signInResponseSchema.safeParse({
+      mfaRequired: true,
+      challengeToken: "t".repeat(43),
+      expiresAt: "2026-09-13T12:00:00.000Z",
+      resendAvailableAt: "2026-09-13T11:50:30.000Z",
+      attemptsRemaining: 5,
+      resendsRemaining: 3,
+    }).success).toBe(true);
   });
 });

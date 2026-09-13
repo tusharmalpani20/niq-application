@@ -17,6 +17,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     authenticate: async (token) => token === "valid-session" ? principal : null,
     signIn: async () => ({ kind: "authenticated", session: { token: "valid-session", expiresAt: new Date(Date.now() + 60_000), principal } }),
     verifyMfa: async () => ({ token: "valid-session", expiresAt: new Date(Date.now() + 60_000), principal }),
+    resendMfa: async () => ({ challengeToken: "y".repeat(43), expiresAt: new Date(Date.now() + 60_000), resendAvailableAt: new Date(Date.now() + 30_000), attemptsRemaining: 5, resendsRemaining: 2 }),
     signOut: async () => {}, acceptInvitation: async () => principal, bootstrap: async () => principal,
     createOrganization: async () => ({}), listOrganizations: async () => [], getOrganization: async () => ({}), updateOrganization: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], updateFacility: async () => ({}),
@@ -36,12 +37,26 @@ describe("local authentication routes", () => {
   });
 
   test("returns an opaque MFA challenge without exposing an OTP", async () => {
-    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService({ signIn: async () => ({ kind: "mfa_required", challengeToken: "x".repeat(43), expiresAt: new Date(Date.now() + 60_000) }) }) });
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService({ signIn: async () => ({ kind: "mfa_required", challengeToken: "x".repeat(43), expiresAt: new Date(Date.now() + 60_000), resendAvailableAt: new Date(Date.now() + 30_000), attemptsRemaining: 5, resendsRemaining: 3 }) }) });
     const response = await app.request("/v1/auth/sign-in", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "admin@example.com", password: "a secure password" }) });
     expect(response.status).toBe(202);
     const body = await response.json();
     expect(body.mfaRequired).toBe(true);
     expect(body.otp).toBeUndefined();
+    expect(body.attemptsRemaining).toBe(5);
+  });
+
+  test("replaces an MFA challenge through the resend boundary", async () => {
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService() });
+    const response = await app.request("/v1/auth/mfa/resend", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ challengeToken: "x".repeat(43) }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.challengeToken).toBe("y".repeat(43));
+    expect(body.resendsRemaining).toBe(2);
   });
 
   test("rejects protected routes without a valid server-side session", async () => {

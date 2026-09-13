@@ -27,6 +27,8 @@ export const applicationConfigSchema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(12),
   MFA_OTP_TTL_MINUTES: z.coerce.number().int().min(2).max(15).default(10),
   MFA_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(10).default(5),
+  MFA_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(30).max(300).default(30),
+  MFA_MAX_RESENDS: z.coerce.number().int().min(1).max(5).default(3),
   AUTH_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(20).default(5),
   AUTH_LOCKOUT_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   INVITATION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(72),

@@ -4,6 +4,7 @@ import type {
   CreateFacility,
   CreateInvitation,
   CreateOrganization,
+  ResendMfaRequest,
   SignInRequest,
   UpdateFacility,
   UpdateOrganization,
@@ -22,8 +23,15 @@ export type Principal = {
 
 export type RequestContext = { requestId: string; ipAddress?: string; userAgent?: string };
 export type SessionResult = { token: string; expiresAt: Date; principal: Principal };
+export type MfaChallengeResult = {
+  challengeToken: string;
+  expiresAt: Date;
+  resendAvailableAt: Date;
+  attemptsRemaining: number;
+  resendsRemaining: number;
+};
 export type SignInResult =
-  | { kind: "mfa_required"; challengeToken: string; expiresAt: Date }
+  | ({ kind: "mfa_required" } & MfaChallengeResult)
   | { kind: "authenticated"; session: SessionResult };
 
 export class ServiceError extends Error {
@@ -35,8 +43,10 @@ export class ServiceError extends Error {
       | "INVALID_CREDENTIALS"
       | "INVALID_OR_EXPIRED_TOKEN"
       | "NOT_FOUND"
+      | "RATE_LIMITED"
       | "USER_LIMIT_REACHED",
     message: string,
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -49,6 +59,7 @@ export interface OtpDelivery {
 export interface ApplicationService {
   signIn(input: SignInRequest, context: RequestContext): Promise<SignInResult>;
   verifyMfa(input: VerifyMfaRequest, context: RequestContext): Promise<SessionResult>;
+  resendMfa(input: ResendMfaRequest, context: RequestContext): Promise<MfaChallengeResult>;
   authenticate(sessionToken: string): Promise<Principal | null>;
   signOut(sessionToken: string, context: RequestContext): Promise<void>;
   acceptInvitation(input: AcceptInvitation, context: RequestContext): Promise<Principal>;

@@ -244,6 +244,8 @@ export const mfaChallenges = pgTable(
     otpHash: text("otp_hash").notNull(),
     attempts: integer("attempts").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(5),
+    resendCount: integer("resend_count").notNull().default(0),
+    lastSentAt: timestamp("last_sent_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
     ...timestamps,
@@ -252,7 +254,7 @@ export const mfaChallenges = pgTable(
     uniqueIndex("mfa_challenges_token_hash_uidx").on(table.challengeTokenHash),
     index("mfa_challenges_user_idx").on(table.userId),
     foreignKey({ name: "mfa_challenges_org_membership_user_fk", columns: [table.organizationId, table.membershipId, table.userId], foreignColumns: [organizationMemberships.organizationId, organizationMemberships.id, organizationMemberships.userId] }),
-    check("mfa_challenges_attempts_ck", sql`${table.attempts} >= 0 AND ${table.maxAttempts} >= 1`),
+    check("mfa_challenges_attempts_ck", sql`${table.attempts} >= 0 AND ${table.maxAttempts} >= 1 AND ${table.resendCount} >= 0`),
     check("mfa_challenges_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
   ],
 );

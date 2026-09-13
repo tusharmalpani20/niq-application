@@ -1,5 +1,5 @@
 import type { ApplicationConfig } from "@niq/application-config";
-import type { AcceptInvitation, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
+import type { AcceptInvitation, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
 import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
@@ -18,7 +18,7 @@ import {
   users,
 } from "../db/schema";
 import { hashPassword, keyedHash, randomOtp, randomToken, secureEqual, verifyPassword } from "../security/tokens";
-import type { ApplicationService, OtpDelivery, Principal, RequestContext, SessionResult, SignInResult } from "./application";
+import type { ApplicationService, MfaChallengeResult, OtpDelivery, Principal, RequestContext, SessionResult, SignInResult } from "./application";
 import { ServiceError } from "./application";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -104,20 +104,85 @@ export class PostgresApplicationService implements ApplicationService {
     if (principal.mfaEnabled || requiresMfa(principal.role, principal.platformRole === "NIQ_ADMIN")) {
       const challengeToken = randomToken();
       const otp = randomOtp();
-      const expiresAt = new Date(Date.now() + this.config.MFA_OTP_TTL_MINUTES * 60_000);
+      const sentAt = new Date();
+      const expiresAt = new Date(sentAt.getTime() + this.config.MFA_OTP_TTL_MINUTES * 60_000);
       await this.db.insert(mfaChallenges).values({
         id: createEntityId(), userId: principal.userId, organizationId: principal.organizationId,
         membershipId: principal.membershipId, challengeTokenHash: await keyedHash(challengeToken, this.config.SESSION_SECRET),
-        otpHash: await keyedHash(otp, this.config.SESSION_SECRET), maxAttempts: this.config.MFA_MAX_ATTEMPTS, expiresAt,
+        otpHash: await keyedHash(otp, this.config.SESSION_SECRET), maxAttempts: this.config.MFA_MAX_ATTEMPTS,
+        lastSentAt: sentAt, expiresAt,
       });
       await this.otpDelivery.deliver({ email, otp, expiresAt });
       await this.audit(this.db, principal.organizationId, context, "AUTH_MFA_CHALLENGE_CREATED", "user", principal.userId, principal);
-      return { kind: "mfa_required", challengeToken, expiresAt };
+      return {
+        kind: "mfa_required", challengeToken, expiresAt,
+        resendAvailableAt: new Date(sentAt.getTime() + this.config.MFA_RESEND_COOLDOWN_SECONDS * 1000),
+        attemptsRemaining: this.config.MFA_MAX_ATTEMPTS,
+        resendsRemaining: this.config.MFA_MAX_RESENDS,
+      };
     }
     const session = await this.createSession(this.db, principal);
     await this.db.update(users).set({ lastSignedInAt: new Date(), updatedAt: new Date() }).where(eq(users.id, principal.userId));
     await this.audit(this.db, principal.organizationId, context, "AUTH_SIGNED_IN", "user", principal.userId, principal);
     return { kind: "authenticated", session };
+  }
+
+  async resendMfa(input: ResendMfaRequest, context: RequestContext): Promise<MfaChallengeResult> {
+    const challengeHash = await keyedHash(input.challengeToken, this.config.SESSION_SECRET);
+    const now = new Date();
+    const challengeToken = randomToken();
+    const otp = randomOtp();
+    const result = await this.db.transaction(async (tx) => {
+      const [challenge] = await tx.select().from(mfaChallenges)
+        .where(and(eq(mfaChallenges.challengeTokenHash, challengeHash), isNull(mfaChallenges.consumedAt)))
+        .for("update").limit(1);
+      const chainExpiresAt = challenge
+        ? new Date(challenge.createdAt.getTime() + this.config.MFA_OTP_TTL_MINUTES * 60_000 * (this.config.MFA_MAX_RESENDS + 1))
+        : now;
+      if (!challenge || chainExpiresAt <= now) {
+        throw new ServiceError("INVALID_OR_EXPIRED_TOKEN", "This verification request has expired. Please sign in again.");
+      }
+      if (challenge.resendCount >= this.config.MFA_MAX_RESENDS) {
+        throw new ServiceError("RATE_LIMITED", "The resend limit has been reached. Please sign in again.", { resendsRemaining: 0 });
+      }
+      const resendAvailableAt = new Date(challenge.lastSentAt.getTime() + this.config.MFA_RESEND_COOLDOWN_SECONDS * 1000);
+      if (resendAvailableAt > now) {
+        throw new ServiceError("RATE_LIMITED", "Please wait before requesting another code.", {
+          retryAfterSeconds: Math.ceil((resendAvailableAt.getTime() - now.getTime()) / 1000),
+          resendsRemaining: this.config.MFA_MAX_RESENDS - challenge.resendCount,
+        });
+      }
+      const [account] = await tx.select({ email: users.email }).from(users)
+        .innerJoin(organizationMemberships, and(
+          eq(organizationMemberships.id, challenge.membershipId),
+          eq(organizationMemberships.userId, users.id),
+          eq(organizationMemberships.organizationId, challenge.organizationId),
+        ))
+        .innerJoin(organizations, eq(organizations.id, challenge.organizationId))
+        .where(and(
+          eq(users.id, challenge.userId), eq(users.status, "ACTIVE"),
+          eq(organizationMemberships.isActive, true), eq(organizations.status, "ACTIVE"),
+        )).limit(1);
+      if (!account) throw new ServiceError("INVALID_OR_EXPIRED_TOKEN", "The account is no longer active.");
+
+      const expiresAt = new Date(now.getTime() + this.config.MFA_OTP_TTL_MINUTES * 60_000);
+      const resendCount = challenge.resendCount + 1;
+      await tx.update(mfaChallenges).set({
+        challengeTokenHash: await keyedHash(challengeToken, this.config.SESSION_SECRET),
+        otpHash: await keyedHash(otp, this.config.SESSION_SECRET),
+        attempts: 0, resendCount, lastSentAt: now, expiresAt, updatedAt: now,
+      }).where(eq(mfaChallenges.id, challenge.id));
+      await this.audit(tx, challenge.organizationId, context, "AUTH_MFA_CHALLENGE_RESENT", "user", challenge.userId, undefined, { resendCount });
+      return {
+        email: account.email,
+        expiresAt,
+        resendAvailableAt: new Date(now.getTime() + this.config.MFA_RESEND_COOLDOWN_SECONDS * 1000),
+        resendsRemaining: this.config.MFA_MAX_RESENDS - resendCount,
+        attemptsRemaining: challenge.maxAttempts,
+      };
+    });
+    await this.otpDelivery.deliver({ email: result.email, otp, expiresAt: result.expiresAt });
+    return { challengeToken, ...result };
   }
 
   async verifyMfa(input: VerifyMfaRequest, context: RequestContext): Promise<SessionResult> {
@@ -127,9 +192,10 @@ export class PostgresApplicationService implements ApplicationService {
       if (!challenge || challenge.expiresAt <= new Date() || challenge.attempts >= challenge.maxAttempts) throw new ServiceError("INVALID_OR_EXPIRED_TOKEN", "The MFA challenge is invalid or expired.");
       const otpHash = await keyedHash(input.otp, this.config.SESSION_SECRET);
       if (!secureEqual(otpHash, challenge.otpHash)) {
+        const attemptsRemaining = Math.max(0, challenge.maxAttempts - challenge.attempts - 1);
         await tx.update(mfaChallenges).set({ attempts: challenge.attempts + 1, updatedAt: new Date() }).where(eq(mfaChallenges.id, challenge.id));
         await this.audit(tx, challenge.organizationId, context, "AUTH_MFA_FAILED", "user", challenge.userId);
-        return null;
+        return { session: null, attemptsRemaining };
       }
       const [row] = await tx.select({
         userId: users.id, email: users.email, displayName: users.displayName, platformRole: users.platformRole,
@@ -142,10 +208,10 @@ export class PostgresApplicationService implements ApplicationService {
       await tx.update(users).set({ lastSignedInAt: new Date(), updatedAt: new Date() }).where(eq(users.id, row.userId));
       const session = await this.createSession(tx, row);
       await this.audit(tx, row.organizationId, context, "AUTH_SIGNED_IN", "user", row.userId, row);
-      return session;
+      return { session, attemptsRemaining: challenge.maxAttempts - challenge.attempts };
     });
-    if (!result) throw new ServiceError("INVALID_CREDENTIALS", "The verification code is incorrect.");
-    return result;
+    if (!result.session) throw new ServiceError("INVALID_CREDENTIALS", "The verification code is incorrect.", { attemptsRemaining: result.attemptsRemaining });
+    return result.session;
   }
 
   async authenticate(sessionToken: string): Promise<Principal | null> {

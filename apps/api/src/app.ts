@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { acceptInvitationSchema, bootstrapAdminSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, idSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
+import { acceptInvitationSchema, bootstrapAdminSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, idSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
@@ -51,7 +51,14 @@ export function createApp(dependencies: AppDependencies) {
   app.post("/v1/auth/sign-in", zValidator("json", signInRequestSchema, validationFailure), async (context) => {
     const service = localService(context); if (service instanceof Response) return service;
     const result = await service.signIn(context.req.valid("json"), requestContext(context));
-    if (result.kind === "mfa_required") return context.json({ mfaRequired: true, challengeToken: result.challengeToken, expiresAt: result.expiresAt.toISOString() }, 202);
+    if (result.kind === "mfa_required") return context.json({
+      mfaRequired: true,
+      challengeToken: result.challengeToken,
+      expiresAt: result.expiresAt.toISOString(),
+      resendAvailableAt: result.resendAvailableAt.toISOString(),
+      attemptsRemaining: result.attemptsRemaining,
+      resendsRemaining: result.resendsRemaining,
+    }, 202);
     issueCookie(context, result.session.token, result.session.expiresAt);
     return context.json({ user: result.session.principal });
   });
@@ -59,6 +66,17 @@ export function createApp(dependencies: AppDependencies) {
     const service = localService(context); if (service instanceof Response) return service;
     const session = await service.verifyMfa(context.req.valid("json"), requestContext(context)); issueCookie(context, session.token, session.expiresAt);
     return context.json({ user: session.principal });
+  });
+  app.post("/v1/auth/mfa/resend", zValidator("json", resendMfaRequestSchema, validationFailure), async (context) => {
+    const service = localService(context); if (service instanceof Response) return service;
+    const result = await service.resendMfa(context.req.valid("json"), requestContext(context));
+    return context.json({
+      challengeToken: result.challengeToken,
+      expiresAt: result.expiresAt.toISOString(),
+      resendAvailableAt: result.resendAvailableAt.toISOString(),
+      attemptsRemaining: result.attemptsRemaining,
+      resendsRemaining: result.resendsRemaining,
+    });
   });
   app.post("/v1/auth/invitations/accept", zValidator("json", acceptInvitationSchema, validationFailure), async (context) => {
     const service = localService(context); if (service instanceof Response) return service;
@@ -103,8 +121,8 @@ export function createApp(dependencies: AppDependencies) {
   app.notFound((context) => context.json(errorBody("NOT_FOUND", "The requested resource was not found.", context.get("requestId")), 404));
   app.onError((error, context) => {
     if (error instanceof ServiceError) {
-      const status = error.code === "FORBIDDEN" ? 403 : error.code === "NOT_FOUND" ? 404 : error.code === "USER_LIMIT_REACHED" ? 409 : error.code === "ACCOUNT_LOCKED" ? 423 : error.code === "INVALID_CREDENTIALS" ? 401 : 409;
-      return context.json(errorBody(error.code, error.message, context.get("requestId")), status);
+      const status = error.code === "FORBIDDEN" ? 403 : error.code === "NOT_FOUND" ? 404 : error.code === "USER_LIMIT_REACHED" ? 409 : error.code === "ACCOUNT_LOCKED" ? 423 : error.code === "RATE_LIMITED" ? 429 : error.code === "INVALID_CREDENTIALS" ? 401 : 409;
+      return context.json(errorBody(error.code, error.message, context.get("requestId"), error.details), status);
     }
     console.error(JSON.stringify({ level: "error", requestId: context.get("requestId"), message: error.message }));
     return context.json(errorBody("INTERNAL_ERROR", "An unexpected error occurred.", context.get("requestId")), 500);

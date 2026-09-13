@@ -13,6 +13,8 @@ describe("configuration", () => {
     });
     expect(config.APP_REGION).toBe("india");
     expect(config.DEPLOYMENT_MODE).toBe("niq-hosted");
+    expect(config.MFA_RESEND_COOLDOWN_SECONDS).toBe(30);
+    expect(config.MFA_MAX_RESENDS).toBe(3);
   });
 
   test("refuses development OTP disclosure in production", () => {

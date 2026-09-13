@@ -40,6 +40,18 @@ export const verifyMfaRequestSchema = z.object({
   otp: z.string().regex(/^\d{6}$/),
 });
 
+export const resendMfaRequestSchema = z.object({
+  challengeToken: z.string().min(32).max(512),
+});
+
+export const mfaChallengeSchema = z.object({
+  challengeToken: z.string().min(32).max(512),
+  expiresAt: z.iso.datetime(),
+  resendAvailableAt: z.iso.datetime(),
+  attemptsRemaining: z.number().int().nonnegative(),
+  resendsRemaining: z.number().int().nonnegative(),
+});
+
 export const authenticatedUserSchema = z.object({
   userId: idSchema,
   organizationId: idSchema,
@@ -51,13 +63,13 @@ export const authenticatedUserSchema = z.object({
 });
 
 export const signInResponseSchema = z.union([
-  z.object({
+  mfaChallengeSchema.extend({
     mfaRequired: z.literal(true),
-    challengeToken: z.string().min(32).max(512),
-    expiresAt: z.iso.datetime(),
   }),
   z.object({ user: authenticatedUserSchema }),
 ]);
+
+export const resendMfaResponseSchema = mfaChallengeSchema;
 
 export const authenticationResponseSchema = z.object({ user: authenticatedUserSchema });
 
@@ -177,3 +189,4 @@ export type CreateInvitation = z.infer<typeof createInvitationSchema>;
 export type UpdateFacility = z.infer<typeof updateFacilitySchema>;
 export type UpdateOrganization = z.infer<typeof updateOrganizationSchema>;
 export type VerifyMfaRequest = z.infer<typeof verifyMfaRequestSchema>;
+export type ResendMfaRequest = z.infer<typeof resendMfaRequestSchema>;

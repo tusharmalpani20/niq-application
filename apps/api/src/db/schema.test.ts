@@ -100,4 +100,11 @@ describe("migration-only safeguards", () => {
     expect(migration).not.toContain('"otp" text');
     expect(migration.indexOf("organization_memberships_org_id_user_uidx")).toBeLessThan(migration.indexOf("auth_sessions_org_membership_user_fk"));
   });
+
+  test("MFA resend migration persists only counters and timestamps", async () => {
+    const migration = await Bun.file("./drizzle/0002_spooky_ben_urich.sql").text();
+    expect(migration).toContain('"resend_count" integer DEFAULT 0 NOT NULL');
+    expect(migration).toContain('"last_sent_at" timestamp with time zone DEFAULT now() NOT NULL');
+    expect(migration).not.toContain("otp");
+  });
 });
