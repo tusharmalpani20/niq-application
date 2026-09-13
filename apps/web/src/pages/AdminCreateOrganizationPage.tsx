@@ -39,7 +39,6 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
   const [furthestStep, setFurthestStep] = useState<Step>(0);
   const [displayName, setDisplayName] = useState("");
   const [slug, setSlug] = useState("");
-  const [slugEdited, setSlugEdited] = useState(false);
   const [logo, setLogo] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoMessage, setLogoMessage] = useState<string | null>(null);
@@ -87,7 +86,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     const limit = (name: LimitName) => unlimited[name] ? null : Number(data.get(name));
     try {
       const result = await onboardOrganization({
-        legalName: String(data.get("legalName")), displayName, slug,
+        legalName: displayName, displayName, slug,
         firstAdminEmail: String(data.get("firstAdminEmail")),
         deploymentMode: String(data.get("deploymentMode")) as "NIQ_HOSTED" | "CLIENT_CLOUD" | "ON_PREM",
         primaryColor, secondaryColor,
@@ -116,8 +115,8 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     <TabsList variant="line" className="onboarding-tabs h-auto w-full min-w-0 rounded-none bg-background" aria-label="Organization setup steps">{steps.map((label, index) => <TabsTrigger id={index} key={label} isDisabled={index > furthestStep} className="h-11 min-w-0 gap-2 overflow-hidden rounded-none px-3 shadow-none"><span className="grid size-6 shrink-0 place-items-center rounded-full border text-xs">{index < step ? <Icon name="check" size={14} /> : index + 1}</span><strong className="truncate">{label}</strong></TabsTrigger>)}</TabsList>
 
     <TabsContent id={0} className="onboarding-panel" data-onboarding-step="0">
-      <div className="wizard-heading"><h2>Organization details</h2><p>Set up the client account and invite its first administrator.</p></div>
-      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Display name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" onChange={(event) => { const value = event.target.value; setDisplayName(value); if (!slugEdited) setSlug(organizationUrlName(value)); }} /></Field><Field><FieldLabel htmlFor="legalName">Legal name</FieldLabel><Input id="legalName" name="legalName" required minLength={2} placeholder="Example Health Network Pvt. Ltd." /></Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" value={slug} placeholder="example-health" onChange={(event) => { setSlugEdited(true); setSlug(organizationUrlName(event.target.value)); }} /><FieldDescription>Used in organization links. You can edit it.</FieldDescription></Field><Field><FieldLabel htmlFor="firstAdminEmail">First administrator email</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required placeholder="admin@example-health.test" /></Field></FieldGroup>
+      <div className="wizard-heading"><h2>Organization details</h2></div>
+      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Display name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} /></Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated from the display name.</FieldDescription></Field><Field><FieldLabel htmlFor="firstAdminEmail">First administrator email</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required placeholder="admin@example-health.test" /></Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={1} className="onboarding-panel" data-onboarding-step="1">
