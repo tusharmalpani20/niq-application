@@ -109,10 +109,10 @@ describe("local authentication routes", () => {
       method: "POST",
       headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
       body: JSON.stringify({
-        legalName: "Apollo Hospitals Enterprise Limited",
-        displayName: "Apollo Hospitals",
-        slug: "apollo-hospitals",
-        firstAdminEmail: "admin@apollo.example",
+        legalName: "Example Health Network Private Limited",
+        displayName: "Example Health Network",
+        slug: "example-health",
+        firstAdminEmail: "admin@example-health.test",
       }),
     });
     expect(response.status).toBe(201);

@@ -7,7 +7,7 @@ const questionnaireDefinitionId = "01ARZ3NDEKTSV4RRFFQ69G5FAX";
 
 describe("application contracts", () => {
   test("rejects unsafe organization slugs", () => {
-    expect(createOrganizationSchema.safeParse({ legalName: "Apollo Group", displayName: "Apollo", slug: "Apollo Group" }).success).toBe(false);
+    expect(createOrganizationSchema.safeParse({ legalName: "Example Health Group", displayName: "Example Health", slug: "Example Health Group" }).success).toBe(false);
   });
 
   test("limits provenance to system-derived values", () => {
@@ -60,10 +60,10 @@ describe("application contracts", () => {
 
   test("defaults new client organizations to enabled NIQ hosting with unlimited usage", () => {
     const result = onboardOrganizationSchema.parse({
-      legalName: "Apollo Hospitals Enterprise Limited",
-      displayName: "Apollo Hospitals",
-      slug: "apollo-hospitals",
-      firstAdminEmail: "admin@apollo.example",
+      legalName: "Example Health Network Private Limited",
+      displayName: "Example Health Network",
+      slug: "example-health",
+      firstAdminEmail: "admin@example-health.test",
     });
     expect(result.deploymentMode).toBe("NIQ_HOSTED");
     expect(result.userLimit).toBeNull();
@@ -75,7 +75,7 @@ describe("application contracts", () => {
   });
 
   test("accepts only supported organization logo formats", () => {
-    const base = { legalName: "Apollo Hospitals", displayName: "Apollo", slug: "apollo", firstAdminEmail: "admin@apollo.example" };
+    const base = { legalName: "Example Health Network", displayName: "Example Health", slug: "example-health", firstAdminEmail: "admin@example-health.test" };
     expect(onboardOrganizationSchema.safeParse({ ...base, logo: { mimeType: "image/png", contentBase64: "iVBORw0KGgo=" } }).success).toBe(true);
     expect(onboardOrganizationSchema.safeParse({ ...base, logo: { mimeType: "image/svg+xml", contentBase64: "PHN2Zz4=" } }).success).toBe(false);
   });

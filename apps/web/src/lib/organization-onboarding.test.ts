@@ -3,7 +3,7 @@ import { MAX_ORGANIZATION_LOGO_BYTES, organizationLogoError, organizationUrlName
 
 describe("organization onboarding helpers", () => {
   test("creates a readable URL name from an organization name", () => {
-    expect(organizationUrlName("  Apollo Hospitals & Clinics  ")).toBe("apollo-hospitals-clinics");
+    expect(organizationUrlName("  Example Health & Clinics  ")).toBe("example-health-clinics");
   });
 
   test("accepts only supported logo types under two megabytes", () => {
