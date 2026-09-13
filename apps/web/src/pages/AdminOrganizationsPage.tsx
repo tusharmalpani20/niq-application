@@ -11,17 +11,31 @@ const statusLabels = { ACTIVE: "Active", SUSPENDED: "Suspended", CLOSED: "Closed
 
 function OrganizationOnboardingDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [dirty, setDirty] = useState(false);
+  const [confirmingClose, setConfirmingClose] = useState(false);
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (open && dialog && !dialog.open) dialog.showModal();
+    if (open && dialog && !dialog.open) {
+      setDirty(false);
+      setConfirmingClose(false);
+      dialog.showModal();
+    }
   }, [open]);
 
+  const requestClose = useCallback(() => {
+    if (dirty) setConfirmingClose(true);
+    else onClose();
+  }, [dirty, onClose]);
+
   if (!open) return null;
-  return <dialog className="admin-modal" ref={dialogRef} aria-labelledby="onboard-organization-title" onCancel={(event) => { event.preventDefault(); onClose(); }} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  return <dialog className="admin-modal" ref={dialogRef} aria-labelledby="onboard-organization-title" onCancel={(event) => { event.preventDefault(); if (confirmingClose) setConfirmingClose(false); else requestClose(); }} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
     <div className="admin-modal-panel">
-      <header className="admin-modal-header"><div><h2 id="onboard-organization-title">Add organization</h2><p>Create the client account, limits and first administrator invitation.</p></div><button className="icon-button" type="button" aria-label="Close add organization" onClick={onClose}><Icon name="close" size={19} /></button></header>
-      <div className="admin-modal-body"><OrganizationOnboardingForm onCancel={onClose} onCreated={onCreated} /></div>
+      <div className="admin-modal-content" aria-hidden={confirmingClose || undefined}>
+        <header className="admin-modal-header"><div><h2 id="onboard-organization-title">Add organization</h2><p>Create the client account, limits and first administrator invitation.</p></div><button className="icon-button" type="button" aria-label="Close add organization" onClick={requestClose}><Icon name="close" size={19} /></button></header>
+        <div className="admin-modal-body"><OrganizationOnboardingForm onCancel={requestClose} onCreated={onCreated} onDirtyChange={setDirty} /></div>
+      </div>
+      {confirmingClose && <div className="discard-overlay" role="alertdialog" aria-modal="true" aria-labelledby="discard-title" aria-describedby="discard-description"><section><span className="discard-icon"><Icon name="alert" /></span><h3 id="discard-title">Discard your changes?</h3><p id="discard-description">The information entered for this organization has not been saved.</p><div><button className="btn btn-outline" type="button" autoFocus onClick={() => setConfirmingClose(false)}>Keep editing</button><button className="btn btn-danger" type="button" onClick={onClose}>Discard changes</button></div></section></div>}
     </div>
   </dialog>;
 }
