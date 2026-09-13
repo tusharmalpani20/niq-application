@@ -232,6 +232,15 @@ CREATE TABLE "users" (
 	CONSTRAINT "users_id_ulid_ck" CHECK ("users"."id" ~ '^[0-9A-HJKMNP-TV-Z]{26}$')
 );
 --> statement-breakpoint
+-- PostgreSQL requires the referenced column sets to be unique before the
+-- tenant-scoped composite foreign keys below are created.
+CREATE UNIQUE INDEX "assessments_org_id_uidx" ON "assessments" USING btree ("organization_id","id");--> statement-breakpoint
+CREATE UNIQUE INDEX "face_scan_sessions_org_id_uidx" ON "face_scan_sessions" USING btree ("organization_id","id");--> statement-breakpoint
+CREATE UNIQUE INDEX "facilities_org_id_uidx" ON "facilities" USING btree ("organization_id","id");--> statement-breakpoint
+CREATE UNIQUE INDEX "organization_memberships_org_id_uidx" ON "organization_memberships" USING btree ("organization_id","id");--> statement-breakpoint
+CREATE UNIQUE INDEX "patients_org_id_uidx" ON "patients" USING btree ("organization_id","id");--> statement-breakpoint
+CREATE UNIQUE INDEX "questionnaire_definitions_scope_id_uidx" ON "questionnaire_definitions" USING btree ("scope_key","id");--> statement-breakpoint
+CREATE UNIQUE INDEX "scoring_requests_org_id_uidx" ON "scoring_requests" USING btree ("organization_id","id");--> statement-breakpoint
 ALTER TABLE "assessment_answers" ADD CONSTRAINT "assessment_answers_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "assessment_answers" ADD CONSTRAINT "assessment_answers_org_assessment_fk" FOREIGN KEY ("organization_id","assessment_id") REFERENCES "public"."assessments"("organization_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "assessment_answers" ADD CONSTRAINT "assessment_answers_org_answerer_fk" FOREIGN KEY ("organization_id","answered_by_membership_id") REFERENCES "public"."organization_memberships"("organization_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -269,14 +278,11 @@ ALTER TABLE "scoring_results" ADD CONSTRAINT "scoring_results_organization_id_or
 ALTER TABLE "scoring_results" ADD CONSTRAINT "scoring_results_org_assessment_fk" FOREIGN KEY ("organization_id","assessment_id") REFERENCES "public"."assessments"("organization_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "scoring_results" ADD CONSTRAINT "scoring_results_org_request_fk" FOREIGN KEY ("organization_id","scoring_request_id") REFERENCES "public"."scoring_requests"("organization_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "assessment_answers_assessment_question_uidx" ON "assessment_answers" USING btree ("assessment_id","question_key");--> statement-breakpoint
-CREATE UNIQUE INDEX "assessments_org_id_uidx" ON "assessments" USING btree ("organization_id","id");--> statement-breakpoint
 CREATE INDEX "assessments_org_status_idx" ON "assessments" USING btree ("organization_id","status");--> statement-breakpoint
 CREATE INDEX "assessments_org_patient_idx" ON "assessments" USING btree ("organization_id","patient_id");--> statement-breakpoint
 CREATE INDEX "audit_events_org_occurred_idx" ON "audit_events" USING btree ("organization_id","occurred_at");--> statement-breakpoint
 CREATE INDEX "audit_events_resource_idx" ON "audit_events" USING btree ("resource_type","resource_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "face_scan_sessions_org_id_uidx" ON "face_scan_sessions" USING btree ("organization_id","id");--> statement-breakpoint
 CREATE INDEX "face_scan_sessions_org_assessment_idx" ON "face_scan_sessions" USING btree ("organization_id","assessment_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "facilities_org_id_uidx" ON "facilities" USING btree ("organization_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "facilities_org_code_uidx" ON "facilities" USING btree ("organization_id","code");--> statement-breakpoint
 CREATE INDEX "facilities_org_idx" ON "facilities" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "facility_memberships_membership_facility_uidx" ON "facility_memberships" USING btree ("organization_membership_id","facility_id");--> statement-breakpoint
@@ -285,16 +291,12 @@ CREATE UNIQUE INDEX "invitations_pending_org_email_uidx" ON "invitations" USING 
 CREATE INDEX "invitations_org_status_idx" ON "invitations" USING btree ("organization_id","status");--> statement-breakpoint
 CREATE INDEX "measurements_org_assessment_idx" ON "measurements" USING btree ("organization_id","assessment_id");--> statement-breakpoint
 CREATE INDEX "organization_entitlements_org_effective_idx" ON "organization_entitlements" USING btree ("organization_id","effective_from");--> statement-breakpoint
-CREATE UNIQUE INDEX "organization_memberships_org_id_uidx" ON "organization_memberships" USING btree ("organization_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "organization_memberships_org_user_uidx" ON "organization_memberships" USING btree ("organization_id","user_id");--> statement-breakpoint
 CREATE INDEX "organization_memberships_user_idx" ON "organization_memberships" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "organizations_slug_uidx" ON "organizations" USING btree ("slug");--> statement-breakpoint
-CREATE UNIQUE INDEX "patients_org_id_uidx" ON "patients" USING btree ("organization_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "patients_org_external_reference_hash_uidx" ON "patients" USING btree ("organization_id","external_reference_lookup_hash");--> statement-breakpoint
 CREATE INDEX "patients_org_facility_idx" ON "patients" USING btree ("organization_id","home_facility_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "questionnaire_definitions_scope_id_uidx" ON "questionnaire_definitions" USING btree ("scope_key","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "questionnaire_definitions_scope_key_version_uidx" ON "questionnaire_definitions" USING btree ("scope_key","key","version");--> statement-breakpoint
-CREATE UNIQUE INDEX "scoring_requests_org_id_uidx" ON "scoring_requests" USING btree ("organization_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "scoring_requests_org_idempotency_uidx" ON "scoring_requests" USING btree ("organization_id","idempotency_key");--> statement-breakpoint
 CREATE INDEX "scoring_requests_org_assessment_idx" ON "scoring_requests" USING btree ("organization_id","assessment_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "scoring_results_request_uidx" ON "scoring_results" USING btree ("scoring_request_id");--> statement-breakpoint

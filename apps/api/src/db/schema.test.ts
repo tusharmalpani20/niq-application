@@ -74,6 +74,24 @@ describe("migration-only safeguards", () => {
     expect(migration).not.toContain("gen_random_uuid()");
   });
 
+  test("initial migration creates composite unique keys before dependent foreign keys", async () => {
+    const migration = await Bun.file("./drizzle/0000_initial.sql").text();
+    const dependencies = [
+      ["assessments_org_id_uidx", "assessment_answers_org_assessment_fk"],
+      ["organization_memberships_org_id_uidx", "assessment_answers_org_answerer_fk"],
+      ["patients_org_id_uidx", "assessments_org_patient_fk"],
+      ["facilities_org_id_uidx", "assessments_org_facility_fk"],
+      ["questionnaire_definitions_scope_id_uidx", "assessments_questionnaire_scope_fk"],
+      ["face_scan_sessions_org_id_uidx", "measurements_org_face_scan_fk"],
+      ["scoring_requests_org_id_uidx", "scoring_results_org_request_fk"],
+    ] as const;
+
+    for (const [uniqueIndex, foreignKey] of dependencies) {
+      expect(migration.indexOf(uniqueIndex)).toBeGreaterThan(-1);
+      expect(migration.indexOf(uniqueIndex)).toBeLessThan(migration.indexOf(foreignKey));
+    }
+  });
+
   test("authentication migration keeps only hashes and creates tenant-safe foreign keys", async () => {
     const migration = await Bun.file("./drizzle/0001_auth_foundation.sql").text();
     expect(migration).toContain('"token_hash" text NOT NULL');
