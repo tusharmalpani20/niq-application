@@ -40,11 +40,10 @@ export function SignInPage() {
       <section className="form-panel" aria-labelledby="sign-in-heading">
         <div className="form-container">
           <h2 id="sign-in-heading">Welcome back</h2>
-          <p className="form-intro">Use the account provided by your organization.</p>
 
-          <form onSubmit={handleSubmit} noValidate>
-            <label htmlFor="email">Work email</label>
-            <input id="email" name="email" type="email" autoComplete="username" required placeholder="name@hospital.org" />
+          <form className="sign-in-form" onSubmit={handleSubmit} noValidate>
+            <label htmlFor="email">Email</label>
+            <input id="email" name="email" type="email" autoComplete="username" required placeholder="name@example.com" />
 
             <div className="password-row">
               <label htmlFor="password">Password</label>
