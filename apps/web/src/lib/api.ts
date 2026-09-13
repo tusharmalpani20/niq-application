@@ -3,6 +3,8 @@ import {
   apiErrorSchema,
   authenticationResponseSchema,
   invitationAcceptanceResponseSchema,
+  resendMfaRequestSchema,
+  resendMfaResponseSchema,
   signInRequestSchema,
   signInResponseSchema,
   verifyMfaRequestSchema,
@@ -20,7 +22,7 @@ export class ApiRequestError extends Error {
 }
 
 export type SignInResult =
-  | { nextStep: "MFA_REQUIRED"; challengeToken: string }
+  | { nextStep: "MFA_REQUIRED"; challengeToken: string; expiresAt: string; resendAvailableAt: string; attemptsRemaining: number; resendsRemaining: number }
   | { nextStep: "AUTHENTICATED"; user: AuthenticatedUser };
 
 async function responseBody(response: Response): Promise<unknown> {
@@ -42,7 +44,14 @@ export async function signIn(input: SignInRequest): Promise<SignInResult> {
     body: JSON.stringify(request),
   });
   const result = signInResponseSchema.parse(await responseBody(response));
-  if ("mfaRequired" in result) return { nextStep: "MFA_REQUIRED", challengeToken: result.challengeToken };
+  if ("mfaRequired" in result) return {
+    nextStep: "MFA_REQUIRED",
+    challengeToken: result.challengeToken,
+    expiresAt: result.expiresAt,
+    resendAvailableAt: result.resendAvailableAt,
+    attemptsRemaining: result.attemptsRemaining,
+    resendsRemaining: result.resendsRemaining,
+  };
   return { nextStep: "AUTHENTICATED", user: result.user };
 }
 
@@ -54,6 +63,16 @@ export async function verifyMfa(input: VerifyMfaRequest): Promise<AuthenticatedU
     body: JSON.stringify(verifyMfaRequestSchema.parse(input)),
   });
   return authenticationResponseSchema.parse(await responseBody(response)).user;
+}
+
+export async function resendMfa(challengeToken: string) {
+  const response = await fetch("/api/v1/auth/mfa/resend", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(resendMfaRequestSchema.parse({ challengeToken })),
+  });
+  return resendMfaResponseSchema.parse(await responseBody(response));
 }
 
 export async function acceptInvitation(input: AcceptInvitation): Promise<void> {
