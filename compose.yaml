@@ -34,9 +34,6 @@ services:
       AUTH_MODE: ${AUTH_MODE:-disabled}
       SESSION_SECRET: ${SESSION_SECRET:-replace-this-development-only-secret}
       SCORING_API_URL: ${SCORING_API_URL:-}
-      SCORING_CLIENT_ID: ${SCORING_CLIENT_ID:-}
-      SCORING_DEPLOYMENT_ID: ${SCORING_DEPLOYMENT_ID:-}
-      SCORING_CLIENT_SECRET: ${SCORING_CLIENT_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy
