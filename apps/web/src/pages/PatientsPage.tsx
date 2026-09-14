@@ -15,12 +15,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
-import { StatusBadge } from "../components/StatusBadge";
 import { ApiRequestError, getPatient, listFacilities, listPatients, registerPatient } from "../lib/api";
 import { Icon } from "../lib/icons";
 
 const pageSize = 10;
-type PatientRow = { id: string; reference: string; displayName: string; age: number | null; gender: string; facility: string; lastAssessment: string; status: "Registered" };
+type PatientRow = { id: string; reference: string; displayName: string; age: number | null; gender: string; facility: string; lastAssessment: string };
 
 function patientAge(dateOfBirth: string | null): number | null {
   if (!dateOfBirth) return null;
@@ -41,7 +40,6 @@ const patientRow = (patient: Patient): PatientRow => ({
   gender: genderLabel(patient.gender),
   facility: patient.homeFacility?.name ?? "—",
   lastAssessment: "—",
-  status: "Registered",
 });
 
 export function PatientsPage() {
@@ -51,7 +49,6 @@ export function PatientsPage() {
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [query, setQuery] = useState("");
   const [facility, setFacility] = useState("all");
-  const [status, setStatus] = useState("all");
   const [gender, setGender] = useState("all");
   const [page, setPage] = useState(1);
   const [showRegistration, setShowRegistration] = useState(false);
@@ -74,19 +71,18 @@ export function PatientsPage() {
     const normalizedQuery = query.trim().toLowerCase();
     return patientRecords.filter((patient) => {
       const matchesQuery = !normalizedQuery || `${patient.reference} ${patient.displayName} ${patient.facility}`.toLowerCase().includes(normalizedQuery);
-      return matchesQuery && (facility === "all" || patient.facility === facility) && (status === "all" || patient.status === status) && (gender === "all" || patient.gender === gender);
+      return matchesQuery && (facility === "all" || patient.facility === facility) && (gender === "all" || patient.gender === gender);
     });
-  }, [facility, gender, patientRecords, query, status]);
+  }, [facility, gender, patientRecords, query]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visiblePatients = filtered.slice((page - 1) * pageSize, page * pageSize);
   const columns: Array<DataTableColumn<PatientRow>> = [
     { id: "patient", header: "Patient", cell: ({ row }) => <strong>{row.original.reference}</strong> },
     { id: "ageGender", header: "Age / gender", cell: ({ row }) => `${row.original.age ?? "—"} · ${row.original.gender}` },
     { accessorKey: "facility", header: "Facility" }, { accessorKey: "lastAssessment", header: "Last assessment" },
-    { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={row.original.status} /> },
     { id: "open", header: () => <span className="sr-only">Open</span>, cell: ({ row }) => <RouterButtonLink variant="ghost" size="icon-sm" to={`/patients/${row.original.reference}`} aria-label={`Open ${row.original.reference}`}><Icon name="chevron" size={18}/></RouterButtonLink> },
   ];
-  const hasFilters = query.trim() || facility !== "all" || status !== "all" || gender !== "all";
+  const hasFilters = query.trim() || facility !== "all" || gender !== "all";
   const emptyContent = <div className="table-empty-content">
     {loadState === "loading" ? <span>Loading patients…</span>
       : loadState === "error" ? <><strong>Patients could not be loaded</strong><span>Refresh the page to try again.</span></>
@@ -102,10 +98,9 @@ export function PatientsPage() {
     </div>
     <div className="patient-filter-bar">
       <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { setFacility(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilityNames.map((name) => <SelectItem key={name} id={name}>{name}</SelectItem>)}</SelectContent></Select>
-      <Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem><SelectItem id="Registered">Registered</SelectItem><SelectItem id="Draft">Draft</SelectItem><SelectItem id="Pending scoring">Pending scoring</SelectItem><SelectItem id="Scoring unavailable">Scoring unavailable</SelectItem><SelectItem id="Under review">Under review</SelectItem><SelectItem id="Completed">Completed</SelectItem></SelectContent></Select>
       <Select aria-label="Filter by gender" selectedKey={gender} onSelectionChange={(key) => { setGender(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All genders</SelectItem><SelectItem id="Female">Female</SelectItem><SelectItem id="Male">Male</SelectItem><SelectItem id="Other">Other</SelectItem><SelectItem id="Unknown">Unknown</SelectItem></SelectContent></Select>
     </div>
-    <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><Link className="mobile-data-card" to={`/patients/${patient.reference}`} key={patient.id}><div><strong>{patient.reference}</strong><span>{patient.gender} · {patient.age}</span></div><StatusBadge status={patient.status}/><span>{patient.facility}</span></Link>) : emptyContent}</div>
+    <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><Link className="mobile-data-card" to={`/patients/${patient.reference}`} key={patient.id}><div><strong>{patient.reference}</strong><span>{patient.gender} · {patient.age}</span></div><span>{patient.facility}</span></Link>) : emptyContent}</div>
       <div className="desktop-table p-5"><DataTable columns={columns} data={visiblePatients} label="Patients" emptyContent={emptyContent} /></div>
     </section>
     <Pagination className="mt-4" aria-label="Patients pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={page === 1} onPress={() => setPage((current) => current - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {page} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={page === pageCount} onPress={() => setPage((current) => current + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>
@@ -194,7 +189,7 @@ export function PatientDetailPage() {
     <div className="breadcrumb"><Link to="/patients">Patients</Link><span>/</span><span>{patient.reference}</span></div>
     <header className="patient-detail-header">
       <div className="patient-detail-summary">
-        <div className="organization-title-row"><h1>{patient.displayName}</h1><StatusBadge status="Registered" /></div>
+        <div className="organization-title-row"><h1>{patient.displayName}</h1></div>
         <p>{patient.reference} · {age ?? "—"} years · {genderLabel(patient.gender)} · {patient.homeFacility?.name ?? "No facility"}</p>
       </div>
       <RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18}/>New assessment</RouterButtonLink>
