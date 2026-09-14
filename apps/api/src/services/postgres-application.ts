@@ -30,7 +30,7 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Executor = Database | Transaction;
 const scoringActivationResponseSchema = z.object({
   deploymentId: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
-  organizationId: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
+  clientId: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
   credential: z.string().min(32),
 });
 
@@ -403,7 +403,7 @@ export class PostgresApplicationService implements ApplicationService {
       response = await fetch(new URL("/v1/activate", this.config.SCORING_API_URL), {
         method: "POST",
         headers: { "content-type": "application/json", "x-request-id": context.requestId },
-        body: JSON.stringify({ ...input, organizationReference: organizationId }),
+        body: JSON.stringify({ ...input, clientReference: organizationId }),
         signal: AbortSignal.timeout(this.config.SCORING_TIMEOUT_MS),
       });
     } catch {
@@ -417,12 +417,12 @@ export class PostgresApplicationService implements ApplicationService {
     const encrypted = encryptCredential(parsed.data.credential, this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY);
     const activatedAt = new Date();
     const [connection] = await this.db.insert(scoringConnections).values({
-      id: createEntityId(), organizationId, deploymentId: parsed.data.deploymentId, scoringOrganizationId: parsed.data.organizationId,
+      id: createEntityId(), organizationId, deploymentId: parsed.data.deploymentId, scoringOrganizationId: parsed.data.clientId,
       encryptedCredential: encrypted.ciphertext, credentialIv: encrypted.iv,
       keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION, activatedAt,
     }).onConflictDoUpdate({
       target: scoringConnections.organizationId,
-      set: { deploymentId: parsed.data.deploymentId, scoringOrganizationId: parsed.data.organizationId, encryptedCredential: encrypted.ciphertext, credentialIv: encrypted.iv, keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION, activatedAt, updatedAt: activatedAt },
+      set: { deploymentId: parsed.data.deploymentId, scoringOrganizationId: parsed.data.clientId, encryptedCredential: encrypted.ciphertext, credentialIv: encrypted.iv, keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION, activatedAt, updatedAt: activatedAt },
     }).returning({ deploymentId: scoringConnections.deploymentId, scoringOrganizationId: scoringConnections.scoringOrganizationId, keyVersion: scoringConnections.keyVersion, activatedAt: scoringConnections.activatedAt });
     await this.audit(this.db, organizationId, context, "SCORING_CONNECTION_ACTIVATED", "scoring_connection", connection?.deploymentId, undefined, { actorUserId: actor.userId, keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION });
     return { connection };
