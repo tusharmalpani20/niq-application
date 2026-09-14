@@ -80,6 +80,33 @@ describe("local authentication routes", () => {
     expect(observedOrganization).toBe(principal.organizationId);
   });
 
+  test("creates facilities through the tenant boundary", async () => {
+    let observedOrganization = "";
+    let observedCode = "";
+    const facility = { id: "01J00000000000000000000004", name: "Chennai Central", code: "CHE" };
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173",
+      authMode: "local",
+      checkDatabase: async () => true,
+      service: fakeService({
+        createFacility: async (_actor, organizationId, input) => {
+          observedOrganization = organizationId;
+          observedCode = input.code;
+          return facility;
+        },
+      }),
+    });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/facilities`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: "niq_session=valid-session" },
+      body: JSON.stringify({ name: "Chennai Central", code: "CHE", timezone: "Asia/Kolkata" }),
+    });
+    expect(response.status).toBe(201);
+    expect(observedOrganization).toBe(principal.organizationId);
+    expect(observedCode).toBe("CHE");
+    expect(await response.json()).toEqual(facility);
+  });
+
   test("creates and lists patients through the tenant boundary", async () => {
     let observedOrganization = "";
     let observedMedicalRecordNumber = "";
