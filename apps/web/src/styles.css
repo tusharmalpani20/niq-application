@@ -51,7 +51,7 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, input { font: inherit; }
 
-.sign-in-shell { display: grid; min-height: 100vh; grid-template-columns: minmax(360px, 46%) 1fr; }
+.sign-in-shell { display: grid; height: 100dvh; min-height: 0; overflow: hidden; grid-template-columns: minmax(360px, 46%) 1fr; }
 .welcome-panel {
   position: relative;
   display: flex;
@@ -80,7 +80,7 @@ button, input { font: inherit; }
 .welcome-copy h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2.5rem, 5vw, 5rem); font-weight: 500; letter-spacing: -0.045em; line-height: 0.98; }
 .welcome-copy > p:last-child { max-width: 31rem; margin: 1.75rem 0 0; color: color-mix(in srgb, var(--primary-foreground) 78%, transparent); font-size: 1.08rem; line-height: 1.65; }
 .privacy-note { position: relative; z-index: 1; max-width: 29rem; margin: 0; color: color-mix(in srgb, var(--primary-foreground) 66%, transparent); font-size: 0.82rem; line-height: 1.5; }
-.form-panel { display: grid; align-items: center; padding: clamp(2rem, 8vw, 7.5rem); background: var(--surface); }
+.form-panel { display: grid; min-height: 0; align-items: center; overflow-y: auto; padding: clamp(2rem, 8vw, 7.5rem); background: var(--surface); }
 .form-container { width: 100%; max-width: 29rem; margin-inline: auto; }
 .form-container .eyebrow { color: var(--primary); }
 .form-container h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 2.7rem; font-weight: 500; letter-spacing: -0.035em; }
@@ -90,7 +90,7 @@ form { display: flex; flex-direction: column; }
 .support-copy { margin: 1.6rem 0 0; color: var(--ink-muted); font-size: 0.85rem; text-align: center; }
 
 @media (max-width: 760px) {
-  .sign-in-shell { grid-template-columns: 1fr; }
+  .sign-in-shell { height: auto; min-height: 100dvh; overflow: visible; grid-template-columns: 1fr; }
   .welcome-panel { min-height: 15rem; padding: 1.5rem; }
   .brand-lockup { top: 1.5rem; left: 1.5rem; }
   .welcome-copy h1 { font-size: 2.3rem; }

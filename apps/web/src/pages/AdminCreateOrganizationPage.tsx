@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { OnboardOrganizationResponse } from "@niq/application-contracts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +11,7 @@ import { ApiRequestError, onboardOrganization } from "../lib/api";
 import { PageHeader } from "../components/Page";
 import { Icon } from "../lib/icons";
 import { ORGANIZATION_LOGO_ACCEPT, organizationLogoError, organizationLogoPayload, organizationUrlName } from "../lib/organization-onboarding";
+import { CircleAlert } from "lucide-react";
 
 type Step = 0 | 1 | 2;
 
@@ -33,11 +34,12 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
   const [secondaryColor, setSecondaryColor] = useState("#0E9384");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [errorField, setErrorField] = useState<"name" | "email" | null>(null);
   const [created, setCreated] = useState<OnboardOrganizationResponse | null>(null);
 
   useEffect(() => () => { if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current); }, []);
 
-  function markDirty() { setMessage(null); onDirtyChange?.(true); }
+  function markDirty() { setMessage(null); setErrorField(null); onDirtyChange?.(true); }
 
   function moveNext() {
     const panel = formRef.current?.querySelector<HTMLElement>(`[data-onboarding-step="${step}"]`);
@@ -68,6 +70,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     event.preventDefault();
     setBusy(true);
     setMessage(null);
+    setErrorField(null);
     try {
       const result = await onboardOrganization({
         legalName: displayName, displayName, slug,
@@ -84,8 +87,8 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     } catch (error) {
       if (error instanceof ApiRequestError) {
         const field = error.response.error.details?.field;
-        if (field === "name") setStep(0);
-        if (field === "email") setStep(1);
+        if (field === "name") { setErrorField("name"); setStep(0); }
+        if (field === "email") { setErrorField("email"); setStep(1); }
       }
       setMessage(error instanceof ApiRequestError || error instanceof Error ? error.message : "The organization could not be created. Please try again.");
     } finally { setBusy(false); }
@@ -107,11 +110,11 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     })}</TabsList>
 
     <TabsContent id={0} className="onboarding-panel" data-onboarding-step="0">
-      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} /></Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated from the name.</FieldDescription></Field></FieldGroup>
+      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" aria-invalid={errorField === "name"} onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} />{errorField === "name" && message && <FieldError>{message}</FieldError>}</Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated from the name.</FieldDescription></Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={1} className="onboarding-panel" data-onboarding-step="1">
-      <FieldGroup><Field><FieldLabel htmlFor="firstAdminEmail">Email</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required value={firstAdminEmail} placeholder="admin@example-health.test" autoComplete="email" onChange={(event) => setFirstAdminEmail(event.target.value)} /><FieldDescription>We’ll create an invitation for this organization’s first administrator.</FieldDescription></Field></FieldGroup>
+      <FieldGroup><Field><FieldLabel htmlFor="firstAdminEmail">Email</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required value={firstAdminEmail} placeholder="admin@example-health.test" autoComplete="email" aria-invalid={errorField === "email"} onChange={(event) => setFirstAdminEmail(event.target.value)} />{errorField === "email" && message && <FieldError>{message}</FieldError>}<FieldDescription>We’ll create an invitation for this organization’s first administrator.</FieldDescription></Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={2} className="onboarding-panel" data-onboarding-step="2">
@@ -122,7 +125,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     </TabsContent>
     </Tabs>
 
-    {message && <Alert variant="destructive" className="onboarding-error"><AlertDescription>{message}</AlertDescription></Alert>}
+    {message && !errorField && <Alert variant="destructive" className="onboarding-error"><CircleAlert aria-hidden="true" /><AlertDescription>{message}</AlertDescription></Alert>}
     <footer className="form-footer wizard-footer"><div>{onCancel ? <Button variant="outline" type="button" onPress={onCancel}>Cancel</Button> : <Link className={buttonVariants({ variant: "outline" })} to="/admin/organizations">Cancel</Link>}</div><div>{step > 0 && <Button variant="outline" type="button" onPress={() => setStep((step - 1) as Step)}>Back</Button>}{step < 2 ? <Button key="continue" type="button" onPress={moveNext}>Continue</Button> : <Button key="submit" type="submit" isDisabled={busy}>{busy ? "Creating…" : "Create"}</Button>}</div></footer>
   </form>;
 }
