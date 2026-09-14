@@ -227,6 +227,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .status-badge { display: inline-flex; width: fit-content; align-items: center; gap: .35rem; padding: .26rem .55rem; border-radius: 99px; color: #536363; background: #edf2f2; font-size: .66rem; font-weight: 700; white-space: nowrap; }
 .status-dot { width: .38rem; height: .38rem; border-radius: 50%; background: currentColor; }
 .status-badge[data-status="active"], .status-badge[data-status="completed"] { color: #227455; background: #e9f7f0; }
+.status-badge[data-status="registered"] { color: var(--primary); background: var(--primary-soft); }
 .status-badge[data-status="under-review"] { color: #6751a4; background: #f0edfb; }
 .status-badge[data-status="pending-scoring"], .status-badge[data-status="invited"] { color: #966300; background: #fff7df; }
 .status-badge[data-status="scoring-unavailable"] { color: #a43f3f; background: #fff0ef; }

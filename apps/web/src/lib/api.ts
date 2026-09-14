@@ -5,7 +5,10 @@ import {
   apiErrorSchema,
   authenticationResponseSchema,
   invitationAcceptanceResponseSchema,
+  facilityListResponseSchema,
+  facilitySchema,
   createPlatformAdministratorInvitationSchema,
+  createFacilitySchema,
   organizationListResponseSchema,
   organizationDetailsResponseSchema,
   organizationSchema,
@@ -17,6 +20,9 @@ import {
   platformAdministratorsResponseSchema,
   onboardOrganizationResponseSchema,
   onboardOrganizationSchema,
+  patientListResponseSchema,
+  patientSchema,
+  registerPatientSchema,
   resendMfaRequestSchema,
   resendMfaResponseSchema,
   signInRequestSchema,
@@ -27,6 +33,8 @@ import {
   type ApiError,
   type AuthenticatedUser,
   type CreatePlatformAdministratorInvitation,
+  type CreateFacility,
+  type Facility,
   type Organization,
   type OrganizationDetails,
   type OrganizationUser,
@@ -34,6 +42,8 @@ import {
   type ScoringOrganizationInfo,
   type OnboardOrganization,
   type OnboardOrganizationResponse,
+  type Patient,
+  type RegisterPatient,
   type SignInRequest,
   type UpdateOrganization,
   type VerifyMfaRequest,
@@ -209,4 +219,39 @@ export async function disconnectScoring(organizationId: string): Promise<void> {
     credentials: "include",
   });
   if (!response.ok) await responseBody(response);
+}
+
+export async function listFacilities(organizationId: string): Promise<Facility[]> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/facilities`, { credentials: "include" });
+  return facilityListResponseSchema.parse(await responseBody(response)).items;
+}
+
+export async function createFacility(organizationId: string, input: CreateFacility): Promise<Facility> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/facilities`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(createFacilitySchema.parse(input)),
+  });
+  return facilitySchema.parse(await responseBody(response));
+}
+
+export async function listPatients(organizationId: string): Promise<Patient[]> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/patients`, { credentials: "include" });
+  return patientListResponseSchema.parse(await responseBody(response)).items;
+}
+
+export async function getPatient(organizationId: string, patientId: string): Promise<Patient> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/patients/${patientId}`, { credentials: "include" });
+  return patientSchema.parse(await responseBody(response));
+}
+
+export async function registerPatient(organizationId: string, input: RegisterPatient): Promise<Patient> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/patients`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(registerPatientSchema.parse(input)),
+  });
+  return patientSchema.parse(await responseBody(response));
 }
