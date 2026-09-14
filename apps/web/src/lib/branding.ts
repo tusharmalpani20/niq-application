@@ -1,15 +1,17 @@
 import type { Organization } from "@niq/application-contracts";
 
 export type TenantBranding = {
+  logoUrl?: string | null;
   displayName?: string;
   primaryColor: string;
   secondaryColor: string;
 };
 
 export function brandingFromOrganization(
-  organization: Pick<Organization, "displayName" | "primaryColor" | "secondaryColor">,
+  organization: Pick<Organization, "displayName" | "primaryColor" | "secondaryColor"> & Partial<Pick<Organization, "id" | "logoObjectKey">>,
 ): Required<TenantBranding> {
   return normalizeBranding({
+    logoUrl: organization.id && organization.logoObjectKey ? `/api/v1/organizations/${organization.id}/logo?v=${encodeURIComponent(organization.logoObjectKey)}` : null,
     displayName: organization.displayName,
     primaryColor: organization.primaryColor,
     secondaryColor: organization.secondaryColor,
@@ -33,5 +35,5 @@ export function normalizeBranding(branding: TenantBranding): Required<TenantBran
   toBrandCssVariables(branding);
   const displayName = branding.displayName?.trim() ?? "NIQ";
   if (displayName.length < 2 || displayName.length > 120) throw new Error("Tenant display name must be between 2 and 120 characters.");
-  return { ...branding, displayName };
+  return { ...branding, displayName, logoUrl: branding.logoUrl ?? null };
 }

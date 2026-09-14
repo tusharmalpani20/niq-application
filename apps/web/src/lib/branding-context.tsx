@@ -1,7 +1,7 @@
 import { DEFAULT_ORGANIZATION_BRANDING } from "@niq/application-contracts";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { normalizeBranding, type TenantBranding } from "./branding";
-const defaultBranding: Required<TenantBranding> = { displayName: "NIQ", ...DEFAULT_ORGANIZATION_BRANDING };
+const defaultBranding: Required<TenantBranding> = { displayName: "NIQ", logoUrl: null, ...DEFAULT_ORGANIZATION_BRANDING };
 type BrandingValue = { branding: Required<TenantBranding>; updateBranding: (next: TenantBranding) => void; resetBranding: () => void };
 const BrandingContext = createContext<BrandingValue | null>(null);
 export function BrandingProvider({ children }: { children: ReactNode }) {
