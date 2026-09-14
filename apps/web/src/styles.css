@@ -107,9 +107,9 @@ form { display: flex; flex-direction: column; }
 
 /* Application workspace: compact clinical visual language from the NIQ reference. */
 :root {
-  --primary: #175CD3;
+  --primary: #0E9384;
   --primary-foreground: #ffffff;
-  --secondary: #0E9384;
+  --secondary: #175CD3;
   --secondary-foreground: #ffffff;
   --primary-soft: color-mix(in srgb, var(--primary) 10%, white);
   --brand-panel-start: color-mix(in srgb, var(--primary) 76%, var(--foreground));

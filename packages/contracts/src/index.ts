@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const DEFAULT_ORGANIZATION_BRANDING = {
-  primaryColor: "#175CD3",
-  secondaryColor: "#0E9384",
+  primaryColor: "#0E9384",
+  secondaryColor: "#175CD3",
 } as const;
 
 // Entity identifiers are canonical ULIDs. Lowercase input is rejected rather

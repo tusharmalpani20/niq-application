@@ -78,6 +78,13 @@
       "when": 1789409616558,
       "tag": "0010_fine_sinister_six",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789409964218,
+      "tag": "0011_lowly_shooting_star",
+      "breakpoints": true
     }
   ]
 }

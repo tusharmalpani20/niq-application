@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import type { OnboardOrganizationResponse } from "@niq/application-contracts";
+import { DEFAULT_ORGANIZATION_BRANDING, type OnboardOrganizationResponse } from "@niq/application-contracts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -31,8 +31,8 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
   const [logo, setLogo] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoMessage, setLogoMessage] = useState<string | null>(null);
-  const [primaryColor, setPrimaryColor] = useState("#175CD3");
-  const [secondaryColor, setSecondaryColor] = useState("#0E9384");
+  const [primaryColor, setPrimaryColor] = useState<string>(DEFAULT_ORGANIZATION_BRANDING.primaryColor);
+  const [secondaryColor, setSecondaryColor] = useState<string>(DEFAULT_ORGANIZATION_BRANDING.secondaryColor);
   const [patientReferencePrefix, setPatientReferencePrefix] = useState("PAT");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);

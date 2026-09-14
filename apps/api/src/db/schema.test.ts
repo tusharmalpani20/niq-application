@@ -24,6 +24,11 @@ function foreignKeyNames(table: Parameters<typeof getTableConfig>[0]): string[] 
 }
 
 describe("tenant data invariants", () => {
+  test("organization color defaults follow the canonical branding palette", () => {
+    expect(organizations.primaryColor.default).toBe("#0E9384");
+    expect(organizations.secondaryColor.default).toBe("#175CD3");
+  });
+
   test("assessment ownership is constrained through organization-scoped foreign keys", () => {
     expect(foreignKeyNames(assessments)).toContain("assessments_org_patient_fk");
     expect(foreignKeyNames(assessments)).toContain("assessments_org_facility_fk");
@@ -115,6 +120,12 @@ describe("migration-only safeguards", () => {
     expect(migration).toContain('ALTER TYPE "public"."patient_sex" RENAME TO "patient_gender"');
     expect(migration).toContain('RENAME COLUMN "sex" TO "gender"');
     expect(migration).not.toContain("DROP COLUMN");
+  });
+
+  test("branding defaults migrate to teal primary and blue secondary", async () => {
+    const migration = await Bun.file("./drizzle/0011_lowly_shooting_star.sql").text();
+    expect(migration).toContain('"primary_color" SET DEFAULT \'#0E9384\'');
+    expect(migration).toContain('"secondary_color" SET DEFAULT \'#175CD3\'');
   });
 
   test("initial migration enforces seat limits and append-only audit storage", async () => {

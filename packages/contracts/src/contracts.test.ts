@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, createPlatformAdministratorInvitationSchema, errorCodeSchema, measurementProvenanceSchema, onboardOrganizationSchema, signInRequestSchema, signInResponseSchema, updateOrganizationSchema } from "./index";
+import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, createPlatformAdministratorInvitationSchema, DEFAULT_ORGANIZATION_BRANDING, errorCodeSchema, measurementProvenanceSchema, onboardOrganizationSchema, signInRequestSchema, signInResponseSchema, updateOrganizationSchema } from "./index";
 
 const organizationId = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patientId = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
 const questionnaireDefinitionId = "01ARZ3NDEKTSV4RRFFQ69G5FAX";
 
 describe("application contracts", () => {
+  test("defaults organization branding to teal primary and blue secondary", () => {
+    expect(DEFAULT_ORGANIZATION_BRANDING).toEqual({ primaryColor: "#0E9384", secondaryColor: "#175CD3" });
+  });
+
   test("rejects unsafe organization slugs", () => {
     expect(createOrganizationSchema.safeParse({ legalName: "Example Health Group", displayName: "Example Health", slug: "Example Health Group" }).success).toBe(false);
   });
