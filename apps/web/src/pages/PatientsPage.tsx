@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
@@ -31,6 +32,7 @@ function patientAge(dateOfBirth: string | null): number | null {
 }
 
 const genderLabel = (gender: Patient["gender"]) => gender[0] + gender.slice(1).toLowerCase();
+const formatPatientDate = (value: string | Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(typeof value === "string" ? `${value}T00:00:00` : value));
 const patientRow = (patient: Patient): PatientRow => ({
   id: patient.id,
   reference: patient.reference,
@@ -188,7 +190,29 @@ export function PatientDetailPage() {
   if (failed) return <Alert variant="destructive"><AlertDescription>This patient could not be loaded.</AlertDescription></Alert>;
   if (!patient) return <p className="muted">Loading patient…</p>;
   const age = patientAge(patient.dateOfBirth);
-  return <><div className="breadcrumb"><Link to="/patients">Patients</Link><span>/</span><span>{patient.reference}</span></div><PageHeader eyebrow={patient.reference} title={patient.displayName} description={`${age ?? "—"} years · ${genderLabel(patient.gender)} · ${patient.homeFacility?.name ?? "—"}`} action={<RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18}/>New assessment</RouterButtonLink>}/>
-    <div className="detail-grid"><Card className="surface"><div className="section-heading"><div><p className="page-eyebrow">Patient details</p><h2>Clinical profile</h2></div><Button variant="link">Edit</Button></div><dl className="definition-grid"><div><dt>Patient reference</dt><dd>{patient.reference}</dd></div><div><dt>Home facility</dt><dd>{patient.homeFacility?.name ?? "—"}</dd></div><div><dt>Date of birth</dt><dd>{patient.dateOfBirth ?? "—"}</dd></div><div><dt>Contact</dt><dd>{patient.phone ?? patient.email ?? "—"}</dd></div></dl></Card><Card className="surface timeline"><div className="section-heading"><div><p className="page-eyebrow">History</p><h2>Assessments</h2></div></div><p className="muted">No assessments yet.</p></Card></div>
+  return <>
+    <div className="breadcrumb"><Link to="/patients">Patients</Link><span>/</span><span>{patient.reference}</span></div>
+    <header className="patient-detail-header">
+      <div className="patient-detail-summary">
+        <div className="organization-title-row"><h1>{patient.displayName}</h1><StatusBadge status="Registered" /></div>
+        <p>{patient.reference} · {age ?? "—"} years · {genderLabel(patient.gender)} · {patient.homeFacility?.name ?? "No facility"}</p>
+      </div>
+      <RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18}/>New assessment</RouterButtonLink>
+    </header>
+    <Tabs defaultSelectedKey="details" className="organization-detail-tabs gap-5">
+      <TabsList variant="line" aria-label="Patient record" className="w-full justify-start gap-5 border-b p-0">
+        <TabsTrigger id="details" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Details</TabsTrigger>
+        <TabsTrigger id="assessments" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Assessments <span className="patient-tab-count">0</span></TabsTrigger>
+      </TabsList>
+      <TabsContent id="details">
+        <div className="admin-detail-grid">
+          <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Patient information</h2><dl className="stacked-definition"><div><dt>Patient reference</dt><dd>{patient.reference}</dd></div><div><dt>Date of birth</dt><dd>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</dd></div><div><dt>Gender</dt><dd>{genderLabel(patient.gender)}</dd></div><div><dt>Age</dt><dd>{age == null ? "—" : `${age} years`}</dd></div></dl></Card>
+          <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Care and contact</h2><dl className="stacked-definition"><div><dt>Home facility</dt><dd>{patient.homeFacility?.name ?? "—"}</dd></div><div><dt>Mobile number</dt><dd>{patient.phone ?? "—"}</dd></div><div><dt>Email address</dt><dd>{patient.email ?? "—"}</dd></div><div><dt>Registered</dt><dd>{formatPatientDate(patient.createdAt)}</dd></div></dl></Card>
+        </div>
+      </TabsContent>
+      <TabsContent id="assessments">
+        <Card className="surface patient-assessments-empty"><h2>Assessments</h2><p className="muted">No assessments have been created for this patient.</p><RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18}/>New assessment</RouterButtonLink></Card>
+      </TabsContent>
+    </Tabs>
   </>;
 }
