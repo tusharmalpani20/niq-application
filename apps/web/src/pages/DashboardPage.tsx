@@ -1,10 +1,9 @@
 import type { AuthenticatedUser, Patient } from "@niq/application-contracts";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
-import { ArrowUpRight, Building2, Users, UserRound, CalendarDays } from "lucide-react";
+import { Building2, Users, UserRound, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { RouterButtonLink } from "../components/RouterButtonLink";
 import { getOrganization, listFacilities, listOrganizationUsers, listPatients } from "../lib/api";
 
 type Overview = { patients: Patient[]; facilityCount: number; enabledUsers: number | null; pendingInvitations: number };
@@ -26,7 +25,7 @@ export function DashboardPage() {
     ]).then(([patients, facilities, members, organization]) => {
       if (!active) return;
       setData({
-        patients: [...patients].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+        patients,
         facilityCount: facilities.filter((item) => item.status === "ACTIVE").length,
         enabledUsers: members ? members.filter((item) => item.active && item.status === "ACTIVE").length : null,
         pendingInvitations: organization?.invitations.filter((item) => item.status === "PENDING" && item.expiresAt.getTime() > Date.now()).length ?? 0,
@@ -54,22 +53,6 @@ export function DashboardPage() {
           <span className="text-xs text-muted-foreground">{detail}</span>
         </Link>)}
       </section>
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(240px,1fr)]">
-        <Card className="surface gap-0 p-5">
-          <div className="mb-3 flex items-center justify-between gap-3"><h2 className="m-0 text-base font-semibold">Recent patients</h2><RouterButtonLink to="/patients" variant="ghost" size="sm">View all<ArrowUpRight className="size-4" /></RouterButtonLink></div>
-          {!data ? <p role="status" className="py-8 text-center text-sm text-muted-foreground">Loading overview…</p> : data.patients.length ? <ul className="m-0 list-none divide-y p-0">
-            {data.patients.slice(0, 5).map((patient) => <li key={patient.id}><Link to={"/patients/" + encodeURIComponent(patient.reference)} className="flex items-center justify-between gap-3 rounded-md px-2 py-4 no-underline hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary">
-              <div className="grid min-w-0 gap-1"><strong className="text-sm text-primary">{patient.reference}</strong><span className="truncate text-xs text-muted-foreground">{patient.homeFacility?.name ?? "No facility"}</span></div>
-              <div className="flex shrink-0 items-center gap-3"><time className="text-xs text-muted-foreground" dateTime={patient.createdAt.toISOString()}>{patient.createdAt.toLocaleDateString()}</time><ArrowUpRight className="size-4 text-muted-foreground" aria-hidden="true" /></div>
-            </Link></li>)}
-          </ul> : <div className="grid justify-items-center gap-3 py-10"><span className="text-sm text-muted-foreground">No registered patients yet.</span><RouterButtonLink to="/patients" variant="outline" size="sm">Go to patients<ArrowUpRight className="size-4" /></RouterButtonLink></div>}
-        </Card>
-        <Card className="surface gap-3 p-5">
-          <h2 className="m-0 text-base font-semibold">Workspace</h2>
-          <Link className="flex items-center justify-between rounded-md py-2 text-sm text-primary no-underline hover:underline" to="/facilities">Facilities<ArrowUpRight className="size-4" /></Link>
-          {isAdmin && <><Link className="flex items-center justify-between rounded-md py-2 text-sm text-primary no-underline hover:underline" to="/users">Users and invitations<ArrowUpRight className="size-4" /></Link><Link className="flex items-center justify-between rounded-md py-2 text-sm text-primary no-underline hover:underline" to="/settings/branding">Branding<ArrowUpRight className="size-4" /></Link><Link className="flex items-center justify-between rounded-md py-2 text-sm text-primary no-underline hover:underline" to="/settings/scoring">Scoring connection<ArrowUpRight className="size-4" /></Link></>}
-        </Card>
-      </div>
     </>}
   </>;
 }
