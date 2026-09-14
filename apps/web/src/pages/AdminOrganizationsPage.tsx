@@ -1,6 +1,6 @@
 import type { Organization } from "@niq/application-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChevronRight, Plus, X } from "lucide-react";
+import { AlertTriangle, ChevronRight, Plus, Search, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { DataTableColumn } from "../components/DataTable";
 import { DataTable } from "../components/DataTable";
@@ -9,10 +9,13 @@ import { StatusBadge } from "../components/StatusBadge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
+import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { OrganizationOnboardingForm } from "./AdminCreateOrganizationPage";
 import { listOrganizations } from "../lib/api";
 
 const statusLabels = { ACTIVE: "Active", SUSPENDED: "Suspended", CLOSED: "Closed" } as const;
+const pageSize = 10;
 
 function OrganizationOnboardingDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const [dirty, setDirty] = useState(false);
@@ -46,6 +49,8 @@ export function AdminOrganizationsPage() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const onboardingWasOpen = useRef(false);
 
@@ -77,12 +82,37 @@ export function AdminOrganizationsPage() {
     { id: "open", header: () => <span className="sr-only">Open</span>, cell: ({ row }) => <Link className="row-link" to={`/admin/organizations/${row.original.id}`} aria-label={`Manage ${row.original.displayName}`}><ChevronRight className="size-4" /></Link> },
   ];
 
+  const query = search.trim().toLocaleLowerCase();
+  const filteredOrganizations = organizations.filter((organization) =>
+    [organization.displayName, organization.legalName, organization.slug]
+      .some((value) => value.toLocaleLowerCase().includes(query)),
+  );
+  const pageCount = Math.max(1, Math.ceil(filteredOrganizations.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visibleOrganizations = filteredOrganizations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return <>
     <PageHeader title="Organizations" action={<Button ref={addButtonRef} size="icon-lg" aria-label="Add organization" onPress={() => setShowOnboarding(true)}><Plus /><span className="sr-only">Add organization</span></Button>} />
-    {state === "loading" ? <section className="surface"><LoadingState label="Loading organizations" /></section> : state === "error" ? <ErrorState retry={load} /> : organizations.length === 0 ? <section className="surface"><EmptyState title="No organizations" description="Create the first client organization." /></section> : <section className="surface table-surface">
-      <div className="desktop-table"><DataTable columns={columns} data={organizations} /></div>
-      <div className="mobile-card-list">{organizations.map((organization) => <Link className="mobile-data-card" key={organization.id} to={`/admin/organizations/${organization.id}`} aria-label={`Manage ${organization.displayName}`}><div><strong>{organization.displayName}</strong><span>{organization.legalName}</span></div><div className="mobile-organization-meta"><span>URL name: {organization.slug}</span><StatusBadge status={statusLabels[organization.status]} /></div></Link>)}</div>
-    </section>}
+    {state === "loading" ? <section className="surface"><LoadingState label="Loading organizations" /></section> : state === "error" ? <ErrorState retry={load} /> : organizations.length === 0 ? <section className="surface"><EmptyState title="No organizations" description="Create the first client organization." /></section> : <div className="grid gap-4">
+      <section className="surface table-surface">
+        <div className="toolbar border-b border-border p-3">
+          <InputGroup className="max-w-sm">
+            <InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon>
+            <InputGroupInput aria-label="Search organizations" placeholder="Search organizations…" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
+            {search && <InputGroupAddon align="inline-end"><InputGroupButton size="icon-xs" aria-label="Clear search" onPress={() => { setSearch(""); setPage(1); }}><X aria-hidden="true" /></InputGroupButton></InputGroupAddon>}
+          </InputGroup>
+        </div>
+        {filteredOrganizations.length === 0 ? <EmptyState title="No matching organizations" description="Try a different name or URL name." /> : <>
+          <div className="desktop-table"><DataTable columns={columns} data={visibleOrganizations} label="Organizations" /></div>
+          <div className="mobile-card-list">{visibleOrganizations.map((organization) => <Link className="mobile-data-card" key={organization.id} to={`/admin/organizations/${organization.id}`} aria-label={`Manage ${organization.displayName}`}><div><strong>{organization.displayName}</strong>{organization.legalName !== organization.displayName && <span>{organization.legalName}</span>}</div><div className="mobile-organization-meta"><span>URL name: {organization.slug}</span><StatusBadge status={statusLabels[organization.status]} /></div></Link>)}</div>
+        </>}
+      </section>
+      {filteredOrganizations.length > 0 && <Pagination aria-label="Organizations pagination"><PaginationContent>
+        <PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem>
+        <PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filteredOrganizations.length} total</span></PaginationItem>
+        <PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem>
+      </PaginationContent></Pagination>}
+    </div>}
     <OrganizationOnboardingDialog open={showOnboarding} onClose={closeOnboarding} onCreated={load} />
   </>;
 }
