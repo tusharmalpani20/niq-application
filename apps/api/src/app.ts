@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { acceptInvitationSchema, activateScoringSchema, bootstrapAdminSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, idSchema, onboardOrganizationSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
+import { acceptInvitationSchema, activateScoringSchema, bootstrapAdminSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, idSchema, onboardOrganizationSchema, organizationSlugSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
@@ -23,6 +23,7 @@ export type AppDependencies = {
 };
 type AppEnvironment = { Variables: { requestId: string; principal: Principal } };
 const idParamsSchema = z.object({ organizationId: idSchema, facilityId: idSchema.optional(), membershipId: idSchema.optional() });
+const organizationSlugParamsSchema = z.object({ organizationSlug: organizationSlugSchema });
 function requestContext(context: { get(name: "requestId"): string; req: { header(name: string): string | undefined } }): RequestContext {
   return { requestId: context.get("requestId"), userAgent: context.req.header("user-agent") };
 }
@@ -111,6 +112,7 @@ export function createApp(dependencies: AppDependencies) {
     return context.json({ organization: result.organization, invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens ? { activationToken: result.token } : {}) }, 201);
   });
   app.post("/v1/organizations", zValidator("json", createOrganizationSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.createOrganization(context.get("principal"), context.req.valid("json"), requestContext(context))), 201));
+  app.get("/v1/organizations/by-slug/:organizationSlug", zValidator("param", organizationSlugParamsSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.getOrganizationBySlug(context.get("principal"), context.req.valid("param").organizationSlug))));
   app.get("/v1/organizations/:organizationId/logo", zValidator("param", idParamsSchema, validationFailure), async (context) => {
     const asset = await dependencies.service!.getOrganizationLogo(context.get("principal"), context.req.valid("param").organizationId);
     const body = asset.data.buffer.slice(asset.data.byteOffset, asset.data.byteOffset + asset.data.byteLength) as ArrayBuffer;

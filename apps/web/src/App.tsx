@@ -26,7 +26,7 @@ export function App() {
           <Route path="/admin" element={<Navigate replace to="/admin/organizations" />} />
           <Route path="/admin/organizations" element={<AdminOrganizationsPage />} />
           <Route path="/admin/organizations/new" element={<AdminCreateOrganizationPage />} />
-          <Route path="/admin/organizations/:organizationId" element={<AdminOrganizationDetailPage />} />
+          <Route path="/admin/organizations/:organizationSlug" element={<AdminOrganizationDetailPage />} />
         </Route>
         <Route element={<AuthenticatedShell area="organization" />}>
           <Route path="/" element={<DashboardPage />} />

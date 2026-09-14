@@ -1,7 +1,7 @@
 import type { ApplicationConfig } from "@niq/application-config";
 import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, OnboardOrganization, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
-import { and, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "../db/client";
 import {
@@ -366,14 +366,14 @@ export class PostgresApplicationService implements ApplicationService {
     }
   }
   async listOrganizations(actor: Principal) {
-    if (actor.platformRole === "NIQ_ADMIN") return this.db.select().from(organizations).orderBy(organizations.displayName);
+    if (actor.platformRole === "NIQ_ADMIN") return this.db.select().from(organizations).where(ne(organizations.id, actor.organizationId)).orderBy(organizations.displayName);
     return this.db.select().from(organizations).where(eq(organizations.id, actor.organizationId));
   }
   async getOrganization(actor: Principal, organizationId: string) {
     this.ensureOrganizationAccess(actor, organizationId);
     const [organization] = await this.db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1);
     if (!organization) throw new ServiceError("NOT_FOUND", "Organization not found.");
-    const [entitlement, organizationInvitations, scoringConnection] = await Promise.all([
+    const [entitlements, organizationInvitations, scoringConnectionsForOrganization] = await Promise.all([
       this.db.select({
         userLimit: organizationEntitlements.userLimit,
         scoringMonthlyLimit: organizationEntitlements.scoringMonthlyLimit,
@@ -389,7 +389,25 @@ export class PostgresApplicationService implements ApplicationService {
       this.db.select({ deploymentId: scoringConnections.deploymentId, scoringOrganizationId: scoringConnections.scoringOrganizationId, keyVersion: scoringConnections.keyVersion, activatedAt: scoringConnections.activatedAt })
         .from(scoringConnections).where(eq(scoringConnections.organizationId, organizationId)).limit(1),
     ]);
-    return { organization, entitlement: entitlement ?? null, invitations: organizationInvitations, scoringConnection: scoringConnection ?? null };
+    return {
+      organization,
+      entitlement: entitlements[0] ?? null,
+      invitations: organizationInvitations,
+      scoringConnection: scoringConnectionsForOrganization[0] ?? null,
+    };
+  }
+
+  async getOrganizationBySlug(actor: Principal, organizationSlug: string) {
+    if (actor.platformRole !== "NIQ_ADMIN") {
+      const [actorOrganization] = await this.db.select({ id: organizations.id, slug: organizations.slug }).from(organizations).where(eq(organizations.id, actor.organizationId)).limit(1);
+      if (!actorOrganization || actorOrganization.slug !== organizationSlug) {
+        throw new ServiceError("FORBIDDEN", "You do not have access to this organization.");
+      }
+      return this.getOrganization(actor, actorOrganization.id);
+    }
+    const [organization] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.slug, organizationSlug)).limit(1);
+    if (!organization) throw new ServiceError("NOT_FOUND", "Organization not found.");
+    return this.getOrganization(actor, organization.id);
   }
 
   async getOrganizationLogo(actor: Principal, organizationId: string) {

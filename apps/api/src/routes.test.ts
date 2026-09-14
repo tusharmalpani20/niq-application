@@ -19,7 +19,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     verifyMfa: async () => ({ token: "valid-session", expiresAt: new Date(Date.now() + 60_000), principal }),
     resendMfa: async () => ({ challengeToken: "y".repeat(43), expiresAt: new Date(Date.now() + 60_000), resendAvailableAt: new Date(Date.now() + 30_000), attemptsRemaining: 5, resendsRemaining: 2 }),
     signOut: async () => {}, acceptInvitation: async () => principal, bootstrap: async () => principal,
-    createOrganization: async () => ({}), listOrganizations: async () => [], getOrganization: async () => ({}), getOrganizationLogo: async () => ({ data: new Uint8Array([1, 2, 3]), mimeType: "image/png", etag: "abc" }), updateOrganization: async () => ({}),
+    createOrganization: async () => ({}), listOrganizations: async () => [], getOrganization: async () => ({}), getOrganizationBySlug: async () => ({}), getOrganizationLogo: async () => ({ data: new Uint8Array([1, 2, 3]), mimeType: "image/png", etag: "abc" }), updateOrganization: async () => ({}),
     onboardOrganization: async () => ({ organization: {}, invitation: {}, token: "invite-token" }),
     activateScoring: async () => ({ connection: {} }),
     createFacility: async () => ({}), listFacilities: async () => [], updateFacility: async () => ({}),
@@ -74,6 +74,14 @@ describe("local authentication routes", () => {
     const response = await app.request(`/v1/organizations/${principal.organizationId}/facilities`, { headers: { cookie: "niq_session=valid-session" } });
     expect(response.status).toBe(200);
     expect(observedOrganization).toBe(principal.organizationId);
+  });
+
+  test("resolves an organization detail by its URL name", async () => {
+    let observedSlug = "";
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService({ getOrganizationBySlug: async (_actor, slug) => { observedSlug = slug; return { slug }; } }) });
+    const response = await app.request("/v1/organizations/by-slug/example-health", { headers: { cookie: "niq_session=valid-session" } });
+    expect(response.status).toBe(200);
+    expect(observedSlug).toBe("example-health");
   });
 
   test("requires the independent bootstrap token", async () => {

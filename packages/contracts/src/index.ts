@@ -87,12 +87,13 @@ export const membershipRoleSchema = z.enum(["ORGANIZATION_ADMIN", "MEDICAL", "SU
 export const organizationStatusSchema = z.enum(["ACTIVE", "SUSPENDED", "CLOSED"]);
 export const facilityStatusSchema = z.enum(["ACTIVE", "INACTIVE"]);
 export const deploymentModeSchema = z.enum(["NIQ_HOSTED", "CLIENT_CLOUD", "ON_PREM"]);
+export const organizationSlugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(80);
 
 export const organizationSchema = z.object({
   id: idSchema,
   legalName: z.string(),
   displayName: z.string(),
-  slug: z.string(),
+  slug: organizationSlugSchema,
   logoObjectKey: z.string().nullable(),
   primaryColor: z.string(),
   secondaryColor: z.string(),
@@ -109,7 +110,7 @@ export const organizationListResponseSchema = z.object({ items: z.array(organiza
 export const createOrganizationSchema = z.object({
   legalName: z.string().trim().min(2).max(200),
   displayName: z.string().trim().min(2).max(120),
-  slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(80),
+  slug: organizationSlugSchema,
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#175CD3"),
   secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#0E9384"),
 });

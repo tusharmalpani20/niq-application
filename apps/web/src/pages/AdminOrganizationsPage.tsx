@@ -81,7 +81,7 @@ export function AdminOrganizationsPage() {
     { accessorKey: "slug", header: "URL name" },
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={statusLabels[row.original.status]} /> },
     { id: "created", header: "Created", cell: ({ row }) => row.original.createdAt.toLocaleDateString() },
-    { id: "open", header: () => <span className="sr-only">Open</span>, cell: ({ row }) => <Link className="row-link" to={`/admin/organizations/${row.original.id}`} aria-label={`Manage ${row.original.displayName}`}><ChevronRight className="size-4" /></Link> },
+    { id: "open", header: () => <span className="sr-only">Open</span>, cell: ({ row }) => <Link className="row-link" to={`/admin/organizations/${row.original.slug}`} aria-label={`Manage ${row.original.displayName}`}><ChevronRight className="size-4" /></Link> },
   ];
 
   const query = search.trim().toLocaleLowerCase();
@@ -113,7 +113,7 @@ export function AdminOrganizationsPage() {
       <section className="surface table-surface organization-table-card">
         {organizations.length === 0 ? <EmptyState title="No organizations" description="Create the first client organization." /> : filteredOrganizations.length === 0 ? <EmptyState title="No matching organizations" description="Try a different name or URL name." /> : <>
           <div className="desktop-table p-5"><DataTable columns={columns} data={visibleOrganizations} label="Organizations" /></div>
-          <div className="mobile-card-list">{visibleOrganizations.map((organization) => <Link className="mobile-data-card" key={organization.id} to={`/admin/organizations/${organization.id}`} aria-label={`Manage ${organization.displayName}`}><div><strong>{organization.displayName}</strong>{organization.legalName !== organization.displayName && <span>{organization.legalName}</span>}</div><div className="mobile-organization-meta"><span>URL name: {organization.slug}</span><StatusBadge status={statusLabels[organization.status]} /></div></Link>)}</div>
+          <div className="mobile-card-list">{visibleOrganizations.map((organization) => <Link className="mobile-data-card" key={organization.id} to={`/admin/organizations/${organization.slug}`} aria-label={`Manage ${organization.displayName}`}><div><strong>{organization.displayName}</strong>{organization.legalName !== organization.displayName && <span>{organization.legalName}</span>}</div><div className="mobile-organization-meta"><span>URL name: {organization.slug}</span><StatusBadge status={statusLabels[organization.status]} /></div></Link>)}</div>
         </>}
       </section>
       {organizations.length > 0 && filteredOrganizations.length > 0 && <Pagination aria-label="Organizations pagination"><PaginationContent>

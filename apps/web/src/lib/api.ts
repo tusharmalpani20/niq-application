@@ -126,6 +126,11 @@ export async function getOrganization(organizationId: string): Promise<Organizat
   return organizationDetailsResponseSchema.parse(await responseBody(response));
 }
 
+export async function getOrganizationBySlug(organizationSlug: string): Promise<OrganizationDetails> {
+  const response = await fetch(`/api/v1/organizations/by-slug/${encodeURIComponent(organizationSlug)}`, { credentials: "include" });
+  return organizationDetailsResponseSchema.parse(await responseBody(response));
+}
+
 export async function activateScoring(organizationId: string, input: ActivateScoring) {
   const response = await fetch(`/api/v1/organizations/${organizationId}/scoring/activate`, {
     method: "POST",

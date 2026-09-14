@@ -98,7 +98,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     const invitationUrl = created.activationToken ? `${window.location.origin}/invite/${created.activationToken}` : null;
     return <section className="onboarding-success"><div className="success-icon"><Icon name="check" /></div><div><h2>Organization created</h2><p>{created.organization.displayName} and its first administrator invitation were created.</p></div>
       {invitationUrl ? <Field><FieldLabel>Local invitation link</FieldLabel><Textarea readOnly value={invitationUrl} /><FieldDescription>Visible only in development. Production delivery will use the configured notification provider.</FieldDescription></Field> : <Alert><AlertDescription>The delivery provider will send the activation link to {created.invitation.email}.</AlertDescription></Alert>}
-      <div className="form-actions onboarding-success-actions">{onCancel ? <Button variant="outline" type="button" onPress={onCancel}>Close</Button> : <Link className={buttonVariants({ variant: "outline" })} to="/admin/organizations">All organizations</Link>}<Link className={buttonVariants()} to={`/admin/organizations/${created.organization.id}`}>Manage organization</Link></div>
+      <div className="form-actions onboarding-success-actions">{onCancel ? <Button variant="outline" type="button" onPress={onCancel}>Close</Button> : <Link className={buttonVariants({ variant: "outline" })} to="/admin/organizations">All organizations</Link>}<Link className={buttonVariants()} to={`/admin/organizations/${created.organization.slug}`}>Manage organization</Link></div>
     </section>;
   }
 

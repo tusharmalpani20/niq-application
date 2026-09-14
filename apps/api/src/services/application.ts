@@ -73,6 +73,7 @@ export interface ApplicationService {
   activateScoring(actor: Principal, organizationId: string, input: ActivateScoring, context: RequestContext): Promise<unknown>;
   listOrganizations(actor: Principal): Promise<unknown[]>;
   getOrganization(actor: Principal, organizationId: string): Promise<unknown>;
+  getOrganizationBySlug(actor: Principal, organizationSlug: string): Promise<unknown>;
   getOrganizationLogo(actor: Principal, organizationId: string): Promise<{ data: Uint8Array; mimeType: string; etag: string }>;
   updateOrganization(actor: Principal, organizationId: string, input: UpdateOrganization, context: RequestContext): Promise<unknown>;
   createFacility(actor: Principal, organizationId: string, input: CreateFacility, context: RequestContext): Promise<unknown>;
