@@ -41,7 +41,7 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
           : <><Link className="grid size-10 shrink-0 place-items-center rounded-xl rounded-bl-sm bg-primary font-bold text-primary-foreground" to="/" aria-label={`${branding.displayName} home`}>N</Link><div className="grid min-w-0 flex-1"><strong className="truncate text-sm">{branding.displayName}</strong><span className="truncate text-xs text-muted-foreground">Nutrition intelligence</span></div><SidebarTrigger aria-label="Collapse navigation" /></>}
       </div>
     </SidebarHeader>
-    <SidebarContent><SidebarGroup><SidebarGroupContent><SidebarMenu>
+    <SidebarContent><SidebarGroup><SidebarGroupContent><SidebarMenu className="gap-1">
       {navigation.filter((item) => item.to !== "/settings/scoring" || user.role === "ORGANIZATION_ADMIN").map((item) => <SidebarMenuItem key={item.to}>
         <SidebarMenuButton isActive={isActive(item.to, item.end)} tooltip={item.label} onPress={() => go(item.to)} className="h-10 text-sm">
           <Icon name={item.icon} /><span>{item.label}</span>
