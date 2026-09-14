@@ -76,10 +76,8 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
       const result = await onboardOrganization({
         legalName: displayName, displayName, slug,
         firstAdminEmail,
-        deploymentMode: "NIQ_HOSTED",
         primaryColor, secondaryColor,
-        scoringEnabled: true, faceScanEnabled: true,
-        userLimit: userLimit ? Number(userLimit) : null, scoringMonthlyLimit: null, faceScanMonthlyLimit: null,
+        userLimit: userLimit ? Number(userLimit) : null,
         logo: await organizationLogoPayload(logo),
       });
       setCreated(result);

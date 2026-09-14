@@ -20,11 +20,12 @@ import {
   scoringConnections,
   users,
 } from "../db/schema";
-import { encryptCredential } from "../security/credential-encryption";
+import { decryptCredential, encryptCredential } from "../security/credential-encryption";
 import { decodeOrganizationLogo, InvalidOrganizationLogoError } from "../security/organization-logo";
 import { hashPassword, keyedHash, randomOtp, randomToken, secureEqual, verifyPassword } from "../security/tokens";
 import type { ApplicationService, MfaChallengeResult, OtpDelivery, Principal, RequestContext, SessionResult, SignInResult } from "./application";
 import { ServiceError } from "./application";
+import { requestScoringOrganizationInfo, ScoringOrganizationInfoRequestError } from "./scoring-organization-info";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Executor = Database | Transaction;
@@ -327,9 +328,6 @@ export class PostgresApplicationService implements ApplicationService {
           slug: input.slug,
           primaryColor: input.primaryColor,
           secondaryColor: input.secondaryColor,
-          deploymentMode: input.deploymentMode,
-          scoringEnabled: input.scoringEnabled,
-          faceScanEnabled: input.faceScanEnabled,
           logoObjectKey: logoAssetId ? `database:${logoAssetId}` : null,
         }).returning();
         if (!organization) throw new Error("Organization insert failed");
@@ -338,8 +336,6 @@ export class PostgresApplicationService implements ApplicationService {
           id: createEntityId(),
           organizationId,
           userLimit: input.userLimit,
-          scoringMonthlyLimit: input.scoringMonthlyLimit,
-          faceScanMonthlyLimit: input.faceScanMonthlyLimit,
           reason: "Initial client onboarding",
         });
         const [invitation] = await tx.insert(invitations).values({
@@ -353,7 +349,6 @@ export class PostgresApplicationService implements ApplicationService {
         if (!invitation) throw new Error("Invitation insert failed");
         await this.audit(tx, organizationId, context, "ORGANIZATION_ONBOARDED", "organization", organizationId, undefined, {
           actorUserId: actor.userId,
-          deploymentMode: input.deploymentMode,
           firstAdminInvitationId: invitationId,
         });
         return { organization, invitation, token };
@@ -376,8 +371,6 @@ export class PostgresApplicationService implements ApplicationService {
     const [entitlements, organizationInvitations, scoringConnectionsForOrganization] = await Promise.all([
       this.db.select({
         userLimit: organizationEntitlements.userLimit,
-        scoringMonthlyLimit: organizationEntitlements.scoringMonthlyLimit,
-        faceScanMonthlyLimit: organizationEntitlements.faceScanMonthlyLimit,
         effectiveFrom: organizationEntitlements.effectiveFrom,
       }).from(organizationEntitlements).where(and(
         eq(organizationEntitlements.organizationId, organizationId),
@@ -415,6 +408,40 @@ export class PostgresApplicationService implements ApplicationService {
     const [asset] = await this.db.select({ data: organizationBrandAssets.content, mimeType: organizationBrandAssets.mimeType, etag: organizationBrandAssets.sha256 }).from(organizationBrandAssets).where(eq(organizationBrandAssets.organizationId, organizationId)).limit(1);
     if (!asset) throw new ServiceError("NOT_FOUND", "Organization logo not found.");
     return asset;
+  }
+  async getScoringOrganizationInfo(actor: Principal, organizationId: string, context: RequestContext) {
+    this.ensureOrganizationAccess(actor, organizationId, true);
+    if (!this.config.SCORING_API_URL || !this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY) {
+      throw new ServiceError("SCORING_UNAVAILABLE", "NIQ Scoring is not configured for this application installation.");
+    }
+    const [connection] = await this.db.select({
+      encryptedCredential: scoringConnections.encryptedCredential,
+      credentialIv: scoringConnections.credentialIv,
+    }).from(scoringConnections).where(eq(scoringConnections.organizationId, organizationId)).limit(1);
+    if (!connection) throw new ServiceError("NOT_FOUND", "This organization is not connected to NIQ Scoring.");
+
+    let credential: string;
+    try {
+      credential = decryptCredential(connection.encryptedCredential, connection.credentialIv, this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY);
+    } catch {
+      throw new ServiceError("SCORING_UNAVAILABLE", "The saved NIQ Scoring connection could not be opened.");
+    }
+
+    try {
+      return await requestScoringOrganizationInfo({
+        baseUrl: this.config.SCORING_API_URL,
+        credential,
+        requestId: context.requestId,
+        timeoutMs: this.config.SCORING_TIMEOUT_MS,
+      });
+    } catch (error) {
+      if (error instanceof ScoringOrganizationInfoRequestError) {
+        if (error.reason === "unauthorized") throw new ServiceError("INVALID_OR_EXPIRED_TOKEN", "The NIQ Scoring connection has expired or was revoked. Reconnect it to continue.");
+        if (error.reason === "disabled") throw new ServiceError("SCORING_UNAVAILABLE", "This organization or its NIQ Scoring deployment is disabled.");
+        if (error.reason === "incomplete") throw new ServiceError("SCORING_UNAVAILABLE", "NIQ Scoring configuration is incomplete.");
+      }
+      throw new ServiceError("SCORING_UNAVAILABLE", "NIQ Scoring information could not be loaded.");
+    }
   }
   async activateScoring(actor: Principal, organizationId: string, input: ActivateScoring, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true);

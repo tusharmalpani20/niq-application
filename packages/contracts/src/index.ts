@@ -86,7 +86,6 @@ export const acceptInvitationSchema = z.object({
 export const membershipRoleSchema = z.enum(["ORGANIZATION_ADMIN", "MEDICAL", "SUPPORT"]);
 export const organizationStatusSchema = z.enum(["ACTIVE", "SUSPENDED", "CLOSED"]);
 export const facilityStatusSchema = z.enum(["ACTIVE", "INACTIVE"]);
-export const deploymentModeSchema = z.enum(["NIQ_HOSTED", "CLIENT_CLOUD", "ON_PREM"]);
 export const organizationSlugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(80);
 
 export const organizationSchema = z.object({
@@ -97,9 +96,6 @@ export const organizationSchema = z.object({
   logoObjectKey: z.string().nullable(),
   primaryColor: z.string(),
   secondaryColor: z.string(),
-  deploymentMode: deploymentModeSchema,
-  scoringEnabled: z.boolean(),
-  faceScanEnabled: z.boolean(),
   status: organizationStatusSchema,
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -115,19 +111,14 @@ export const createOrganizationSchema = z.object({
   secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#0E9384"),
 });
 
-const optionalMonthlyLimitSchema = z.number().int().min(1).nullable().default(null);
+const optionalUserLimitSchema = z.number().int().min(1).nullable().default(null);
 export const organizationLogoUploadSchema = z.object({
   mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
   contentBase64: z.string().regex(/^[A-Za-z0-9+/]+={0,2}$/, "Expected base64-encoded image data").max(2_796_204),
 });
 
 export const onboardOrganizationSchema = createOrganizationSchema.extend({
-  deploymentMode: deploymentModeSchema.default("NIQ_HOSTED"),
-  scoringEnabled: z.boolean().default(true),
-  faceScanEnabled: z.boolean().default(true),
-  userLimit: optionalMonthlyLimitSchema,
-  scoringMonthlyLimit: optionalMonthlyLimitSchema,
-  faceScanMonthlyLimit: optionalMonthlyLimitSchema,
+  userLimit: optionalUserLimitSchema,
   firstAdminEmail: z.email().max(320),
   logo: organizationLogoUploadSchema.nullable().default(null),
 });
@@ -155,8 +146,6 @@ export const organizationDetailsResponseSchema = z.object({
   organization: organizationSchema,
   entitlement: z.object({
     userLimit: z.number().int().nullable(),
-    scoringMonthlyLimit: z.number().int().nullable(),
-    faceScanMonthlyLimit: z.number().int().nullable(),
     effectiveFrom: z.coerce.date(),
   }).nullable(),
   invitations: z.array(z.object({
@@ -212,6 +201,33 @@ export const organizationUserSchema = z.object({
 });
 
 export const organizationUsersResponseSchema = z.object({ items: z.array(organizationUserSchema) });
+
+// NIQ Scoring owns this snapshot. Application validates it at both API
+// boundaries and never persists it in the Application database.
+export const scoringOrganizationInfoSchema = z.object({
+  organization: z.object({ id: idSchema, name: z.string(), status: z.enum(["ACTIVE", "DISABLED"]) }).strict(),
+  deployment: z.object({
+    id: idSchema,
+    mode: z.enum(["NIQ_HOSTED", "CLIENT_CLOUD", "ON_PREMISES"]),
+    environment: z.string(),
+    status: z.enum(["ACTIVE", "DISABLED"]),
+  }).strict(),
+  services: z.object({
+    scoring: z.object({ enabled: z.boolean() }).strict(),
+    faceScan: z.object({ enabled: z.boolean() }).strict(),
+  }).strict(),
+  limits: z.object({
+    scoresPerMonth: z.number().int().nonnegative().nullable(),
+    faceScansPerMonth: z.number().int().nonnegative().nullable(),
+  }).strict(),
+  usage: z.object({
+    period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+    scores: z.number().int().nonnegative(),
+    faceScans: z.number().int().nonnegative(),
+  }).strict(),
+  updatedAt: z.iso.datetime().nullable(),
+  unavailableFields: z.tuple([z.literal("limits.users")]),
+}).strict();
 
 export const bootstrapAdminSchema = createOrganizationSchema.extend({
   adminEmail: z.email().max(320),
@@ -277,6 +293,7 @@ export type OnboardOrganization = z.infer<typeof onboardOrganizationSchema>;
 export type OnboardOrganizationResponse = z.infer<typeof onboardOrganizationResponseSchema>;
 export type OrganizationDetails = z.infer<typeof organizationDetailsResponseSchema>;
 export type OrganizationUser = z.infer<typeof organizationUserSchema>;
+export type ScoringOrganizationInfo = z.infer<typeof scoringOrganizationInfoSchema>;
 export type ActivateScoring = z.infer<typeof activateScoringSchema>;
 export type ScoringConnection = z.infer<typeof scoringConnectionSchema>;
 export type CreateInvitation = z.infer<typeof createInvitationSchema>;

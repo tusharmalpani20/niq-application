@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, measurementProvenanceSchema, onboardOrganizationSchema, signInRequestSchema, signInResponseSchema } from "./index";
+import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, measurementProvenanceSchema, onboardOrganizationSchema, signInRequestSchema, signInResponseSchema, updateOrganizationSchema } from "./index";
 
 const organizationId = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patientId = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
@@ -63,19 +63,17 @@ describe("application contracts", () => {
     }).success).toBe(true);
   });
 
-  test("defaults new client organizations to enabled NIQ hosting with unlimited usage", () => {
+  test("keeps only the Application-owned user limit during organization onboarding", () => {
     const result = onboardOrganizationSchema.parse({
       legalName: "Example Health Network Private Limited",
       displayName: "Example Health Network",
       slug: "example-health",
       firstAdminEmail: "admin@example-health.test",
     });
-    expect(result.deploymentMode).toBe("NIQ_HOSTED");
     expect(result.userLimit).toBeNull();
-    expect(result.scoringMonthlyLimit).toBeNull();
-    expect(result.faceScanMonthlyLimit).toBeNull();
-    expect(result.scoringEnabled).toBe(true);
-    expect(result.faceScanEnabled).toBe(true);
+    expect("deploymentMode" in result).toBe(false);
+    expect("scoringMonthlyLimit" in result).toBe(false);
+    expect("faceScanMonthlyLimit" in result).toBe(false);
     expect(result.logo).toBeNull();
   });
 
@@ -89,6 +87,12 @@ describe("application contracts", () => {
     expect(onboardOrganizationSchema.safeParse({ ...organization, userLimit: 25 }).success).toBe(true);
     expect(onboardOrganizationSchema.safeParse({ ...organization, userLimit: 2.5 }).success).toBe(false);
     expect(onboardOrganizationSchema.safeParse({ ...organization, userLimit: -1 }).success).toBe(false);
+  });
+
+  test("allows an organization to be suspended and re-enabled", () => {
+    expect(updateOrganizationSchema.safeParse({ status: "SUSPENDED" }).success).toBe(true);
+    expect(updateOrganizationSchema.safeParse({ status: "ACTIVE" }).success).toBe(true);
+    expect(updateOrganizationSchema.safeParse({ status: "INACTIVE" }).success).toBe(false);
   });
 
   test("accepts only supported organization logo formats", () => {

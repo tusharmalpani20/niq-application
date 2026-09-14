@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createApp } from "./app";
-import type { ApplicationService, Principal } from "./services/application";
+import { ServiceError, type ApplicationService, type Principal } from "./services/application";
 
 const principal: Principal = {
   userId: "01J00000000000000000000001",
@@ -22,6 +22,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     createOrganization: async () => ({}), listOrganizations: async () => [], getOrganization: async () => ({}), getOrganizationBySlug: async () => ({}), getOrganizationLogo: async () => ({ data: new Uint8Array([1, 2, 3]), mimeType: "image/png", etag: "abc" }), updateOrganization: async () => ({}),
     onboardOrganization: async () => ({ organization: {}, invitation: {}, token: "invite-token" }),
     activateScoring: async () => ({ connection: {} }),
+    getScoringOrganizationInfo: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], updateFacility: async () => ({}),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
     ...overrides,
@@ -155,5 +156,37 @@ describe("local authentication routes", () => {
     expect(body.connection.deploymentId).toBe("01J00000000000000000000006");
     expect(body.connection.scoringOrganizationId).toBe("01J00000000000000000000007");
     expect(body.credential).toBeUndefined();
+  });
+
+  test("returns live NIQ Scoring organization information without secret material", async () => {
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({
+        getScoringOrganizationInfo: async () => ({
+          organization: { id: "01J00000000000000000000004", name: "Example Health", status: "ACTIVE" },
+          deployment: { id: "01J00000000000000000000005", mode: "NIQ_HOSTED", environment: "production", status: "ACTIVE" },
+          services: { scoring: { enabled: true }, faceScan: { enabled: false } },
+          limits: { scoresPerMonth: 1000, faceScansPerMonth: null },
+          usage: { period: "2026-09", scores: 12, faceScans: 0 },
+          updatedAt: "2026-09-14T10:00:00.000Z",
+          unavailableFields: ["limits.users"],
+        }),
+      }),
+    });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/scoring/organization-info`, { headers: { cookie: "niq_session=valid-session" } });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.usage.scores).toBe(12);
+    expect(JSON.stringify(body)).not.toContain("credential");
+  });
+
+  test("requires reconnection when NIQ Scoring rejects the saved credential", async () => {
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({ getScoringOrganizationInfo: async () => { throw new ServiceError("INVALID_OR_EXPIRED_TOKEN", "Reconnect NIQ Scoring."); } }),
+    });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/scoring/organization-info`, { headers: { cookie: "niq_session=valid-session" } });
+    expect(response.status).toBe(401);
+    expect((await response.json()).error.code).toBe("INVALID_OR_EXPIRED_TOKEN");
   });
 });

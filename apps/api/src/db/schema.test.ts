@@ -65,12 +65,13 @@ describe("tenant data invariants", () => {
     expect(foreignKeyNames(invitationFacilities)).toContain("invitation_facilities_org_facility_fk");
   });
 
-  test("organization onboarding records deployment and service entitlements", () => {
-    expect(organizations.deploymentMode.notNull).toBe(true);
-    expect(organizations.scoringEnabled.notNull).toBe(true);
-    expect(organizations.faceScanEnabled.notNull).toBe(true);
-    expect("scoringMonthlyLimit" in organizationEntitlements).toBe(true);
-    expect("faceScanMonthlyLimit" in organizationEntitlements).toBe(true);
+  test("organization onboarding stores only the Application-owned user entitlement", () => {
+    expect("deploymentMode" in organizations).toBe(false);
+    expect("scoringEnabled" in organizations).toBe(false);
+    expect("faceScanEnabled" in organizations).toBe(false);
+    expect("scoringMonthlyLimit" in organizationEntitlements).toBe(false);
+    expect("faceScanMonthlyLimit" in organizationEntitlements).toBe(false);
+    expect(organizationEntitlements.userLimit).toBeDefined();
   });
 
   test("organization logos are tenant-bound binary assets", () => {
@@ -133,13 +134,10 @@ describe("migration-only safeguards", () => {
     expect(migration).not.toContain("otp");
   });
 
-  test("client onboarding migration adds deployment and usage controls", async () => {
-    const migration = await Bun.file("./drizzle/0003_mixed_the_phantom.sql").text();
-    expect(migration).toContain('"deployment_mode"');
-    expect(migration).toContain('"scoring_monthly_limit"');
-    expect(migration).toContain('"face_scan_monthly_limit"');
-    expect(migration).toContain('"scoring_enabled" boolean DEFAULT true NOT NULL');
-    expect(migration).toContain('"face_scan_enabled" boolean DEFAULT true NOT NULL');
+  test("Scoring-owned configuration is removed from Application storage", async () => {
+    const migration = await Bun.file("./drizzle/0007_remove_scoring_configuration.sql").text();
+    expect(migration).toContain('DROP COLUMN "deployment_mode"');
+    expect(migration).toContain('DROP COLUMN "scoring_monthly_limit"');
   });
 
   test("scoring connection migration never creates a plaintext credential column", async () => {

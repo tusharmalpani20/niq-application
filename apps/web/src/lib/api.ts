@@ -8,6 +8,7 @@ import {
   organizationListResponseSchema,
   organizationDetailsResponseSchema,
   organizationSchema,
+  scoringOrganizationInfoSchema,
   organizationUsersResponseSchema,
   onboardOrganizationResponseSchema,
   onboardOrganizationSchema,
@@ -23,6 +24,7 @@ import {
   type Organization,
   type OrganizationDetails,
   type OrganizationUser,
+  type ScoringOrganizationInfo,
   type OnboardOrganization,
   type OnboardOrganizationResponse,
   type SignInRequest,
@@ -147,6 +149,11 @@ export async function setOrganizationStatus(organizationId: string, status: "ACT
     body: JSON.stringify({ status }),
   });
   return organizationSchema.parse(await responseBody(response));
+}
+
+export async function getScoringOrganizationInfo(organizationId: string): Promise<ScoringOrganizationInfo> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/scoring/organization-info`, { credentials: "include" });
+  return scoringOrganizationInfoSchema.parse(await responseBody(response));
 }
 
 export async function activateScoring(organizationId: string, input: ActivateScoring) {
