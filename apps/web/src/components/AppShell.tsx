@@ -19,6 +19,7 @@ const navigation = [
   { to: "/facilities", label: "Facilities", icon: "building" },
   { to: "/users", label: "Users", icon: "users" },
   { to: "/settings/branding", label: "Branding", icon: "palette" },
+  { to: "/settings/scoring", label: "Scoring connection", icon: "link" },
 ];
 
 function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onSignOut: () => void }) {
@@ -41,7 +42,7 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
       </div>
     </SidebarHeader>
     <SidebarContent><SidebarGroup><SidebarGroupContent><SidebarMenu>
-      {navigation.map((item) => <SidebarMenuItem key={item.to}>
+      {navigation.filter((item) => item.to !== "/settings/scoring" || user.role === "ORGANIZATION_ADMIN").map((item) => <SidebarMenuItem key={item.to}>
         <SidebarMenuButton isActive={isActive(item.to, item.end)} tooltip={item.label} onPress={() => go(item.to)} className="h-10 text-sm">
           <Icon name={item.icon} /><span>{item.label}</span>
         </SidebarMenuButton>
@@ -68,7 +69,7 @@ export function AppShell({ user }: { user: AuthenticatedUser }) {
     <OrganizationSidebar user={user} onSignOut={handleSignOut} />
     <SidebarInset className="min-w-0">
       <header className="topbar"><SidebarTrigger aria-label="Toggle navigation" /><div className="topbar-path"><strong>{currentPage}</strong></div><div className="topbar-actions"><Button variant="ghost" size="icon-sm" aria-label="Notifications"><Bell /></Button><Avatar className="size-8"><AvatarFallback>{initials}</AvatarFallback></Avatar></div></header>
-      <main className="content"><Outlet /></main>
+      <main className="content"><Outlet context={user} /></main>
     </SidebarInset>
   </SidebarProvider>;
 }

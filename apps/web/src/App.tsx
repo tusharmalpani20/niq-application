@@ -11,6 +11,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { FacilitiesPage } from "./pages/FacilitiesPage";
 import { PatientDetailPage, PatientsPage, RegisterPatientPage } from "./pages/PatientsPage";
 import { SignInPage } from "./pages/SignInPage";
+import { ScoringConnectionPage } from "./pages/ScoringConnectionPage";
 import { UsersPage } from "./pages/UsersPage";
 import { VerifyMfaPage } from "./pages/VerifyMfaPage";
 
@@ -38,6 +39,7 @@ export function App() {
           <Route path="/assessments/new" element={<StartAssessmentPage />} />
           <Route path="/assessments/:assessmentId" element={<AssessmentDetailPage />} />
           <Route path="/settings/branding" element={<BrandingPage />} />
+          <Route path="/settings/scoring" element={<ScoringConnectionPage />} />
         </Route>
         <Route path="*" element={<Navigate replace to="/" />} />
       </Routes>

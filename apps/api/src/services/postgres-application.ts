@@ -391,7 +391,7 @@ export class PostgresApplicationService implements ApplicationService {
     return asset;
   }
   async activateScoring(actor: Principal, organizationId: string, input: ActivateScoring, context: RequestContext) {
-    if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");
+    this.ensureOrganizationAccess(actor, organizationId, true);
     if (!this.config.SCORING_API_URL || !this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY) {
       throw new ServiceError("SCORING_UNAVAILABLE", "Scoring activation is not configured for this application installation.");
     }
