@@ -7,6 +7,8 @@ import {
   invitationAcceptanceResponseSchema,
   organizationListResponseSchema,
   organizationDetailsResponseSchema,
+  organizationSchema,
+  organizationUsersResponseSchema,
   onboardOrganizationResponseSchema,
   onboardOrganizationSchema,
   resendMfaRequestSchema,
@@ -20,6 +22,7 @@ import {
   type AuthenticatedUser,
   type Organization,
   type OrganizationDetails,
+  type OrganizationUser,
   type OnboardOrganization,
   type OnboardOrganizationResponse,
   type SignInRequest,
@@ -129,6 +132,21 @@ export async function getOrganization(organizationId: string): Promise<Organizat
 export async function getOrganizationBySlug(organizationSlug: string): Promise<OrganizationDetails> {
   const response = await fetch(`/api/v1/organizations/by-slug/${encodeURIComponent(organizationSlug)}`, { credentials: "include" });
   return organizationDetailsResponseSchema.parse(await responseBody(response));
+}
+
+export async function listOrganizationUsers(organizationId: string): Promise<OrganizationUser[]> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/users`, { credentials: "include" });
+  return organizationUsersResponseSchema.parse(await responseBody(response)).items;
+}
+
+export async function setOrganizationStatus(organizationId: string, status: "ACTIVE" | "SUSPENDED"): Promise<Organization> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  return organizationSchema.parse(await responseBody(response));
 }
 
 export async function activateScoring(organizationId: string, input: ActivateScoring) {

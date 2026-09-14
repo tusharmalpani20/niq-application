@@ -26,6 +26,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
   const [furthestStep, setFurthestStep] = useState<Step>(0);
   const [displayName, setDisplayName] = useState("");
   const [slug, setSlug] = useState("");
+  const [userLimit, setUserLimit] = useState("");
   const [firstAdminEmail, setFirstAdminEmail] = useState("");
   const [logo, setLogo] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -78,7 +79,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
         deploymentMode: "NIQ_HOSTED",
         primaryColor, secondaryColor,
         scoringEnabled: true, faceScanEnabled: true,
-        userLimit: null, scoringMonthlyLimit: null, faceScanMonthlyLimit: null,
+        userLimit: userLimit ? Number(userLimit) : null, scoringMonthlyLimit: null, faceScanMonthlyLimit: null,
         logo: await organizationLogoPayload(logo),
       });
       setCreated(result);
@@ -110,7 +111,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     })}</TabsList>
 
     <TabsContent id={0} className="onboarding-panel" data-onboarding-step="0">
-      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" aria-invalid={errorField === "name"} onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} />{errorField === "name" && message && <FieldError>{message}</FieldError>}</Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated from the name.</FieldDescription></Field></FieldGroup>
+      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" aria-invalid={errorField === "name"} onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} />{errorField === "name" && message && <FieldError>{message}</FieldError>}</Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated from the name.</FieldDescription></Field><Field><FieldLabel htmlFor="userLimit">User limit</FieldLabel><Input id="userLimit" name="userLimit" type="number" inputMode="numeric" min={1} step={1} value={userLimit} placeholder="Unlimited" onChange={(event) => { if (/^\d*$/.test(event.target.value)) setUserLimit(event.target.value); }} /><FieldDescription>Enter a positive whole number, or leave empty for unlimited users.</FieldDescription></Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={1} className="onboarding-panel" data-onboarding-step="1">

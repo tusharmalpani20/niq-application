@@ -79,6 +79,18 @@ describe("application contracts", () => {
     expect(result.logo).toBeNull();
   });
 
+  test("accepts only positive whole-number user limits", () => {
+    const organization = {
+      legalName: "Example Health Network Private Limited",
+      displayName: "Example Health Network",
+      slug: "example-health",
+      firstAdminEmail: "admin@example-health.test",
+    };
+    expect(onboardOrganizationSchema.safeParse({ ...organization, userLimit: 25 }).success).toBe(true);
+    expect(onboardOrganizationSchema.safeParse({ ...organization, userLimit: 2.5 }).success).toBe(false);
+    expect(onboardOrganizationSchema.safeParse({ ...organization, userLimit: -1 }).success).toBe(false);
+  });
+
   test("accepts only supported organization logo formats", () => {
     const base = { legalName: "Example Health Network", displayName: "Example Health", slug: "example-health", firstAdminEmail: "admin@example-health.test" };
     expect(onboardOrganizationSchema.safeParse({ ...base, logo: { mimeType: "image/png", contentBase64: "iVBORw0KGgo=" } }).success).toBe(true);

@@ -200,6 +200,19 @@ export const updateUserStatusSchema = z.object({
   active: z.boolean(),
 });
 
+export const organizationUserSchema = z.object({
+  membershipId: idSchema,
+  userId: idSchema,
+  email: z.email(),
+  displayName: z.string().min(1).max(120),
+  status: z.enum(["INVITED", "ACTIVE", "SUSPENDED", "DEACTIVATED"]),
+  role: membershipRoleSchema,
+  active: z.boolean(),
+  createdAt: z.coerce.date(),
+});
+
+export const organizationUsersResponseSchema = z.object({ items: z.array(organizationUserSchema) });
+
 export const bootstrapAdminSchema = createOrganizationSchema.extend({
   adminEmail: z.email().max(320),
   adminDisplayName: z.string().trim().min(2).max(120),
@@ -263,6 +276,7 @@ export type Organization = z.infer<typeof organizationSchema>;
 export type OnboardOrganization = z.infer<typeof onboardOrganizationSchema>;
 export type OnboardOrganizationResponse = z.infer<typeof onboardOrganizationResponseSchema>;
 export type OrganizationDetails = z.infer<typeof organizationDetailsResponseSchema>;
+export type OrganizationUser = z.infer<typeof organizationUserSchema>;
 export type ActivateScoring = z.infer<typeof activateScoringSchema>;
 export type ScoringConnection = z.infer<typeof scoringConnectionSchema>;
 export type CreateInvitation = z.infer<typeof createInvitationSchema>;
