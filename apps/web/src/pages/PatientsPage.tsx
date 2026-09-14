@@ -82,7 +82,7 @@ export function PatientsPage() {
     { id: "ageGender", header: "Age / gender", cell: ({ row }) => `${row.original.age ?? "—"} · ${row.original.gender}` },
     { accessorKey: "facility", header: "Facility" }, { accessorKey: "lastAssessment", header: "Last assessment" },
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={row.original.status} /> },
-    { id: "open", header: () => <span className="sr-only">Open</span>, cell: ({ row }) => <RouterButtonLink variant="ghost" size="icon-sm" to={`/patients/${row.original.id}`} aria-label={`Open ${row.original.reference}`}><Icon name="chevron" size={18}/></RouterButtonLink> },
+    { id: "open", header: () => <span className="sr-only">Open</span>, cell: ({ row }) => <RouterButtonLink variant="ghost" size="icon-sm" to={`/patients/${row.original.reference}`} aria-label={`Open ${row.original.reference}`}><Icon name="chevron" size={18}/></RouterButtonLink> },
   ];
   const hasFilters = query.trim() || facility !== "all" || status !== "all" || gender !== "all";
   const emptyContent = <div className="table-empty-content">
@@ -103,7 +103,7 @@ export function PatientsPage() {
       <Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem><SelectItem id="Registered">Registered</SelectItem><SelectItem id="Draft">Draft</SelectItem><SelectItem id="Pending scoring">Pending scoring</SelectItem><SelectItem id="Scoring unavailable">Scoring unavailable</SelectItem><SelectItem id="Under review">Under review</SelectItem><SelectItem id="Completed">Completed</SelectItem></SelectContent></Select>
       <Select aria-label="Filter by gender" selectedKey={gender} onSelectionChange={(key) => { setGender(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All genders</SelectItem><SelectItem id="Female">Female</SelectItem><SelectItem id="Male">Male</SelectItem><SelectItem id="Other">Other</SelectItem><SelectItem id="Unknown">Unknown</SelectItem></SelectContent></Select>
     </div>
-    <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><Link className="mobile-data-card" to={`/patients/${patient.id}`} key={patient.id}><div><strong>{patient.reference}</strong><span>{patient.gender} · {patient.age}</span></div><StatusBadge status={patient.status}/><span>{patient.facility}</span></Link>) : emptyContent}</div>
+    <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><Link className="mobile-data-card" to={`/patients/${patient.reference}`} key={patient.id}><div><strong>{patient.reference}</strong><span>{patient.gender} · {patient.age}</span></div><StatusBadge status={patient.status}/><span>{patient.facility}</span></Link>) : emptyContent}</div>
       <div className="desktop-table p-5"><DataTable columns={columns} data={visiblePatients} label="Patients" emptyContent={emptyContent} /></div>
     </section>
     <Pagination className="mt-4" aria-label="Patients pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={page === 1} onPress={() => setPage((current) => current - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {page} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={page === pageCount} onPress={() => setPage((current) => current + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>
@@ -170,10 +170,21 @@ export function RegisterPatientPage() {
 
 export function PatientDetailPage() {
   const user = useOutletContext<AuthenticatedUser>();
-  const { patientId = "" } = useParams();
+  const navigate = useNavigate();
+  const { patientLocator = "" } = useParams();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [failed, setFailed] = useState(false);
-  useEffect(() => { getPatient(user.organizationId, patientId).then(setPatient).catch(() => setFailed(true)); }, [patientId, user.organizationId]);
+  useEffect(() => {
+    let active = true;
+    setPatient(null);
+    setFailed(false);
+    getPatient(user.organizationId, patientLocator).then((value) => {
+      if (!active) return;
+      setPatient(value);
+      if (patientLocator !== value.reference) navigate(`/patients/${value.reference}`, { replace: true });
+    }).catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, [navigate, patientLocator, user.organizationId]);
   if (failed) return <Alert variant="destructive"><AlertDescription>This patient could not be loaded.</AlertDescription></Alert>;
   if (!patient) return <p className="muted">Loading patient…</p>;
   const age = patientAge(patient.dateOfBirth);

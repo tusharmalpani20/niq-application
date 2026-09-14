@@ -241,8 +241,8 @@ export async function listPatients(organizationId: string): Promise<Patient[]> {
   return patientListResponseSchema.parse(await responseBody(response)).items;
 }
 
-export async function getPatient(organizationId: string, patientId: string): Promise<Patient> {
-  const response = await fetch(`/api/v1/organizations/${organizationId}/patients/${patientId}`, { credentials: "include" });
+export async function getPatient(organizationId: string, patientLocator: string): Promise<Patient> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/patients/${encodeURIComponent(patientLocator)}`, { credentials: "include" });
   return patientSchema.parse(await responseBody(response));
 }
 

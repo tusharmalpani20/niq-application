@@ -715,8 +715,12 @@ export class PostgresApplicationService implements ApplicationService {
       .where(and(eq(patients.organizationId, organizationId), eq(patients.isArchived, false))).orderBy(desc(patients.createdAt));
     return rows.map((row) => this.presentPatient(row));
   }
-  async getPatient(actor: Principal, organizationId: string, patientId: string) {
+  async getPatient(actor: Principal, organizationId: string, patientLocator: string) {
     this.ensureOrganizationAccess(actor, organizationId);
+    const reference = /^([A-Z][A-Z0-9]{1,11})-([1-9]\d{0,9})$/.exec(patientLocator);
+    const patientMatch = reference
+      ? and(eq(patients.referencePrefix, reference[1]!), eq(patients.serialNumber, Number(reference[2])))
+      : eq(patients.id, patientLocator);
     const [row] = await this.db.select({
       id: patients.id,
       organizationId: patients.organizationId,
@@ -730,7 +734,7 @@ export class PostgresApplicationService implements ApplicationService {
       createdAt: patients.createdAt,
       updatedAt: patients.updatedAt,
     }).from(patients).leftJoin(facilities, and(eq(facilities.organizationId, patients.organizationId), eq(facilities.id, patients.homeFacilityId)))
-      .where(and(eq(patients.organizationId, organizationId), eq(patients.id, patientId), eq(patients.isArchived, false))).limit(1);
+      .where(and(eq(patients.organizationId, organizationId), patientMatch, eq(patients.isArchived, false))).limit(1);
     if (!row) throw new ServiceError("NOT_FOUND", "Patient not found.");
     return this.presentPatient(row);
   }

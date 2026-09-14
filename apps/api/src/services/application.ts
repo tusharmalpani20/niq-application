@@ -79,7 +79,7 @@ export interface ApplicationService {
   updateFacility(actor: Principal, organizationId: string, facilityId: string, input: UpdateFacility, context: RequestContext): Promise<unknown>;
   createPatient(actor: Principal, organizationId: string, input: RegisterPatient, context: RequestContext): Promise<unknown>;
   listPatients(actor: Principal, organizationId: string): Promise<unknown[]>;
-  getPatient(actor: Principal, organizationId: string, patientId: string): Promise<unknown>;
+  getPatient(actor: Principal, organizationId: string, patientLocator: string): Promise<unknown>;
   inviteUser(actor: Principal, organizationId: string, input: CreateInvitation, context: RequestContext): Promise<{ invitation: unknown; token: string }>;
   listUsers(actor: Principal, organizationId: string): Promise<unknown[]>;
   setUserActive(actor: Principal, organizationId: string, membershipId: string, active: boolean, context: RequestContext): Promise<unknown>;

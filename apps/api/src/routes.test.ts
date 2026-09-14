@@ -165,6 +165,50 @@ describe("local authentication routes", () => {
     expect((await listResponse.json()).items).toEqual([patient]);
   });
 
+  test("resolves a patient reference through the tenant boundary", async () => {
+    let observedOrganization = "";
+    let observedReference = "";
+    const patient = { id: "01J00000000000000000000009", reference: "PAT-1" };
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173",
+      authMode: "local",
+      checkDatabase: async () => true,
+      service: fakeService({
+        getPatient: async (_actor, organizationId, patientReference) => {
+          observedOrganization = organizationId;
+          observedReference = patientReference;
+          return patient;
+        },
+      }),
+    });
+
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/patients/pat-1`, { headers: { cookie: "niq_session=valid-session" } });
+
+    expect(response.status).toBe(200);
+    expect(observedOrganization).toBe(principal.organizationId);
+    expect(observedReference).toBe("PAT-1");
+    expect(await response.json()).toEqual(patient);
+  });
+
+  test("rejects malformed patient references", async () => {
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService() });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/patients/PAT-0`, { headers: { cookie: "niq_session=valid-session" } });
+    expect(response.status).toBe(400);
+  });
+
+  test("continues to resolve legacy patient ID links", async () => {
+    let observedLocator = "";
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173",
+      authMode: "local",
+      checkDatabase: async () => true,
+      service: fakeService({ getPatient: async (_actor, _organizationId, patientLocator) => { observedLocator = patientLocator; return {}; } }),
+    });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/patients/01J00000000000000000000009`, { headers: { cookie: "niq_session=valid-session" } });
+    expect(response.status).toBe(200);
+    expect(observedLocator).toBe("01J00000000000000000000009");
+  });
+
   test("resolves an organization detail by its URL name", async () => {
     let observedSlug = "";
     const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService({ getOrganizationBySlug: async (_actor, slug) => { observedSlug = slug; return { slug }; } }) });

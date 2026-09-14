@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, createPlatformAdministratorInvitationSchema, DEFAULT_ORGANIZATION_BRANDING, errorCodeSchema, measurementProvenanceSchema, onboardOrganizationSchema, signInRequestSchema, signInResponseSchema, updateOrganizationSchema } from "./index";
+import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, createPlatformAdministratorInvitationSchema, DEFAULT_ORGANIZATION_BRANDING, errorCodeSchema, measurementProvenanceSchema, onboardOrganizationSchema, patientReferenceSchema, signInRequestSchema, signInResponseSchema, updateOrganizationSchema } from "./index";
 
 const organizationId = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patientId = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
@@ -19,6 +19,13 @@ describe("application contracts", () => {
     expect(parsed.patientReferencePrefix).toBe("EHN");
     expect(updateOrganizationSchema.safeParse({ patientReferencePrefix: "1EH" }).success).toBe(false);
     expect(updateOrganizationSchema.safeParse({ patientReferencePrefix: "E" }).success).toBe(false);
+  });
+
+  test("normalizes and validates patient references", () => {
+    expect(patientReferenceSchema.parse("pat-1")).toBe("PAT-1");
+    expect(patientReferenceSchema.safeParse("PAT-0").success).toBe(false);
+    expect(patientReferenceSchema.safeParse("P-1").success).toBe(false);
+    expect(patientReferenceSchema.safeParse("PAT-one").success).toBe(false);
   });
 
   test("limits provenance to system-derived values", () => {

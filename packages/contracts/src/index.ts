@@ -95,6 +95,8 @@ export const facilityStatusSchema = z.enum(["ACTIVE", "INACTIVE"]);
 export const organizationSlugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(80);
 export const patientReferencePrefixSchema = z.string().trim().toUpperCase()
   .regex(/^[A-Z][A-Z0-9]{1,11}$/, "Use 2–12 letters or numbers, starting with a letter");
+export const patientReferenceSchema = z.string().trim().toUpperCase()
+  .regex(/^[A-Z][A-Z0-9]{1,11}-[1-9]\d{0,9}$/, "Use a patient prefix followed by a positive serial number");
 
 export const organizationSchema = z.object({
   id: idSchema,
