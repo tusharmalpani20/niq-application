@@ -27,6 +27,7 @@ import { decryptPatientData, encryptPatientData, patientDataKey } from "../secur
 import { hashPassword, keyedHash, randomOtp, randomToken, secureEqual, verifyPassword } from "../security/tokens";
 import type { ApplicationService, MfaChallengeResult, OtpDelivery, Principal, RequestContext, SessionResult, SignInResult } from "./application";
 import { ServiceError } from "./application";
+import { facilityAccessCondition } from "./facility-access";
 import { requestScoringOrganizationInfo, ScoringOrganizationInfoRequestError } from "./scoring-organization-info";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -654,12 +655,13 @@ export class PostgresApplicationService implements ApplicationService {
     await this.audit(this.db, organizationId, context, "FACILITY_CREATED", "facility", result?.id, actor); return result;
   }
   async listFacilities(actor: Principal, organizationId: string) {
-    this.ensureOrganizationAccess(actor, organizationId); return this.db.select().from(facilities).where(eq(facilities.organizationId, organizationId)).orderBy(facilities.name);
+    this.ensureOrganizationAccess(actor, organizationId);
+    return this.db.select().from(facilities).where(and(eq(facilities.organizationId, organizationId), facilityAccessCondition(actor, organizationId, facilities.id))).orderBy(facilities.name);
   }
   async updateFacility(actor: Principal, organizationId: string, facilityId: string, input: UpdateFacility, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true);
     const values = { ...input, ...(input.code ? { code: input.code.toUpperCase() } : {}), updatedAt: new Date() };
-    const [result] = await this.db.update(facilities).set(values).where(and(eq(facilities.organizationId, organizationId), eq(facilities.id, facilityId))).returning();
+    const [result] = await this.db.update(facilities).set(values).where(and(eq(facilities.organizationId, organizationId), eq(facilities.id, facilityId), facilityAccessCondition(actor, organizationId, facilities.id))).returning();
     if (!result) throw new ServiceError("NOT_FOUND", "Facility not found.");
     await this.audit(this.db, organizationId, context, "FACILITY_UPDATED", "facility", facilityId, actor, { fields: Object.keys(input) }); return result;
   }
@@ -675,7 +677,7 @@ export class PostgresApplicationService implements ApplicationService {
     try {
       return await this.db.transaction(async (tx) => {
         const [facility] = await tx.select({ id: facilities.id, name: facilities.name }).from(facilities)
-          .where(and(eq(facilities.organizationId, organizationId), eq(facilities.id, input.homeFacilityId), eq(facilities.status, "ACTIVE"))).limit(1);
+          .where(and(eq(facilities.organizationId, organizationId), eq(facilities.id, input.homeFacilityId), eq(facilities.status, "ACTIVE"), facilityAccessCondition(actor, organizationId, facilities.id))).limit(1);
         if (!facility) throw new ServiceError("NOT_FOUND", "Facility not found or inactive.");
         const [created] = await tx.insert(patients).values({
           id: createEntityId(),
@@ -712,7 +714,7 @@ export class PostgresApplicationService implements ApplicationService {
       createdAt: patients.createdAt,
       updatedAt: patients.updatedAt,
     }).from(patients).leftJoin(facilities, and(eq(facilities.organizationId, patients.organizationId), eq(facilities.id, patients.homeFacilityId)))
-      .where(and(eq(patients.organizationId, organizationId), eq(patients.isArchived, false))).orderBy(desc(patients.createdAt));
+      .where(and(eq(patients.organizationId, organizationId), eq(patients.isArchived, false), facilityAccessCondition(actor, organizationId, patients.homeFacilityId))).orderBy(desc(patients.createdAt));
     return rows.map((row) => this.presentPatient(row));
   }
   async getPatient(actor: Principal, organizationId: string, patientLocator: string) {
@@ -734,12 +736,19 @@ export class PostgresApplicationService implements ApplicationService {
       createdAt: patients.createdAt,
       updatedAt: patients.updatedAt,
     }).from(patients).leftJoin(facilities, and(eq(facilities.organizationId, patients.organizationId), eq(facilities.id, patients.homeFacilityId)))
-      .where(and(eq(patients.organizationId, organizationId), patientMatch, eq(patients.isArchived, false))).limit(1);
+      .where(and(eq(patients.organizationId, organizationId), patientMatch, eq(patients.isArchived, false), facilityAccessCondition(actor, organizationId, patients.homeFacilityId))).limit(1);
     if (!row) throw new ServiceError("NOT_FOUND", "Patient not found.");
     return this.presentPatient(row);
   }
   async inviteUser(actor: Principal, organizationId: string, input: CreateInvitation, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true); const token = randomToken(); const invitationId = createEntityId();
+    if (actor.platformRole !== "NIQ_ADMIN") {
+      const assigned = await this.db.select({ facilityId: facilityMemberships.facilityId }).from(facilityMemberships)
+        .where(and(eq(facilityMemberships.organizationId, organizationId), eq(facilityMemberships.organizationMembershipId, actor.membershipId)));
+      if (assigned.length && (!input.facilityIds.length || input.facilityIds.some((id) => !assigned.some((item) => item.facilityId === id)))) {
+        throw new ServiceError("FORBIDDEN", "You can invite users only to your assigned facilities.");
+      }
+    }
     try {
       const invitation = await this.db.transaction(async (tx) => {
         // Expired invitations no longer reserve paid seats. This also keeps the
