@@ -32,6 +32,18 @@ describe("application contracts", () => {
     expect(createPatientSchema.safeParse(patient).success).toBe(false);
   });
 
+  test("uses gender in the patient contract", () => {
+    const patient = {
+      organizationId,
+      encryptedExternalReference: "encrypted-reference",
+      externalReferenceLookupHash: "a".repeat(64),
+      encryptedProfile: "encrypted-envelope",
+      encryptionKeyVersion: "key-v1",
+    };
+    expect(createPatientSchema.safeParse({ ...patient, gender: "FEMALE" }).success).toBe(true);
+    expect(createPatientSchema.safeParse({ ...patient, sex: "FEMALE" }).success).toBe(false);
+  });
+
   test("references one questionnaire definition instead of accepting a second version", () => {
     const assessment = {
       organizationId,

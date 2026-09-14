@@ -278,7 +278,7 @@ export const bootstrapAdminSchema = createOrganizationSchema.extend({
   userLimit: z.number().int().min(1).nullable().default(null),
 });
 
-export const patientSexSchema = z.enum(["FEMALE", "MALE", "OTHER", "UNKNOWN"]);
+export const patientGenderSchema = z.enum(["FEMALE", "MALE", "OTHER", "UNKNOWN"]);
 
 export const createPatientSchema = z.object({
   organizationId: idSchema,
@@ -286,7 +286,7 @@ export const createPatientSchema = z.object({
   encryptedExternalReference: z.string().min(1),
   externalReferenceLookupHash: z.string().regex(/^[0-9a-f]{64}$/i),
   dateOfBirth: z.iso.date().nullable().optional(),
-  sex: patientSexSchema.default("UNKNOWN"),
+  gender: patientGenderSchema.default("UNKNOWN"),
   encryptedProfile: z.string().min(1),
   encryptionKeyVersion: z.string().min(1).max(64),
 }).strict();

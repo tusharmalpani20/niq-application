@@ -38,7 +38,7 @@ export const userStatus = pgEnum("user_status", ["INVITED", "ACTIVE", "SUSPENDED
 export const platformRole = pgEnum("platform_role", ["USER", "NIQ_ADMIN"]);
 export const membershipRole = pgEnum("membership_role", ["ORGANIZATION_ADMIN", "MEDICAL", "SUPPORT"]);
 export const invitationStatus = pgEnum("invitation_status", ["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]);
-export const patientSex = pgEnum("patient_sex", ["FEMALE", "MALE", "OTHER", "UNKNOWN"]);
+export const patientGender = pgEnum("patient_gender", ["FEMALE", "MALE", "OTHER", "UNKNOWN"]);
 export const assessmentStatus = pgEnum("assessment_status", [
   "DRAFT",
   "READY_FOR_SCORING",
@@ -352,7 +352,7 @@ export const patients = pgTable(
     referencePrefix: varchar("reference_prefix", { length: 12 }).notNull().default("PAT"),
     serialNumber: integer("serial_number").notNull().default(0),
     dateOfBirth: date("date_of_birth"),
-    sex: patientSex("sex").notNull().default("UNKNOWN"),
+    gender: patientGender("gender").notNull().default("UNKNOWN"),
     encryptedProfile: encryptedBytes("encrypted_profile").notNull(),
     encryptionKeyVersion: text("encryption_key_version").notNull(),
     isArchived: boolean("is_archived").notNull().default(false),

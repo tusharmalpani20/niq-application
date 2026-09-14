@@ -50,6 +50,11 @@ describe("tenant data invariants", () => {
     expect(getTableConfig(patients).indexes.map((index) => index.config.name)).toContain("patients_org_serial_uidx");
   });
 
+  test("patient demographics use gender terminology", () => {
+    expect(patients.gender.notNull).toBe(true);
+    expect("sex" in patients).toBe(false);
+  });
+
   test("assessment derives questionnaire version from one immutable definition", () => {
     expect("questionnaireVersion" in assessments).toBe(false);
     expect(questionnaireDefinitions.scopeKey.notNull).toBe(true);
@@ -103,6 +108,13 @@ describe("migration-only safeguards", () => {
     expect(migration).toContain("PARTITION BY \"organization_id\"");
     expect(migration).toContain("next_patient_serial = next_patient_serial + 1");
     expect(migration).toContain("patients_allocate_serial_trigger");
+  });
+
+  test("gender migration preserves existing patient values", async () => {
+    const migration = await Bun.file("./drizzle/0010_fine_sinister_six.sql").text();
+    expect(migration).toContain('ALTER TYPE "public"."patient_sex" RENAME TO "patient_gender"');
+    expect(migration).toContain('RENAME COLUMN "sex" TO "gender"');
+    expect(migration).not.toContain("DROP COLUMN");
   });
 
   test("initial migration enforces seat limits and append-only audit storage", async () => {
