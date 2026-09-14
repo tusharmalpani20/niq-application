@@ -15,6 +15,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { DEFAULT_ORGANIZATION_BRANDING } from "@niq/application-contracts";
 
 const encryptedBytes = customType<{ data: Uint8Array }>({
   dataType() {
@@ -64,8 +65,8 @@ export const organizations = pgTable(
     slug: text("slug").notNull(),
     status: organizationStatus("status").notNull().default("ACTIVE"),
     logoObjectKey: text("logo_object_key"),
-    primaryColor: text("primary_color").notNull().default("#175CD3"),
-    secondaryColor: text("secondary_color").notNull().default("#0E9384"),
+    primaryColor: text("primary_color").notNull().default(DEFAULT_ORGANIZATION_BRANDING.primaryColor),
+    secondaryColor: text("secondary_color").notNull().default(DEFAULT_ORGANIZATION_BRANDING.secondaryColor),
     patientReferencePrefix: varchar("patient_reference_prefix", { length: 12 }).notNull().default("PAT"),
     nextPatientSerial: integer("next_patient_serial").notNull().default(1),
     ...timestamps,

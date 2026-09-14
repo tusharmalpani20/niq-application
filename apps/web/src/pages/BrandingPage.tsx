@@ -1,4 +1,4 @@
-import type { AuthenticatedUser } from "@niq/application-contracts";
+import { DEFAULT_ORGANIZATION_BRANDING, type AuthenticatedUser } from "@niq/application-contracts";
 import { CircleAlert } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
@@ -81,7 +81,7 @@ export function BrandingPage() {
           </Field>
           <Field><FieldLabel>Organization logo</FieldLabel><div className="upload-area"><strong>Upload a PNG or SVG</strong><FieldDescription>Maximum 2 MB. A square or horizontal transparent logo works best.</FieldDescription><input type="file" accept="image/png,image/svg+xml" /></div></Field>
           {message && <Alert variant="destructive"><CircleAlert aria-hidden="true" /><AlertDescription>{message}</AlertDescription></Alert>}
-          <div className="form-actions spread"><Button type="button" variant="outline" onPress={() => { resetBranding(); setDisplayName("NIQ"); setPrimaryColor("#176b70"); setSecondaryColor("#2a8e94"); }}>Reset</Button><Button type="submit" isDisabled={!canManage || loading || saving}>{saving ? "Saving…" : saved ? "Saved" : "Save settings"}</Button></div>
+          <div className="form-actions spread"><Button type="button" variant="outline" onPress={() => { resetBranding(); setDisplayName("NIQ"); setPrimaryColor(DEFAULT_ORGANIZATION_BRANDING.primaryColor); setSecondaryColor(DEFAULT_ORGANIZATION_BRANDING.secondaryColor); }}>Reset</Button><Button type="submit" isDisabled={!canManage || loading || saving}>{saving ? "Saving…" : saved ? "Saved" : "Save settings"}</Button></div>
         </form>
       </Card>
       <Card className="surface preview-panel"><p className="page-eyebrow">Live preview</p><div className="brand-preview"><div className="preview-sidebar"><div className="brand-logo">N</div><strong>{branding.displayName}</strong><span /><span /><span /></div><div className="preview-content"><div className="preview-header" /><div className="preview-heading" /><div className="preview-cards"><i /><i /><i /></div><Button size="sm">Primary action</Button></div></div><p className="muted">On shared sign-in URLs, NIQ branding is shown until the organization is identified.</p></Card>

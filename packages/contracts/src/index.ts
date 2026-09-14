@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+export const DEFAULT_ORGANIZATION_BRANDING = {
+  primaryColor: "#175CD3",
+  secondaryColor: "#0E9384",
+} as const;
+
 // Entity identifiers are canonical ULIDs. Lowercase input is rejected rather
 // than normalized so signatures, logs and database keys have one representation.
 export const idSchema = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/, "Expected an uppercase ULID");
@@ -111,8 +116,8 @@ export const createOrganizationSchema = z.object({
   legalName: z.string().trim().min(2).max(200),
   displayName: z.string().trim().min(2).max(120),
   slug: organizationSlugSchema,
-  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#175CD3"),
-  secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#0E9384"),
+  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default(DEFAULT_ORGANIZATION_BRANDING.primaryColor),
+  secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default(DEFAULT_ORGANIZATION_BRANDING.secondaryColor),
   patientReferencePrefix: patientReferencePrefixSchema.default("PAT"),
 });
 
