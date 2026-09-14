@@ -11,6 +11,7 @@ import {
   organizationSchema,
   scoringOrganizationInfoSchema,
   organizationUsersResponseSchema,
+  updateOrganizationSchema,
   platformAdministratorInvitationResponseSchema,
   platformAdministratorSchema,
   platformAdministratorsResponseSchema,
@@ -34,6 +35,7 @@ import {
   type OnboardOrganization,
   type OnboardOrganizationResponse,
   type SignInRequest,
+  type UpdateOrganization,
   type VerifyMfaRequest,
 } from "@niq/application-contracts";
 
@@ -173,11 +175,15 @@ export async function listOrganizationUsers(organizationId: string): Promise<Org
 }
 
 export async function setOrganizationStatus(organizationId: string, status: "ACTIVE" | "SUSPENDED"): Promise<Organization> {
+  return updateOrganization(organizationId, { status });
+}
+
+export async function updateOrganization(organizationId: string, input: UpdateOrganization): Promise<Organization> {
   const response = await fetch(`/api/v1/organizations/${organizationId}`, {
     method: "PATCH",
     credentials: "include",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(updateOrganizationSchema.parse(input)),
   });
   return organizationSchema.parse(await responseBody(response));
 }

@@ -37,7 +37,7 @@ export function PatientsPage() {
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visiblePatients = filtered.slice((page - 1) * pageSize, page * pageSize);
   const columns: Array<DataTableColumn<PatientSummary>> = [
-    { id: "patient", header: "Patient", cell: ({ row }) => <><strong>{row.original.displayName}</strong><span className="cell-subtitle">{row.original.reference}</span></> },
+    { id: "patient", header: "Patient", cell: ({ row }) => <strong>{row.original.reference}</strong> },
     { id: "ageSex", header: "Age / sex", cell: ({ row }) => `${row.original.age} · ${row.original.sex}` },
     { accessorKey: "facility", header: "Facility" }, { accessorKey: "lastAssessment", header: "Last assessment" },
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={row.original.status} /> },
@@ -60,7 +60,7 @@ export function PatientsPage() {
       <Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem><SelectItem id="Draft">Draft</SelectItem><SelectItem id="Pending scoring">Pending scoring</SelectItem><SelectItem id="Scoring unavailable">Scoring unavailable</SelectItem><SelectItem id="Under review">Under review</SelectItem><SelectItem id="Completed">Completed</SelectItem></SelectContent></Select>
       <Select aria-label="Filter by sex" selectedKey={sex} onSelectionChange={(key) => { setSex(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All sexes</SelectItem><SelectItem id="Female">Female</SelectItem><SelectItem id="Male">Male</SelectItem><SelectItem id="Other">Other</SelectItem><SelectItem id="Unknown">Unknown</SelectItem></SelectContent></Select>
     </div>
-    <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><Link className="mobile-data-card" to={`/patients/${patient.id}`} key={patient.id}><div><strong>{patient.displayName}</strong><span>{patient.reference} · {patient.sex}, {patient.age}</span></div><StatusBadge status={patient.status}/><span>{patient.facility}</span></Link>) : emptyContent}</div>
+    <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><Link className="mobile-data-card" to={`/patients/${patient.id}`} key={patient.id}><div><strong>{patient.reference}</strong><span>{patient.sex} · {patient.age}</span></div><StatusBadge status={patient.status}/><span>{patient.facility}</span></Link>) : emptyContent}</div>
       <div className="desktop-table p-5"><DataTable columns={columns} data={visiblePatients} label="Patients" emptyContent={emptyContent} /></div>
     </section>
     <Pagination className="mt-4" aria-label="Patients pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={page === 1} onPress={() => setPage((current) => current - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {page} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={page === pageCount} onPress={() => setPage((current) => current + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>
