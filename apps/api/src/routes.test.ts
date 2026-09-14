@@ -33,6 +33,27 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
 }
 
 describe("local authentication routes", () => {
+  test("passes logo replacement through authenticated organization updates and rejects SVG", async () => {
+    const logo = { mimeType: "image/png", contentBase64: "iVBORw0KGgo=" };
+    let updates = 0;
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService({
+      updateOrganization: async (actor, organizationId, input) => {
+        expect(actor.organizationId).toBe(principal.organizationId);
+        expect(organizationId).toBe(principal.organizationId);
+        expect(input.logo).toEqual(logo);
+        updates++;
+        return {};
+      },
+    }) });
+    const request = (mimeType: string, cookie = "niq_session=valid-session") => app.request("/v1/organizations/" + principal.organizationId, {
+      method: "PATCH", headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ logo: { ...logo, mimeType } }),
+    });
+    expect((await request("image/png")).status).toBe(200);
+    expect((await request("image/svg+xml")).status).toBe(400);
+    expect((await request("image/png", "")).status).toBe(401);
+    expect(updates).toBe(1);
+  });
   test("issues an HttpOnly SameSite cookie after successful sign-in", async () => {
     const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService() });
     const response = await app.request("/v1/auth/sign-in", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "admin@example.com", password: "a secure password" }) });

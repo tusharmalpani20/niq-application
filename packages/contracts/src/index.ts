@@ -175,6 +175,7 @@ export const createFacilitySchema = z.object({
 });
 
 export const updateOrganizationSchema = z.object({
+  logo: organizationLogoUploadSchema.optional(),
   displayName: z.string().trim().min(2).max(120).optional(),
   logoObjectKey: z.string().trim().max(500).nullable().optional(),
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),

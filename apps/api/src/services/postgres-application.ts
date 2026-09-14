@@ -624,9 +624,29 @@ export class PostgresApplicationService implements ApplicationService {
   }
   async updateOrganization(actor: Principal, organizationId: string, input: UpdateOrganization, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true);
-    const [result] = await this.db.update(organizations).set({ ...input, updatedAt: new Date() }).where(eq(organizations.id, organizationId)).returning();
-    if (!result) throw new ServiceError("NOT_FOUND", "Organization not found.");
-    await this.audit(this.db, organizationId, context, "ORGANIZATION_UPDATED", "organization", organizationId, actor, { fields: Object.keys(input) }); return result;
+    const { logo: upload, ...settings } = input;
+    let logo: ReturnType<typeof decodeOrganizationLogo>;
+    try {
+      logo = decodeOrganizationLogo(upload ?? null);
+    } catch (error) {
+      if (error instanceof InvalidOrganizationLogoError) throw new ServiceError("VALIDATION_ERROR", error.message);
+      throw error;
+    }
+    return this.db.transaction(async (tx) => {
+      // Lock the organization so concurrent logo replacements remain consistent with its cache key.
+      const [existing] = await tx.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, organizationId)).for("update");
+      if (!existing) throw new ServiceError("NOT_FOUND", "Organization not found.");
+      if (logo) {
+        const assetId = createEntityId();
+        const values = { content: logo.data, mimeType: logo.mimeType, byteSize: logo.data.byteLength, sha256: logo.sha256, updatedAt: new Date() };
+        await tx.insert(organizationBrandAssets).values({ id: assetId, organizationId, ...values })
+          .onConflictDoUpdate({ target: organizationBrandAssets.organizationId, set: { ...values, id: assetId } });
+        settings.logoObjectKey = `database:${assetId}`;
+      }
+      const [result] = await tx.update(organizations).set({ ...settings, updatedAt: new Date() }).where(eq(organizations.id, organizationId)).returning();
+      await this.audit(tx, organizationId, context, "ORGANIZATION_UPDATED", "organization", organizationId, actor, { fields: Object.keys(input) });
+      return result;
+    });
   }
   async createFacility(actor: Principal, organizationId: string, input: CreateFacility, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true);
