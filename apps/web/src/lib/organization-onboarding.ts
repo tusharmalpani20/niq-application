@@ -2,6 +2,12 @@ import type { OnboardOrganization } from "@niq/application-contracts";
 
 export const MAX_ORGANIZATION_LOGO_BYTES = 2_097_152;
 export const ORGANIZATION_LOGO_ACCEPT = "image/png,image/jpeg,image/webp";
+export const ORGANIZATION_BRAND_PRESETS = [
+  { id: "niq", name: "NIQ", primaryColor: "#175CD3", secondaryColor: "#0E9384" },
+  { id: "ocean", name: "Ocean", primaryColor: "#175CD3", secondaryColor: "#0E7490" },
+  { id: "forest", name: "Forest", primaryColor: "#18794E", secondaryColor: "#3A7D44" },
+  { id: "plum", name: "Plum", primaryColor: "#7A3E8E", secondaryColor: "#A15C9A" },
+] as const;
 
 export function organizationUrlName(value: string): string {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);

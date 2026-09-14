@@ -36,7 +36,7 @@ function OrganizationOnboardingDialog({ open, onClose, onCreated }: { open: bool
   }, [dirty, onClose]);
 
   return <>
-    <Dialog ariaLabel="Add organization" isOpen={open} onOpenChange={(next) => { if (!next) requestClose(); }} isDismissable showCloseButton={false} className="max-h-[calc(100dvh-2rem)] max-w-[calc(100%-1rem)] gap-0 overflow-hidden p-0 sm:max-w-[780px]">
+    <Dialog ariaLabel="Add organization" isOpen={open} onOpenChange={(next) => { if (!next) requestClose(); }} isDismissable showCloseButton={false} className="h-[min(680px,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] max-w-[calc(100%-1rem)] gap-0 overflow-hidden p-0 sm:max-w-[780px]">
       <DialogHeader className="relative border-b p-5 pr-14"><DialogTitle id="onboard-organization-title" className="text-lg">Add organization</DialogTitle><DialogDescription>Create the organization and invite its first administrator.</DialogDescription><Button className="absolute right-4 top-4" variant="ghost" size="icon-sm" aria-label="Close add organization" onPress={requestClose}><X /></Button></DialogHeader>
       <div className="admin-modal-body"><OrganizationOnboardingForm onCancel={requestClose} onCreated={onCreated} onDirtyChange={setDirty} /></div>
     </Dialog>
