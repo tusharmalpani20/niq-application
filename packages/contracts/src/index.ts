@@ -344,6 +344,18 @@ export const assessmentStatusSchema = z.enum([
   "VOIDED",
 ]);
 
+export const assessmentSummarySchema = z.object({
+  id: idSchema,
+  organizationId: idSchema,
+  patient: patientSchema.pick({ id: true, reference: true, displayName: true }),
+  facility: facilitySchema.pick({ id: true, name: true }).nullable(),
+  status: assessmentStatusSchema,
+  createdAt: z.coerce.date(),
+  completedAt: z.coerce.date().nullable(),
+});
+
+export const assessmentListResponseSchema = z.object({ items: z.array(assessmentSummarySchema) });
+
 export const measurementProvenanceSchema = z.enum([
   "AUTO_FACE_SCAN",
   "AUTOMATED_MANUAL_FALLBACK",
@@ -363,6 +375,7 @@ export const healthResponseSchema = z.object({
 });
 
 export type ApiError = z.infer<typeof apiErrorSchema>;
+export type AssessmentSummary = z.infer<typeof assessmentSummarySchema>;
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 export type CreateAssessment = z.infer<typeof createAssessmentSchema>;
 export type CreateFacility = z.infer<typeof createFacilitySchema>;

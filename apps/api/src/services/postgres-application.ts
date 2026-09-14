@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { Database } from "../db/client";
 import {
   auditEvents,
+  assessments,
   authenticationFailures,
   authSessions,
   facilities,
@@ -739,6 +740,40 @@ export class PostgresApplicationService implements ApplicationService {
       .where(and(eq(patients.organizationId, organizationId), patientMatch, eq(patients.isArchived, false), facilityAccessCondition(actor, organizationId, patients.homeFacilityId))).limit(1);
     if (!row) throw new ServiceError("NOT_FOUND", "Patient not found.");
     return this.presentPatient(row);
+  }
+  async listAssessments(actor: Principal, organizationId: string) {
+    this.ensureOrganizationAccess(actor, organizationId);
+    const rows = await this.db.select({
+      id: assessments.id,
+      organizationId: assessments.organizationId,
+      patientId: patients.id,
+      patientReferencePrefix: patients.referencePrefix,
+      patientSerialNumber: patients.serialNumber,
+      patientEncryptedProfile: patients.encryptedProfile,
+      facilityId: facilities.id,
+      facilityName: facilities.name,
+      status: assessments.status,
+      createdAt: assessments.createdAt,
+      completedAt: assessments.completedAt,
+    }).from(assessments)
+      .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
+      .leftJoin(facilities, and(eq(facilities.organizationId, assessments.organizationId), eq(facilities.id, assessments.facilityId)))
+      .where(eq(assessments.organizationId, organizationId))
+      .orderBy(desc(assessments.createdAt));
+    const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
+    return rows.map((row) => ({
+      id: row.id,
+      organizationId: row.organizationId,
+      patient: {
+        id: row.patientId,
+        reference: `${row.patientReferencePrefix}-${row.patientSerialNumber}`,
+        displayName: patientProfileSchema.parse(JSON.parse(decryptPatientData(row.patientEncryptedProfile, key))).name,
+      },
+      facility: row.facilityId && row.facilityName ? { id: row.facilityId, name: row.facilityName } : null,
+      status: row.status,
+      createdAt: row.createdAt,
+      completedAt: row.completedAt,
+    }));
   }
   async inviteUser(actor: Principal, organizationId: string, input: CreateInvitation, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true); const token = randomToken(); const invitationId = createEntityId();

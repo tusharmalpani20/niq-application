@@ -26,7 +26,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     disconnectScoring: async () => {},
     getScoringOrganizationInfo: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], updateFacility: async () => ({}),
-    createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}),
+    createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [],
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
     ...overrides,
   };
@@ -207,6 +207,21 @@ describe("local authentication routes", () => {
     const response = await app.request(`/v1/organizations/${principal.organizationId}/patients/01J00000000000000000000009`, { headers: { cookie: "niq_session=valid-session" } });
     expect(response.status).toBe(200);
     expect(observedLocator).toBe("01J00000000000000000000009");
+  });
+
+  test("lists assessments through the tenant boundary", async () => {
+    let observedOrganization = "";
+    const assessment = { id: "01J00000000000000000000010", status: "DRAFT" };
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173",
+      authMode: "local",
+      checkDatabase: async () => true,
+      service: fakeService({ listAssessments: async (_actor, organizationId) => { observedOrganization = organizationId; return [assessment]; } }),
+    });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/assessments`, { headers: { cookie: "niq_session=valid-session" } });
+    expect(response.status).toBe(200);
+    expect(observedOrganization).toBe(principal.organizationId);
+    expect((await response.json()).items).toEqual([assessment]);
   });
 
   test("resolves an organization detail by its URL name", async () => {
