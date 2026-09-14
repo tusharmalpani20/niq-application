@@ -233,8 +233,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 .inline-form { margin-bottom: .9rem; padding: 1.15rem; }
 .clinical-form label, .inline-form label, .branding-form label, .auth-card label { display: grid; gap: .45rem; margin: 0; color: var(--ink-soft); font-size: .76rem; font-weight: 700; }
-.clinical-form input, .clinical-form select, .inline-form input, .inline-form select, .branding-form input, .auth-card input, .toolbar input, .toolbar select { width: 100%; height: 2.75rem; margin: 0; padding: 0 .8rem; border: 1px solid var(--border); border-radius: .65rem; outline: none; color: var(--ink); background: white; }
-.clinical-form input:focus, .clinical-form select:focus, .inline-form input:focus, .inline-form select:focus, .branding-form input:focus, .auth-card input:focus, .toolbar input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb,var(--primary) 14%,transparent); }
+.clinical-form input, .clinical-form select, .inline-form input, .inline-form select, .branding-form input, .auth-card input:not([data-slot="input-group-control"]), .toolbar input, .toolbar select { width: 100%; height: 2.75rem; margin: 0; padding: 0 .8rem; border: 1px solid var(--border); border-radius: .65rem; outline: none; color: var(--ink); background: white; }
+.clinical-form input:focus, .clinical-form select:focus, .inline-form input:focus, .inline-form select:focus, .branding-form input:focus, .auth-card input:not([data-slot="input-group-control"]):focus, .toolbar input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb,var(--primary) 14%,transparent); }
 .field-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: .9rem; }.field-grid.three { grid-template-columns: repeat(3,1fr); }
 .form-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }.form-actions.spread { justify-content: space-between; }
 .card-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: .9rem; }
