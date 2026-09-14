@@ -59,8 +59,8 @@ button, input { font: inherit; }
   justify-content: center;
   overflow: hidden;
   padding: clamp(2rem, 5vw, 5rem);
-  color: #f7fffb;
-  background: linear-gradient(145deg, #103e34 0%, #176951 58%, #229873 100%);
+  color: var(--primary-foreground);
+  background: linear-gradient(145deg, var(--brand-panel-start) 0%, var(--primary) 58%, var(--brand-panel-end) 100%);
 }
 .welcome-panel::after {
   content: "";
@@ -69,18 +69,18 @@ button, input { font: inherit; }
   bottom: -16rem;
   width: 36rem;
   height: 36rem;
-  border: 1px solid rgb(255 255 255 / 18%);
+  border: 1px solid color-mix(in srgb, var(--primary-foreground) 18%, transparent);
   border-radius: 50%;
-  box-shadow: 0 0 0 4rem rgb(255 255 255 / 3%), 0 0 0 8rem rgb(255 255 255 / 2%);
+  box-shadow: 0 0 0 4rem color-mix(in srgb, var(--primary-foreground) 3%, transparent), 0 0 0 8rem color-mix(in srgb, var(--primary-foreground) 2%, transparent);
 }
 .brand-lockup { position: absolute; top: clamp(2rem, 5vw, 5rem); left: clamp(2rem, 5vw, 5rem); z-index: 1; display: flex; align-items: center; gap: 0.75rem; font-size: 1.3rem; font-weight: 750; letter-spacing: 0.04em; }
-.brand-mark { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border-radius: 0.7rem 0.7rem 0.7rem 0.15rem; color: #103e34; background: var(--secondary); }
+.brand-mark { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border-radius: 0.7rem 0.7rem 0.7rem 0.15rem; color: var(--secondary-foreground); background: var(--secondary); }
 .welcome-copy { position: relative; z-index: 1; max-width: 36rem; }
 .eyebrow { margin: 0 0 1rem; color: inherit; font-size: 0.75rem; font-weight: 750; letter-spacing: 0.16em; text-transform: uppercase; }
 .welcome-copy h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2.5rem, 5vw, 5rem); font-weight: 500; letter-spacing: -0.045em; line-height: 0.98; }
-.welcome-copy > p:last-child { max-width: 31rem; margin: 1.75rem 0 0; color: rgb(247 255 251 / 78%); font-size: 1.08rem; line-height: 1.65; }
-.privacy-note { position: relative; z-index: 1; max-width: 29rem; margin: 0; color: rgb(247 255 251 / 66%); font-size: 0.82rem; line-height: 1.5; }
-.form-panel { display: grid; align-items: center; padding: clamp(2rem, 8vw, 7.5rem); background: #fbfcfa; }
+.welcome-copy > p:last-child { max-width: 31rem; margin: 1.75rem 0 0; color: color-mix(in srgb, var(--primary-foreground) 78%, transparent); font-size: 1.08rem; line-height: 1.65; }
+.privacy-note { position: relative; z-index: 1; max-width: 29rem; margin: 0; color: color-mix(in srgb, var(--primary-foreground) 66%, transparent); font-size: 0.82rem; line-height: 1.5; }
+.form-panel { display: grid; align-items: center; padding: clamp(2rem, 8vw, 7.5rem); background: var(--surface); }
 .form-container { width: 100%; max-width: 29rem; margin-inline: auto; }
 .form-container .eyebrow { color: var(--primary); }
 .form-container h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 2.7rem; font-weight: 500; letter-spacing: -0.035em; }
@@ -110,6 +110,8 @@ form { display: flex; flex-direction: column; }
   --secondary: #2a8e94;
   --secondary-foreground: #ffffff;
   --primary-soft: color-mix(in srgb, var(--primary) 10%, white);
+  --brand-panel-start: color-mix(in srgb, var(--primary) 76%, var(--foreground));
+  --brand-panel-end: color-mix(in srgb, var(--primary) 62%, var(--secondary));
   --ink: #3f4042;
   --ink-soft: #58595b;
   --ink-muted: #68696b;
