@@ -33,6 +33,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
   const [logoMessage, setLogoMessage] = useState<string | null>(null);
   const [primaryColor, setPrimaryColor] = useState("#175CD3");
   const [secondaryColor, setSecondaryColor] = useState("#0E9384");
+  const [patientReferencePrefix, setPatientReferencePrefix] = useState("PAT");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [errorField, setErrorField] = useState<"name" | "email" | null>(null);
@@ -76,7 +77,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
       const result = await onboardOrganization({
         legalName: displayName, displayName, slug,
         firstAdminEmail,
-        primaryColor, secondaryColor,
+        primaryColor, secondaryColor, patientReferencePrefix,
         userLimit: userLimit ? Number(userLimit) : null,
         logo: await organizationLogoPayload(logo),
       });
@@ -109,7 +110,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     })}</TabsList>
 
     <TabsContent id={0} className="onboarding-panel" data-onboarding-step="0">
-      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" aria-invalid={errorField === "name"} onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} />{errorField === "name" && message && <FieldError>{message}</FieldError>}</Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated from the name.</FieldDescription></Field><Field><FieldLabel htmlFor="userLimit">User limit</FieldLabel><Input id="userLimit" name="userLimit" type="number" inputMode="numeric" min={1} step={1} value={userLimit} placeholder="Unlimited" onChange={(event) => { if (/^\d*$/.test(event.target.value)) setUserLimit(event.target.value); }} /><FieldDescription>Enter a positive whole number, or leave empty for unlimited users.</FieldDescription></Field></FieldGroup>
+      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" aria-invalid={errorField === "name"} onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} />{errorField === "name" && message && <FieldError>{message}</FieldError>}</Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated from the name.</FieldDescription></Field><Field><FieldLabel htmlFor="patientReferencePrefix">Patient prefix</FieldLabel><Input id="patientReferencePrefix" name="patientReferencePrefix" required minLength={2} maxLength={12} pattern="[A-Za-z][A-Za-z0-9]{1,11}" value={patientReferencePrefix} onChange={(event) => setPatientReferencePrefix(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12))} /><FieldDescription>Patient references begin at {patientReferencePrefix || "PREFIX"}-1.</FieldDescription></Field><Field><FieldLabel htmlFor="userLimit">User limit</FieldLabel><Input id="userLimit" name="userLimit" type="number" inputMode="numeric" min={1} step={1} value={userLimit} placeholder="Unlimited" onChange={(event) => { if (/^\d*$/.test(event.target.value)) setUserLimit(event.target.value); }} /><FieldDescription>Enter a positive whole number, or leave empty for unlimited users.</FieldDescription></Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={1} className="onboarding-panel" data-onboarding-step="1">

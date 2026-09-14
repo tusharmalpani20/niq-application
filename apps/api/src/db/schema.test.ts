@@ -42,6 +42,14 @@ describe("tenant data invariants", () => {
     expect(columns.externalReferenceLookupHash.notNull).toBe(true);
   });
 
+  test("patient serials are tenant-scoped and retain their issued prefix", () => {
+    expect(organizations.patientReferencePrefix.notNull).toBe(true);
+    expect(organizations.nextPatientSerial.default).toBe(1);
+    expect(patients.referencePrefix.notNull).toBe(true);
+    expect(patients.serialNumber.notNull).toBe(true);
+    expect(getTableConfig(patients).indexes.map((index) => index.config.name)).toContain("patients_org_serial_uidx");
+  });
+
   test("assessment derives questionnaire version from one immutable definition", () => {
     expect("questionnaireVersion" in assessments).toBe(false);
     expect(questionnaireDefinitions.scopeKey.notNull).toBe(true);
@@ -90,6 +98,13 @@ describe("tenant data invariants", () => {
 });
 
 describe("migration-only safeguards", () => {
+  test("patient references allocate an independent serial inside each organization", async () => {
+    const migration = await Bun.file("./drizzle/0009_blushing_champions.sql").text();
+    expect(migration).toContain("PARTITION BY \"organization_id\"");
+    expect(migration).toContain("next_patient_serial = next_patient_serial + 1");
+    expect(migration).toContain("patients_allocate_serial_trigger");
+  });
+
   test("initial migration enforces seat limits and append-only audit storage", async () => {
     const migration = await Bun.file("./drizzle/0000_initial.sql").text();
     expect(migration).toContain("enforce_organization_user_limit");

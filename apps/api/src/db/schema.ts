@@ -66,11 +66,15 @@ export const organizations = pgTable(
     logoObjectKey: text("logo_object_key"),
     primaryColor: text("primary_color").notNull().default("#175CD3"),
     secondaryColor: text("secondary_color").notNull().default("#0E9384"),
+    patientReferencePrefix: varchar("patient_reference_prefix", { length: 12 }).notNull().default("PAT"),
+    nextPatientSerial: integer("next_patient_serial").notNull().default(1),
     ...timestamps,
   },
   (table) => [
     uniqueIndex("organizations_slug_uidx").on(table.slug),
     check("organizations_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
+    check("organizations_patient_reference_prefix_ck", sql`${table.patientReferencePrefix} ~ '^[A-Z][A-Z0-9]{1,11}$'`),
+    check("organizations_next_patient_serial_ck", sql`${table.nextPatientSerial} > 0`),
   ],
 );
 
@@ -344,6 +348,8 @@ export const patients = pgTable(
     homeFacilityId: entityId("home_facility_id"),
     encryptedExternalReference: encryptedBytes("encrypted_external_reference").notNull(),
     externalReferenceLookupHash: text("external_reference_lookup_hash").notNull(),
+    referencePrefix: varchar("reference_prefix", { length: 12 }).notNull().default("PAT"),
+    serialNumber: integer("serial_number").notNull().default(0),
     dateOfBirth: date("date_of_birth"),
     sex: patientSex("sex").notNull().default("UNKNOWN"),
     encryptedProfile: encryptedBytes("encrypted_profile").notNull(),
@@ -353,6 +359,7 @@ export const patients = pgTable(
   },
   (table) => [
     uniqueIndex("patients_org_id_uidx").on(table.organizationId, table.id),
+    uniqueIndex("patients_org_serial_uidx").on(table.organizationId, table.serialNumber),
     uniqueIndex("patients_org_external_reference_hash_uidx").on(table.organizationId, table.externalReferenceLookupHash),
     index("patients_org_facility_idx").on(table.organizationId, table.homeFacilityId),
     foreignKey({
@@ -361,6 +368,8 @@ export const patients = pgTable(
       foreignColumns: [facilities.organizationId, facilities.id],
     }),
     check("patients_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
+    check("patients_reference_prefix_ck", sql`${table.referencePrefix} ~ '^[A-Z][A-Z0-9]{1,11}$'`),
+    check("patients_serial_number_ck", sql`${table.serialNumber} > 0`),
   ],
 );
 

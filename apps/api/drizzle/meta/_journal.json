@@ -64,6 +64,13 @@
       "when": 1789396861559,
       "tag": "0008_fantastic_shockwave",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789406862462,
+      "tag": "0009_blushing_champions",
+      "breakpoints": true
     }
   ]
 }

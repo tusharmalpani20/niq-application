@@ -276,7 +276,7 @@ export class PostgresApplicationService implements ApplicationService {
       const existing = await tx.select({ id: users.id }).from(users).where(eq(users.platformRole, "NIQ_ADMIN")).limit(1);
       if (existing.length) throw new ServiceError("CONFLICT", "Bootstrap has already been completed.");
       const organizationId = createEntityId(); const userId = createEntityId(); const membershipId = createEntityId();
-      await tx.insert(organizations).values({ id: organizationId, legalName: input.legalName, displayName: input.displayName, slug: input.slug, primaryColor: input.primaryColor, secondaryColor: input.secondaryColor });
+      await tx.insert(organizations).values({ id: organizationId, legalName: input.legalName, displayName: input.displayName, slug: input.slug, primaryColor: input.primaryColor, secondaryColor: input.secondaryColor, patientReferencePrefix: input.patientReferencePrefix });
       await tx.insert(users).values({ id: userId, email: normalizeEmail(input.adminEmail), displayName: input.adminDisplayName, passwordHash: await hashPassword(input.adminPassword), status: "ACTIVE", platformRole: "NIQ_ADMIN", mfaEnabled: true });
       await tx.insert(organizationMemberships).values({ id: membershipId, organizationId, userId, role: "ORGANIZATION_ADMIN" });
       await tx.insert(organizationEntitlements).values({ id: createEntityId(), organizationId, userLimit: input.userLimit, changedByMembershipId: membershipId, reason: "Initial NIQ bootstrap" });
@@ -421,6 +421,7 @@ export class PostgresApplicationService implements ApplicationService {
           slug: input.slug,
           primaryColor: input.primaryColor,
           secondaryColor: input.secondaryColor,
+          patientReferencePrefix: input.patientReferencePrefix,
           logoObjectKey: logoAssetId ? `database:${logoAssetId}` : null,
         }).returning();
         if (!organization) throw new Error("Organization insert failed");

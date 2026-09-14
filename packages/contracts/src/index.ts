@@ -88,6 +88,8 @@ export const membershipRoleSchema = z.enum(["ORGANIZATION_ADMIN", "MEDICAL", "SU
 export const organizationStatusSchema = z.enum(["ACTIVE", "SUSPENDED", "CLOSED"]);
 export const facilityStatusSchema = z.enum(["ACTIVE", "INACTIVE"]);
 export const organizationSlugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(80);
+export const patientReferencePrefixSchema = z.string().trim().toUpperCase()
+  .regex(/^[A-Z][A-Z0-9]{1,11}$/, "Use 2–12 letters or numbers, starting with a letter");
 
 export const organizationSchema = z.object({
   id: idSchema,
@@ -97,6 +99,7 @@ export const organizationSchema = z.object({
   logoObjectKey: z.string().nullable(),
   primaryColor: z.string(),
   secondaryColor: z.string(),
+  patientReferencePrefix: patientReferencePrefixSchema,
   status: organizationStatusSchema,
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -110,6 +113,7 @@ export const createOrganizationSchema = z.object({
   slug: organizationSlugSchema,
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#175CD3"),
   secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#0E9384"),
+  patientReferencePrefix: patientReferencePrefixSchema.default("PAT"),
 });
 
 const optionalUserLimitSchema = z.number().int().min(1).nullable().default(null);
@@ -170,6 +174,7 @@ export const updateOrganizationSchema = z.object({
   logoObjectKey: z.string().trim().max(500).nullable().optional(),
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  patientReferencePrefix: patientReferencePrefixSchema.optional(),
   status: organizationStatusSchema.optional(),
 }).refine((value) => Object.keys(value).length > 0, "At least one field is required");
 

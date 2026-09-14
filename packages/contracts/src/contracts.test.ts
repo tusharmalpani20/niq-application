@@ -10,6 +10,13 @@ describe("application contracts", () => {
     expect(createOrganizationSchema.safeParse({ legalName: "Example Health Group", displayName: "Example Health", slug: "Example Health Group" }).success).toBe(false);
   });
 
+  test("normalizes and validates patient reference prefixes", () => {
+    const parsed = createOrganizationSchema.parse({ legalName: "Example Health Group", displayName: "Example Health", slug: "example-health", patientReferencePrefix: "ehn" });
+    expect(parsed.patientReferencePrefix).toBe("EHN");
+    expect(updateOrganizationSchema.safeParse({ patientReferencePrefix: "1EH" }).success).toBe(false);
+    expect(updateOrganizationSchema.safeParse({ patientReferencePrefix: "E" }).success).toBe(false);
+  });
+
   test("limits provenance to system-derived values", () => {
     expect(measurementProvenanceSchema.safeParse("AUTO_FACE_SCAN").success).toBe(true);
     expect(measurementProvenanceSchema.safeParse("USER_SELECTED").success).toBe(false);
@@ -85,6 +92,7 @@ describe("application contracts", () => {
     expect("scoringMonthlyLimit" in result).toBe(false);
     expect("faceScanMonthlyLimit" in result).toBe(false);
     expect(result.logo).toBeNull();
+    expect(result.patientReferencePrefix).toBe("PAT");
   });
 
   test("accepts only positive whole-number user limits", () => {
