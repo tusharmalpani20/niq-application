@@ -1,16 +1,18 @@
 import type { Organization } from "@niq/application-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChevronRight, Plus, Search, X } from "lucide-react";
+import { AlertTriangle, ChevronRight, Plus, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { DataTableColumn } from "../components/DataTable";
 import { DataTable } from "../components/DataTable";
 import { EmptyState, ErrorState, LoadingState, PageHeader } from "../components/Page";
 import { StatusBadge } from "../components/StatusBadge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
+import { Input } from "@/components/ui/input";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OrganizationOnboardingForm } from "./AdminCreateOrganizationPage";
 import { listOrganizations } from "../lib/api";
 
@@ -75,7 +77,7 @@ export function AdminOrganizationsPage() {
   }, []);
 
   const columns: Array<DataTableColumn<Organization>> = [
-    { id: "organization", header: "Organization", cell: ({ row }) => <><strong>{row.original.displayName}</strong><span className="cell-subtitle">{row.original.legalName}</span></> },
+    { id: "organization", header: "Organization", cell: ({ row }) => <><strong>{row.original.displayName}</strong>{row.original.legalName !== row.original.displayName && <span className="cell-subtitle">{row.original.legalName}</span>}</> },
     { accessorKey: "slug", header: "URL name" },
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={statusLabels[row.original.status]} /> },
     { id: "created", header: "Created", cell: ({ row }) => row.original.createdAt.toLocaleDateString() },
@@ -92,22 +94,29 @@ export function AdminOrganizationsPage() {
   const visibleOrganizations = filteredOrganizations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return <>
-    <PageHeader title="Organizations" action={<Button ref={addButtonRef} size="icon-lg" aria-label="Add organization" onPress={() => setShowOnboarding(true)}><Plus /><span className="sr-only">Add organization</span></Button>} />
-    {state === "loading" ? <section className="surface"><LoadingState label="Loading organizations" /></section> : state === "error" ? <ErrorState retry={load} /> : organizations.length === 0 ? <section className="surface"><EmptyState title="No organizations" description="Create the first client organization." /></section> : <div className="grid gap-4">
-      <section className="surface table-surface">
-        <div className="toolbar border-b border-border p-3">
-          <InputGroup className="max-w-sm">
-            <InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon>
-            <InputGroupInput aria-label="Search organizations" placeholder="Search organizations…" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
-            {search && <InputGroupAddon align="inline-end"><InputGroupButton size="icon-xs" aria-label="Clear search" onPress={() => { setSearch(""); setPage(1); }}><X aria-hidden="true" /></InputGroupButton></InputGroupAddon>}
-          </InputGroup>
+    <PageHeader title="Organizations" />
+    {state === "loading" ? <section className="surface"><LoadingState label="Loading organizations" /></section> : state === "error" ? <ErrorState retry={load} /> : <div className="grid gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs selectedKey="organizations">
+          <TabsList variant="line" aria-label="Organization management" className="gap-2 p-0">
+            <TabsTrigger id="organizations" className="rounded-none border-0 px-1 pb-2 text-primary shadow-none after:bg-primary">Organizations <Badge variant="secondary" className="px-1.5 py-0 text-xs tabular-nums">{organizations.length}</Badge></TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="flex min-w-0 items-center gap-2 sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:w-80">
+            <Input aria-label="Search organizations" placeholder="Search organizations…" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} className="h-10 pr-9" />
+            {search && <Button type="button" variant="ghost" size="icon-sm" aria-label="Clear search" className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground" onPress={() => { setSearch(""); setPage(1); }}><X aria-hidden="true" /></Button>}
+          </div>
+          <Button ref={addButtonRef} size="icon-lg" className="size-10 shrink-0" aria-label="Add organization" onPress={() => setShowOnboarding(true)}><Plus /><span className="sr-only">Add organization</span></Button>
         </div>
-        {filteredOrganizations.length === 0 ? <EmptyState title="No matching organizations" description="Try a different name or URL name." /> : <>
-          <div className="desktop-table"><DataTable columns={columns} data={visibleOrganizations} label="Organizations" /></div>
+      </div>
+      <section className="surface table-surface organization-table-card">
+        {organizations.length === 0 ? <EmptyState title="No organizations" description="Create the first client organization." /> : filteredOrganizations.length === 0 ? <EmptyState title="No matching organizations" description="Try a different name or URL name." /> : <>
+          <div className="desktop-table p-5"><DataTable columns={columns} data={visibleOrganizations} label="Organizations" /></div>
           <div className="mobile-card-list">{visibleOrganizations.map((organization) => <Link className="mobile-data-card" key={organization.id} to={`/admin/organizations/${organization.id}`} aria-label={`Manage ${organization.displayName}`}><div><strong>{organization.displayName}</strong>{organization.legalName !== organization.displayName && <span>{organization.legalName}</span>}</div><div className="mobile-organization-meta"><span>URL name: {organization.slug}</span><StatusBadge status={statusLabels[organization.status]} /></div></Link>)}</div>
         </>}
       </section>
-      {filteredOrganizations.length > 0 && <Pagination aria-label="Organizations pagination"><PaginationContent>
+      {organizations.length > 0 && filteredOrganizations.length > 0 && <Pagination aria-label="Organizations pagination"><PaginationContent>
         <PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem>
         <PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filteredOrganizations.length} total</span></PaginationItem>
         <PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem>
