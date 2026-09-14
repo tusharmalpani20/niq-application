@@ -96,7 +96,10 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
 
   return <form ref={formRef} className="admin-onboarding-form onboarding-wizard" onSubmit={submit} onChange={markDirty}>
     <Tabs selectedKey={step} onSelectionChange={(key) => setStep(Number(key) as Step)} className="min-h-0 min-w-0 flex-1 gap-0">
-    <TabsList variant="line" className="onboarding-tabs h-auto w-full min-w-0 rounded-none bg-background" aria-label="Organization setup steps">{steps.map((label, index) => <TabsTrigger id={index} key={label} isDisabled={index > furthestStep} className="h-11 min-w-0 gap-2 overflow-hidden rounded-none px-3 shadow-none"><span className="grid size-6 shrink-0 place-items-center rounded-full border text-xs">{index < step ? <Icon name="check" size={14} /> : index + 1}</span><strong className="truncate">{label}</strong></TabsTrigger>)}</TabsList>
+    <TabsList variant="line" className="onboarding-tabs h-auto w-full min-w-0 rounded-none bg-background" aria-label="Organization setup steps">{steps.map((label, index) => {
+      const isComplete = index < furthestStep;
+      return <TabsTrigger id={index} key={label} isDisabled={index > furthestStep} data-complete={isComplete || undefined} className="h-11 min-w-0 gap-2 overflow-hidden rounded-none px-3 shadow-none"><span className="grid size-6 shrink-0 place-items-center rounded-full border text-xs">{isComplete ? <Icon name="check" size={14} /> : index + 1}</span><strong className="truncate">{label}</strong></TabsTrigger>;
+    })}</TabsList>
 
     <TabsContent id={0} className="onboarding-panel" data-onboarding-step="0">
       <div className="wizard-heading"><h2>Organization details</h2></div>
