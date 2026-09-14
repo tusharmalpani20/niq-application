@@ -1,5 +1,5 @@
 import type { AuthenticatedUser } from "@niq/application-contracts";
-import { Bell, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -59,16 +59,13 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
 }
 
 export function AppShell({ user }: { user: AuthenticatedUser }) {
-  const location = useLocation();
   const navigate = useNavigate();
-  const initials = user.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
-  const currentPage = navigation.find((item) => item.end ? location.pathname === item.to : location.pathname.startsWith(item.to))?.label ?? "Workspace";
   async function handleSignOut() { await signOut().catch(() => undefined); navigate("/sign-in", { replace: true }); }
 
   return <SidebarProvider>
     <OrganizationSidebar user={user} onSignOut={handleSignOut} />
     <SidebarInset className="min-w-0">
-      <header className="topbar"><SidebarTrigger aria-label="Toggle navigation" /><div className="topbar-path"><strong>{currentPage}</strong></div><div className="topbar-actions"><Button variant="ghost" size="icon-sm" aria-label="Notifications"><Bell /></Button><Avatar className="size-8"><AvatarFallback>{initials}</AvatarFallback></Avatar></div></header>
+      <header className="client-mobile-nav"><SidebarTrigger aria-label="Toggle navigation" /></header>
       <main className="content"><Outlet context={user} /></main>
     </SidebarInset>
   </SidebarProvider>;
