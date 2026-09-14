@@ -1,17 +1,16 @@
-import { type CSSProperties, type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { OnboardOrganizationResponse } from "@niq/application-contracts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiRequestError, onboardOrganization } from "../lib/api";
 import { PageHeader } from "../components/Page";
 import { Icon } from "../lib/icons";
-import { ORGANIZATION_BRAND_PRESETS, ORGANIZATION_LOGO_ACCEPT, organizationLogoError, organizationLogoPayload, organizationUrlName } from "../lib/organization-onboarding";
+import { ORGANIZATION_LOGO_ACCEPT, organizationLogoError, organizationLogoPayload, organizationUrlName } from "../lib/organization-onboarding";
 
 type Step = 0 | 1 | 2;
 
@@ -65,14 +64,6 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     markDirty();
   }
 
-  function chooseBrandPreset(presetId: string) {
-    const preset = ORGANIZATION_BRAND_PRESETS.find((option) => option.id === presetId);
-    if (!preset) return;
-    setPrimaryColor(preset.primaryColor);
-    setSecondaryColor(preset.secondaryColor);
-    markDirty();
-  }
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -111,32 +102,23 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     })}</TabsList>
 
     <TabsContent id={0} className="onboarding-panel" data-onboarding-step="0">
-      <div className="wizard-heading"><h2>Organization details</h2></div>
       <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Display name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} /></Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated from the display name.</FieldDescription></Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={1} className="onboarding-panel" data-onboarding-step="1">
-      <div className="wizard-heading"><h2>First administrator</h2></div>
       <FieldGroup><Field><FieldLabel htmlFor="firstAdminEmail">Email address</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required value={firstAdminEmail} placeholder="admin@example-health.test" autoComplete="email" onChange={(event) => setFirstAdminEmail(event.target.value)} /><FieldDescription>We’ll create an invitation for this organization’s first administrator.</FieldDescription></Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={2} className="onboarding-panel" data-onboarding-step="2">
-      <div className="wizard-heading"><h2>Branding</h2><p>Add the organization’s logo and colours. These appear after its users sign in.</p></div>
-      <div className="brand-preset-section">
-        <div><strong>Choose a theme</strong><p>Start with a ready-made palette, then adjust it below if needed.</p></div>
-        <RadioGroup aria-label="Brand theme" value={ORGANIZATION_BRAND_PRESETS.find((preset) => preset.primaryColor === primaryColor && preset.secondaryColor === secondaryColor)?.id ?? ""} onChange={chooseBrandPreset} className="brand-preset-grid" orientation="horizontal">
-          {ORGANIZATION_BRAND_PRESETS.map((preset) => <RadioGroupItem className="brand-preset-card" key={preset.id} value={preset.id}><span className="brand-preset-swatches" aria-hidden="true"><i style={{ backgroundColor: preset.primaryColor }} /><i style={{ backgroundColor: preset.secondaryColor }} /></span><strong>{preset.name}</strong></RadioGroupItem>)}
-        </RadioGroup>
-      </div>
       <div className="branding-wizard-grid brand-customization-grid">
-        <Field className="logo-field"><FieldLabel>Organization logo <small>Optional</small></FieldLabel><label className="logo-dropzone"><input type="file" accept={ORGANIZATION_LOGO_ACCEPT} onChange={(event) => chooseLogo(event.target.files?.[0] ?? null)} /><span className="logo-preview">{logoPreview ? <img src={logoPreview} alt="Organization logo preview" /> : <Icon name="building" size={26} />}</span><span><strong>{logo ? logo.name : "Choose a logo"}</strong><small>PNG, JPEG or WebP · maximum 2 MB</small></span></label>{logoMessage && <Alert variant="destructive"><AlertDescription>{logoMessage}</AlertDescription></Alert>}</Field>
-        <div className="brand-colour-panel"><strong>Custom colours</strong><div className="brand-colour-grid"><label>Primary<span className="brand-colour-input"><input name="primaryColor" type="color" value={primaryColor} onChange={(event) => setPrimaryColor(event.target.value.toUpperCase())} /><span>{primaryColor}</span></span></label><label>Secondary<span className="brand-colour-input"><input name="secondaryColor" type="color" value={secondaryColor} onChange={(event) => setSecondaryColor(event.target.value.toUpperCase())} /><span>{secondaryColor}</span></span></label></div><div className="brand-theme-preview" style={{ "--preview-primary": primaryColor, "--preview-secondary": secondaryColor } as CSSProperties}><span>{displayName.trim().charAt(0).toUpperCase() || "N"}</span><span><strong>{displayName || "Organization name"}</strong><small>Workspace preview</small></span><i>Primary action</i></div></div>
+        <Field className="logo-field branding-card"><FieldLabel>Logo <small>Optional</small></FieldLabel><label className="logo-dropzone"><input type="file" accept={ORGANIZATION_LOGO_ACCEPT} onChange={(event) => chooseLogo(event.target.files?.[0] ?? null)} /><span className="logo-preview">{logoPreview ? <img src={logoPreview} alt="Organization logo preview" /> : <Icon name="building" size={26} />}</span><span><strong>{logo ? logo.name : "Upload a logo"}</strong><small>PNG, JPEG or WebP · maximum 2 MB</small></span></label>{logoMessage && <Alert variant="destructive"><AlertDescription>{logoMessage}</AlertDescription></Alert>}</Field>
+        <div className="brand-colour-panel branding-card"><span className="branding-card-title">Brand colours</span><div className="brand-colour-grid"><label>Primary<span className="brand-colour-input"><input name="primaryColor" type="color" value={primaryColor} onChange={(event) => setPrimaryColor(event.target.value.toUpperCase())} /><span>{primaryColor}</span></span></label><label>Secondary<span className="brand-colour-input"><input name="secondaryColor" type="color" value={secondaryColor} onChange={(event) => setSecondaryColor(event.target.value.toUpperCase())} /><span>{secondaryColor}</span></span></label></div></div>
       </div>
     </TabsContent>
     </Tabs>
 
     {message && <Alert variant="destructive" className="onboarding-error"><AlertDescription>{message}</AlertDescription></Alert>}
-    <footer className="form-footer wizard-footer"><div>{onCancel ? <Button variant="outline" type="button" onPress={onCancel}>Cancel</Button> : <Link className={buttonVariants({ variant: "outline" })} to="/admin/organizations">Cancel</Link>}</div><div>{step > 0 && <Button variant="outline" type="button" onPress={() => setStep((step - 1) as Step)}>Back</Button>}{step < 2 ? <Button key="continue" type="button" onPress={moveNext}>Continue</Button> : <Button key="submit" type="submit" isDisabled={busy}>{busy ? "Creating…" : "Create organization"}</Button>}</div></footer>
+    <footer className="form-footer wizard-footer"><div>{onCancel ? <Button variant="outline" type="button" onPress={onCancel}>Cancel</Button> : <Link className={buttonVariants({ variant: "outline" })} to="/admin/organizations">Cancel</Link>}</div><div>{step > 0 && <Button variant="outline" type="button" onPress={() => setStep((step - 1) as Step)}>Back</Button>}{step < 2 ? <Button key="continue" type="button" onPress={moveNext}>Continue</Button> : <Button key="submit" type="submit" isDisabled={busy}>{busy ? "Creating…" : "Create"}</Button>}</div></footer>
   </form>;
 }
 
