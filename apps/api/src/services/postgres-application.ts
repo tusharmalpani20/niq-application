@@ -480,6 +480,16 @@ export class PostgresApplicationService implements ApplicationService {
     await this.audit(this.db, organizationId, context, "SCORING_CONNECTION_ACTIVATED", "scoring_connection", connection?.deploymentId, undefined, { actorUserId: actor.userId, keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION });
     return { connection };
   }
+  async disconnectScoring(actor: Principal, organizationId: string, context: RequestContext) {
+    this.ensureOrganizationAccess(actor, organizationId, true);
+    await this.db.transaction(async (tx) => {
+      const [connection] = await tx.select({ deploymentId: scoringConnections.deploymentId })
+        .from(scoringConnections).where(eq(scoringConnections.organizationId, organizationId)).limit(1);
+      if (!connection) throw new ServiceError("NOT_FOUND", "This organization is not connected to NIQ Scoring.");
+      await tx.delete(scoringConnections).where(eq(scoringConnections.organizationId, organizationId));
+      await this.audit(tx, organizationId, context, "SCORING_CONNECTION_DISCONNECTED", "scoring_connection", connection.deploymentId, undefined, { actorUserId: actor.userId });
+    });
+  }
   async updateOrganization(actor: Principal, organizationId: string, input: UpdateOrganization, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true);
     const [result] = await this.db.update(organizations).set({ ...input, updatedAt: new Date() }).where(eq(organizations.id, organizationId)).returning();

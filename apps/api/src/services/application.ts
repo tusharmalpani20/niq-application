@@ -71,6 +71,7 @@ export interface ApplicationService {
   createOrganization(actor: Principal, input: CreateOrganization, context: RequestContext): Promise<unknown>;
   onboardOrganization(actor: Principal, input: OnboardOrganization, context: RequestContext): Promise<{ organization: unknown; invitation: unknown; token: string }>;
   activateScoring(actor: Principal, organizationId: string, input: ActivateScoring, context: RequestContext): Promise<unknown>;
+  disconnectScoring(actor: Principal, organizationId: string, context: RequestContext): Promise<void>;
   listOrganizations(actor: Principal): Promise<unknown[]>;
   getOrganization(actor: Principal, organizationId: string): Promise<unknown>;
   getOrganizationBySlug(actor: Principal, organizationSlug: string): Promise<unknown>;

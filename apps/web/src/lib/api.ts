@@ -165,3 +165,11 @@ export async function activateScoring(organizationId: string, input: ActivateSco
   });
   return activateScoringResponseSchema.parse(await responseBody(response)).connection;
 }
+
+export async function disconnectScoring(organizationId: string): Promise<void> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/scoring/connection`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!response.ok) await responseBody(response);
+}

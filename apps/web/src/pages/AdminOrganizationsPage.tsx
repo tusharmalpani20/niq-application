@@ -1,11 +1,12 @@
 import type { Organization } from "@niq/application-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChevronRight, Plus, X } from "lucide-react";
+import { AlertTriangle, ChevronRight, Power, PowerOff, Plus, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { DataTableColumn } from "../components/DataTable";
 import { DataTable } from "../components/DataTable";
 import { EmptyState, ErrorState, LoadingState, PageHeader } from "../components/Page";
 import { StatusBadge } from "../components/StatusBadge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,8 +14,9 @@ import { Dialog, DialogDescription, DialogHeader, DialogTitle } from "@/componen
 import { Input } from "@/components/ui/input";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { OrganizationOnboardingForm } from "./AdminCreateOrganizationPage";
-import { listOrganizations } from "../lib/api";
+import { ApiRequestError, listOrganizations, setOrganizationStatus } from "../lib/api";
 
 const statusLabels = { ACTIVE: "Active", SUSPENDED: "Suspended", CLOSED: "Closed" } as const;
 const pageSize = 10;
@@ -53,6 +55,9 @@ export function AdminOrganizationsPage() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [statusTarget, setStatusTarget] = useState<Organization | null>(null);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const onboardingWasOpen = useRef(false);
 
@@ -76,12 +81,35 @@ export function AdminOrganizationsPage() {
     setShowOnboarding(false);
   }, []);
 
+  async function changeOrganizationStatus() {
+    if (!statusTarget || statusTarget.status === "CLOSED") return;
+    const status = statusTarget.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
+    setStatusBusy(true);
+    setStatusMessage(null);
+    try {
+      const organization = await setOrganizationStatus(statusTarget.id, status);
+      setOrganizations((current) => current.map((item) => item.id === organization.id ? organization : item));
+      setStatusTarget(null);
+    } catch (error) {
+      setStatusMessage(error instanceof ApiRequestError || error instanceof Error ? error.message : "The organization status could not be changed.");
+      setStatusTarget(null);
+    } finally {
+      setStatusBusy(false);
+    }
+  }
+
+  function organizationActions(organization: Organization) {
+    return <div className="flex items-center justify-start gap-2">
+      {organization.status !== "CLOSED" && <TooltipTrigger><Button variant="outline" size="icon" aria-label={organization.status === "ACTIVE" ? `Disable ${organization.displayName}` : `Enable ${organization.displayName}`} onPress={() => setStatusTarget(organization)}>{organization.status === "ACTIVE" ? <PowerOff className="size-4" /> : <Power className="size-4" />}</Button><Tooltip>{organization.status === "ACTIVE" ? "Disable organization" : "Enable organization"}</Tooltip></TooltipTrigger>}
+      <TooltipTrigger><Link className="row-link size-9" to={`/admin/organizations/${organization.slug}`} aria-label={`Manage ${organization.displayName}`}><ChevronRight className="size-5" /></Link><Tooltip>Manage organization</Tooltip></TooltipTrigger>
+    </div>;
+  }
+
   const columns: Array<DataTableColumn<Organization>> = [
     { id: "organization", header: "Organization", cell: ({ row }) => <><strong>{row.original.displayName}</strong>{row.original.legalName !== row.original.displayName && <span className="cell-subtitle">{row.original.legalName}</span>}</> },
-    { accessorKey: "slug", header: "URL name" },
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={statusLabels[row.original.status]} /> },
     { id: "created", header: "Created", cell: ({ row }) => row.original.createdAt.toLocaleDateString() },
-    { id: "open", header: () => <span className="sr-only">Open</span>, cell: ({ row }) => <Link className="row-link" to={`/admin/organizations/${row.original.slug}`} aria-label={`Manage ${row.original.displayName}`}><ChevronRight className="size-4" /></Link> },
+    { id: "actions", header: "Actions", cell: ({ row }) => organizationActions(row.original) },
   ];
 
   const query = search.trim().toLocaleLowerCase();
@@ -96,6 +124,7 @@ export function AdminOrganizationsPage() {
   return <>
     <PageHeader title="Organizations" />
     {state === "loading" ? <section className="surface"><LoadingState label="Loading organizations" /></section> : state === "error" ? <ErrorState retry={load} /> : <div className="grid gap-4">
+      {statusMessage && <Alert variant="destructive"><AlertDescription>{statusMessage}</AlertDescription></Alert>}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Tabs selectedKey="organizations">
           <TabsList variant="line" aria-label="Organization management" className="gap-2 p-0">
@@ -111,9 +140,9 @@ export function AdminOrganizationsPage() {
         </div>
       </div>
       <section className="surface table-surface organization-table-card">
-        {organizations.length === 0 ? <EmptyState title="No organizations" description="Create the first client organization." /> : filteredOrganizations.length === 0 ? <EmptyState title="No matching organizations" description="Try a different name or URL name." /> : <>
+        {organizations.length === 0 ? <EmptyState title="No organizations" description="Create the first client organization." /> : filteredOrganizations.length === 0 ? <EmptyState title="No matching organizations" description="Try a different organization name." /> : <>
           <div className="desktop-table p-5"><DataTable columns={columns} data={visibleOrganizations} label="Organizations" /></div>
-          <div className="mobile-card-list">{visibleOrganizations.map((organization) => <Link className="mobile-data-card" key={organization.id} to={`/admin/organizations/${organization.slug}`} aria-label={`Manage ${organization.displayName}`}><div><strong>{organization.displayName}</strong>{organization.legalName !== organization.displayName && <span>{organization.legalName}</span>}</div><div className="mobile-organization-meta"><span>URL name: {organization.slug}</span><StatusBadge status={statusLabels[organization.status]} /></div></Link>)}</div>
+          <div className="mobile-card-list">{visibleOrganizations.map((organization) => <article className="mobile-data-card" key={organization.id}><div><strong>{organization.displayName}</strong>{organization.legalName !== organization.displayName && <span>{organization.legalName}</span>}</div><div className="mobile-organization-meta"><StatusBadge status={statusLabels[organization.status]} />{organizationActions(organization)}</div></article>)}</div>
         </>}
       </section>
       {organizations.length > 0 && filteredOrganizations.length > 0 && <Pagination aria-label="Organizations pagination"><PaginationContent>
@@ -123,5 +152,9 @@ export function AdminOrganizationsPage() {
       </PaginationContent></Pagination>}
     </div>}
     <OrganizationOnboardingDialog open={showOnboarding} onClose={closeOnboarding} onCreated={load} />
+    {statusTarget && <AlertDialog ariaLabel={statusTarget.status === "ACTIVE" ? "Disable organization" : "Enable organization"} isOpen onOpenChange={(open) => { if (!open && !statusBusy) setStatusTarget(null); }} isDismissable={!statusBusy}>
+      <AlertDialogHeader><AlertDialogMedia>{statusTarget.status === "ACTIVE" ? <PowerOff /> : <Power />}</AlertDialogMedia><AlertDialogTitle>{statusTarget.status === "ACTIVE" ? "Disable organization?" : "Enable organization?"}</AlertDialogTitle><AlertDialogDescription>{statusTarget.status === "ACTIVE" ? `${statusTarget.displayName} users will be unable to sign in until the organization is enabled again.` : `${statusTarget.displayName} users will be able to sign in again.`}</AlertDialogDescription></AlertDialogHeader>
+      <AlertDialogFooter><AlertDialogCancel isDisabled={statusBusy}>Cancel</AlertDialogCancel><AlertDialogAction variant={statusTarget.status === "ACTIVE" ? "destructive" : "default"} isDisabled={statusBusy} onPress={changeOrganizationStatus}>{statusBusy ? "Saving…" : statusTarget.status === "ACTIVE" ? "Disable organization" : "Enable organization"}</AlertDialogAction></AlertDialogFooter>
+    </AlertDialog>}
   </>;
 }

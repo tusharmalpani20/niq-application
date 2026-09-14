@@ -18,5 +18,5 @@ export function ScoringConnectionPage() {
   if (user.role !== "ORGANIZATION_ADMIN") return <Navigate replace to="/" />;
   if (state === "loading") return <section className="surface"><LoadingState label="Loading scoring connection" /></section>;
   if (state === "error" || !details) return <ErrorState retry={load} />;
-  return <><PageHeader title="Scoring connection" /><ScoringConnectionPanel organizationId={user.organizationId} connection={details.scoringConnection} onActivated={(connection) => setDetails({ ...details, scoringConnection: connection })} className="surface admin-detail-card" showHeading={false} /></>;
+  return <><PageHeader title="Scoring connection" /><ScoringConnectionPanel organizationId={user.organizationId} connection={details.scoringConnection} onActivated={(connection) => setDetails({ ...details, scoringConnection: connection })} onDisconnected={() => setDetails({ ...details, scoringConnection: null })} className="surface admin-detail-card" showHeading={false} /></>;
 }

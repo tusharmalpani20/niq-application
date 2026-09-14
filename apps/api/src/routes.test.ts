@@ -22,6 +22,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     createOrganization: async () => ({}), listOrganizations: async () => [], getOrganization: async () => ({}), getOrganizationBySlug: async () => ({}), getOrganizationLogo: async () => ({ data: new Uint8Array([1, 2, 3]), mimeType: "image/png", etag: "abc" }), updateOrganization: async () => ({}),
     onboardOrganization: async () => ({ organization: {}, invitation: {}, token: "invite-token" }),
     activateScoring: async () => ({ connection: {} }),
+    disconnectScoring: async () => {},
     getScoringOrganizationInfo: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], updateFacility: async () => ({}),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
@@ -178,6 +179,20 @@ describe("local authentication routes", () => {
     const body = await response.json();
     expect(body.usage.scores).toBe(12);
     expect(JSON.stringify(body)).not.toContain("credential");
+  });
+
+  test("disconnects NIQ Scoring without accepting credential material", async () => {
+    let disconnectedOrganization = "";
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({ disconnectScoring: async (_actor, organizationId) => { disconnectedOrganization = organizationId; } }),
+    });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/scoring/connection`, {
+      method: "DELETE",
+      headers: { cookie: "niq_session=valid-session" },
+    });
+    expect(response.status).toBe(204);
+    expect(disconnectedOrganization).toBe(principal.organizationId);
   });
 
   test("requires reconnection when NIQ Scoring rejects the saved credential", async () => {
