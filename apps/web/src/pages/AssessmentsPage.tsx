@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import type { AssessmentSummary, AuthenticatedUser } from "@niq/application-contracts";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useOutletContext, useParams } from "react-router-dom";
 import { Search } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -7,23 +8,77 @@ import { Card } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EmptyState, PageHeader } from "../components/Page";
+import { DataTable, type DataTableColumn } from "../components/DataTable";
+import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
 import { StatusBadge } from "../components/StatusBadge";
+import { listAssessments } from "../lib/api";
 import { assessments, patients } from "../lib/demo-data";
 import { Icon } from "../lib/icons";
 
+const assessmentPageSize = 10;
+const assessmentStatusLabels = {
+  DRAFT: "Draft",
+  READY_FOR_SCORING: "Ready for scoring",
+  SCORING_PENDING: "Pending scoring",
+  SCORING_UNAVAILABLE: "Scoring unavailable",
+  SCORED: "Scored",
+  UNDER_REVIEW: "Under review",
+  COMPLETED: "Completed",
+  VOIDED: "Voided",
+} as const satisfies Record<AssessmentSummary["status"], string>;
+const assessmentDate = (date: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
+
 export function AssessmentsPage() {
-  const [query, setQuery] = useState(""); const [tab, setTab] = useState("All");
-  const visible = useMemo(()=>assessments.filter((a)=>(tab==="All" || a.status===tab) && `${a.id} ${a.patient} ${a.facility}`.toLowerCase().includes(query.toLowerCase())),[query,tab]);
-  return <><PageHeader eyebrow="Clinical workflow" title="Assessments" description="Review assessment progress and scoring status." action={<RouterButtonLink to="/assessments/new"><Icon name="plus" size={18}/>Start assessment</RouterButtonLink>}/>
-    <section className="surface queue-surface"><Tabs selectedKey={tab} onSelectionChange={(key) => setTab(String(key))} className="gap-0 p-3 pb-0"><TabsList aria-label="Assessment status" className="w-full">{["All","Pending scoring","Under review","Completed"].map((value)=><TabsTrigger className="text-foreground/80" id={value} key={value}>{value}</TabsTrigger>)}</TabsList><TabsContent id={tab}>
-        <div className="toolbar"><InputGroup className="max-w-md"><InputGroupAddon><Search /></InputGroupAddon><InputGroupInput aria-label="Search assessments" value={query} onChange={(event)=>setQuery(event.target.value)} placeholder="Search patient, assessment or facility"/></InputGroup></div>
-        <div className="assessment-list">{visible.length ? visible.map((item)=><Link className="assessment-card" to={`/assessments/${item.id}`} key={item.id}><div className="assessment-card-head"><div><span className="record-id">{item.id}</span><h2>{item.patient}</h2><p>{item.facility} · {item.date}</p></div><StatusBadge status={item.status}/></div><div className="assessment-card-foot"><span>Scoring version</span><strong>{item.version}</strong><Icon name="chevron" size={18}/></div></Link>) : <EmptyState title="No assessments found" description="Try another search or queue."/>}</div>
-      </TabsContent></Tabs>
-    </section></>;
+  const user = useOutletContext<AuthenticatedUser>();
+  const [records, setRecords] = useState<AssessmentSummary[]>([]);
+  const [query, setQuery] = useState("");
+  const [facility, setFacility] = useState("all");
+  const [status, setStatus] = useState("all");
+  const [page, setPage] = useState(1);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  useEffect(() => {
+    let active = true;
+    setLoadState("loading");
+    listAssessments(user.organizationId).then((items) => { if (active) { setRecords(items); setLoadState("ready"); } }).catch(() => { if (active) setLoadState("error"); });
+    return () => { active = false; };
+  }, [user.organizationId]);
+  const facilityNames = useMemo(() => [...new Set(records.map((record) => record.facility?.name).filter((name): name is string => Boolean(name)))], [records]);
+  const filtered = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return records.filter((record) => {
+      const matchesQuery = !normalizedQuery || `${record.patient.reference} ${record.patient.displayName} ${record.facility?.name ?? ""}`.toLowerCase().includes(normalizedQuery);
+      return matchesQuery && (facility === "all" || record.facility?.name === facility) && (status === "all" || record.status === status);
+    });
+  }, [facility, query, records, status]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / assessmentPageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visible = filtered.slice((currentPage - 1) * assessmentPageSize, currentPage * assessmentPageSize);
+  const columns: Array<DataTableColumn<AssessmentSummary>> = [
+    { id: "patient", header: "Patient", cell: ({ row }) => <div className="grid gap-1"><strong>{row.original.patient.reference}</strong><span className="text-xs text-muted-foreground">{row.original.patient.displayName}</span></div> },
+    { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "—" },
+    { id: "created", header: "Started", cell: ({ row }) => assessmentDate(row.original.createdAt) },
+    { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
+  ];
+  const hasFilters = query.trim() || facility !== "all" || status !== "all";
+  const emptyContent = <div className="table-empty-content">{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><span>Refresh the page to try again.</span></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : <RouterButtonLink className="patient-empty-action" variant="outline" size="sm" to="/assessments/new"><Icon name="plus" size={16}/>Start assessment</RouterButtonLink>}</div>;
+  return <>
+    <h1 className="patient-page-title">Assessments</h1>
+    <div className="patient-list-header">
+      <div className="patient-list-heading"><span className="patient-list-label">Assessments</span><span>{records.length}</span></div>
+      <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search assessments" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search assessments…" /></InputGroup><RouterButtonLink className="size-10 shrink-0" size="icon-lg" to="/assessments/new" aria-label="Start assessment"><Icon name="plus" size={20}/></RouterButtonLink></div>
+    </div>
+    <div className="patient-filter-bar assessment-filter-bar">
+      <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { setFacility(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilityNames.map((name) => <SelectItem id={name} key={name}>{name}</SelectItem>)}</SelectContent></Select>
+      <Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem>{Object.entries(assessmentStatusLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>
+    </div>
+    <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card" key={record.id}><div><strong>{record.patient.reference}</strong><span>{record.patient.displayName}</span></div><StatusBadge status={assessmentStatusLabels[record.status]}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent}/></div></section>
+    <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>
+  </>;
 }
 
 export function StartAssessmentPage() {

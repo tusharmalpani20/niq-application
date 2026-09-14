@@ -1,4 +1,4 @@
-export type AssessmentStatus = "Draft" | "Pending scoring" | "Scoring unavailable" | "Under review" | "Completed";
+export type AssessmentStatus = "Draft" | "Ready for scoring" | "Pending scoring" | "Scoring unavailable" | "Scored" | "Under review" | "Completed" | "Voided";
 export type PatientSummary = { id: string; reference: string; displayName: string; age: number; gender: string; facility: string; lastAssessment: string; status: AssessmentStatus };
 export const patients: PatientSummary[] = [
   { id: "01ARZ3NDEKTSV4RRFFQ69G5FA1", reference: "NIQ-1042", displayName: "Patient NIQ-1042", age: 54, gender: "Female", facility: "Chennai Central", lastAssessment: "12 Sep 2026", status: "Under review" },

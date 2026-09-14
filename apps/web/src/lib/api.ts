@@ -1,5 +1,6 @@
 import {
   acceptInvitationSchema,
+  assessmentListResponseSchema,
   activateScoringResponseSchema,
   activateScoringSchema,
   apiErrorSchema,
@@ -30,6 +31,7 @@ import {
   verifyMfaRequestSchema,
   type AcceptInvitation,
   type ActivateScoring,
+  type AssessmentSummary,
   type ApiError,
   type AuthenticatedUser,
   type CreatePlatformAdministratorInvitation,
@@ -239,6 +241,11 @@ export async function createFacility(organizationId: string, input: CreateFacili
 export async function listPatients(organizationId: string): Promise<Patient[]> {
   const response = await fetch(`/api/v1/organizations/${organizationId}/patients`, { credentials: "include" });
   return patientListResponseSchema.parse(await responseBody(response)).items;
+}
+
+export async function listAssessments(organizationId: string): Promise<AssessmentSummary[]> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/assessments`, { credentials: "include" });
+  return assessmentListResponseSchema.parse(await responseBody(response)).items;
 }
 
 export async function getPatient(organizationId: string, patientLocator: string): Promise<Patient> {
