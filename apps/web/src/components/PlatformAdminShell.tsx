@@ -11,7 +11,10 @@ import {
 import { signOut } from "../lib/api";
 import { Icon } from "../lib/icons";
 
-const navigation = [{ to: "/admin/organizations", label: "Organizations", icon: "building" }];
+const navigation = [
+  { to: "/admin/organizations", label: "Organizations", icon: "building" },
+  { to: "/admin/administrators", label: "Administrators", icon: "users" },
+];
 
 function AdminSidebar({ user, onSignOut }: { user: AuthenticatedUser; onSignOut: () => void }) {
   const { isMobile, state, setOpen, setOpenMobile } = useSidebar();
@@ -59,7 +62,7 @@ export function PlatformAdminShell({ user }: { user: AuthenticatedUser }) {
       <header className="flex h-14 shrink-0 items-center border-b border-border px-4 md:hidden">
         <SidebarTrigger aria-label="Open navigation" />
       </header>
-      <main className="content"><Outlet /></main>
+      <main className="content"><Outlet context={{ user }} /></main>
     </SidebarInset>
   </SidebarProvider>;
 }

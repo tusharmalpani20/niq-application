@@ -1,11 +1,11 @@
 import type { OrganizationDetails, ScoringOrganizationInfo } from "@niq/application-contracts";
-import { RefreshCw, Unplug } from "lucide-react";
+import { Eye, EyeOff, RefreshCw, Unplug } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { activateScoring, ApiRequestError, disconnectScoring, getScoringOrganizationInfo } from "../lib/api";
 
 type ScoringConnection = OrganizationDetails["scoringConnection"];
@@ -27,6 +27,7 @@ export function ScoringConnectionPanel({ organizationId, connection, onActivated
   const [reconnectRequired, setReconnectRequired] = useState(false);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [showToken, setShowToken] = useState(false);
 
   const loadInformation = useCallback(async () => {
     if (!connection) return;
@@ -96,11 +97,10 @@ export function ScoringConnectionPanel({ organizationId, connection, onActivated
         <section className="branding-card scoring-usage-card"><h3>Current usage</h3><p className="muted">UTC month {information.usage.period}</p><dl className="definition-grid"><div><dt>Scores</dt><dd>{limitLabel(information.usage.scores, information.limits.scoresPerMonth)}</dd></div><div><dt>Face scans</dt><dd>{limitLabel(information.usage.faceScans, information.limits.faceScansPerMonth)}</dd></div></dl>{information.updatedAt && <small className="scoring-updated-at">Updated {new Date(information.updatedAt).toLocaleString()}</small>}</section>
       </div>}
     </> : <>
-      {reconnectRequired ? <Alert><AlertTitle>Reconnect required</AlertTitle><AlertDescription>The saved service credential is no longer valid. Enter a new one-time activation token from NIQ Scoring.</AlertDescription></Alert> : <p className="muted scoring-token-intro">Enter the one-time activation token supplied from NIQ Scoring.</p>}
+      {reconnectRequired && <Alert><AlertTitle>Reconnect required</AlertTitle><AlertDescription>The saved service credential is no longer valid. Enter a new one-time activation token from NIQ Scoring.</AlertDescription></Alert>}
       <form className="activation-form" onSubmit={submit}>
-        <Field><FieldLabel htmlFor="activationToken">Activation token</FieldLabel><Input id="activationToken" name="activationToken" type="password" minLength={48} maxLength={256} autoComplete="off" required /><FieldDescription>The token is exchanged securely and is not saved in this browser.</FieldDescription></Field>
+        <Field><FieldLabel htmlFor="activationToken">Activation token</FieldLabel><div className="activation-token-controls"><InputGroup className="h-11 overflow-hidden"><InputGroupInput id="activationToken" name="activationToken" type={showToken ? "text" : "password"} minLength={48} maxLength={256} autoComplete="off" required /><InputGroupAddon align="inline-end" className="mr-0! self-stretch border-l bg-accent p-0"><InputGroupButton className="m-0! h-full w-11 rounded-none border-0 bg-clip-border text-primary hover:bg-secondary" aria-label={showToken ? "Hide activation token" : "Show activation token"} aria-controls="activationToken" aria-pressed={showToken} onPress={() => setShowToken((visible) => !visible)} size="icon-sm">{showToken ? <EyeOff /> : <Eye />}</InputGroupButton></InputGroupAddon></InputGroup><Button type="submit" className="h-11" isDisabled={activating}>{activating ? "Connecting…" : "Connect scoring"}</Button></div></Field>
         {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
-        <Button type="submit" isDisabled={activating}>{activating ? "Connecting…" : "Connect scoring"}</Button>
       </form>
     </>}
     <AlertDialog ariaLabel="Disconnect NIQ Scoring" isOpen={confirmingDisconnect} onOpenChange={(open) => { if (!disconnecting) setConfirmingDisconnect(open); }} isDismissable={!disconnecting}>

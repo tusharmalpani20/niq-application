@@ -5,6 +5,7 @@ import type {
   CreateFacility,
   CreateInvitation,
   CreateOrganization,
+  CreatePlatformAdministratorInvitation,
   OnboardOrganization,
   ResendMfaRequest,
   SignInRequest,
@@ -68,6 +69,9 @@ export interface ApplicationService {
   signOut(sessionToken: string, context: RequestContext): Promise<void>;
   acceptInvitation(input: AcceptInvitation, context: RequestContext): Promise<Principal>;
   bootstrap(input: BootstrapAdmin, context: RequestContext): Promise<Principal>;
+  listPlatformAdministrators(actor: Principal): Promise<unknown[]>;
+  invitePlatformAdministrator(actor: Principal, input: CreatePlatformAdministratorInvitation, context: RequestContext): Promise<{ invitation: unknown; token: string }>;
+  setPlatformAdministratorActive(actor: Principal, membershipId: string, active: boolean, context: RequestContext): Promise<unknown>;
   createOrganization(actor: Principal, input: CreateOrganization, context: RequestContext): Promise<unknown>;
   onboardOrganization(actor: Principal, input: OnboardOrganization, context: RequestContext): Promise<{ organization: unknown; invitation: unknown; token: string }>;
   activateScoring(actor: Principal, organizationId: string, input: ActivateScoring, context: RequestContext): Promise<unknown>;

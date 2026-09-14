@@ -1,0 +1,1 @@
+ALTER TABLE "invitations" ADD COLUMN "platform_role" "platform_role" DEFAULT 'USER' NOT NULL;

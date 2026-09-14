@@ -50,6 +50,7 @@ describe("tenant data invariants", () => {
   test("pending invitations have one organization-scoped reservation index", () => {
     const names = getTableConfig(invitations).indexes.map((index) => index.config.name);
     expect(names).toContain("invitations_pending_org_email_uidx");
+    expect(invitations.platformRole.notNull).toBe(true);
   });
 
   test("entity IDs are application-generated canonical ULIDs", () => {
@@ -159,5 +160,10 @@ describe("migration-only safeguards", () => {
     expect(migration).toContain('"byte_size" <= 2097152');
     expect(migration).toContain('CREATE UNIQUE INDEX "organization_brand_assets_org_uidx"');
     expect(migration).toContain("ON DELETE cascade");
+  });
+
+  test("platform administrator invitations default safely to regular users", async () => {
+    const migration = await Bun.file("./drizzle/0008_fantastic_shockwave.sql").text();
+    expect(migration).toContain('"platform_role" "platform_role" DEFAULT \'USER\' NOT NULL');
   });
 });

@@ -5,11 +5,15 @@ import {
   apiErrorSchema,
   authenticationResponseSchema,
   invitationAcceptanceResponseSchema,
+  createPlatformAdministratorInvitationSchema,
   organizationListResponseSchema,
   organizationDetailsResponseSchema,
   organizationSchema,
   scoringOrganizationInfoSchema,
   organizationUsersResponseSchema,
+  platformAdministratorInvitationResponseSchema,
+  platformAdministratorSchema,
+  platformAdministratorsResponseSchema,
   onboardOrganizationResponseSchema,
   onboardOrganizationSchema,
   resendMfaRequestSchema,
@@ -21,9 +25,11 @@ import {
   type ActivateScoring,
   type ApiError,
   type AuthenticatedUser,
+  type CreatePlatformAdministratorInvitation,
   type Organization,
   type OrganizationDetails,
   type OrganizationUser,
+  type PlatformAdministrator,
   type ScoringOrganizationInfo,
   type OnboardOrganization,
   type OnboardOrganizationResponse,
@@ -114,6 +120,31 @@ export async function signOut(): Promise<void> {
 export async function listOrganizations(): Promise<Organization[]> {
   const response = await fetch("/api/v1/organizations", { credentials: "include" });
   return organizationListResponseSchema.parse(await responseBody(response)).items;
+}
+
+export async function listPlatformAdministrators(): Promise<PlatformAdministrator[]> {
+  const response = await fetch("/api/v1/platform/administrators", { credentials: "include" });
+  return platformAdministratorsResponseSchema.parse(await responseBody(response)).items;
+}
+
+export async function invitePlatformAdministrator(input: CreatePlatformAdministratorInvitation) {
+  const response = await fetch("/api/v1/platform/administrators/invitations", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(createPlatformAdministratorInvitationSchema.parse(input)),
+  });
+  return platformAdministratorInvitationResponseSchema.parse(await responseBody(response));
+}
+
+export async function setPlatformAdministratorActive(membershipId: string, active: boolean): Promise<PlatformAdministrator> {
+  const response = await fetch(`/api/v1/platform/administrators/${membershipId}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ active }),
+  });
+  return platformAdministratorSchema.parse(await responseBody(response));
 }
 
 export async function onboardOrganization(input: OnboardOrganization): Promise<OnboardOrganizationResponse> {

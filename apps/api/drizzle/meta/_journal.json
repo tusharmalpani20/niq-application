@@ -57,6 +57,13 @@
       "when": 1789394833777,
       "tag": "0007_remove_scoring_configuration",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789396861559,
+      "tag": "0008_fantastic_shockwave",
+      "breakpoints": true
     }
   ]
 }

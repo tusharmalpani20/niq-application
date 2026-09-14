@@ -202,6 +202,37 @@ export const organizationUserSchema = z.object({
 
 export const organizationUsersResponseSchema = z.object({ items: z.array(organizationUserSchema) });
 
+export const createPlatformAdministratorInvitationSchema = z.object({
+  email: z.email().max(320),
+}).strict();
+
+export const platformAdministratorSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("USER"),
+    userId: idSchema,
+    membershipId: idSchema,
+    email: z.email(),
+    displayName: z.string().min(1).max(120),
+    status: z.enum(["INVITED", "ACTIVE", "SUSPENDED", "DEACTIVATED"]),
+    active: z.boolean(),
+    createdAt: z.coerce.date(),
+  }),
+  z.object({
+    kind: z.literal("INVITATION"),
+    invitationId: idSchema,
+    email: z.email(),
+    status: z.literal("PENDING"),
+    expiresAt: z.coerce.date(),
+    createdAt: z.coerce.date(),
+  }),
+]);
+
+export const platformAdministratorsResponseSchema = z.object({ items: z.array(platformAdministratorSchema) });
+export const platformAdministratorInvitationResponseSchema = z.object({
+  invitation: z.object({ invitationId: idSchema, email: z.email(), expiresAt: z.coerce.date() }),
+  activationToken: z.string().optional(),
+});
+
 // NIQ Scoring owns this snapshot. Application validates it at both API
 // boundaries and never persists it in the Application database.
 export const scoringOrganizationInfoSchema = z.object({
@@ -293,6 +324,8 @@ export type OnboardOrganization = z.infer<typeof onboardOrganizationSchema>;
 export type OnboardOrganizationResponse = z.infer<typeof onboardOrganizationResponseSchema>;
 export type OrganizationDetails = z.infer<typeof organizationDetailsResponseSchema>;
 export type OrganizationUser = z.infer<typeof organizationUserSchema>;
+export type CreatePlatformAdministratorInvitation = z.infer<typeof createPlatformAdministratorInvitationSchema>;
+export type PlatformAdministrator = z.infer<typeof platformAdministratorSchema>;
 export type ScoringOrganizationInfo = z.infer<typeof scoringOrganizationInfoSchema>;
 export type ActivateScoring = z.infer<typeof activateScoringSchema>;
 export type ScoringConnection = z.infer<typeof scoringConnectionSchema>;

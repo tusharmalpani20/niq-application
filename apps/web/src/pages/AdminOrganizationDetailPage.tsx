@@ -55,7 +55,7 @@ export function AdminOrganizationDetailPage() {
       </TabsContent>
       <TabsContent id="users"><AdminOrganizationUsers users={users} /></TabsContent>
       <TabsContent id="scoring">
-        <ScoringConnectionPanel organizationId={organization.id} connection={details.scoringConnection} onActivated={(connection) => setDetails({ ...details, scoringConnection: connection })} onDisconnected={() => setDetails({ ...details, scoringConnection: null })} />
+        <ScoringConnectionPanel organizationId={organization.id} connection={details.scoringConnection} onActivated={(connection) => setDetails({ ...details, scoringConnection: connection })} onDisconnected={() => setDetails({ ...details, scoringConnection: null })} showHeading={false} />
       </TabsContent>
     </Tabs>
   </>;

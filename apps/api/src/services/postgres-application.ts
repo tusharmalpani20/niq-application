@@ -1,5 +1,5 @@
 import type { ApplicationConfig } from "@niq/application-config";
-import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, OnboardOrganization, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
+import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
 import { and, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -260,12 +260,12 @@ export class PostgresApplicationService implements ApplicationService {
       const existing = await tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
       if (existing.length > 0) throw new ServiceError("CONFLICT", "An account already exists for this email.");
       const userId = createEntityId(); const membershipId = createEntityId();
-      await tx.insert(users).values({ id: userId, email, displayName: input.displayName, passwordHash: await hashPassword(input.password), status: "ACTIVE", mfaEnabled: invite.role === "ORGANIZATION_ADMIN" });
+      await tx.insert(users).values({ id: userId, email, displayName: input.displayName, passwordHash: await hashPassword(input.password), status: "ACTIVE", platformRole: invite.platformRole, mfaEnabled: invite.role === "ORGANIZATION_ADMIN" || invite.platformRole === "NIQ_ADMIN" });
       await tx.update(invitations).set({ status: "ACCEPTED", acceptedAt: new Date(), updatedAt: new Date() }).where(eq(invitations.id, invite.id));
       await tx.insert(organizationMemberships).values({ id: membershipId, organizationId: invite.organizationId, userId, role: invite.role });
       const assigned = await tx.select().from(invitationFacilities).where(eq(invitationFacilities.invitationId, invite.id));
       if (assigned.length) await tx.insert(facilityMemberships).values(assigned.map((item) => ({ id: createEntityId(), organizationId: invite.organizationId, organizationMembershipId: membershipId, facilityId: item.facilityId })));
-      const principal: Principal = { userId, organizationId: invite.organizationId, membershipId, email, displayName: input.displayName, role: invite.role, platformRole: "USER" };
+      const principal: Principal = { userId, organizationId: invite.organizationId, membershipId, email, displayName: input.displayName, role: invite.role, platformRole: invite.platformRole };
       await this.audit(tx, invite.organizationId, context, "INVITATION_ACCEPTED", "invitation", invite.id, principal);
       return principal;
     });
@@ -283,6 +283,99 @@ export class PostgresApplicationService implements ApplicationService {
       const principal: Principal = { userId, organizationId, membershipId, email: normalizeEmail(input.adminEmail), displayName: input.adminDisplayName, role: "ORGANIZATION_ADMIN", platformRole: "NIQ_ADMIN" };
       await this.audit(tx, organizationId, context, "PLATFORM_BOOTSTRAPPED", "organization", organizationId, principal);
       return principal;
+    });
+  }
+
+  async listPlatformAdministrators(actor: Principal) {
+    if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");
+    const [administratorUsers, pendingInvitations] = await Promise.all([
+      this.db.select({
+        userId: users.id,
+        membershipId: organizationMemberships.id,
+        email: users.email,
+        displayName: users.displayName,
+        status: users.status,
+        active: organizationMemberships.isActive,
+        createdAt: users.createdAt,
+      }).from(users).innerJoin(organizationMemberships, and(
+        eq(organizationMemberships.userId, users.id),
+        eq(organizationMemberships.organizationId, actor.organizationId),
+      )).where(eq(users.platformRole, "NIQ_ADMIN")).orderBy(users.displayName),
+      this.db.select({
+        invitationId: invitations.id,
+        email: invitations.email,
+        status: invitations.status,
+        expiresAt: invitations.expiresAt,
+        createdAt: invitations.createdAt,
+      }).from(invitations).where(and(
+        eq(invitations.organizationId, actor.organizationId),
+        eq(invitations.platformRole, "NIQ_ADMIN"),
+        eq(invitations.status, "PENDING"),
+        gt(invitations.expiresAt, new Date()),
+      )).orderBy(desc(invitations.createdAt)),
+    ]);
+    return [
+      ...administratorUsers.map((administrator) => ({ kind: "USER" as const, ...administrator })),
+      ...pendingInvitations.map((invitation) => ({ kind: "INVITATION" as const, ...invitation, status: "PENDING" as const })),
+    ];
+  }
+
+  async invitePlatformAdministrator(actor: Principal, input: CreatePlatformAdministratorInvitation, context: RequestContext) {
+    if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");
+    const token = randomToken();
+    const invitationId = createEntityId();
+    const email = normalizeEmail(input.email);
+    const expiresAt = new Date(Date.now() + this.config.INVITATION_TTL_HOURS * 3_600_000);
+    try {
+      const invitation = await this.db.transaction(async (tx) => {
+        await tx.update(invitations).set({ status: "EXPIRED", updatedAt: new Date() })
+          .where(and(eq(invitations.email, email), eq(invitations.status, "PENDING"), sql`${invitations.expiresAt} <= now()`));
+        const [existingUser, existingInvitation] = await Promise.all([
+          tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1),
+          tx.select({ id: invitations.id }).from(invitations).where(and(eq(invitations.email, email), eq(invitations.status, "PENDING"), gt(invitations.expiresAt, new Date()))).limit(1),
+        ]);
+        if (existingUser.length || existingInvitation.length) throw new ServiceError("CONFLICT", "This email is already associated with an account or pending invitation.");
+        const [created] = await tx.insert(invitations).values({
+          id: invitationId,
+          organizationId: actor.organizationId,
+          email,
+          role: "ORGANIZATION_ADMIN",
+          platformRole: "NIQ_ADMIN",
+          tokenHash: await keyedHash(token, this.config.SESSION_SECRET),
+          expiresAt,
+          invitedByMembershipId: actor.membershipId,
+        }).returning({ invitationId: invitations.id, email: invitations.email, expiresAt: invitations.expiresAt });
+        if (!created) throw new Error("Platform administrator invitation insert failed");
+        await this.audit(tx, actor.organizationId, context, "PLATFORM_ADMIN_INVITED", "invitation", invitationId, undefined, { actorUserId: actor.userId });
+        return created;
+      });
+      return { invitation, token };
+    } catch (error) {
+      if (databaseCode(error) === "23505") throw new ServiceError("CONFLICT", "This email is already associated with an account or pending invitation.");
+      throw error;
+    }
+  }
+
+  async setPlatformAdministratorActive(actor: Principal, membershipId: string, active: boolean, context: RequestContext) {
+    if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");
+    if (membershipId === actor.membershipId && !active) throw new ServiceError("CONFLICT", "You cannot disable your own administrator access.");
+    return this.db.transaction(async (tx) => {
+      const [administrator] = await tx.select({
+        userId: users.id,
+        email: users.email,
+        displayName: users.displayName,
+        status: users.status,
+        createdAt: users.createdAt,
+      }).from(organizationMemberships).innerJoin(users, eq(users.id, organizationMemberships.userId)).where(and(
+        eq(organizationMemberships.organizationId, actor.organizationId),
+        eq(organizationMemberships.id, membershipId),
+        eq(users.platformRole, "NIQ_ADMIN"),
+      )).limit(1);
+      if (!administrator) throw new ServiceError("NOT_FOUND", "NIQ administrator not found.");
+      await tx.update(organizationMemberships).set({ isActive: active, updatedAt: new Date() }).where(eq(organizationMemberships.id, membershipId));
+      if (!active) await tx.update(authSessions).set({ revokedAt: new Date(), updatedAt: new Date() }).where(and(eq(authSessions.membershipId, membershipId), isNull(authSessions.revokedAt)));
+      await this.audit(tx, actor.organizationId, context, active ? "PLATFORM_ADMIN_ENABLED" : "PLATFORM_ADMIN_DISABLED", "membership", membershipId, undefined, { actorUserId: actor.userId });
+      return { kind: "USER" as const, membershipId, ...administrator, active };
     });
   }
 

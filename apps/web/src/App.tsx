@@ -3,6 +3,7 @@ import { AuthenticatedShell } from "./components/AuthenticatedShell";
 import { BrandingProvider } from "./lib/branding-context";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { AdminOrganizationsPage } from "./pages/AdminOrganizationsPage";
+import { AdminAdministratorsPage } from "./pages/AdminAdministratorsPage";
 import { AdminCreateOrganizationPage } from "./pages/AdminCreateOrganizationPage";
 import { AdminOrganizationDetailPage } from "./pages/AdminOrganizationDetailPage";
 import { AssessmentDetailPage, AssessmentsPage, StartAssessmentPage } from "./pages/AssessmentsPage";
@@ -27,6 +28,7 @@ export function App() {
           <Route path="/admin/organizations" element={<AdminOrganizationsPage />} />
           <Route path="/admin/organizations/new" element={<AdminCreateOrganizationPage />} />
           <Route path="/admin/organizations/:organizationSlug" element={<AdminOrganizationDetailPage />} />
+          <Route path="/admin/administrators" element={<AdminAdministratorsPage />} />
         </Route>
         <Route element={<AuthenticatedShell area="organization" />}>
           <Route path="/" element={<DashboardPage />} />

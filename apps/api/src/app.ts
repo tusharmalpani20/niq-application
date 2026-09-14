@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { acceptInvitationSchema, activateScoringSchema, bootstrapAdminSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, idSchema, onboardOrganizationSchema, organizationSlugSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
+import { acceptInvitationSchema, activateScoringSchema, bootstrapAdminSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, createPlatformAdministratorInvitationSchema, idSchema, onboardOrganizationSchema, organizationSlugSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
@@ -101,12 +101,19 @@ export function createApp(dependencies: AppDependencies) {
   app.use("/v1/auth/sign-out", requireSession);
   app.use("/v1/organizations", requireSession);
   app.use("/v1/organizations/*", requireSession);
+  app.use("/v1/platform/*", requireSession);
   app.get("/v1/auth/me", (context) => context.json({ user: context.get("principal") }));
   app.post("/v1/auth/sign-out", async (context) => {
     const token = getCookie(context, cookieName); if (token) await dependencies.service!.signOut(token, requestContext(context));
     deleteCookie(context, cookieName, { path: "/", secure: dependencies.secureCookies ?? false }); return context.body(null, 204);
   });
   app.get("/v1/organizations", async (context) => context.json({ items: await dependencies.service!.listOrganizations(context.get("principal")) }));
+  app.get("/v1/platform/administrators", async (context) => context.json({ items: await dependencies.service!.listPlatformAdministrators(context.get("principal")) }));
+  app.post("/v1/platform/administrators/invitations", zValidator("json", createPlatformAdministratorInvitationSchema, validationFailure), async (context) => {
+    const result = await dependencies.service!.invitePlatformAdministrator(context.get("principal"), context.req.valid("json"), requestContext(context));
+    return context.json({ invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens ? { activationToken: result.token } : {}) }, 201);
+  });
+  app.patch("/v1/platform/administrators/:membershipId", zValidator("param", z.object({ membershipId: idSchema }), validationFailure), zValidator("json", updateUserStatusSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.setPlatformAdministratorActive(context.get("principal"), context.req.valid("param").membershipId, context.req.valid("json").active, requestContext(context)))));
   app.post("/v1/organizations/onboard", zValidator("json", onboardOrganizationSchema, validationFailure), async (context) => {
     const result = await dependencies.service!.onboardOrganization(context.get("principal"), context.req.valid("json"), requestContext(context));
     return context.json({ organization: result.organization, invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens ? { activationToken: result.token } : {}) }, 201);

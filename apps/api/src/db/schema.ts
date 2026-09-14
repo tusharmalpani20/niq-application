@@ -203,6 +203,7 @@ export const invitations = pgTable(
     organizationId: entityId("organization_id").notNull().references(() => organizations.id),
     email: text("email").notNull(),
     role: membershipRole("role").notNull().default("MEDICAL"),
+    platformRole: platformRole("platform_role").notNull().default("USER"),
     tokenHash: text("token_hash").notNull(),
     status: invitationStatus("status").notNull().default("PENDING"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),

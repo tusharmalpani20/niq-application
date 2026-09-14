@@ -19,6 +19,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     verifyMfa: async () => ({ token: "valid-session", expiresAt: new Date(Date.now() + 60_000), principal }),
     resendMfa: async () => ({ challengeToken: "y".repeat(43), expiresAt: new Date(Date.now() + 60_000), resendAvailableAt: new Date(Date.now() + 30_000), attemptsRemaining: 5, resendsRemaining: 2 }),
     signOut: async () => {}, acceptInvitation: async () => principal, bootstrap: async () => principal,
+    listPlatformAdministrators: async () => [], invitePlatformAdministrator: async () => ({ invitation: {}, token: "invite-token" }), setPlatformAdministratorActive: async () => ({}),
     createOrganization: async () => ({}), listOrganizations: async () => [], getOrganization: async () => ({}), getOrganizationBySlug: async () => ({}), getOrganizationLogo: async () => ({ data: new Uint8Array([1, 2, 3]), mimeType: "image/png", etag: "abc" }), updateOrganization: async () => ({}),
     onboardOrganization: async () => ({ organization: {}, invitation: {}, token: "invite-token" }),
     activateScoring: async () => ({ connection: {} }),
@@ -90,6 +91,65 @@ describe("local authentication routes", () => {
     const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService(), bootstrapToken: "b".repeat(32) });
     const response = await app.request("/v1/bootstrap", { method: "POST", headers: { "content-type": "application/json", "x-bootstrap-token": "wrong" }, body: JSON.stringify({ legalName: "NIQ Private Limited", displayName: "NIQ", slug: "niq", adminEmail: "admin@example.com", adminDisplayName: "NIQ Admin", adminPassword: "a very secure password", userLimit: null }) });
     expect(response.status).toBe(403);
+  });
+
+  test("lists and invites NIQ administrators through the platform boundary", async () => {
+    const niqAdmin = { ...principal, platformRole: "NIQ_ADMIN" as const };
+    let invitedEmail = "";
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173",
+      authMode: "local",
+      checkDatabase: async () => true,
+      exposeDevelopmentTokens: true,
+      service: fakeService({
+        authenticate: async () => niqAdmin,
+        listPlatformAdministrators: async () => [{ kind: "USER", email: niqAdmin.email }],
+        invitePlatformAdministrator: async (_actor, input) => {
+          invitedEmail = input.email;
+          return { invitation: { invitationId: "01J00000000000000000000009", email: input.email, expiresAt: new Date() }, token: "platform-invite-token" };
+        },
+      }),
+    });
+    const listResponse = await app.request("/v1/platform/administrators", { headers: { cookie: "niq_session=valid-session" } });
+    expect(listResponse.status).toBe(200);
+    expect((await listResponse.json()).items).toHaveLength(1);
+    const inviteResponse = await app.request("/v1/platform/administrators/invitations", {
+      method: "POST",
+      headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      body: JSON.stringify({ email: "second.admin@niq.test" }),
+    });
+    expect(inviteResponse.status).toBe(201);
+    expect(invitedEmail).toBe("second.admin@niq.test");
+    expect((await inviteResponse.json()).activationToken).toBe("platform-invite-token");
+  });
+
+  test("changes NIQ administrator access through the platform boundary", async () => {
+    const niqAdmin = { ...principal, platformRole: "NIQ_ADMIN" as const };
+    let observedMembership = "";
+    let observedActive = true;
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173",
+      authMode: "local",
+      checkDatabase: async () => true,
+      service: fakeService({
+        authenticate: async () => niqAdmin,
+        setPlatformAdministratorActive: async (_actor, membershipId, active) => {
+          observedMembership = membershipId;
+          observedActive = active;
+          return { kind: "USER", membershipId, userId: "01J00000000000000000000008", email: "second.admin@niq.test", displayName: "Second Admin", status: "DISABLED", active, createdAt: new Date() };
+        },
+      }),
+    });
+    const membershipId = "01J00000000000000000000009";
+    const response = await app.request(`/v1/platform/administrators/${membershipId}`, {
+      method: "PATCH",
+      headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      body: JSON.stringify({ active: false }),
+    });
+    expect(response.status).toBe(200);
+    expect(observedMembership).toBe(membershipId);
+    expect(observedActive).toBe(false);
+    expect((await response.json()).active).toBe(false);
   });
 
   test("does not expose invitation activation tokens outside development", async () => {
