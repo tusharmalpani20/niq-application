@@ -1,10 +1,10 @@
 export type AssessmentStatus = "Draft" | "Pending scoring" | "Scoring unavailable" | "Under review" | "Completed";
-export type PatientSummary = { id: string; reference: string; displayName: string; age: number; sex: string; facility: string; lastAssessment: string; status: AssessmentStatus };
+export type PatientSummary = { id: string; reference: string; displayName: string; age: number; gender: string; facility: string; lastAssessment: string; status: AssessmentStatus };
 export const patients: PatientSummary[] = [
-  { id: "01ARZ3NDEKTSV4RRFFQ69G5FA1", reference: "NIQ-1042", displayName: "Patient NIQ-1042", age: 54, sex: "Female", facility: "Chennai Central", lastAssessment: "12 Sep 2026", status: "Under review" },
-  { id: "01ARZ3NDEKTSV4RRFFQ69G5FA2", reference: "NIQ-1038", displayName: "Patient NIQ-1038", age: 61, sex: "Male", facility: "Hyderabad", lastAssessment: "11 Sep 2026", status: "Pending scoring" },
-  { id: "01ARZ3NDEKTSV4RRFFQ69G5FA3", reference: "NIQ-1031", displayName: "Patient NIQ-1031", age: 47, sex: "Female", facility: "Chennai Central", lastAssessment: "9 Sep 2026", status: "Completed" },
-  { id: "01ARZ3NDEKTSV4RRFFQ69G5FA4", reference: "NIQ-1029", displayName: "Patient NIQ-1029", age: 68, sex: "Male", facility: "Bengaluru", lastAssessment: "8 Sep 2026", status: "Scoring unavailable" },
+  { id: "01ARZ3NDEKTSV4RRFFQ69G5FA1", reference: "NIQ-1042", displayName: "Patient NIQ-1042", age: 54, gender: "Female", facility: "Chennai Central", lastAssessment: "12 Sep 2026", status: "Under review" },
+  { id: "01ARZ3NDEKTSV4RRFFQ69G5FA2", reference: "NIQ-1038", displayName: "Patient NIQ-1038", age: 61, gender: "Male", facility: "Hyderabad", lastAssessment: "11 Sep 2026", status: "Pending scoring" },
+  { id: "01ARZ3NDEKTSV4RRFFQ69G5FA3", reference: "NIQ-1031", displayName: "Patient NIQ-1031", age: 47, gender: "Female", facility: "Chennai Central", lastAssessment: "9 Sep 2026", status: "Completed" },
+  { id: "01ARZ3NDEKTSV4RRFFQ69G5FA4", reference: "NIQ-1029", displayName: "Patient NIQ-1029", age: 68, gender: "Male", facility: "Bengaluru", lastAssessment: "8 Sep 2026", status: "Scoring unavailable" },
 ];
 export const facilities = [
   { id: "facility-1", name: "Chennai Central", code: "CHE-C", timezone: "Asia/Kolkata", users: 34, assessments: 128 },
