@@ -252,6 +252,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .table-surface, .queue-surface { overflow: hidden; }
 .organization-table-card th { background: transparent; }
 .toolbar { display: flex; gap: .7rem; padding: .9rem; border-bottom: 1px solid #edf1f2; }.toolbar select { width: auto; min-width: 155px; }
+.users-toolbar { justify-content:flex-end; }.toolbar.users-toolbar input { height:2.25rem;font-size:.72rem; }
 .search-control { position: relative; display: flex; flex: 1; align-items: center; }.search-control svg { position: absolute; left: .8rem; color: var(--ink-muted); }.toolbar .search-control input { padding-left: 2.35rem; }
 .responsive-table { overflow-x: auto; }table { width: 100%; border-collapse: collapse; font-size: .75rem; }th { padding: .7rem 1rem; color: var(--ink-muted); background: #fafcfc; font-size: .65rem; letter-spacing: .05em; text-align: left; text-transform: uppercase; }td { padding: .85rem 1rem; border-top: 1px solid #edf1f2; vertical-align: middle; }td strong,.cell-subtitle { display: block; }.cell-subtitle,.person-cell span { margin-top: .1rem; color: var(--ink-muted); font-size: .67rem; }.person-cell { display: flex; align-items: center; gap: .55rem; }.person-cell > div:last-child { display: grid; }.row-link { display: grid; place-items: center; color: var(--primary); }.mobile-card-list { display: none; }
 
