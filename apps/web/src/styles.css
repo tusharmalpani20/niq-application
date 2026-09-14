@@ -85,7 +85,7 @@ button, input { font: inherit; }
 .form-container .eyebrow { color: var(--primary); }
 .form-container h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 2.7rem; font-weight: 500; letter-spacing: -0.035em; }
 .form-intro { margin: 0.8rem 0 2.5rem; color: var(--ink-muted); }
-.sign-in-form { margin-top: 2.5rem; }
+.sign-in-form { gap: 1.25rem; margin-top: 2.5rem; }
 form { display: flex; flex-direction: column; }
 .password-row { display: flex; align-items: baseline; justify-content: space-between; }
 .support-copy { margin: 1.6rem 0 0; color: var(--ink-muted); font-size: 0.85rem; text-align: center; }

@@ -53,7 +53,7 @@ export function SignInPage() {
             </FieldGroup>
             {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
             <Button className="h-12 w-full text-base" type="submit" isDisabled={isSubmitting}>
-              {isSubmitting ? "Signing in…" : "Sign in securely"}
+              {isSubmitting ? "Signing in…" : "Sign in"}
             </Button>
           </form>
 
