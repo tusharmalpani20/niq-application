@@ -18,6 +18,28 @@ The bootstrap account has `platformRole=NIQ_ADMIN`. After password and MFA verif
 
 The administrator may add a PNG, JPEG or WebP organization logo during onboarding. Logos are limited to 2 MB, their actual file signature is checked against the declared type, and the initial implementation stores the tenant-bound binary in PostgreSQL so the same deployment package works in NIQ-hosted, client-cloud and on-premises environments. The authenticated logo endpoint returns private, non-sniffable responses; logos are not embedded in organization list responses.
 
+## Facility access
+
+Invitation facility assignments become facility memberships when the invitation is accepted.
+An organization membership with no facility assignments represents “All facilities.”
+One or more assignments restrict patient lists, patient detail lookups (including references),
+patient registration, facility lists, and facility updates to those facilities. These checks
+apply to medical, support, and organization-admin users. Existing NIQ platform-admin access
+is unchanged. A facility-restricted administrator cannot issue an invitation granting broader
+facility access.
+
+Assignments are evaluated in each data query, so no sign-out is needed after an assignment
+change. Inactive facilities retain their assignments and do not grant wider access. A patient
+without a home facility is visible only to users with organization-wide access.
+
+Assessment APIs are not implemented yet; the assessment UI currently uses demonstration
+records. Future assessment list, detail, creation, scoring, and export endpoints must enforce
+the same facility boundary before returning or changing stored assessment data.
+
+The PostgreSQL access tests use temporary tables. Run
+`FACILITY_TEST_SOCKET=/path/to/isolated/socket bun test apps/api/src/services/facility-access.test.ts`
+against a disposable PostgreSQL instance on port 55439; the tests skip when this variable is absent.
+
 ## Authentication acceptance gate
 
 Before enabling `AUTH_MODE=local` or `AUTH_MODE=oidc`, implement and review:
