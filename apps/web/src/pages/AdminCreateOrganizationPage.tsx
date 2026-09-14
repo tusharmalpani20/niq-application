@@ -25,6 +25,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
   const [furthestStep, setFurthestStep] = useState<Step>(0);
   const [displayName, setDisplayName] = useState("");
   const [slug, setSlug] = useState("");
+  const [firstAdminEmail, setFirstAdminEmail] = useState("");
   const [logo, setLogo] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoMessage, setLogoMessage] = useState<string | null>(null);
@@ -67,11 +68,10 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     event.preventDefault();
     setBusy(true);
     setMessage(null);
-    const data = new FormData(event.currentTarget);
     try {
       const result = await onboardOrganization({
         legalName: displayName, displayName, slug,
-        firstAdminEmail: String(data.get("firstAdminEmail")),
+        firstAdminEmail,
         deploymentMode: "NIQ_HOSTED",
         primaryColor, secondaryColor,
         scoringEnabled: true, faceScanEnabled: true,
@@ -105,7 +105,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
 
     <TabsContent id={1} className="onboarding-panel" data-onboarding-step="1">
       <div className="wizard-heading"><h2>First administrator</h2></div>
-      <FieldGroup><Field><FieldLabel htmlFor="firstAdminEmail">Email address</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required placeholder="admin@example-health.test" autoComplete="email" /><FieldDescription>We’ll create an invitation for this organization’s first administrator.</FieldDescription></Field></FieldGroup>
+      <FieldGroup><Field><FieldLabel htmlFor="firstAdminEmail">Email address</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required value={firstAdminEmail} placeholder="admin@example-health.test" autoComplete="email" onChange={(event) => setFirstAdminEmail(event.target.value)} /><FieldDescription>We’ll create an invitation for this organization’s first administrator.</FieldDescription></Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={2} className="onboarding-panel" data-onboarding-step="2">
