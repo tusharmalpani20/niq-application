@@ -3,11 +3,8 @@ import { Link } from "react-router-dom";
 import type { OnboardOrganizationResponse } from "@niq/application-contracts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiRequestError, onboardOrganization } from "../lib/api";
@@ -15,20 +12,9 @@ import { PageHeader } from "../components/Page";
 import { Icon } from "../lib/icons";
 import { ORGANIZATION_LOGO_ACCEPT, organizationLogoError, organizationLogoPayload, organizationUrlName } from "../lib/organization-onboarding";
 
-type LimitName = "userLimit" | "scoringMonthlyLimit" | "faceScanMonthlyLimit";
 type Step = 0 | 1 | 2;
 
-const steps = ["Organization", "Deployment & limits", "Branding"] as const;
-const limitFields: Array<{ name: LimitName; label: string; help: string; unit: string }> = [
-  { name: "userLimit", label: "Users", help: "Active users and pending invitations", unit: "users" },
-  { name: "scoringMonthlyLimit", label: "Scores", help: "Completed requests each month", unit: "per month" },
-  { name: "faceScanMonthlyLimit", label: "Face scans", help: "Automated scans each month", unit: "per month" },
-];
-const deploymentOptions = [
-  { value: "NIQ_HOSTED", label: "NIQ hosted", help: "Runs in infrastructure managed by NIQ" },
-  { value: "CLIENT_CLOUD", label: "Client cloud", help: "Runs in the client’s cloud account" },
-  { value: "ON_PREM", label: "On-premises", help: "Runs inside the client’s network" },
-] as const;
+const steps = ["Organization", "First administrator", "Branding"] as const;
 
 type FormProps = { onCancel?: () => void; onCreated?: () => void; onDirtyChange?: (dirty: boolean) => void };
 
@@ -44,7 +30,6 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
   const [logoMessage, setLogoMessage] = useState<string | null>(null);
   const [primaryColor, setPrimaryColor] = useState("#175CD3");
   const [secondaryColor, setSecondaryColor] = useState("#0E9384");
-  const [unlimited, setUnlimited] = useState<Record<LimitName, boolean>>({ userLimit: true, scoringMonthlyLimit: true, faceScanMonthlyLimit: true });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [created, setCreated] = useState<OnboardOrganizationResponse | null>(null);
@@ -83,15 +68,14 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     setBusy(true);
     setMessage(null);
     const data = new FormData(event.currentTarget);
-    const limit = (name: LimitName) => unlimited[name] ? null : Number(data.get(name));
     try {
       const result = await onboardOrganization({
         legalName: displayName, displayName, slug,
         firstAdminEmail: String(data.get("firstAdminEmail")),
-        deploymentMode: String(data.get("deploymentMode")) as "NIQ_HOSTED" | "CLIENT_CLOUD" | "ON_PREM",
+        deploymentMode: "NIQ_HOSTED",
         primaryColor, secondaryColor,
-        scoringEnabled: data.get("scoringEnabled") === "on", faceScanEnabled: data.get("faceScanEnabled") === "on",
-        userLimit: limit("userLimit"), scoringMonthlyLimit: limit("scoringMonthlyLimit"), faceScanMonthlyLimit: limit("faceScanMonthlyLimit"),
+        scoringEnabled: true, faceScanEnabled: true,
+        userLimit: null, scoringMonthlyLimit: null, faceScanMonthlyLimit: null,
         logo: await organizationLogoPayload(logo),
       });
       setCreated(result);
@@ -104,7 +88,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
 
   if (created) {
     const invitationUrl = created.activationToken ? `${window.location.origin}/invite/${created.activationToken}` : null;
-    return <section className="onboarding-success"><div className="success-icon"><Icon name="check" /></div><div><h2>{created.organization.displayName} created</h2><p>The organization, usage limits and administrator invitation were saved together.</p></div>
+    return <section className="onboarding-success"><div className="success-icon"><Icon name="check" /></div><div><h2>{created.organization.displayName} created</h2><p>The organization and its first administrator invitation were created.</p></div>
       {invitationUrl ? <Field><FieldLabel>Local invitation link</FieldLabel><Textarea readOnly value={invitationUrl} /><FieldDescription>Visible only in development. Production delivery will use the configured notification provider.</FieldDescription></Field> : <Alert><AlertDescription>The delivery provider will send the activation link to {created.invitation.email}.</AlertDescription></Alert>}
       <div className="form-actions">{onCancel ? <Button variant="outline" type="button" onPress={onCancel}>Close</Button> : <Link className={buttonVariants({ variant: "outline" })} to="/admin/organizations">All organizations</Link>}<Link className={buttonVariants()} to={`/admin/organizations/${created.organization.id}`}>Manage organization</Link></div>
     </section>;
@@ -116,14 +100,12 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
 
     <TabsContent id={0} className="onboarding-panel" data-onboarding-step="0">
       <div className="wizard-heading"><h2>Organization details</h2></div>
-      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Display name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} /></Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated from the display name.</FieldDescription></Field><Field><FieldLabel htmlFor="firstAdminEmail">First administrator email</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required placeholder="admin@example-health.test" /></Field></FieldGroup>
+      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Display name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} /></Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated from the display name.</FieldDescription></Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={1} className="onboarding-panel" data-onboarding-step="1">
-      <div className="wizard-heading"><h2>Deployment and usage</h2><p>Choose where the application runs and set any account limits.</p></div>
-      <FieldSet className="wizard-fieldset"><FieldLegend>Deployment type</FieldLegend><RadioGroup name="deploymentMode" defaultValue="NIQ_HOSTED" className="deployment-choice-grid">{deploymentOptions.map((option) => <FieldLabel className="deployment-choice" key={option.value}><RadioGroupItem value={option.value} /><span><strong>{option.label}</strong><small>{option.help}</small></span></FieldLabel>)}</RadioGroup></FieldSet>
-      <div className="service-toggle-grid"><Field orientation="horizontal" className="switch-row"><FieldLabel className="grid flex-1 gap-1"><strong>Scoring</strong><small>Allow this organization to request scores</small></FieldLabel><Switch name="scoringEnabled" defaultSelected aria-label="Enable scoring" /></Field><Field orientation="horizontal" className="switch-row"><FieldLabel className="grid flex-1 gap-1"><strong>Face scan</strong><small>Allow automated face-scan requests</small></FieldLabel><Switch name="faceScanEnabled" defaultSelected aria-label="Enable face scan" /></Field></div>
-      <FieldSet className="wizard-fieldset"><FieldLegend>Usage limits</FieldLegend><div className="wizard-limit-list">{limitFields.map((field) => <div className="wizard-limit-row" key={field.name}><div><strong>{field.label}</strong><small>{field.help}</small></div>{!unlimited[field.name] && <div className="limit-value"><Input aria-label={`${field.label} limit`} name={field.name} type="number" inputMode="numeric" min="1" defaultValue="100" required /><em>{field.unit}</em></div>}<Checkbox isSelected={unlimited[field.name]} onChange={(selected) => setUnlimited((current) => ({ ...current, [field.name]: selected }))}>Unlimited</Checkbox></div>)}</div></FieldSet>
+      <div className="wizard-heading"><h2>First administrator</h2></div>
+      <FieldGroup><Field><FieldLabel htmlFor="firstAdminEmail">Email address</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required placeholder="admin@example-health.test" autoComplete="email" /><FieldDescription>We’ll create an invitation for this organization’s first administrator.</FieldDescription></Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={2} className="onboarding-panel" data-onboarding-step="2">
