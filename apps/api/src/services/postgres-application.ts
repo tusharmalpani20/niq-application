@@ -310,8 +310,16 @@ export class PostgresApplicationService implements ApplicationService {
 
     try {
       return await this.db.transaction(async (tx) => {
+        const existingOrganization = await tx.select({ id: organizations.id }).from(organizations)
+          .where(sql`lower(btrim(${organizations.displayName})) = lower(btrim(${input.displayName}))`).limit(1);
+        if (existingOrganization.length) throw new ServiceError("CONFLICT", "An organization with this name already exists.", { field: "name" });
+
+        await tx.update(invitations).set({ status: "EXPIRED", updatedAt: new Date() })
+          .where(and(eq(invitations.email, email), eq(invitations.status, "PENDING"), sql`${invitations.expiresAt} <= now()`));
         const existingUser = await tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-        if (existingUser.length) throw new ServiceError("CONFLICT", "An account already exists for the first administrator email.");
+        const existingInvitation = await tx.select({ id: invitations.id }).from(invitations)
+          .where(and(eq(invitations.email, email), eq(invitations.status, "PENDING"), gt(invitations.expiresAt, new Date()))).limit(1);
+        if (existingUser.length || existingInvitation.length) throw new ServiceError("CONFLICT", "This email is already associated with an account or pending invitation.", { field: "email" });
         const [organization] = await tx.insert(organizations).values({
           id: organizationId,
           legalName: input.legalName,
@@ -352,7 +360,7 @@ export class PostgresApplicationService implements ApplicationService {
       });
     } catch (error) {
       if (error instanceof ServiceError) throw error;
-      if (databaseCode(error) === "23505") throw new ServiceError("CONFLICT", "The organization slug or administrator email is already in use.");
+      if (databaseCode(error) === "23505") throw new ServiceError("CONFLICT", "The organization name or administrator email is already in use.");
       if (databaseCode(error) === "23514" && String(error).includes("user limit")) throw new ServiceError("USER_LIMIT_REACHED", "The organization user limit must allow its first administrator.");
       throw error;
     }

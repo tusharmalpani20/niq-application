@@ -37,7 +37,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
 
   useEffect(() => () => { if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current); }, []);
 
-  function markDirty() { onDirtyChange?.(true); }
+  function markDirty() { setMessage(null); onDirtyChange?.(true); }
 
   function moveNext() {
     const panel = formRef.current?.querySelector<HTMLElement>(`[data-onboarding-step="${step}"]`);
@@ -82,6 +82,11 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
       onDirtyChange?.(false);
       onCreated?.();
     } catch (error) {
+      if (error instanceof ApiRequestError) {
+        const field = error.response.error.details?.field;
+        if (field === "name") setStep(0);
+        if (field === "email") setStep(1);
+      }
       setMessage(error instanceof ApiRequestError || error instanceof Error ? error.message : "The organization could not be created. Please try again.");
     } finally { setBusy(false); }
   }
@@ -102,11 +107,11 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     })}</TabsList>
 
     <TabsContent id={0} className="onboarding-panel" data-onboarding-step="0">
-      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Display name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} /></Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated from the display name.</FieldDescription></Field></FieldGroup>
+      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} /></Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated from the name.</FieldDescription></Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={1} className="onboarding-panel" data-onboarding-step="1">
-      <FieldGroup><Field><FieldLabel htmlFor="firstAdminEmail">Email address</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required value={firstAdminEmail} placeholder="admin@example-health.test" autoComplete="email" onChange={(event) => setFirstAdminEmail(event.target.value)} /><FieldDescription>We’ll create an invitation for this organization’s first administrator.</FieldDescription></Field></FieldGroup>
+      <FieldGroup><Field><FieldLabel htmlFor="firstAdminEmail">Email</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required value={firstAdminEmail} placeholder="admin@example-health.test" autoComplete="email" onChange={(event) => setFirstAdminEmail(event.target.value)} /><FieldDescription>We’ll create an invitation for this organization’s first administrator.</FieldDescription></Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={2} className="onboarding-panel" data-onboarding-step="2">
