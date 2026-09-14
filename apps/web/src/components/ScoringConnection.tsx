@@ -1,6 +1,6 @@
 import type { ApiError, OrganizationDetails, ScoringOrganizationInfo } from "@niq/application-contracts";
-import { AlertCircle, Eye, EyeOff, RefreshCw, Unplug } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { Activity, AlertCircle, Eye, EyeOff, Gauge, RefreshCw, ScanFace, Server, Unplug } from "lucide-react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import { activateScoring, ApiRequestError, disconnectScoring, getScoringOrganiza
 
 type ScoringConnection = OrganizationDetails["scoringConnection"];
 const modeLabels = { NIQ_HOSTED: "NIQ hosted", CLIENT_CLOUD: "Client cloud", ON_PREMISES: "On-premises" } as const;
-const limitLabel = (used: number, limit: number | null) => `${used.toLocaleString()} / ${limit == null ? "Unlimited" : limit.toLocaleString()}`;
 type ErrorNotice = { title: string; description: string };
 const scoringErrorNotices: Partial<Record<ApiError["error"]["code"], ErrorNotice>> = {
   SCORING_NOT_CONFIGURED: { title: "NIQ Scoring isn’t configured", description: "Complete the NIQ Scoring server configuration before connecting an organization." },
@@ -19,6 +18,22 @@ const scoringErrorNotices: Partial<Record<ApiError["error"]["code"], ErrorNotice
 };
 function scoringErrorNotice(error: unknown, fallback: ErrorNotice): ErrorNotice {
   return error instanceof ApiRequestError ? scoringErrorNotices[error.response.error.code] ?? fallback : fallback;
+}
+
+function usageMonth(period: string) {
+  return new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${period}-01T00:00:00Z`));
+}
+
+function UsageMetric({ label, used, limit, icon }: { label: string; used: number; limit: number | null; icon: ReactNode }) {
+  const remaining = limit == null ? 0 : Math.max(limit - used, 0);
+  const percentage = limit == null || limit === 0 ? 0 : Math.min((used / limit) * 100, 100);
+  return <div className="scoring-usage-metric">
+    <div className="scoring-usage-title"><span className="scoring-section-icon">{icon}</span><span>{label}</span></div>
+    <p><strong>{used.toLocaleString()}</strong><span>used this month</span></p>
+    {limit == null
+      ? <small>No monthly limit</small>
+      : <><div className="scoring-usage-track" role="progressbar" aria-label={`${label} monthly usage`} aria-valuemin={0} aria-valuemax={limit} aria-valuenow={Math.min(used, limit)}><span style={{ width: `${percentage}%` }} /></div><small>{remaining.toLocaleString()} of {limit.toLocaleString()} remaining</small></>}
+  </div>;
 }
 
 export function ScoringConnectionPanel({ organizationId, connection, onActivated, onDisconnected, className = "surface admin-detail-card admin-detail-wide", showHeading = true }: {
@@ -97,13 +112,13 @@ export function ScoringConnectionPanel({ organizationId, connection, onActivated
   return <section className={className}>
     {showHeading && <div className="section-heading"><div><h2>Scoring connection</h2></div></div>}
     {connection && !reconnectRequired ? <>
-      <div className="connection-summary"><span className="health-ok" /><div><strong>Connected</strong><small>Activated {connection.activatedAt.toLocaleString()}</small></div><Button className="ml-auto" variant="outline" size="sm" onPress={() => setConfirmingDisconnect(true)}><Unplug aria-hidden="true" />Disconnect</Button></div>
+      <div className="connection-summary"><span className="connection-summary-icon"><Activity aria-hidden="true" /></span><div><strong>NIQ Scoring connected</strong><small>Connected since {connection.activatedAt.toLocaleString()}</small></div><Button className="ml-auto" variant="outline" size="sm" onPress={() => setConfirmingDisconnect(true)}><Unplug aria-hidden="true" />Disconnect</Button></div>
       {informationState === "loading" && <p className="muted scoring-information-message" role="status">Loading current NIQ Scoring information…</p>}
       {informationState === "error" && errorNotice && <Alert variant="destructive" className="scoring-information-message"><AlertCircle aria-hidden="true" /><AlertTitle>{errorNotice.title}</AlertTitle><AlertDescription>{errorNotice.description}</AlertDescription><Button variant="outline" size="sm" aria-label="Retry NIQ Scoring information" onPress={loadInformation}><RefreshCw aria-hidden="true" />Retry</Button></Alert>}
       {informationState === "ready" && information && <div className="scoring-information-grid">
-        <section className="branding-card"><h3>Deployment</h3><dl className="stacked-definition"><div><dt>Mode</dt><dd>{modeLabels[information.deployment.mode]}</dd></div><div><dt>Environment</dt><dd>{information.deployment.environment}</dd></div><div><dt>Status</dt><dd>{information.deployment.status === "ACTIVE" ? "Active" : "Disabled"}</dd></div></dl></section>
-        <section className="branding-card"><h3>Services</h3><dl className="stacked-definition"><div><dt>Scoring</dt><dd>{information.services.scoring.enabled ? "Enabled" : "Disabled"}</dd></div><div><dt>Face scan</dt><dd>{information.services.faceScan.enabled ? "Enabled" : "Disabled"}</dd></div></dl></section>
-        <section className="branding-card scoring-usage-card"><h3>Current usage</h3><p className="muted">UTC month {information.usage.period}</p><dl className="definition-grid"><div><dt>Scores</dt><dd>{limitLabel(information.usage.scores, information.limits.scoresPerMonth)}</dd></div><div><dt>Face scans</dt><dd>{limitLabel(information.usage.faceScans, information.limits.faceScansPerMonth)}</dd></div></dl>{information.updatedAt && <small className="scoring-updated-at">Updated {new Date(information.updatedAt).toLocaleString()}</small>}</section>
+        <section className="scoring-information-card"><h3><span className="scoring-section-icon"><Server aria-hidden="true" /></span>Deployment</h3><dl className="scoring-detail-list"><div><dt>Mode</dt><dd>{modeLabels[information.deployment.mode]}</dd></div><div><dt>Environment</dt><dd className="capitalize">{information.deployment.environment}</dd></div><div><dt>Status</dt><dd><span className="scoring-state" data-enabled={information.deployment.status === "ACTIVE"}>{information.deployment.status === "ACTIVE" ? "Active" : "Disabled"}</span></dd></div></dl></section>
+        <section className="scoring-information-card"><h3><span className="scoring-section-icon"><Gauge aria-hidden="true" /></span>Services</h3><dl className="scoring-detail-list"><div><dt>Scoring</dt><dd><span className="scoring-state" data-enabled={information.services.scoring.enabled}>{information.services.scoring.enabled ? "Enabled" : "Disabled"}</span></dd></div><div><dt>Face scan</dt><dd><span className="scoring-state" data-enabled={information.services.faceScan.enabled}>{information.services.faceScan.enabled ? "Enabled" : "Disabled"}</span></dd></div></dl></section>
+        <section className="scoring-information-card scoring-usage-card"><div className="scoring-usage-heading"><div><h3>Usage this month</h3><p>{usageMonth(information.usage.period)} · UTC</p></div>{information.updatedAt && <small>Updated {new Date(information.updatedAt).toLocaleString()}</small>}</div><div className="scoring-usage-grid"><UsageMetric label="Scores" used={information.usage.scores} limit={information.limits.scoresPerMonth} icon={<Gauge aria-hidden="true" />} /><UsageMetric label="Face scans" used={information.usage.faceScans} limit={information.limits.faceScansPerMonth} icon={<ScanFace aria-hidden="true" />} /></div></section>
       </div>}
     </> : <>
       {reconnectRequired && <Alert><AlertTitle>Reconnect required</AlertTitle><AlertDescription>The saved service credential is no longer valid. Enter a new one-time activation token from NIQ Scoring.</AlertDescription></Alert>}
