@@ -6,6 +6,7 @@ import type {
   CreateInvitation,
   CreateOrganization,
   CreatePlatformAdministratorInvitation,
+  ErrorCode,
   OnboardOrganization,
   ResendMfaRequest,
   SignInRequest,
@@ -39,17 +40,7 @@ export type SignInResult =
 
 export class ServiceError extends Error {
   constructor(
-    readonly code:
-      | "ACCOUNT_LOCKED"
-      | "CONFLICT"
-      | "FORBIDDEN"
-      | "INVALID_CREDENTIALS"
-      | "INVALID_OR_EXPIRED_TOKEN"
-      | "NOT_FOUND"
-      | "RATE_LIMITED"
-      | "SCORING_UNAVAILABLE"
-      | "USER_LIMIT_REACHED"
-      | "VALIDATION_ERROR",
+    readonly code: ErrorCode,
     message: string,
     readonly details?: Record<string, unknown>,
   ) {

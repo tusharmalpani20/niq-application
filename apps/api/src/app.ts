@@ -146,7 +146,7 @@ export function createApp(dependencies: AppDependencies) {
   app.onError((error, context) => {
     if (error instanceof ServiceError) {
       const status = error.code === "FORBIDDEN" ? 403 : error.code === "NOT_FOUND" ? 404 : error.code === "VALIDATION_ERROR" ? 400 : error.code === "USER_LIMIT_REACHED" ? 409 : error.code === "ACCOUNT_LOCKED" ? 423 : error.code === "RATE_LIMITED" ? 429 : error.code === "INVALID_CREDENTIALS" || error.code === "INVALID_OR_EXPIRED_TOKEN" ? 401 : 409;
-      return context.json(errorBody(error.code, error.message, context.get("requestId"), error.details), error.code === "SCORING_UNAVAILABLE" ? 503 : status);
+      return context.json(errorBody(error.code, error.message, context.get("requestId"), error.details), error.code === "SCORING_UNAVAILABLE" || error.code === "SCORING_NOT_CONFIGURED" ? 503 : status);
     }
     console.error(JSON.stringify({ level: "error", requestId: context.get("requestId"), message: error.message }));
     return context.json(errorBody("INTERNAL_ERROR", "An unexpected error occurred.", context.get("requestId")), 500);

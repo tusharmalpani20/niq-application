@@ -219,6 +219,26 @@ describe("local authentication routes", () => {
     expect(body.credential).toBeUndefined();
   });
 
+  test("returns the system error type when NIQ Scoring is not configured", async () => {
+    const niqAdmin = { ...principal, platformRole: "NIQ_ADMIN" as const };
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({
+        authenticate: async () => niqAdmin,
+        activateScoring: async () => { throw new ServiceError("SCORING_NOT_CONFIGURED", "NIQ Scoring is not configured for this application installation."); },
+      }),
+    });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/scoring/activate`, {
+      method: "POST",
+      headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      body: JSON.stringify({ activationToken: `niq_act_${"x".repeat(48)}` }),
+    });
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body.error.code).toBe("SCORING_NOT_CONFIGURED");
+    expect(body.error.requestId).toBeString();
+  });
+
   test("returns live NIQ Scoring organization information without secret material", async () => {
     const app = createApp({
       allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,

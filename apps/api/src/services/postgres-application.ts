@@ -505,7 +505,7 @@ export class PostgresApplicationService implements ApplicationService {
   async getScoringOrganizationInfo(actor: Principal, organizationId: string, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true);
     if (!this.config.SCORING_API_URL || !this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY) {
-      throw new ServiceError("SCORING_UNAVAILABLE", "NIQ Scoring is not configured for this application installation.");
+      throw new ServiceError("SCORING_NOT_CONFIGURED", "NIQ Scoring is not configured for this application installation.");
     }
     const [connection] = await this.db.select({
       encryptedCredential: scoringConnections.encryptedCredential,
@@ -539,7 +539,7 @@ export class PostgresApplicationService implements ApplicationService {
   async activateScoring(actor: Principal, organizationId: string, input: ActivateScoring, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true);
     if (!this.config.SCORING_API_URL || !this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY) {
-      throw new ServiceError("SCORING_UNAVAILABLE", "Scoring activation is not configured for this application installation.");
+      throw new ServiceError("SCORING_NOT_CONFIGURED", "NIQ Scoring is not configured for this application installation.");
     }
     const [organization] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
     if (!organization) throw new ServiceError("NOT_FOUND", "Organization not found.");

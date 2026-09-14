@@ -16,6 +16,7 @@ export const errorCodeSchema = z.enum([
   "MFA_REQUIRED",
   "RATE_LIMITED",
   "NOT_FOUND",
+  "SCORING_NOT_CONFIGURED",
   "SCORING_UNAVAILABLE",
   "USER_LIMIT_REACHED",
   "VALIDATION_ERROR",
@@ -310,6 +311,7 @@ export const healthResponseSchema = z.object({
 });
 
 export type ApiError = z.infer<typeof apiErrorSchema>;
+export type ErrorCode = z.infer<typeof errorCodeSchema>;
 export type CreateAssessment = z.infer<typeof createAssessmentSchema>;
 export type CreateFacility = z.infer<typeof createFacilitySchema>;
 export type CreateOrganization = z.infer<typeof createOrganizationSchema>;

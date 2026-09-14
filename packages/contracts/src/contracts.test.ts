@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, createPlatformAdministratorInvitationSchema, measurementProvenanceSchema, onboardOrganizationSchema, signInRequestSchema, signInResponseSchema, updateOrganizationSchema } from "./index";
+import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, createPlatformAdministratorInvitationSchema, errorCodeSchema, measurementProvenanceSchema, onboardOrganizationSchema, signInRequestSchema, signInResponseSchema, updateOrganizationSchema } from "./index";
 
 const organizationId = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patientId = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
@@ -51,6 +51,10 @@ describe("application contracts", () => {
     expect(createPlatformAdministratorInvitationSchema.safeParse({ email: "admin@niq.test" }).success).toBe(true);
     expect(createPlatformAdministratorInvitationSchema.safeParse({ email: "not-an-email" }).success).toBe(false);
     expect(createPlatformAdministratorInvitationSchema.safeParse({ email: "admin@niq.test", platformRole: "NIQ_ADMIN" }).success).toBe(false);
+  });
+
+  test("defines an explicit error code for missing NIQ Scoring configuration", () => {
+    expect(errorCodeSchema.parse("SCORING_NOT_CONFIGURED")).toBe("SCORING_NOT_CONFIGURED");
   });
 
   test("requires at least eight password characters when signing in", () => {
