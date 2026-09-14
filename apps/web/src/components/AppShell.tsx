@@ -25,7 +25,9 @@ const navigation = [
 
 function OrganizationMark({ url }: { url: string | null }) {
   const [failed, setFailed] = useState(false);
-  return url && !failed ? <img src={url} alt="" className="size-10 rounded-xl bg-white object-contain p-1" onError={() => setFailed(true)} /> : <>N</>;
+  return url && !failed
+    ? <img src={url} alt="" className="size-10 object-contain" onError={() => setFailed(true)} />
+    : <span className="grid size-10 place-items-center rounded-xl rounded-bl-sm bg-primary font-bold text-primary-foreground">N</span>;
 }
 
 function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onSignOut: () => void }) {
@@ -43,8 +45,8 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
     <SidebarHeader className="p-3 group-data-[collapsible=icon]:p-1">
       <div className="flex h-11 items-center gap-2 group-data-[collapsible=icon]:justify-center">
         {collapsed
-          ? <Button variant="ghost" size="icon" className="size-10 rounded-xl rounded-bl-sm bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground" aria-label="Expand navigation" onPress={() => setOpen(true)}><OrganizationMark key={branding.logoUrl} url={branding.logoUrl} /></Button>
-          : <><Link className="grid size-10 shrink-0 place-items-center rounded-xl rounded-bl-sm bg-primary font-bold text-primary-foreground" to="/" aria-label={`${branding.displayName} home`}><OrganizationMark key={branding.logoUrl} url={branding.logoUrl} /></Link><div className="grid min-w-0 flex-1"><strong className="truncate text-sm">{branding.displayName}</strong><span className="truncate text-xs text-muted-foreground">Nutrition intelligence</span></div><SidebarTrigger aria-label="Collapse navigation" /></>}
+          ? <Button variant="ghost" size="icon" className="size-10 bg-transparent p-0 hover:bg-transparent" aria-label="Expand navigation" onPress={() => setOpen(true)}><OrganizationMark key={branding.logoUrl} url={branding.logoUrl} /></Button>
+          : <><Link className="grid size-10 shrink-0 place-items-center" to="/" aria-label={`${branding.displayName} home`}><OrganizationMark key={branding.logoUrl} url={branding.logoUrl} /></Link><div className="grid min-w-0 flex-1"><strong className="truncate text-sm">{branding.displayName}</strong><span className="truncate text-xs text-muted-foreground">Nutrition intelligence</span></div><SidebarTrigger aria-label="Collapse navigation" /></>}
       </div>
     </SidebarHeader>
     <SidebarContent><SidebarGroup><SidebarGroupContent><SidebarMenu className="gap-1">
