@@ -32,9 +32,9 @@ Assignments are evaluated in each data query, so no sign-out is needed after an 
 change. Inactive facilities retain their assignments and do not grant wider access. A patient
 without a home facility is visible only to users with organization-wide access.
 
-Assessment APIs are not implemented yet; the assessment UI currently uses demonstration
-records. Future assessment list, detail, creation, scoring, and export endpoints must enforce
-the same facility boundary before returning or changing stored assessment data.
+The assessment list API enforces this same facility boundary. Assessment detail, creation,
+scoring, and export remain demonstration-only or unimplemented and must enforce the boundary
+before returning or changing stored assessment data.
 
 The PostgreSQL access tests use temporary tables. Run
 `FACILITY_TEST_SOCKET=/path/to/isolated/socket bun test apps/api/src/services/facility-access.test.ts`

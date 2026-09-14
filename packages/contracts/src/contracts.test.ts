@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, createPlatformAdministratorInvitationSchema, DEFAULT_ORGANIZATION_BRANDING, errorCodeSchema, measurementProvenanceSchema, onboardOrganizationSchema, patientReferenceSchema, signInRequestSchema, signInResponseSchema, updateOrganizationSchema } from "./index";
+import { acceptInvitationSchema, assessmentListResponseSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, createPlatformAdministratorInvitationSchema, DEFAULT_ORGANIZATION_BRANDING, errorCodeSchema, measurementProvenanceSchema, onboardOrganizationSchema, patientReferenceSchema, signInRequestSchema, signInResponseSchema, updateOrganizationSchema } from "./index";
 
 const organizationId = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patientId = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
@@ -63,6 +63,20 @@ describe("application contracts", () => {
       questionnaireVersion: "1.0.0",
     };
     expect(createAssessmentSchema.safeParse(assessment).success).toBe(false);
+  });
+
+  test("validates assessment list summaries", () => {
+    const summary = {
+      id: "01ARZ3NDEKTSV4RRFFQ69G5FAY",
+      organizationId,
+      patient: { id: patientId, reference: "PAT-1", displayName: "Test Patient" },
+      facility: null,
+      status: "DRAFT",
+      createdAt: "2026-09-15T10:00:00.000Z",
+      completedAt: null,
+    };
+    expect(assessmentListResponseSchema.parse({ items: [summary] }).items[0]?.createdAt).toBeInstanceOf(Date);
+    expect(assessmentListResponseSchema.safeParse({ items: [{ ...summary, status: "UNKNOWN" }] }).success).toBe(false);
   });
 
   test("accepts only canonical uppercase ULIDs for entity references", () => {

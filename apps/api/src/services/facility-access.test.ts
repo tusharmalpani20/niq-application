@@ -17,6 +17,7 @@ describe.skipIf(!process.env.FACILITY_TEST_SOCKET)("facility access against Post
     await client`create temporary table facility_memberships (organization_id text, organization_membership_id text, facility_id text)`;
     await client`create temporary table facilities (id text, organization_id text, name text, code text, timezone text default 'UTC', status text default 'ACTIVE', created_at timestamptz default now(), updated_at timestamptz default now())`;
     await client`create temporary table patients (id text, organization_id text, home_facility_id text, reference_prefix text, serial_number int, date_of_birth date, gender text, encrypted_profile bytea, is_archived boolean default false, created_at timestamptz default now(), updated_at timestamptz default now())`;
+    await client`create temporary table assessments (id text, organization_id text, patient_id text, facility_id text, status text default 'DRAFT', completed_at timestamptz, created_at timestamptz default now(), updated_at timestamptz default now())`;
     await client`insert into facilities (id, organization_id, name, code) values ('a','org','A','A'), ('b','org','B','B'), ('c','other','C','C')`;
     await client`insert into facility_memberships values ('org','restricted','a'), ('org','multi','a'), ('org','multi','b'), ('org','inactive','b')`;
     const encrypted = encryptPatientData(JSON.stringify({ name: "Fixture" }), patientDataKey(undefined, config.SESSION_SECRET));
@@ -25,6 +26,11 @@ describe.skipIf(!process.env.FACILITY_TEST_SOCKET)("facility access against Post
       ('patient-b','org','b','PAT',2,'2000-01-01','UNKNOWN',${encrypted}),
       ('patient-c','other','c','PAT',1,'2000-01-01','UNKNOWN',${encrypted}),
       ('unassigned','org',null,'PAT',3,'2000-01-01','UNKNOWN',${encrypted})`;
+    await client`insert into assessments (id, organization_id, patient_id, facility_id) values
+      ('assessment-a','org','patient-a','a'),
+      ('assessment-b','org','patient-b','b'),
+      ('assessment-c','other','patient-c','c'),
+      ('assessment-unassigned','org','unassigned',null)`;
   });
   afterAll(async () => { await client.end(); });
   test("filters patient and facility lists to the assigned facility", async () => {
@@ -45,6 +51,11 @@ describe.skipIf(!process.env.FACILITY_TEST_SOCKET)("facility access against Post
   test("supports multiple assignments and explicit all-facility membership", async () => {
     expect((await service.listPatients({ ...actor, membershipId: "multi" }, "org")).map((row) => row.id).sort()).toEqual(["patient-a", "patient-b"]);
     expect((await service.listPatients({ ...actor, membershipId: "all" }, "org")).map((row) => row.id).sort()).toEqual(["patient-a", "patient-b", "unassigned"]);
+  });
+  test("filters assessment lists to assigned facilities", async () => {
+    expect((await service.listAssessments(actor, "org")).map((row) => row.id)).toEqual(["assessment-a"]);
+    expect((await service.listAssessments({ ...actor, membershipId: "multi" }, "org")).map((row) => row.id).sort()).toEqual(["assessment-a", "assessment-b"]);
+    expect((await service.listAssessments({ ...actor, membershipId: "all" }, "org")).map((row) => row.id).sort()).toEqual(["assessment-a", "assessment-b", "assessment-unassigned"]);
   });
   test("does not exempt assigned organization admins or widen access for inactive facilities", async () => {
     expect((await service.listPatients({ ...actor, role: "ORGANIZATION_ADMIN" }, "org")).map((row) => row.id)).toEqual(["patient-a"]);
