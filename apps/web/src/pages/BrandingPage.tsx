@@ -9,6 +9,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "../components/Page";
 import { ApiRequestError, getOrganization, updateOrganization } from "../lib/api";
+import { brandingFromOrganization } from "../lib/branding";
 import { useBranding } from "../lib/branding-context";
 
 export function BrandingPage() {
@@ -29,7 +30,7 @@ export function BrandingPage() {
     getOrganization(user.organizationId)
       .then(({ organization }) => {
         if (!active) return;
-        const serverBranding = { displayName: organization.displayName, primaryColor: organization.primaryColor, secondaryColor: organization.secondaryColor };
+        const serverBranding = brandingFromOrganization(organization);
         setDisplayName(serverBranding.displayName);
         setPrimaryColor(serverBranding.primaryColor);
         setSecondaryColor(serverBranding.secondaryColor);

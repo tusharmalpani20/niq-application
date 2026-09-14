@@ -1,8 +1,20 @@
+import type { Organization } from "@niq/application-contracts";
+
 export type TenantBranding = {
   displayName?: string;
   primaryColor: string;
   secondaryColor: string;
 };
+
+export function brandingFromOrganization(
+  organization: Pick<Organization, "displayName" | "primaryColor" | "secondaryColor">,
+): Required<TenantBranding> {
+  return normalizeBranding({
+    displayName: organization.displayName,
+    primaryColor: organization.primaryColor,
+    secondaryColor: organization.secondaryColor,
+  });
+}
 
 const safeHexColor = /^#[0-9a-fA-F]{6}$/;
 

@@ -59,8 +59,9 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
 }
 
 export function AppShell({ user }: { user: AuthenticatedUser }) {
+  const { resetBranding } = useBranding();
   const navigate = useNavigate();
-  async function handleSignOut() { await signOut().catch(() => undefined); navigate("/sign-in", { replace: true }); }
+  async function handleSignOut() { await signOut().catch(() => undefined); resetBranding(); navigate("/sign-in", { replace: true }); }
 
   return <SidebarProvider>
     <OrganizationSidebar user={user} onSignOut={handleSignOut} />
