@@ -34,7 +34,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
 
 describe("local authentication routes", () => {
   test("passes logo replacement through authenticated organization updates and rejects SVG", async () => {
-    const logo = { mimeType: "image/png", contentBase64: "iVBORw0KGgo=" };
+    const logo = { mimeType: "image/png" as const, contentBase64: "iVBORw0KGgo=" };
     let updates = 0;
     const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService({
       updateOrganization: async (actor, organizationId, input) => {
