@@ -30,8 +30,19 @@ describe("configuration", () => {
       NODE_ENV: "production", DATABASE_URL: "postgres://localhost/niq",
       SESSION_SECRET: "a-production-secret-with-32-chars", BOOTSTRAP_TOKEN: "b".repeat(32),
       AUTH_MODE: "local", SCORING_API_URL: "https://scoring.example.com",
+      PATIENT_DATA_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
     };
     expect(() => loadApplicationConfig(production)).toThrow("A credential encryption key is required");
     expect(loadApplicationConfig({ ...production, SCORING_CREDENTIAL_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString("base64") }).SCORING_CREDENTIAL_KEY_VERSION).toBe("local-v1");
+  });
+
+  test("requires a dedicated patient data encryption key in production", () => {
+    const production = {
+      NODE_ENV: "production", DATABASE_URL: "postgres://localhost/niq",
+      SESSION_SECRET: "a-production-secret-with-32-chars", BOOTSTRAP_TOKEN: "b".repeat(32),
+      AUTH_MODE: "local",
+    };
+    expect(() => loadApplicationConfig(production)).toThrow("A patient data encryption key is required in production");
+    expect(loadApplicationConfig({ ...production, PATIENT_DATA_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64") }).PATIENT_DATA_KEY_VERSION).toBe("local-v1");
   });
 });

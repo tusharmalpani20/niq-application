@@ -1,5 +1,5 @@
 import type { ApplicationConfig } from "@niq/application-config";
-import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
+import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
 import { and, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -17,11 +17,13 @@ import {
   organizationBrandAssets,
   organizationMemberships,
   organizations,
+  patients,
   scoringConnections,
   users,
 } from "../db/schema";
 import { decryptCredential, encryptCredential } from "../security/credential-encryption";
 import { decodeOrganizationLogo, InvalidOrganizationLogoError } from "../security/organization-logo";
+import { decryptPatientData, encryptPatientData, patientDataKey } from "../security/patient-data";
 import { hashPassword, keyedHash, randomOtp, randomToken, secureEqual, verifyPassword } from "../security/tokens";
 import type { ApplicationService, MfaChallengeResult, OtpDelivery, Principal, RequestContext, SessionResult, SignInResult } from "./application";
 import { ServiceError } from "./application";
@@ -34,6 +36,24 @@ const scoringActivationResponseSchema = z.object({
   clientId: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
   credential: z.string().min(32),
 });
+const patientProfileSchema = z.object({
+  name: z.string(),
+  phone: z.string().optional(),
+  email: z.string().optional(),
+});
+type PatientRecord = {
+  id: string;
+  organizationId: string;
+  referencePrefix: string;
+  serialNumber: number;
+  dateOfBirth: string | null;
+  gender: "FEMALE" | "MALE" | "OTHER" | "UNKNOWN";
+  encryptedProfile: Uint8Array;
+  facilityId: string | null;
+  facilityName: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 function databaseCode(error: unknown): string | undefined {
   return typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined;
@@ -56,6 +76,24 @@ export class PostgresApplicationService implements ApplicationService {
     if (actor.organizationId !== organizationId || (admin && actor.role !== "ORGANIZATION_ADMIN")) {
       throw new ServiceError("FORBIDDEN", "You do not have access to this organization.");
     }
+  }
+
+  private presentPatient(row: PatientRecord) {
+    const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
+    const profile = patientProfileSchema.parse(JSON.parse(decryptPatientData(row.encryptedProfile, key)));
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      reference: `${row.referencePrefix}-${row.serialNumber}`,
+      homeFacility: row.facilityId && row.facilityName ? { id: row.facilityId, name: row.facilityName } : null,
+      dateOfBirth: row.dateOfBirth,
+      gender: row.gender,
+      displayName: profile.name,
+      ...(profile.phone ? { phone: profile.phone } : {}),
+      ...(profile.email ? { email: profile.email } : {}),
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
   }
 
   private async createSession(executor: Executor, principal: Principal): Promise<SessionResult> {
@@ -604,6 +642,77 @@ export class PostgresApplicationService implements ApplicationService {
     const [result] = await this.db.update(facilities).set(values).where(and(eq(facilities.organizationId, organizationId), eq(facilities.id, facilityId))).returning();
     if (!result) throw new ServiceError("NOT_FOUND", "Facility not found.");
     await this.audit(this.db, organizationId, context, "FACILITY_UPDATED", "facility", facilityId, actor, { fields: Object.keys(input) }); return result;
+  }
+  async createPatient(actor: Principal, organizationId: string, input: RegisterPatient, context: RequestContext) {
+    this.ensureOrganizationAccess(actor, organizationId);
+    const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
+    const normalizedReference = input.medicalRecordNumber.trim().toUpperCase();
+    const profile = JSON.stringify({
+      name: input.name,
+      ...(input.phone ? { phone: input.phone } : {}),
+      ...(input.email ? { email: input.email } : {}),
+    });
+    try {
+      return await this.db.transaction(async (tx) => {
+        const [facility] = await tx.select({ id: facilities.id, name: facilities.name }).from(facilities)
+          .where(and(eq(facilities.organizationId, organizationId), eq(facilities.id, input.homeFacilityId), eq(facilities.status, "ACTIVE"))).limit(1);
+        if (!facility) throw new ServiceError("NOT_FOUND", "Facility not found or inactive.");
+        const [created] = await tx.insert(patients).values({
+          id: createEntityId(),
+          organizationId,
+          homeFacilityId: facility.id,
+          encryptedExternalReference: encryptPatientData(normalizedReference, key),
+          externalReferenceLookupHash: await keyedHash(normalizedReference, key.toString("base64")),
+          dateOfBirth: input.dateOfBirth,
+          gender: input.gender,
+          encryptedProfile: encryptPatientData(profile, key),
+          encryptionKeyVersion: this.config.PATIENT_DATA_KEY_VERSION,
+        }).returning();
+        if (!created) throw new ServiceError("INTERNAL_ERROR", "The patient could not be created.");
+        await this.audit(tx, organizationId, context, "PATIENT_CREATED", "patient", created.id, actor, { facilityId: facility.id });
+        return this.presentPatient({ ...created, facilityId: facility.id, facilityName: facility.name });
+      });
+    } catch (error) {
+      if (databaseCode(error) === "23505") throw new ServiceError("CONFLICT", "A patient with this medical record number already exists in this organization.");
+      throw error;
+    }
+  }
+  async listPatients(actor: Principal, organizationId: string) {
+    this.ensureOrganizationAccess(actor, organizationId);
+    const rows = await this.db.select({
+      id: patients.id,
+      organizationId: patients.organizationId,
+      referencePrefix: patients.referencePrefix,
+      serialNumber: patients.serialNumber,
+      dateOfBirth: patients.dateOfBirth,
+      gender: patients.gender,
+      encryptedProfile: patients.encryptedProfile,
+      facilityId: facilities.id,
+      facilityName: facilities.name,
+      createdAt: patients.createdAt,
+      updatedAt: patients.updatedAt,
+    }).from(patients).leftJoin(facilities, and(eq(facilities.organizationId, patients.organizationId), eq(facilities.id, patients.homeFacilityId)))
+      .where(and(eq(patients.organizationId, organizationId), eq(patients.isArchived, false))).orderBy(desc(patients.createdAt));
+    return rows.map((row) => this.presentPatient(row));
+  }
+  async getPatient(actor: Principal, organizationId: string, patientId: string) {
+    this.ensureOrganizationAccess(actor, organizationId);
+    const [row] = await this.db.select({
+      id: patients.id,
+      organizationId: patients.organizationId,
+      referencePrefix: patients.referencePrefix,
+      serialNumber: patients.serialNumber,
+      dateOfBirth: patients.dateOfBirth,
+      gender: patients.gender,
+      encryptedProfile: patients.encryptedProfile,
+      facilityId: facilities.id,
+      facilityName: facilities.name,
+      createdAt: patients.createdAt,
+      updatedAt: patients.updatedAt,
+    }).from(patients).leftJoin(facilities, and(eq(facilities.organizationId, patients.organizationId), eq(facilities.id, patients.homeFacilityId)))
+      .where(and(eq(patients.organizationId, organizationId), eq(patients.id, patientId), eq(patients.isArchived, false))).limit(1);
+    if (!row) throw new ServiceError("NOT_FOUND", "Patient not found.");
+    return this.presentPatient(row);
   }
   async inviteUser(actor: Principal, organizationId: string, input: CreateInvitation, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true); const token = randomToken(); const invitationId = createEntityId();

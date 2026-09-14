@@ -190,6 +190,19 @@ export const updateFacilitySchema = z.object({
   status: facilityStatusSchema.optional(),
 }).refine((value) => Object.keys(value).length > 0, "At least one field is required");
 
+export const facilitySchema = z.object({
+  id: idSchema,
+  organizationId: idSchema,
+  name: z.string(),
+  code: z.string(),
+  timezone: z.string(),
+  status: facilityStatusSchema,
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+
+export const facilityListResponseSchema = z.object({ items: z.array(facilitySchema) });
+
 export const createInvitationSchema = z.object({
   email: z.email().max(320),
   role: membershipRoleSchema.default("MEDICAL"),
@@ -280,6 +293,32 @@ export const bootstrapAdminSchema = createOrganizationSchema.extend({
 
 export const patientGenderSchema = z.enum(["FEMALE", "MALE", "OTHER", "UNKNOWN"]);
 
+export const registerPatientSchema = z.object({
+  medicalRecordNumber: z.string().trim().min(1).max(120),
+  homeFacilityId: idSchema,
+  dateOfBirth: z.iso.date(),
+  gender: patientGenderSchema,
+  name: z.string().trim().min(1).max(200),
+  phone: z.string().trim().max(40).optional(),
+  email: z.email().max(320).optional(),
+}).strict();
+
+export const patientSchema = z.object({
+  id: idSchema,
+  organizationId: idSchema,
+  reference: z.string(),
+  homeFacility: facilitySchema.pick({ id: true, name: true }).nullable(),
+  dateOfBirth: z.iso.date().nullable(),
+  gender: patientGenderSchema,
+  displayName: z.string(),
+  phone: z.string().optional(),
+  email: z.email().optional(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+
+export const patientListResponseSchema = z.object({ items: z.array(patientSchema) });
+
 export const createPatientSchema = z.object({
   organizationId: idSchema,
   homeFacilityId: idSchema.nullable().optional(),
@@ -326,7 +365,10 @@ export type CreateAssessment = z.infer<typeof createAssessmentSchema>;
 export type CreateFacility = z.infer<typeof createFacilitySchema>;
 export type CreateOrganization = z.infer<typeof createOrganizationSchema>;
 export type CreatePatient = z.infer<typeof createPatientSchema>;
+export type Facility = z.infer<typeof facilitySchema>;
 export type MeasurementProvenance = z.infer<typeof measurementProvenanceSchema>;
+export type Patient = z.infer<typeof patientSchema>;
+export type RegisterPatient = z.infer<typeof registerPatientSchema>;
 export type SignInRequest = z.infer<typeof signInRequestSchema>;
 export type AuthenticatedUser = z.infer<typeof authenticatedUserSchema>;
 export type AcceptInvitation = z.infer<typeof acceptInvitationSchema>;

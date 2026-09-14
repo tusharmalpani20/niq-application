@@ -30,6 +30,8 @@ export const applicationConfigSchema = z.object({
   SCORING_TIMEOUT_MS: z.coerce.number().int().positive().max(60_000).default(10_000),
   SCORING_CREDENTIAL_ENCRYPTION_KEY: optionalEncryptionKey,
   SCORING_CREDENTIAL_KEY_VERSION: z.string().trim().min(1).max(64).default("local-v1"),
+  PATIENT_DATA_ENCRYPTION_KEY: optionalEncryptionKey,
+  PATIENT_DATA_KEY_VERSION: z.string().trim().min(1).max(64).default("local-v1"),
   AUTH_MODE: z.enum(["disabled", "local", "oidc"]).default("disabled"),
   SESSION_SECRET: z.string().min(32),
   SESSION_COOKIE_NAME: z.string().regex(/^[A-Za-z0-9_-]+$/).default("niq_session"),
@@ -53,6 +55,9 @@ export const applicationConfigSchema = z.object({
   }
   if (value.NODE_ENV === "production" && value.SCORING_API_URL && !value.SCORING_CREDENTIAL_ENCRYPTION_KEY) {
     context.addIssue({ code: "custom", path: ["SCORING_CREDENTIAL_ENCRYPTION_KEY"], message: "A credential encryption key is required when scoring is configured" });
+  }
+  if (value.NODE_ENV === "production" && !value.PATIENT_DATA_ENCRYPTION_KEY) {
+    context.addIssue({ code: "custom", path: ["PATIENT_DATA_ENCRYPTION_KEY"], message: "A patient data encryption key is required in production" });
   }
 });
 

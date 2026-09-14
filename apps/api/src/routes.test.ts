@@ -26,6 +26,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     disconnectScoring: async () => {},
     getScoringOrganizationInfo: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], updateFacility: async () => ({}),
+    createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
     ...overrides,
   };
@@ -77,6 +78,43 @@ describe("local authentication routes", () => {
     const response = await app.request(`/v1/organizations/${principal.organizationId}/facilities`, { headers: { cookie: "niq_session=valid-session" } });
     expect(response.status).toBe(200);
     expect(observedOrganization).toBe(principal.organizationId);
+  });
+
+  test("creates and lists patients through the tenant boundary", async () => {
+    let observedOrganization = "";
+    let observedMedicalRecordNumber = "";
+    const patient = { id: "01J00000000000000000000009", reference: "PAT-1" };
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173",
+      authMode: "local",
+      checkDatabase: async () => true,
+      service: fakeService({
+        createPatient: async (_actor, organizationId, input) => {
+          observedOrganization = organizationId;
+          observedMedicalRecordNumber = input.medicalRecordNumber;
+          return patient;
+        },
+        listPatients: async () => [patient],
+      }),
+    });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/patients`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: "niq_session=valid-session" },
+      body: JSON.stringify({
+        medicalRecordNumber: "MRN-1001",
+        homeFacilityId: "01J00000000000000000000004",
+        dateOfBirth: "1980-01-02",
+        gender: "FEMALE",
+        name: "Test Patient",
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect(observedOrganization).toBe(principal.organizationId);
+    expect(observedMedicalRecordNumber).toBe("MRN-1001");
+
+    const listResponse = await app.request(`/v1/organizations/${principal.organizationId}/patients`, { headers: { cookie: "niq_session=valid-session" } });
+    expect(listResponse.status).toBe(200);
+    expect((await listResponse.json()).items).toEqual([patient]);
   });
 
   test("resolves an organization detail by its URL name", async () => {
