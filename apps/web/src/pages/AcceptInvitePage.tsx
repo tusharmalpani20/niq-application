@@ -28,7 +28,7 @@ export function AcceptInvitePage() {
       <p className="auth-intro">Complete your secure, invitation-only account setup.</p>
       <form onSubmit={submit}><FieldGroup>
         <Field><FieldLabel htmlFor="name">Full name</FieldLabel><Input className="h-11" id="name" name="name" autoComplete="name" required /></Field>
-        <Field><FieldLabel htmlFor="new-password">Create password</FieldLabel><Input className="h-11" id="new-password" name="password" type="password" autoComplete="new-password" minLength={12} required /><FieldDescription>Use at least 12 characters. Avoid patient details and reused passwords.</FieldDescription></Field>
+        <Field><FieldLabel htmlFor="new-password">Create password</FieldLabel><Input className="h-11" id="new-password" name="password" type="password" autoComplete="new-password" minLength={8} required /><FieldDescription>Use at least 8 characters. Avoid patient details and reused passwords.</FieldDescription></Field>
         <Field orientation="horizontal"><Checkbox id="policy" isRequired /><FieldLabel htmlFor="policy" className="font-normal">I agree to follow my organization’s privacy and acceptable-use policies.</FieldLabel></Field>
         {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
         <Button className="h-11 w-full" type="submit" isDisabled={busy || token.length < 32}>{busy ? "Creating account…" : "Accept invitation"}</Button>

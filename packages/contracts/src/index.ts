@@ -32,7 +32,7 @@ export const apiErrorSchema = z.object({
 
 export const signInRequestSchema = z.object({
   email: z.email().max(320),
-  password: z.string().min(1).max(256),
+  password: z.string().min(8).max(256),
 });
 
 export const verifyMfaRequestSchema = z.object({
@@ -80,7 +80,7 @@ export const invitationAcceptanceResponseSchema = authenticationResponseSchema.e
 export const acceptInvitationSchema = z.object({
   token: z.string().min(32).max(512),
   displayName: z.string().trim().min(2).max(120),
-  password: z.string().min(12).max(256),
+  password: z.string().min(8).max(256),
 });
 
 export const membershipRoleSchema = z.enum(["ORGANIZATION_ADMIN", "MEDICAL", "SUPPORT"]);
@@ -202,7 +202,7 @@ export const updateUserStatusSchema = z.object({
 export const bootstrapAdminSchema = createOrganizationSchema.extend({
   adminEmail: z.email().max(320),
   adminDisplayName: z.string().trim().min(2).max(120),
-  adminPassword: z.string().min(12).max(256),
+  adminPassword: z.string().min(8).max(256),
   userLimit: z.number().int().min(1).nullable().default(null),
 });
 

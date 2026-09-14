@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, measurementProvenanceSchema, onboardOrganizationSchema, signInResponseSchema } from "./index";
+import { acceptInvitationSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, measurementProvenanceSchema, onboardOrganizationSchema, signInRequestSchema, signInResponseSchema } from "./index";
 
 const organizationId = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patientId = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
@@ -43,8 +43,13 @@ describe("application contracts", () => {
   });
 
   test("requires strong invitation activation passwords", () => {
-    expect(acceptInvitationSchema.safeParse({ token: "t".repeat(32), displayName: "Test User", password: "short" }).success).toBe(false);
-    expect(acceptInvitationSchema.safeParse({ token: "t".repeat(32), displayName: "Test User", password: "a-long-local-password" }).success).toBe(true);
+    expect(acceptInvitationSchema.safeParse({ token: "t".repeat(32), displayName: "Test User", password: "short7!" }).success).toBe(false);
+    expect(acceptInvitationSchema.safeParse({ token: "t".repeat(32), displayName: "Test User", password: "eight8!!" }).success).toBe(true);
+  });
+
+  test("requires at least eight password characters when signing in", () => {
+    expect(signInRequestSchema.safeParse({ email: "user@example.com", password: "short7!" }).success).toBe(false);
+    expect(signInRequestSchema.safeParse({ email: "user@example.com", password: "eight8!!" }).success).toBe(true);
   });
 
   test("requires server-issued MFA expiry and retry limits", () => {
