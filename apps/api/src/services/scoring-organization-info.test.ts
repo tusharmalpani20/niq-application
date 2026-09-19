@@ -45,7 +45,7 @@ describe("NIQ Scoring organization information client", () => {
   });
 
   test("accepts authoritative rule assignments without resolving them locally", async () => {
-    const ruleVersion = { mode: "DEFAULT", version: "TEST-5" };
+    const ruleVersion = { mode: "DEFAULT", version: "TEST-5" } as const;
     expect((await request(async () => Response.json({ ...snapshot, ruleVersion }))).ruleVersion).toEqual(ruleVersion);
     expect((await request(async () => Response.json(snapshot))).ruleVersion).toBeUndefined();
     await expect(request(async () => Response.json({ ...snapshot, ruleVersion: { mode: "LATEST", version: "TEST-5" } }))).rejects.toBeInstanceOf(ScoringOrganizationInfoRequestError);
