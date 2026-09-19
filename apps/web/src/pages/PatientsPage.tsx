@@ -226,7 +226,7 @@ export function PatientDetailPage() {
         <div className="organization-title-row"><h1>{patient.displayName}</h1></div>
         <p>{patient.reference} · {age} · {genderLabel(patient.gender)} · {patient.homeFacility?.name ?? "No facility"}</p>
       </div>
-      {!(patientTab === "assessments" && historyState === "ready" && history.length === 0) && <RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18}/>New assessment</RouterButtonLink>}
+      {patientTab === "assessments" && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}
     </header>
     <Tabs selectedKey={patientTab} onSelectionChange={(key) => setPatientTab(String(key))} className="organization-detail-tabs gap-5">
       <TabsList variant="line" aria-label="Patient record" className="w-full justify-start gap-5 border-b p-0">
