@@ -200,6 +200,7 @@ export function PatientDetailPage() {
   const [failed, setFailed] = useState(false);
   const [reload, setReload] = useState(0);
   const [history, setHistory] = useState<AssessmentSummary[]>([]);
+  const [patientTab, setPatientTab] = useState("details");
   const [historyState, setHistoryState] = useState<"loading" | "ready" | "error">("loading");
   useEffect(() => {
     let active = true;
@@ -224,9 +225,9 @@ export function PatientDetailPage() {
         <div className="organization-title-row"><h1>{patient.displayName}</h1></div>
         <p>{patient.reference} · {age} · {genderLabel(patient.gender)} · {patient.homeFacility?.name ?? "No facility"}</p>
       </div>
-      <RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18}/>New assessment</RouterButtonLink>
+      {!(patientTab === "assessments" && historyState === "ready" && history.length === 0) && <RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18}/>New assessment</RouterButtonLink>}
     </header>
-    <Tabs defaultSelectedKey="details" className="organization-detail-tabs gap-5">
+    <Tabs selectedKey={patientTab} onSelectionChange={(key) => setPatientTab(String(key))} className="organization-detail-tabs gap-5">
       <TabsList variant="line" aria-label="Patient record" className="w-full justify-start gap-5 border-b p-0">
         <TabsTrigger id="details" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Details</TabsTrigger>
         <TabsTrigger id="assessments" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Assessments {historyState === "ready" && <span className="patient-tab-count">{history.length}</span>}</TabsTrigger>
@@ -243,7 +244,7 @@ export function PatientDetailPage() {
             { id: "date", header: "Started", cell: ({ row }) => <DateDisplay value={row.original.createdAt} /> },
             { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "No facility" },
             { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
-          ]} /> : <p className="text-muted-foreground">No assessments yet.</p>}
+          ]} /> : <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center"><h2 className="font-semibold">Start this patient’s first assessment</h2><p className="text-sm text-muted-foreground">Their assessment history will appear here.</p><RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18} />New assessment</RouterButtonLink></div>}
         </Card>
       </TabsContent>
     </Tabs>
