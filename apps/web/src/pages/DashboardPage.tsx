@@ -4,9 +4,10 @@ import { Link, useOutletContext } from "react-router-dom";
 import { Building2, Users, UserRound, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CapacityCard, OverviewUsage } from "../components/OverviewUsage";
 import { getOrganization, listFacilities, listOrganizationUsers, listPatients } from "../lib/api";
 
-type Overview = { patients: Patient[]; facilityCount: number; enabledUsers: number | null; pendingInvitations: number };
+type Overview = { patients: Patient[]; facilityCount: number; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null };
 
 export function DashboardPage() {
   const user = useOutletContext<AuthenticatedUser>();
@@ -26,6 +27,8 @@ export function DashboardPage() {
       if (!active) return;
       setData({
         patients,
+        seats: members?.filter((item) => item.active).length ?? 0,
+        userLimit: organization?.entitlement?.userLimit ?? null,
         facilityCount: facilities.filter((item) => item.status === "ACTIVE").length,
         enabledUsers: members ? members.filter((item) => item.active && item.status === "ACTIVE").length : null,
         pendingInvitations: organization?.invitations.filter((item) => item.status === "PENDING" && item.expiresAt.getTime() > Date.now()).length ?? 0,
@@ -39,7 +42,7 @@ export function DashboardPage() {
   const monthly = data?.patients.filter((item) => item.createdAt >= monthStart && item.createdAt <= now).length;
   const metrics = [
     { label: "Patients", value: data?.patients.length, detail: "In your accessible facilities", to: "/patients", icon: UserRound },
-    { label: "Registered this month", value: monthly, detail: now.toLocaleDateString(undefined, { month: "long", year: "numeric" }), to: "/patients", icon: CalendarDays },
+    { label: "Registered this month", value: monthly, detail: now.toLocaleDateString(undefined, { month: "long", year: "numeric" }), to: "/patients?registered=this-month", icon: CalendarDays },
     { label: "Active facilities", value: data?.facilityCount, detail: "Available to your account", to: "/facilities", icon: Building2 },
     ...(isAdmin ? [{ label: "Enabled users", value: data?.enabledUsers, detail: data ? data.pendingInvitations + " pending invitations" : "Organization-wide", to: "/users", icon: Users }] : []),
   ];
@@ -53,6 +56,10 @@ export function DashboardPage() {
           <span className="text-xs text-muted-foreground">{detail}</span>
         </Link>)}
       </section>
+    </>}
+    {isAdmin && <>
+      {data && <section aria-label="User capacity" className="mt-7"><CapacityCard title="User capacity" used={data.seats + data.pendingInvitations} limit={data.userLimit} detail={`${data.seats} active memberships · ${data.pendingInvitations} pending invitations`} to="/users" /></section>}
+      <OverviewUsage organizationId={user.organizationId} />
     </>}
   </>;
 }
