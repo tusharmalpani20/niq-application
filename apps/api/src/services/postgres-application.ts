@@ -850,8 +850,9 @@ export class PostgresApplicationService implements ApplicationService {
             tx.select({ id: invitations.id }).from(invitations).where(and(eq(invitations.email, invite.email), ne(invitations.id, invitationId), eq(invitations.status, "PENDING"), gt(invitations.expiresAt, new Date()))).limit(1),
           ]);
           if (accounts.length || pending.length) throw new ServiceError("CONFLICT", "This email already has an account or another invitation.");
-          // Clear expired reservations before the capacity trigger checks the renewed seat.
-          await tx.update(invitations).set({ status: "EXPIRED", updatedAt: new Date() }).where(and(eq(invitations.organizationId, organizationId), eq(invitations.status, "PENDING"), sql`${invitations.expiresAt} <= now()`));
+          // Release only this email's stale unique reservation. Touching every expired
+          // row here can deadlock with another invitation being renewed concurrently.
+          await tx.update(invitations).set({ status: "EXPIRED", updatedAt: new Date() }).where(and(eq(invitations.organizationId, organizationId), eq(invitations.email, invite.email), ne(invitations.id, invitationId), eq(invitations.status, "PENDING"), sql`${invitations.expiresAt} <= now()`));
         }
         const [updated] = await tx.update(invitations).set(token
           ? { status: "PENDING", tokenHash: await keyedHash(token, this.config.SESSION_SECRET), expiresAt: new Date(Date.now() + this.config.INVITATION_TTL_HOURS * 3_600_000), updatedAt: new Date() }
@@ -878,9 +879,9 @@ export class PostgresApplicationService implements ApplicationService {
     }
     try {
       const invitation = await this.db.transaction(async (tx) => {
-        // Expired invitations no longer reserve paid seats. This also keeps the
-        // database trigger's transactional capacity calculation accurate.
-        await tx.update(invitations).set({ status: "EXPIRED", updatedAt: new Date() }).where(and(eq(invitations.organizationId, organizationId), eq(invitations.status, "PENDING"), sql`${invitations.expiresAt} <= now()`));
+        // Clear this email's stale unique reservation. The capacity trigger excludes
+        // expired links without requiring writes to unrelated invitations.
+        await tx.update(invitations).set({ status: "EXPIRED", updatedAt: new Date() }).where(and(eq(invitations.organizationId, organizationId), eq(invitations.email, normalizeEmail(input.email)), eq(invitations.status, "PENDING"), sql`${invitations.expiresAt} <= now()`));
         if (input.facilityIds.length) {
           const valid = await tx.select({ id: facilities.id }).from(facilities).where(and(eq(facilities.organizationId, organizationId), inArray(facilities.id, input.facilityIds)));
           if (valid.length !== input.facilityIds.length) throw new ServiceError("NOT_FOUND", "One or more facilities were not found.");

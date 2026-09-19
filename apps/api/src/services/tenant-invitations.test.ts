@@ -13,6 +13,7 @@ const context = { requestId: "test" };
 function fixture({ status = "PENDING", missing = false, conflict = false, assigned = [] as string[], targets = [] as string[] } = {}) {
   const writes: Record<string, any>[] = [];
   const audits: Record<string, any>[] = [];
+  const writePredicates: { sql: string; params: unknown[] }[] = [];
   const predicates: { sql: string; params: unknown[] }[] = [];
   let transactions = 0;
   let selects = 0;
@@ -32,12 +33,12 @@ function fixture({ status = "PENDING", missing = false, conflict = false, assign
     },
     update: () => ({ set: (data: Record<string, any>) => {
       writes.push(data);
-      return { where: () => ({ returning: async () => [{ id: invite.id, email: invite.email, expiresAt: data.expiresAt }] }) };
+      return { where: (predicate: any) => { writePredicates.push(new PgDialect().sqlToQuery(predicate)); return { returning: async () => [{ id: invite.id, email: invite.email, expiresAt: data.expiresAt }] }; } };
     } }),
     insert: () => ({ values: async (data: Record<string, any>) => { audits.push(data); } }),
   };
   const db = { transaction: async (run: any) => { transactions++; return run(tx); } } as unknown as Database;
-  return { service: new PostgresApplicationService(db, config, { deliver: async () => {} }), writes, audits, predicates, get transactions() { return transactions; } };
+  return { service: new PostgresApplicationService(db, config, { deliver: async () => {} }), writes, audits, predicates, writePredicates, get transactions() { return transactions; } };
 }
 
 describe("tenant invitation lifecycle", () => {
@@ -75,6 +76,7 @@ describe("tenant invitation lifecycle", () => {
     const result = await f.service.manageUserInvitation(actor, "tenant", "invite", "regenerate", context);
     const renewed = f.writes.at(-1)!;
     expect(renewed.status).toBe("PENDING");
+    expect(f.writePredicates[0]?.params).toEqual(["tenant", "colleague@example.com", "invite", "PENDING"]);
     expect(renewed.tokenHash).toBe(await keyedHash(result.token!, config.SESSION_SECRET));
     expect(renewed.tokenHash).not.toBe("old-hash");
     expect(renewed.expiresAt.getTime()).toBeGreaterThanOrEqual(before + 72 * 3_600_000);
