@@ -1,8 +1,9 @@
 import type { AssessmentSummary, AuthenticatedUser, Facility } from "@niq/application-contracts";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useOutletContext, useParams } from "react-router-dom";
+import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { Search } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -28,6 +29,7 @@ const assessmentDate = (date: Date) => new Intl.DateTimeFormat("en-GB", { day: "
 
 export function AssessmentsPage() {
   const user = useOutletContext<AuthenticatedUser>();
+  const navigate = useNavigate();
   const [records, setRecords] = useState<AssessmentSummary[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [reload, setReload] = useState(0);
@@ -59,18 +61,18 @@ export function AssessmentsPage() {
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
   ];
   const hasFilters = query.trim() || facility !== "all" || status !== "all";
-  const emptyContent = <div className="table-empty-content">{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : <RouterButtonLink className="patient-empty-action" variant="outline" size="sm" to="/assessments/new"><Icon name="plus" size={16}/>New assessment</RouterButtonLink>}</div>;
+  const emptyContent = <div className="table-empty-content">{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : <><strong>Create your first assessment</strong><span>Your assessments will appear here.</span><RouterButtonLink to="/assessments/new"><Icon name="plus" size={18} />New assessment</RouterButtonLink></>}</div>;
   return <>
     <h1 className="patient-page-title">Assessments</h1>
     <div className="patient-list-header">
       <div className="patient-list-heading"><span className="patient-list-label">Assessments</span><span>{records.length}</span></div>
-      <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search assessments" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search assessments…" /></InputGroup>{(records.length > 0 || !!hasFilters) && <RouterButtonLink className="size-10 shrink-0" size="icon-lg" to="/assessments/new" aria-label="New assessment"><Icon name="plus" size={20}/></RouterButtonLink>}</div>
+      <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search assessments" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search assessments…" /></InputGroup><TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="New assessment" onPress={() => navigate("/assessments/new")}><Icon name="plus" size={20}/></Button><Tooltip>New assessment</Tooltip></TooltipTrigger></div>
     </div>
     <div className="patient-filter-bar assessment-filter-bar">
       <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { setFacility(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
       <Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem>{Object.entries(assessmentStatusLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>
     </div>
-    <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card" key={record.id}><div><strong>{record.patient.reference}</strong><span>{record.patient.displayName}</span></div><StatusBadge status={assessmentStatusLabels[record.status]}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></article>) : emptyContent}</div><div className="desktop-table p-5">{visible.length ? <DataTable columns={columns} data={visible} label="Assessments" /> : emptyContent}</div></section>
+    <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card" key={record.id}><div><strong>{record.patient.reference}</strong><span>{record.patient.displayName}</span></div><StatusBadge status={assessmentStatusLabels[record.status]}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
   </>;
 }
