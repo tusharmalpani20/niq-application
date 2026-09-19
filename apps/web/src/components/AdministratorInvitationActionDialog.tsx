@@ -25,7 +25,7 @@ export function AdministratorInvitationActionDialog({ target, onClose, onUpdated
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const revoking = target.action === "revoke";
-  const title = done ? (revoking ? "Invitation cancelled" : "New invitation link created") : (revoking ? "Cancel this invitation?" : "Generate a new invitation link?");
+  const title = done ? (revoking ? "Invitation revoked" : "New link created") : (revoking ? "Revoke invitation?" : "Create a new link?");
 
   async function confirm() {
     if (submitting.current) return;
@@ -63,10 +63,10 @@ export function AdministratorInvitationActionDialog({ target, onClose, onUpdated
   return <Dialog ariaLabel={title} isOpen onOpenChange={(open) => { if (!open && !busy) onClose(); }} isDismissable={!busy} showCloseButton={!busy} className="sm:max-w-md">
     <DialogHeader><DialogTitle className="flex items-center gap-2 pr-6">{done && <CheckCircle2 className="size-5 shrink-0 text-success" aria-hidden="true" />}{title}</DialogTitle></DialogHeader>
     <p className="break-words text-muted-foreground">{done
-      ? revoking ? `The invitation for ${target.invitation.email} has been cancelled. Its link no longer works.` : link ? `Share this new link with ${target.invitation.email}. The old link no longer works.` : "The old link no longer works. The invitation expiry has been renewed."
-      : revoking ? `${target.invitation.email} will no longer be able to use this invitation. You can invite them again later.` : `Create a new link for ${target.invitation.email} and renew its expiry. The old link will stop working.`}</p>
+      ? revoking ? `The invitation for ${target.invitation.email} is no longer valid.` : link ? `Share this new link with ${target.invitation.email}. The old link no longer works.` : "The new link is ready. The old link no longer works."
+      : revoking ? `Are you sure you want to revoke the invitation for ${target.invitation.email}? Their link will stop working.` : `Create a new invitation link for ${target.invitation.email}? The old link will stop working.`}</p>
     {link && <Field><FieldLabel htmlFor="replacementInvitationLink">New invitation link</FieldLabel><Input id="replacementInvitationLink" readOnly value={link} onFocus={(event) => event.currentTarget.select()} /></Field>}
     {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
-    <div className="flex justify-end gap-2">{done ? <>{link && <Button variant="outline" onPress={copyLink}><Copy aria-hidden="true" />{copied ? "Copied" : "Copy link"}</Button>}<Button onPress={onClose}>Done</Button></> : <><Button variant="outline" isDisabled={busy} onPress={onClose}>Go back</Button><Button variant={revoking ? "destructive" : "default"} isDisabled={busy} onPress={confirm}>{busy ? "Updating…" : revoking ? "Cancel invitation" : "Generate new link"}</Button></>}</div>
+    <div className="flex justify-end gap-2">{done ? <>{link && <Button variant="outline" onPress={copyLink}><Copy aria-hidden="true" />{copied ? "Copied" : "Copy link"}</Button>}<Button onPress={onClose}>Done</Button></> : <><Button variant="outline" isDisabled={busy} onPress={onClose}>Go back</Button><Button variant={revoking ? "destructive" : "default"} isDisabled={busy} onPress={confirm}>{busy ? "Updating…" : revoking ? "Revoke invitation" : "Create new link"}</Button></>}</div>
   </Dialog>;
 }

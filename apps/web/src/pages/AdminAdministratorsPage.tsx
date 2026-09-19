@@ -80,8 +80,8 @@ export function AdminAdministratorsPage() {
   ];
   function invitationActions(invitation: AdministratorInvitation) {
     return <div className="flex flex-wrap gap-2">
-      <TooltipTrigger><Button variant="outline" size="icon" aria-label={`Generate new link for ${invitation.email}`} onPress={() => setInvitationTarget({ invitation, action: "regenerate" })}><RefreshCw aria-hidden="true" /></Button><Tooltip>Generate new link</Tooltip></TooltipTrigger>
-      <TooltipTrigger><Button variant="destructive-outline" size="icon" aria-label={`Cancel invitation for ${invitation.email}`} onPress={() => setInvitationTarget({ invitation, action: "revoke" })}><CircleX aria-hidden="true" /></Button><Tooltip>Cancel invitation</Tooltip></TooltipTrigger>
+      <TooltipTrigger><Button variant="outline" size="icon" aria-label={`Create new link for ${invitation.email}`} onPress={() => setInvitationTarget({ invitation, action: "regenerate" })}><RefreshCw aria-hidden="true" /></Button><Tooltip>Create new link</Tooltip></TooltipTrigger>
+      <TooltipTrigger><Button variant="destructive-outline" size="icon" aria-label={`Revoke invitation for ${invitation.email}`} onPress={() => setInvitationTarget({ invitation, action: "revoke" })}><CircleX aria-hidden="true" /></Button><Tooltip>Revoke invitation</Tooltip></TooltipTrigger>
     </div>;
   }
   const invitationColumns: Array<DataTableColumn<AdministratorInvitation>> = [
