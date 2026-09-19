@@ -103,7 +103,7 @@ export function AdminOrganizationsPage() {
 
   function organizationActions(organization: Organization) {
     return <div className="flex items-center justify-start gap-2">
-      {organization.status !== "CLOSED" && <TooltipTrigger><Button variant="outline" size="icon" aria-label={organization.status === "ACTIVE" ? `Disable ${organization.displayName}` : `Enable ${organization.displayName}`} onPress={() => setStatusTarget(organization)}>{organization.status === "ACTIVE" ? <PowerOff className="size-4" /> : <Power className="size-4" />}</Button><Tooltip>{organization.status === "ACTIVE" ? "Disable organization" : "Enable organization"}</Tooltip></TooltipTrigger>}
+      {organization.status !== "CLOSED" && <TooltipTrigger><Button variant={organization.status === "ACTIVE" ? "destructive-outline" : "outline"} size="icon" aria-label={organization.status === "ACTIVE" ? `Disable ${organization.displayName}` : `Enable ${organization.displayName}`} onPress={() => setStatusTarget(organization)}>{organization.status === "ACTIVE" ? <PowerOff className="size-4" /> : <Power className="size-4" />}</Button><Tooltip>{organization.status === "ACTIVE" ? "Disable organization" : "Enable organization"}</Tooltip></TooltipTrigger>}
     </div>;
   }
 
