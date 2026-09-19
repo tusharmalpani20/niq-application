@@ -245,7 +245,7 @@ export function PatientDetailPage() {
             { id: "date", header: "Started", cell: ({ row }) => <DateDisplay value={row.original.createdAt} /> },
             { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "No facility" },
             { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
-          ]} /> : <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center"><h2 className="font-semibold">Start this patient’s first assessment</h2><p className="text-sm text-muted-foreground">Their assessment history will appear here.</p><RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18} />New assessment</RouterButtonLink></div>}
+          ]} /> : <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center"><h2 className="font-semibold">Start this patient’s first assessment</h2><RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18} />New assessment</RouterButtonLink></div>}
         </Card>
       </TabsContent>
     </Tabs>

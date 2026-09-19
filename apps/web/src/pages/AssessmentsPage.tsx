@@ -61,7 +61,7 @@ export function AssessmentsPage() {
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
   ];
   const hasFilters = query.trim() || facility !== "all" || status !== "all";
-  const emptyContent = <div className="table-empty-content">{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : <><strong>Create your first assessment</strong><span>Your assessments will appear here.</span><RouterButtonLink to="/assessments/new"><Icon name="plus" size={18} />New assessment</RouterButtonLink></>}</div>;
+  const emptyContent = <div className="table-empty-content">{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : <><strong>Create your first assessment</strong><RouterButtonLink to="/assessments/new"><Icon name="plus" size={18} />New assessment</RouterButtonLink></>}</div>;
   return <>
     <h1 className="patient-page-title">Assessments</h1>
     <div className="patient-list-header">
