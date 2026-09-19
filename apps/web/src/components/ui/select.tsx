@@ -46,7 +46,7 @@ function SelectGroup<T extends object>({
   return (
     <ListBoxSectionPrimitive
       data-slot="select-group"
-      className={cn("scroll-my-1 p-1", className)}
+      className={cn("flex scroll-my-1 flex-col gap-1.5", className)}
       {...props}
     />
   )
@@ -162,7 +162,7 @@ function SelectList<T extends object>({
     <ListBoxPrimitive
       data-slot="select-list"
       className={cn(
-        "group/select-list max-h-[min(20rem,var(--available-height))] space-y-0.5 overflow-x-hidden overflow-y-auto p-1 outline-hidden",
+        "group/select-list flex max-h-[min(20rem,var(--available-height))] flex-col gap-1.5 overflow-x-hidden overflow-y-auto p-1.5 outline-hidden",
         className
       )}
       {...props}
@@ -214,7 +214,7 @@ function SelectItem({
       data-slot="select-item"
       textValue={typeof children === "string" ? children : undefined}
       className={cn(
-        "relative flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-sm py-2 pr-9 pl-3 text-sm leading-5 outline-none select-none data-hovered:bg-accent data-hovered:text-accent-foreground data-focused:bg-accent data-focused:text-accent-foreground data-focus-visible:ring-2 data-focus-visible:ring-inset data-focus-visible:ring-ring data-selected:bg-accent data-selected:font-medium data-selected:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex min-h-9 w-full shrink-0 cursor-pointer items-center gap-2 rounded-sm py-2 pr-9 pl-3 text-sm leading-5 outline-none select-none data-hovered:bg-accent data-hovered:text-accent-foreground data-focused:bg-accent data-focused:text-accent-foreground data-focus-visible:ring-2 data-focus-visible:ring-inset data-focus-visible:ring-ring data-selected:bg-accent data-selected:font-medium data-selected:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
