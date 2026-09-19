@@ -77,7 +77,10 @@ export function UsersPage() {
     { accessorKey: "email", header: "Invitee" },
     { id: "role", header: "Role", cell: ({ row }) => userRoleLabels[row.original.role] },
     { id: "expires", header: "Expires", cell: ({ row }) => <DateDisplay value={new Date(row.original.expiresAt)} /> },
-    { id: "status", header: "Status", cell: ({ row }) => <Badge variant="secondary">{row.original.status === "EXPIRED" || new Date(row.original.expiresAt).getTime() <= Date.now() ? "Expired" : "Pending"}</Badge> },
+    { id: "status", header: "Status", cell: ({ row }) => {
+      const expired = row.original.status === "EXPIRED" || new Date(row.original.expiresAt).getTime() <= Date.now();
+      return <Badge variant="outline" className={expired ? "border-border bg-muted text-muted-foreground" : "border-warning/20 bg-warning/10 text-warning"}>{expired ? "Expired" : "Pending"}</Badge>;
+    } },
   ];
   if (canManage) invitationColumns.push({ id: "actions", header: "Actions", cell: ({ row }) => <div className="flex gap-2"><TooltipTrigger><Button variant="outline" size="icon" aria-label={`Create new link for ${row.original.email}`} onPress={() => setInvitationTarget({ invitation: row.original, action: "regenerate" })}><RefreshCw aria-hidden="true" /></Button><Tooltip>Create new link</Tooltip></TooltipTrigger><TooltipTrigger><Button variant="destructive-outline" size="icon" aria-label={`Revoke invitation for ${row.original.email}`} onPress={() => setInvitationTarget({ invitation: row.original, action: "revoke" })}><CircleX aria-hidden="true" /></Button><Tooltip>Revoke invitation</Tooltip></TooltipTrigger></div> });
   const hasFilters = Boolean(query || role !== "all" || (tab === "users" && status !== "all"));
@@ -90,7 +93,7 @@ export function UsersPage() {
       <TabsList variant="line" aria-label="User lists" className="shrink-0"><TabsTrigger id="users">Users <Badge variant="secondary">{users.length}</Badge></TabsTrigger><TabsTrigger id="invitations">Invitations <Badge variant="secondary">{invitations.length}</Badge></TabsTrigger></TabsList>
       <div className="flex w-full items-center gap-2 sm:w-80"><InputGroup className="h-10"><InputGroupAddon><Search /></InputGroupAddon><InputGroupInput aria-label={tab === "users" ? "Search users" : "Search invitations"} placeholder={tab === "users" ? "Search users…" : "Search invitations…"} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} /></InputGroup>{canManage && !showEmptyInvite && <Button size="icon-lg" className="size-10 shrink-0" aria-label="Invite user" onPress={() => setInvite(true)}><Plus /></Button>}</div>
     </div>
-    <TabsContent id={tab} className="space-y-4 pt-4">
+    <TabsContent key={tab} id={tab} className="space-y-4 pt-4">
     <div className="patient-filter-bar">
       <Select aria-label="Filter by role" selectedKey={role} onSelectionChange={(key) => { setRole(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All roles</SelectItem>{Object.entries(userRoleLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>
       {tab === "users" && <Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem><SelectItem id="active">Enabled</SelectItem><SelectItem id="disabled">Disabled</SelectItem></SelectContent></Select>}
