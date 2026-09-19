@@ -1,4 +1,4 @@
-import type { AssessmentSummary, AuthenticatedUser } from "@niq/application-contracts";
+import type { AssessmentSummary, AuthenticatedUser, Facility } from "@niq/application-contracts";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { Search } from "lucide-react";
@@ -16,26 +16,21 @@ import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
 import { StatusBadge } from "../components/StatusBadge";
-import { listAssessments } from "../lib/api";
+import { listAssessments, listFacilities } from "../lib/api";
 import { assessments, patients } from "../lib/demo-data";
 import { Icon } from "../lib/icons";
 
+import { DateDisplay } from "../components/DateDisplay";
+import { assessmentStatusLabels } from "../lib/patient-display";
+
 const assessmentPageSize = 10;
-const assessmentStatusLabels = {
-  DRAFT: "Draft",
-  READY_FOR_SCORING: "Ready for scoring",
-  SCORING_PENDING: "Pending scoring",
-  SCORING_UNAVAILABLE: "Scoring unavailable",
-  SCORED: "Scored",
-  UNDER_REVIEW: "Under review",
-  COMPLETED: "Completed",
-  VOIDED: "Voided",
-} as const satisfies Record<AssessmentSummary["status"], string>;
 const assessmentDate = (date: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
 
 export function AssessmentsPage() {
   const user = useOutletContext<AuthenticatedUser>();
   const [records, setRecords] = useState<AssessmentSummary[]>([]);
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [reload, setReload] = useState(0);
   const [query, setQuery] = useState("");
   const [facility, setFacility] = useState("all");
   const [status, setStatus] = useState("all");
@@ -44,40 +39,39 @@ export function AssessmentsPage() {
   useEffect(() => {
     let active = true;
     setLoadState("loading");
-    listAssessments(user.organizationId).then((items) => { if (active) { setRecords(items); setLoadState("ready"); } }).catch(() => { if (active) setLoadState("error"); });
+    Promise.all([listAssessments(user.organizationId), listFacilities(user.organizationId)]).then(([items, facilities]) => { if (active) { setRecords(items); setFacilities(facilities); setLoadState("ready"); } }).catch(() => { if (active) setLoadState("error"); });
     return () => { active = false; };
-  }, [user.organizationId]);
-  const facilityNames = useMemo(() => [...new Set(records.map((record) => record.facility?.name).filter((name): name is string => Boolean(name)))], [records]);
+  }, [user.organizationId, reload]);
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return records.filter((record) => {
       const matchesQuery = !normalizedQuery || `${record.patient.reference} ${record.patient.displayName} ${record.facility?.name ?? ""}`.toLowerCase().includes(normalizedQuery);
-      return matchesQuery && (facility === "all" || record.facility?.name === facility) && (status === "all" || record.status === status);
+      return matchesQuery && (facility === "all" || record.facility?.id === facility) && (status === "all" || record.status === status);
     });
   }, [facility, query, records, status]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / assessmentPageSize));
   const currentPage = Math.min(page, pageCount);
   const visible = filtered.slice((currentPage - 1) * assessmentPageSize, currentPage * assessmentPageSize);
   const columns: Array<DataTableColumn<AssessmentSummary>> = [
-    { id: "patient", header: "Patient", cell: ({ row }) => <div className="grid gap-1"><strong>{row.original.patient.reference}</strong><span className="text-xs text-muted-foreground">{row.original.patient.displayName}</span></div> },
+    { id: "patient", header: "Patient", cell: ({ row }) => <div className="grid gap-1"><Link className="text-primary font-semibold" to={`/patients/${row.original.patient.reference}`}>{row.original.patient.displayName}</Link><span className="text-xs text-muted-foreground">{row.original.patient.reference}</span></div> },
     { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "—" },
-    { id: "created", header: "Started", cell: ({ row }) => assessmentDate(row.original.createdAt) },
+    { id: "created", header: "Started", cell: ({ row }) => <DateDisplay value={row.original.createdAt} /> },
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
   ];
   const hasFilters = query.trim() || facility !== "all" || status !== "all";
-  const emptyContent = <div className="table-empty-content">{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><span>Refresh the page to try again.</span></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : <RouterButtonLink className="patient-empty-action" variant="outline" size="sm" to="/assessments/new"><Icon name="plus" size={16}/>Start assessment</RouterButtonLink>}</div>;
+  const emptyContent = <div className="table-empty-content">{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : <RouterButtonLink className="patient-empty-action" variant="outline" size="sm" to="/assessments/new"><Icon name="plus" size={16}/>New assessment</RouterButtonLink>}</div>;
   return <>
     <h1 className="patient-page-title">Assessments</h1>
     <div className="patient-list-header">
       <div className="patient-list-heading"><span className="patient-list-label">Assessments</span><span>{records.length}</span></div>
-      <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search assessments" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search assessments…" /></InputGroup><RouterButtonLink className="size-10 shrink-0" size="icon-lg" to="/assessments/new" aria-label="Start assessment"><Icon name="plus" size={20}/></RouterButtonLink></div>
+      <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search assessments" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search assessments…" /></InputGroup>{(records.length > 0 || !!hasFilters) && <RouterButtonLink className="size-10 shrink-0" size="icon-lg" to="/assessments/new" aria-label="New assessment"><Icon name="plus" size={20}/></RouterButtonLink>}</div>
     </div>
     <div className="patient-filter-bar assessment-filter-bar">
-      <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { setFacility(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilityNames.map((name) => <SelectItem id={name} key={name}>{name}</SelectItem>)}</SelectContent></Select>
+      <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { setFacility(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
       <Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem>{Object.entries(assessmentStatusLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>
     </div>
-    <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card" key={record.id}><div><strong>{record.patient.reference}</strong><span>{record.patient.displayName}</span></div><StatusBadge status={assessmentStatusLabels[record.status]}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent}/></div></section>
-    <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>
+    <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card" key={record.id}><div><strong>{record.patient.reference}</strong><span>{record.patient.displayName}</span></div><StatusBadge status={assessmentStatusLabels[record.status]}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></article>) : emptyContent}</div><div className="desktop-table p-5">{visible.length ? <DataTable columns={columns} data={visible} label="Assessments" /> : emptyContent}</div></section>
+    {filtered.length > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
   </>;
 }
 
