@@ -908,8 +908,9 @@ export class PostgresApplicationService implements ApplicationService {
     if (membershipId === actor.membershipId && !active) throw new ServiceError("CONFLICT", "You cannot deactivate your own membership.");
     try {
       return await this.db.transaction(async (tx) => {
-        // Serialize access changes so concurrent requests cannot disable every admin.
-        await tx.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, organizationId)).for("update");
+        // Serialize access changes without blocking the foreign-key locks used by
+        // invitation acceptance while the quota advisory lock is held.
+        await tx.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, organizationId)).for("no key update");
         const [target] = await tx.select().from(organizationMemberships).where(and(eq(organizationMemberships.organizationId, organizationId), eq(organizationMemberships.id, membershipId))).limit(1);
         if (!target) throw new ServiceError("NOT_FOUND", "User membership not found.");
         if (!active && target.role === "ORGANIZATION_ADMIN" && target.isActive) {

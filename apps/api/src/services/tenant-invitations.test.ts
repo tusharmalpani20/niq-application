@@ -119,7 +119,7 @@ describe("tenant administrator access safeguards", () => {
   test("does not disable the last enabled administrator", async () => {
     const f = accessFixture(0);
     await expect(f.service.setUserActive(actor, "tenant", "target", false, context)).rejects.toMatchObject({ code: "CONFLICT" });
-    expect(f.locks).toEqual(["update"]);
+    expect(f.locks).toEqual(["no key update"]);
     expect(f.writes).toHaveLength(0);
   });
   test("disables access and revokes sessions when another administrator remains", async () => {
