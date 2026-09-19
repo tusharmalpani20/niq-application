@@ -1,7 +1,7 @@
 import type { AuthenticatedUser } from "@niq/application-contracts";
 import { LogOut } from "lucide-react";
-import { useState } from "react";
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useLayoutEffect, useState } from "react";
+import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,7 +39,7 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
   const initials = user.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 
   function isActive(to: string, end?: boolean) { return end ? location.pathname === to : location.pathname.startsWith(to); }
-  function go(to: string) { navigate(to); setOpenMobile(false); }
+  function go(to: string) { if (!window.dispatchEvent(new Event("niq:before-navigation", { cancelable: true }))) return; navigate(to); setOpenMobile(false); }
 
   return <Sidebar collapsible="icon" className="border-r border-sidebar-border">
     <SidebarHeader className="p-3 group-data-[collapsible=icon]:p-1">
@@ -50,7 +50,7 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
       </div>
     </SidebarHeader>
     <SidebarContent><SidebarGroup><SidebarGroupContent><SidebarMenu className="gap-1">
-      {navigation.filter((item) => item.to !== "/settings/scoring" || user.role === "ORGANIZATION_ADMIN").map((item) => <SidebarMenuItem key={item.to}>
+      {navigation.filter((item) => !["/users", "/settings/branding", "/settings/scoring"].includes(item.to) || user.role === "ORGANIZATION_ADMIN").map((item) => <SidebarMenuItem key={item.to}>
         <SidebarMenuButton isActive={isActive(item.to, item.end)} tooltip={item.label} onPress={() => go(item.to)} className="h-10 text-sm">
           <Icon name={item.icon} /><span>{item.label}</span>
         </SidebarMenuButton>
@@ -68,14 +68,23 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
 
 export function AppShell({ user }: { user: AuthenticatedUser }) {
   const { resetBranding } = useBranding();
+  const { pathname } = useLocation();
+  // Assessment creation and its existing detail view are outside this refresh.
+  const refreshedLayout = !pathname.startsWith("/assessments/");
+  const adminOnly = ["/users", "/settings/branding", "/settings/scoring"].includes(pathname);
+  useLayoutEffect(() => {
+    if (refreshedLayout) document.documentElement.dataset.appArea = "client";
+    else delete document.documentElement.dataset.appArea;
+    return () => { delete document.documentElement.dataset.appArea; };
+  }, [refreshedLayout]);
   const navigate = useNavigate();
-  async function handleSignOut() { await signOut().catch(() => undefined); resetBranding(); navigate("/sign-in", { replace: true }); }
+  async function handleSignOut() { if (!window.dispatchEvent(new Event("niq:before-navigation", { cancelable: true }))) return; await signOut().catch(() => undefined); resetBranding(); navigate("/sign-in", { replace: true }); }
 
-  return <SidebarProvider>
+  return <SidebarProvider className={refreshedLayout ? "client-workspace" : undefined}>
     <OrganizationSidebar user={user} onSignOut={handleSignOut} />
     <SidebarInset className="min-w-0">
       <header className="client-mobile-nav"><SidebarTrigger aria-label="Toggle navigation" /></header>
-      <main className="content"><Outlet context={user} /></main>
+      <main className="content">{adminOnly && user.role !== "ORGANIZATION_ADMIN" ? <Navigate to="/" replace /> : <Outlet context={user} />}</main>
     </SidebarInset>
   </SidebarProvider>;
 }

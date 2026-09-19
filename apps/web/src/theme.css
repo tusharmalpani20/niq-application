@@ -172,3 +172,19 @@
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   font-family: var(--font-sans);
 }
+
+/* Shared neutral workspace palette never replaces the organization's brand colours. */
+:root[data-app-area="client"] {
+  --ink: var(--admin-ink);
+  --ink-soft: var(--admin-ink);
+  --ink-muted: var(--admin-muted);
+  --canvas: var(--admin-canvas);
+  --border: var(--admin-border);
+  --input: var(--border);
+  --muted: var(--admin-secondary);
+  --destructive: var(--admin-danger);
+  --danger: var(--destructive);
+  --radius: var(--admin-radius);
+}
+
+:root[data-app-area="client"] { --primary-foreground: var(--brand-primary-foreground, white); --secondary-foreground: var(--brand-secondary-foreground, white); }
