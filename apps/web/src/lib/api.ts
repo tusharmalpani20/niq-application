@@ -151,6 +151,22 @@ export async function invitePlatformAdministrator(input: CreatePlatformAdministr
   return platformAdministratorInvitationResponseSchema.parse(await responseBody(response));
 }
 
+export async function regeneratePlatformAdministratorInvitation(invitationId: string) {
+  const response = await fetch(`/api/v1/platform/administrators/invitations/${encodeURIComponent(invitationId)}/regenerate`, {
+    method: "POST",
+    credentials: "include",
+  });
+  return platformAdministratorInvitationResponseSchema.parse(await responseBody(response));
+}
+
+export async function revokePlatformAdministratorInvitation(invitationId: string): Promise<void> {
+  const response = await fetch(`/api/v1/platform/administrators/invitations/${encodeURIComponent(invitationId)}/revoke`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) await responseBody(response);
+}
+
 export async function setPlatformAdministratorActive(membershipId: string, active: boolean): Promise<PlatformAdministrator> {
   const response = await fetch(`/api/v1/platform/administrators/${membershipId}`, {
     method: "PATCH",

@@ -1,8 +1,9 @@
 import { type AuthenticatedUser, type PlatformAdministrator } from "@niq/application-contracts";
-import { AlertTriangle, Plus, Search } from "lucide-react";
+import { AlertTriangle, Plus, Search, RefreshCw, CircleX } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import type { DataTableColumn } from "../components/DataTable";
+import { AdministratorInvitationActionDialog, type InvitationActionTarget } from "../components/AdministratorInvitationActionDialog";
 import { AdministratorInvitationDialog } from "../components/AdministratorInvitationDialog";
 import { DateDisplay } from "../components/DateDisplay";
 import { StatusBadge } from "../components/StatusBadge";
@@ -31,6 +32,7 @@ export function AdminAdministratorsPage() {
   const [administrators, setAdministrators] = useState<PlatformAdministrator[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [showInvite, setShowInvite] = useState(false);
+  const [invitationTarget, setInvitationTarget] = useState<InvitationActionTarget | null>(null);
   const [selectedTab, setSelectedTab] = useState<"users" | "invitations">("users");
   const [accessTarget, setAccessTarget] = useState<AdministratorUser | null>(null);
   const [accessBusy, setAccessBusy] = useState(false);
@@ -76,9 +78,16 @@ export function AdminAdministratorsPage() {
     { id: "status", header: "Status", cell: ({ row }) => row.original.active ? <StatusBadge status="Active" /> : <Badge variant="secondary">Disabled</Badge> },
     { id: "actions", header: "Actions", cell: ({ row }) => row.original.userId === currentUser.userId ? <OwnAccountLabel /> : <Button variant="outline" size="sm" onPress={() => setAccessTarget(row.original)}>{row.original.active ? "Disable" : "Enable"}</Button> },
   ];
+  function invitationActions(invitation: AdministratorInvitation) {
+    return <div className="flex flex-wrap gap-2">
+      <TooltipTrigger><Button variant="outline" size="icon" aria-label={`Generate new link for ${invitation.email}`} onPress={() => setInvitationTarget({ invitation, action: "regenerate" })}><RefreshCw aria-hidden="true" /></Button><Tooltip>Generate new link</Tooltip></TooltipTrigger>
+      <TooltipTrigger><Button variant="destructive-outline" size="icon" aria-label={`Cancel invitation for ${invitation.email}`} onPress={() => setInvitationTarget({ invitation, action: "revoke" })}><CircleX aria-hidden="true" /></Button><Tooltip>Cancel invitation</Tooltip></TooltipTrigger>
+    </div>;
+  }
   const invitationColumns: Array<DataTableColumn<AdministratorInvitation>> = [
     { id: "administrator", header: "Invitee", cell: ({ row }) => <strong>{row.original.email}</strong> },
     { id: "expires", header: "Expires", cell: ({ row }) => <DateDisplay value={row.original.expiresAt} /> },
+    { id: "actions", header: "Actions", cell: ({ row }) => invitationActions(row.original) },
   ];
 
   return <>
@@ -99,12 +108,13 @@ export function AdminAdministratorsPage() {
         <TabsContent id="users" className="grid gap-4"><section className="surface table-surface">{filteredUsers.length === 0 ? <EmptyState title={normalizedSearch ? "No matching administrators" : "No administrators"} description={normalizedSearch ? "Try a different search." : "Invite an administrator to help manage this application."} /> : <><div className="desktop-table p-5"><DataTable columns={userColumns} data={visibleUsers} label="NIQ administrators" /></div><div className="mobile-card-list">{visibleUsers.map((administrator) => <article className="mobile-data-card" key={administrator.userId}><div><strong>{administrator.displayName}{administrator.userId === currentUser.userId ? " (you)" : ""}</strong><span>{administrator.email}</span></div><div className="flex items-center justify-between gap-3">{administrator.active ? <StatusBadge status="Active" /> : <Badge variant="secondary">Disabled</Badge>}{administrator.userId === currentUser.userId ? <OwnAccountLabel /> : <Button variant="outline" size="sm" onPress={() => setAccessTarget(administrator)}>{administrator.active ? "Disable" : "Enable"}</Button>}</div></article>)}</div></>}</section>{filteredUsers.length > 0 && <Pagination aria-label="Administrators pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={userPage === 1} onPress={() => setUserPage((page) => page - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {userPage} of {userPageCount} · {filteredUsers.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={userPage === userPageCount} onPress={() => setUserPage((page) => page + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}</TabsContent>
         <TabsContent id="invitations" className="grid gap-4">
           <section className="surface table-surface">
-            {filteredInvitations.length === 0 ? (normalizedSearch ? <EmptyState title="No matching invitations" description="Try a different search." icon={null} className="min-h-32" /> : <div className="flex min-h-32 items-center justify-center p-6"><Button variant="outline" onPress={() => setShowInvite(true)}><Plus aria-hidden="true" />Invite a colleague</Button></div>) : <><div className="desktop-table p-5"><DataTable columns={invitationColumns} data={visibleInvitations} label="Pending administrator invitations" /></div><div className="mobile-card-list">{visibleInvitations.map((invitation) => <article className="mobile-data-card" key={invitation.invitationId}><strong>{invitation.email}</strong><div className="flex items-center justify-between gap-3"><Badge variant="secondary">Pending</Badge><span>Expires <DateDisplay value={invitation.expiresAt} /></span></div></article>)}</div></>}
+            {filteredInvitations.length === 0 ? (normalizedSearch ? <EmptyState title="No matching invitations" description="Try a different search." icon={null} className="min-h-32" /> : <div className="flex min-h-32 items-center justify-center p-6"><Button variant="outline" onPress={() => setShowInvite(true)}><Plus aria-hidden="true" />Invite a colleague</Button></div>) : <><div className="desktop-table p-5"><DataTable columns={invitationColumns} data={visibleInvitations} label="Pending administrator invitations" /></div><div className="mobile-card-list">{visibleInvitations.map((invitation) => <article className="mobile-data-card" key={invitation.invitationId}><strong>{invitation.email}</strong><div className="flex items-center justify-between gap-3"><Badge variant="secondary">Pending</Badge><span>Expires <DateDisplay value={invitation.expiresAt} /></span></div>{invitationActions(invitation)}</article>)}</div></>}
           </section>
           {filteredInvitations.length > 0 && <Pagination aria-label="Invitations pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={invitationPage === 1} onPress={() => setInvitationPage((page) => page - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {invitationPage} of {invitationPageCount} · {filteredInvitations.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={invitationPage === invitationPageCount} onPress={() => setInvitationPage((page) => page + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
         </TabsContent>
       </Tabs>
     </div>}
+    {invitationTarget && <AdministratorInvitationActionDialog target={invitationTarget} onClose={() => setInvitationTarget(null)} onUpdated={load} />}
     <AdministratorInvitationDialog open={showInvite} onClose={() => setShowInvite(false)} onCreated={load} />
     {accessTarget && <AlertDialog ariaLabel={accessTarget.active ? "Disable administrator" : "Enable administrator"} isOpen onOpenChange={(open) => { if (!open && !accessBusy) setAccessTarget(null); }} isDismissable={!accessBusy}>
       <AlertDialogHeader><AlertDialogMedia><AlertTriangle /></AlertDialogMedia><AlertDialogTitle>{accessTarget.active ? "Disable administrator?" : "Enable administrator?"}</AlertDialogTitle><AlertDialogDescription>{accessTarget.active ? `${accessTarget.displayName} will lose access to NIQ administration and their active sessions will be signed out.` : `${accessTarget.displayName} will regain access to NIQ administration.`}</AlertDialogDescription></AlertDialogHeader>
