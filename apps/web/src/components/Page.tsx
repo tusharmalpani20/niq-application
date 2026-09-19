@@ -9,8 +9,8 @@ export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: 
   return <header className="page-header"><div>{eyebrow && <p className="page-eyebrow">{eyebrow}</p>}<h1>{title}</h1>{description && <p className="page-description">{description}</p>}</div>{action && <div className="page-actions">{action}</div>}</header>;
 }
 
-export function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
-  return <Empty className="min-h-52"><EmptyHeader><EmptyMedia variant="icon"><Plus /></EmptyMedia><EmptyTitle>{title}</EmptyTitle><EmptyDescription>{description}</EmptyDescription></EmptyHeader>{action && <EmptyContent>{action}</EmptyContent>}</Empty>;
+export function EmptyState({ title, description, action, icon = <Plus />, className = "min-h-52" }: { title: string; description?: string; action?: ReactNode; icon?: ReactNode; className?: string }) {
+  return <Empty className={className}><EmptyHeader>{icon && <EmptyMedia variant="icon">{icon}</EmptyMedia>}<EmptyTitle>{title}</EmptyTitle>{description && <EmptyDescription>{description}</EmptyDescription>}</EmptyHeader>{action && <EmptyContent>{action}</EmptyContent>}</Empty>;
 }
 
 export function ErrorState({ retry }: { retry?: () => void }) {
