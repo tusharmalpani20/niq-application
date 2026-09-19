@@ -84,7 +84,7 @@ export function AdminOrganizationDetailPage() {
       </TabsContent>
       <TabsContent id="users"><AdminOrganizationUsers users={users} /></TabsContent>
       <TabsContent id="scoring">
-        <ScoringConnectionPanel organizationId={organization.id} connection={details.scoringConnection} onActivated={(connection) => setDetails({ ...details, scoringConnection: connection })} onDisconnected={() => setDetails({ ...details, scoringConnection: null })} showHeading={false} />
+        <ScoringConnectionPanel className="min-w-0" organizationId={organization.id} connection={details.scoringConnection} onActivated={(connection) => setDetails({ ...details, scoringConnection: connection })} onDisconnected={() => setDetails({ ...details, scoringConnection: null })} showHeading={false} />
       </TabsContent>
     </Tabs>
     <AlertDialog ariaLabel="Change organization status" isOpen={confirmStatus} onOpenChange={(open) => { if (!statusBusy) setConfirmStatus(open); }} isDismissable={!statusBusy}>

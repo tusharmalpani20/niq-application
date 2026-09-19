@@ -12,7 +12,7 @@ import { ApiRequestError, onboardOrganization } from "../lib/api";
 import { PageHeader } from "../components/Page";
 import { Icon } from "../lib/icons";
 import { ORGANIZATION_LOGO_ACCEPT, organizationLogoError, organizationLogoPayload, organizationUrlName } from "../lib/organization-onboarding";
-import { CircleAlert } from "lucide-react";
+import { CheckCircle2, CircleAlert } from "lucide-react";
 
 type Step = 0 | 1 | 2;
 
@@ -99,7 +99,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
 
   if (created) {
     const invitationUrl = created.activationToken ? `${window.location.origin}/invite/${created.activationToken}` : null;
-    return <section className="onboarding-success"><div className="success-icon"><Icon name="check" /></div><div><h2>Organization created</h2><p>{created.organization.displayName} and its first administrator invitation were created.</p></div>
+    return <section className="onboarding-success"><div><h2 className="flex items-center gap-2 font-semibold"><CheckCircle2 className="size-5 shrink-0 text-success" aria-hidden="true" />Organization created</h2><p>{created.organization.displayName} and its first administrator invitation were created.</p></div>
       {invitationUrl ? <Field><FieldLabel>Invitation link</FieldLabel><Textarea aria-label="Invitation link" readOnly value={invitationUrl} /><FieldDescription>Share this link with {created.invitation.email}.</FieldDescription><Button type="button" variant="outline" onPress={async () => { try { await navigator.clipboard.writeText(invitationUrl); setLinkCopied(true); } catch { setMessage("Could not copy the link. Select and copy it above."); } }}>{linkCopied ? "Copied" : "Copy link"}</Button></Field> : <Alert><AlertDescription>An invitation was created for {created.invitation.email}.</AlertDescription></Alert>}
       {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
       <div className="form-actions onboarding-success-actions">{onCancel ? <Button variant="outline" type="button" onPress={onCancel}>Close</Button> : <Link className={buttonVariants({ variant: "outline" })} to="/admin/organizations">All organizations</Link>}<Link className={buttonVariants()} to={`/admin/organizations/${created.organization.slug}`}>Manage organization</Link></div>

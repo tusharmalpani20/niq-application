@@ -37,7 +37,7 @@
 .admin-workspace .mobile-data-card { gap: .65rem; }
 .admin-workspace .mobile-data-card strong { font-size: .875rem; }
 .admin-workspace .mobile-data-card span { font-size: .8125rem; }
-.admin-workspace .onboarding-tabs button:disabled { opacity: 1; color: var(--muted-foreground); }
+:root[data-app-area="platform"] .onboarding-tabs [role="tab"][data-disabled] { opacity: 1; color: var(--muted-foreground); }
 .admin-workspace .invite-summary strong { overflow-wrap: anywhere; }
 
 /* Dialogs render in a portal outside the workspace element. */
