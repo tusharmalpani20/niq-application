@@ -1,0 +1,93 @@
+/* Platform-only layout rules. All visual values come from theme.css. */
+.admin-workspace .content {
+  width: min(1240px, 100%);
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+}
+.admin-workspace .surface {
+  border: 1px solid var(--border);
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-shadow);
+}
+.admin-workspace .page-header h1,
+.admin-workspace .organization-title-row h1 {
+  color: var(--foreground);
+  font-weight: 650;
+  font-size: clamp(1.65rem, 3vw, 2rem);
+  overflow-wrap: anywhere;
+}
+.admin-workspace .breadcrumb { flex-wrap: wrap; font-size: .8125rem; }
+.admin-workspace .page-header { margin-bottom: 1.75rem; }
+.admin-workspace .admin-detail-card { padding: var(--admin-space); }
+.admin-workspace .admin-detail-grid { gap: var(--admin-space); align-items: start; }
+.admin-workspace .table-surface th {
+  color: var(--foreground);
+  background: transparent;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: .8125rem;
+  font-weight: 550;
+}
+.admin-workspace table { font-size: .875rem; }
+.admin-workspace td { padding-block: 1rem; }
+.admin-workspace .cell-subtitle { font-size: .75rem; }
+.admin-workspace .status-badge { font-size: .75rem; padding: .2rem .55rem; }
+.admin-workspace .toolbar { padding: var(--admin-space); }
+.admin-workspace .toolbar.users-toolbar input { height: 2.5rem; font-size: .875rem; }
+.admin-workspace .empty-state { padding: 2.5rem var(--admin-space); font-size: .875rem; }
+.admin-workspace .mobile-data-card { gap: .65rem; }
+.admin-workspace .mobile-data-card strong { font-size: .875rem; }
+.admin-workspace .mobile-data-card span { font-size: .8125rem; }
+.admin-workspace .onboarding-tabs button:disabled { opacity: 1; color: var(--muted-foreground); }
+.admin-workspace .invite-summary strong { overflow-wrap: anywhere; }
+
+/* Dialogs render in a portal outside the workspace element. */
+:root[data-app-area="platform"] [data-slot="dialog-overlay"],
+:root[data-app-area="platform"] [data-slot="alert-dialog-overlay"] {
+  background: color-mix(in srgb, var(--overlay) 35%, transparent);
+  backdrop-filter: none;
+}
+:root[data-app-area="platform"] [data-slot="dialog-content"],
+:root[data-app-area="platform"] [data-slot="alert-dialog-content"] {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-dialog-shadow);
+}
+:root[data-app-area="platform"] [data-slot="dialog-title"],
+:root[data-app-area="platform"] [data-slot="alert-dialog-title"] {
+  line-height: 1.35;
+  font-weight: 650;
+  padding-right: 1.25rem;
+}
+:root[data-app-area="platform"] [data-slot="alert-dialog-content"] {
+  width: calc(100% - 2rem);
+  max-width: 30rem;
+}
+:root[data-app-area="platform"] [data-slot="alert-dialog-header"] {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  justify-items: start;
+  text-align: left;
+  gap: .75rem;
+}
+:root[data-app-area="platform"] [data-slot="alert-dialog-media"] {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+:root[data-app-area="platform"] [data-slot="alert-dialog-title"] { grid-column: 2; }
+:root[data-app-area="platform"] [data-slot="alert-dialog-description"] {
+  grid-column: 1 / -1;
+  font-size: .875rem;
+  line-height: 1.6;
+}
+:root[data-app-area="platform"] [data-slot="alert-dialog-header"]:not(:has([data-slot="alert-dialog-media"])) [data-slot="alert-dialog-title"] { grid-column: 1 / -1; }
+@media (max-width: 640px) {
+  .admin-workspace .content { padding: 1rem; }
+  .admin-workspace .admin-detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .admin-workspace .organization-detail-tabs [data-slot="tabs-list"] { gap: .75rem; }
+}

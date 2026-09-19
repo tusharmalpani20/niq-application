@@ -8,7 +8,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   const [branding, setBranding] = useState(defaultBranding);
   const updateBranding = useCallback((next: TenantBranding) => setBranding(normalizeBranding(next)), []);
   const resetBranding = useCallback(() => setBranding(defaultBranding), []);
-  useEffect(() => { document.documentElement.style.setProperty("--primary", branding.primaryColor); document.documentElement.style.setProperty("--secondary", branding.secondaryColor); }, [branding]);
+  useEffect(() => { document.documentElement.style.setProperty("--brand-primary", branding.primaryColor); document.documentElement.style.setProperty("--brand-secondary", branding.secondaryColor); }, [branding]);
   const value = useMemo(() => ({ branding, updateBranding, resetBranding }), [branding, resetBranding, updateBranding]);
   return <BrandingContext.Provider value={value}>{children}</BrandingContext.Provider>;
 }

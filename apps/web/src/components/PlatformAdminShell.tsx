@@ -1,3 +1,4 @@
+import { useLayoutEffect } from "react";
 import type { AuthenticatedUser } from "@niq/application-contracts";
 import { LogOut } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -55,8 +56,12 @@ function AdminSidebar({ user, onSignOut }: { user: AuthenticatedUser; onSignOut:
 
 export function PlatformAdminShell({ user }: { user: AuthenticatedUser }) {
   const navigate = useNavigate();
+  useLayoutEffect(() => {
+    document.documentElement.dataset.appArea = "platform";
+    return () => { delete document.documentElement.dataset.appArea; };
+  }, []);
   async function handleSignOut() { await signOut().catch(() => undefined); navigate("/sign-in", { replace: true }); }
-  return <SidebarProvider defaultOpen={!window.matchMedia("(max-width: 820px)").matches}>
+  return <SidebarProvider className="admin-workspace" defaultOpen={!window.matchMedia("(max-width: 820px)").matches}>
     <AdminSidebar user={user} onSignOut={handleSignOut} />
     <SidebarInset className="min-w-0">
       <header className="flex h-14 shrink-0 items-center border-b border-border px-4 md:hidden">
