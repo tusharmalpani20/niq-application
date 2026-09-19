@@ -263,6 +263,7 @@ export const platformAdministratorInvitationResponseSchema = z.object({
 // NIQ Scoring owns this snapshot. Application validates it at both API
 // boundaries and never persists it in the Application database.
 export const scoringOrganizationInfoSchema = z.object({
+  ruleVersion: z.object({ mode: z.enum(["DEFAULT", "SPECIFIC"]), version: z.string().nullable() }).strict().nullable().optional(),
   organization: z.object({ id: idSchema, name: z.string(), status: z.enum(["ACTIVE", "DISABLED"]) }).strict(),
   deployment: z.object({
     id: idSchema,

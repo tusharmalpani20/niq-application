@@ -44,6 +44,13 @@ describe("NIQ Scoring organization information client", () => {
     await expect(request(async () => Response.json({ error: code }, { status }))).rejects.toMatchObject({ reason });
   });
 
+  test("accepts authoritative rule assignments without resolving them locally", async () => {
+    const ruleVersion = { mode: "DEFAULT", version: "TEST-5" };
+    expect((await request(async () => Response.json({ ...snapshot, ruleVersion }))).ruleVersion).toEqual(ruleVersion);
+    expect((await request(async () => Response.json(snapshot))).ruleVersion).toBeUndefined();
+    await expect(request(async () => Response.json({ ...snapshot, ruleVersion: { mode: "LATEST", version: "TEST-5" } }))).rejects.toBeInstanceOf(ScoringOrganizationInfoRequestError);
+  });
+
   test("rejects a successful response that does not match the allowlist", async () => {
     await expect(request(async () => Response.json({ ...snapshot, credential: "must-not-pass" }))).rejects.toBeInstanceOf(ScoringOrganizationInfoRequestError);
     await expect(request(async () => Response.json({ ...snapshot, limits: {} }))).rejects.toBeInstanceOf(ScoringOrganizationInfoRequestError);
