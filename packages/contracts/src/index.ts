@@ -301,7 +301,10 @@ export const patientGenderSchema = z.enum(["FEMALE", "MALE", "OTHER", "UNKNOWN"]
 export const registerPatientSchema = z.object({
   medicalRecordNumber: z.string().trim().min(1).max(120),
   homeFacilityId: idSchema,
-  dateOfBirth: z.iso.date(),
+  dateOfBirth: z.iso.date().refine(
+    value => value <= new Date().toISOString().slice(0, 10),
+    "Date of birth cannot be in the future.",
+  ),
   gender: patientGenderSchema,
   name: z.string().trim().min(1).max(200),
   phone: z.string().trim().max(40).optional(),
