@@ -36,7 +36,7 @@ function AdminSidebar({ user, onSignOut }: { user: AuthenticatedUser; onSignOut:
           : <><Link className="grid size-10 shrink-0 place-items-center rounded-xl rounded-bl-sm bg-primary font-bold text-primary-foreground" to="/admin/organizations" aria-label="NIQ home">N</Link><strong className="min-w-0 flex-1 truncate text-sm">NIQ</strong><SidebarTrigger aria-label="Collapse navigation" /></>}
       </div>
     </SidebarHeader>
-    <SidebarContent><SidebarGroup><SidebarGroupContent><SidebarMenu>
+    <SidebarContent><SidebarGroup><SidebarGroupContent><SidebarMenu className="gap-1">
       {navigation.map((item) => <SidebarMenuItem key={item.to}>
         <SidebarMenuButton isActive={location.pathname.startsWith(item.to)} tooltip={item.label} onPress={() => go(item.to)} className="h-10 text-sm">
           <Icon name={item.icon} /><span>{item.label}</span>
