@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { Search } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -102,7 +103,7 @@ export function PatientsPage() {
     <h1 className="patient-page-title">Patients</h1>
     <div className="patient-list-header">
       <div className="patient-list-heading"><span className="patient-list-label">Patients</span><span>{filtered.length}</span></div>
-      <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search patients" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search patients…" /></InputGroup>{(patients.length > 0 || !!hasFilters) && <Button className="size-10 shrink-0" size="icon-lg" aria-label="Register patient" onPress={() => setShowRegistration(true)}><Icon name="plus" size={20} /></Button>}</div>
+      <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search patients" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search patients…" /></InputGroup>{(patients.length > 0 || !!hasFilters) && <TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="Add patient" onPress={() => setShowRegistration(true)}><Icon name="plus" size={20} /></Button><Tooltip>Add patient</Tooltip></TooltipTrigger>}</div>
     </div>
     {registeredThisMonth && <div className="flex items-center gap-3 text-sm"><span>Registered this month ({new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })})</span><Button variant="link" onPress={() => { setSearchParams(params => { params.delete("registered"); return params; }); setPage(1); }}>Clear</Button></div>}
     <div className="patient-filter-bar">
