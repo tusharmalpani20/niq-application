@@ -114,6 +114,14 @@ export function createApp(dependencies: AppDependencies) {
     const result = await dependencies.service!.invitePlatformAdministrator(context.get("principal"), context.req.valid("json"), requestContext(context));
     return context.json({ invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens ? { activationToken: result.token } : {}) }, 201);
   });
+  app.post("/v1/platform/administrators/invitations/:invitationId/revoke", zValidator("param", z.object({ invitationId: idSchema }), validationFailure), async (context) => {
+    await dependencies.service!.revokePlatformAdministratorInvitation(context.get("principal"), context.req.valid("param").invitationId, requestContext(context));
+    return context.body(null, 204);
+  });
+  app.post("/v1/platform/administrators/invitations/:invitationId/regenerate", zValidator("param", z.object({ invitationId: idSchema }), validationFailure), async (context) => {
+    const result = await dependencies.service!.regeneratePlatformAdministratorInvitation(context.get("principal"), context.req.valid("param").invitationId, requestContext(context));
+    return context.json({ invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens ? { activationToken: result.token } : {}) });
+  });
   app.patch("/v1/platform/administrators/:membershipId", zValidator("param", z.object({ membershipId: idSchema }), validationFailure), zValidator("json", updateUserStatusSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.setPlatformAdministratorActive(context.get("principal"), context.req.valid("param").membershipId, context.req.valid("json").active, requestContext(context)))));
   app.post("/v1/organizations/onboard", zValidator("json", onboardOrganizationSchema, validationFailure), async (context) => {
     const result = await dependencies.service!.onboardOrganization(context.get("principal"), context.req.valid("json"), requestContext(context));

@@ -396,6 +396,51 @@ export class PostgresApplicationService implements ApplicationService {
     }
   }
 
+  async revokePlatformAdministratorInvitation(actor: Principal, invitationId: string, context: RequestContext) {
+    if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");
+    await this.db.transaction(async (tx) => {
+      const invite = await this.lockPlatformInvitation(tx, actor, invitationId);
+      if (invite.status !== "PENDING" && invite.status !== "EXPIRED") throw new ServiceError("CONFLICT", "This invitation has already been accepted or revoked.");
+      await tx.update(invitations).set({ status: "REVOKED", updatedAt: new Date() }).where(eq(invitations.id, invitationId));
+      await this.audit(tx, actor.organizationId, context, "PLATFORM_ADMIN_INVITATION_REVOKED", "invitation", invitationId, actor);
+    });
+  }
+
+  async regeneratePlatformAdministratorInvitation(actor: Principal, invitationId: string, context: RequestContext) {
+    if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");
+    const token = randomToken();
+    try {
+      const invitation = await this.db.transaction(async (tx) => {
+        const invite = await this.lockPlatformInvitation(tx, actor, invitationId);
+        if (invite.status !== "PENDING" && invite.status !== "EXPIRED") throw new ServiceError("CONFLICT", "This invitation has already been accepted or revoked.");
+        const [existingUser, otherInvitation] = await Promise.all([
+          tx.select({ id: users.id }).from(users).where(eq(users.email, invite.email)).limit(1),
+          tx.select({ id: invitations.id }).from(invitations).where(and(eq(invitations.email, invite.email), ne(invitations.id, invitationId), eq(invitations.status, "PENDING"))).limit(1),
+        ]);
+        if (existingUser.length || otherInvitation.length) throw new ServiceError("CONFLICT", "This email is already associated with an account or another pending invitation.");
+        const expiresAt = new Date(Date.now() + this.config.INVITATION_TTL_HOURS * 3_600_000);
+        const [updated] = await tx.update(invitations).set({ status: "PENDING", tokenHash: await keyedHash(token, this.config.SESSION_SECRET), expiresAt, updatedAt: new Date() })
+          .where(eq(invitations.id, invitationId)).returning({ invitationId: invitations.id, email: invitations.email, expiresAt: invitations.expiresAt });
+        if (!updated) throw new Error("Platform administrator invitation update failed");
+        await this.audit(tx, actor.organizationId, context, "PLATFORM_ADMIN_INVITATION_REGENERATED", "invitation", invitationId, actor);
+        return updated;
+      });
+      return { invitation, token };
+    } catch (error) {
+      if (databaseCode(error) === "23505") throw new ServiceError("CONFLICT", "Another pending invitation already exists for this email.");
+      throw error;
+    }
+  }
+
+  private async lockPlatformInvitation(tx: Transaction, actor: Principal, invitationId: string) {
+    // Share the row lock used by acceptance so an accepted invite cannot be revived.
+    const [invite] = await tx.select().from(invitations).where(and(
+      eq(invitations.id, invitationId), eq(invitations.organizationId, actor.organizationId), eq(invitations.platformRole, "NIQ_ADMIN"),
+    )).for("update").limit(1);
+    if (!invite) throw new ServiceError("NOT_FOUND", "Administrator invitation not found.");
+    return invite;
+  }
+
   async setPlatformAdministratorActive(actor: Principal, membershipId: string, active: boolean, context: RequestContext) {
     if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");
     if (membershipId === actor.membershipId && !active) throw new ServiceError("CONFLICT", "You cannot disable your own administrator access.");

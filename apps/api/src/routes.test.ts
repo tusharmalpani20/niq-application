@@ -20,6 +20,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     resendMfa: async () => ({ challengeToken: "y".repeat(43), expiresAt: new Date(Date.now() + 60_000), resendAvailableAt: new Date(Date.now() + 30_000), attemptsRemaining: 5, resendsRemaining: 2 }),
     signOut: async () => {}, acceptInvitation: async () => principal, bootstrap: async () => principal,
     listPlatformAdministrators: async () => [], invitePlatformAdministrator: async () => ({ invitation: {}, token: "invite-token" }), setPlatformAdministratorActive: async () => ({}),
+    revokePlatformAdministratorInvitation: async () => {}, regeneratePlatformAdministratorInvitation: async () => ({ invitation: {}, token: "new-token" }),
     createOrganization: async () => ({}), listOrganizations: async () => [], getOrganization: async () => ({}), getOrganizationBySlug: async () => ({}), getOrganizationLogo: async () => ({ data: new Uint8Array([1, 2, 3]), mimeType: "image/png", etag: "abc" }), updateOrganization: async () => ({}),
     onboardOrganization: async () => ({ organization: {}, invitation: {}, token: "invite-token" }),
     activateScoring: async () => ({ connection: {} }),
@@ -266,6 +267,32 @@ describe("local authentication routes", () => {
     expect(inviteResponse.status).toBe(201);
     expect(invitedEmail).toBe("second.admin@niq.test");
     expect((await inviteResponse.json()).activationToken).toBe("platform-invite-token");
+  });
+
+  test("regenerates and revokes invitations through authenticated validated routes", async () => {
+    const id = "01J00000000000000000000009";
+    for (const exposeDevelopmentTokens of [false, true]) {
+      let regenerated = 0;
+      let revoked = 0;
+      const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, exposeDevelopmentTokens, service: fakeService({
+        regeneratePlatformAdministratorInvitation: async (actor, invitationId) => {
+          expect(actor.userId).toBe(principal.userId);
+          expect(invitationId).toBe(id);
+          regenerated++;
+          return { invitation: { invitationId }, token: "rotated-secret" };
+        },
+        revokePlatformAdministratorInvitation: async (_actor, invitationId) => { expect(invitationId).toBe(id); revoked++; },
+      }) });
+      const request = (action: string, invitationId = id, cookie = "niq_session=valid-session") => app.request(`/v1/platform/administrators/invitations/${invitationId}/${action}`, { method: "POST", headers: { cookie } });
+      const response = await request("regenerate");
+      expect(response.status).toBe(200);
+      expect((await response.json()).activationToken).toBe(exposeDevelopmentTokens ? "rotated-secret" : undefined);
+      expect((await request("revoke")).status).toBe(204);
+      expect((await request("regenerate", "bad-id")).status).toBe(400);
+      expect((await request("revoke", id, "")).status).toBe(401);
+      expect(regenerated).toBe(1);
+      expect(revoked).toBe(1);
+    }
   });
 
   test("changes NIQ administrator access through the platform boundary", async () => {

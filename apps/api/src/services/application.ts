@@ -63,6 +63,8 @@ export interface ApplicationService {
   bootstrap(input: BootstrapAdmin, context: RequestContext): Promise<Principal>;
   listPlatformAdministrators(actor: Principal): Promise<unknown[]>;
   invitePlatformAdministrator(actor: Principal, input: CreatePlatformAdministratorInvitation, context: RequestContext): Promise<{ invitation: unknown; token: string }>;
+  revokePlatformAdministratorInvitation(actor: Principal, invitationId: string, context: RequestContext): Promise<void>;
+  regeneratePlatformAdministratorInvitation(actor: Principal, invitationId: string, context: RequestContext): Promise<{ invitation: unknown; token: string }>;
   setPlatformAdministratorActive(actor: Principal, membershipId: string, active: boolean, context: RequestContext): Promise<unknown>;
   createOrganization(actor: Principal, input: CreateOrganization, context: RequestContext): Promise<unknown>;
   onboardOrganization(actor: Principal, input: OnboardOrganization, context: RequestContext): Promise<{ organization: unknown; invitation: unknown; token: string }>;
