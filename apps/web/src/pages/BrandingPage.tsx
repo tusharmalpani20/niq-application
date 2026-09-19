@@ -36,19 +36,22 @@ export function BrandingPage() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadError, setLoadError] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const dirty = baseline !== null && (JSON.stringify(draft) !== JSON.stringify(baseline) || logo !== null);
   const disabled = user.role !== "ORGANIZATION_ADMIN" || !baseline || saving;
 
   useEffect(() => {
     let active = true;
+    setLoadError(false); setMessage(null);
     getOrganization(user.organizationId).then(({ organization }) => {
       if (!active) return;
       setDraft(settingsFrom(organization)); setBaseline(settingsFrom(organization));
       updateBranding(brandingFromOrganization(organization));
-    }).catch((error) => { if (active) setMessage(error instanceof Error ? error.message : "Settings could not be loaded."); });
+    }).catch((error) => { if (active) { setLoadError(true); setMessage(error instanceof Error ? error.message : "Settings could not be loaded."); } });
     return () => { active = false; };
-  }, [updateBranding, user.organizationId]);
+  }, [updateBranding, user.organizationId, loadAttempt]);
 
   useEffect(() => {
     if (!logo) { setPreviewUrl(null); return; }
@@ -149,6 +152,7 @@ export function BrandingPage() {
           </section>
         </fieldset>
         {message && <p role="alert" className="text-sm text-destructive">{message}</p>}
+        {loadError && <Button type="button" className="w-fit" variant="outline" onPress={() => setLoadAttempt((attempt) => attempt + 1)}>Retry</Button>}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <Button type="button" variant="outline" isDisabled={disabled} onPress={() => { setDraft((current) => ({ ...current, ...DEFAULT_ORGANIZATION_BRANDING })); setSaved(false); }}>Reset colours</Button>
           <div className="flex items-center gap-3"><span role="status" className="text-sm text-muted-foreground">{saved ? "Changes saved" : dirty ? "Unsaved changes" : ""}</span><Button type="button" variant="outline" isDisabled={disabled || !dirty} onPress={discard}>Discard changes</Button><Button type="submit" isDisabled={disabled || !dirty}>{saving ? "Saving…" : "Save changes"}</Button></div>
