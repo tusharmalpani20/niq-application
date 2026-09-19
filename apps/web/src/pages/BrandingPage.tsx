@@ -60,17 +60,21 @@ export function BrandingPage() {
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-    // BrowserRouter does not support route blockers. Guard ordinary in-app links before navigation.
+    // The shell dispatches this before button-driven navigation and sign out.
+    // BrowserRouter does not provide the data router's useBlocker API.
+    const canLeave = () => !saving && window.confirm("Discard your unsaved branding changes?");
+    const guardNavigation = (event: Event) => { if (!canLeave()) event.preventDefault(); };
     const guardLink = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const link = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
+      const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
       if (!link || link.target === "_blank" || link.hasAttribute("download") || link.href === window.location.href) return;
-      if (!window.confirm("Discard your unsaved branding changes?")) { event.preventDefault(); event.stopPropagation(); }
+      if (!canLeave()) { event.preventDefault(); event.stopPropagation(); }
     };
     window.addEventListener("beforeunload", warn);
+    window.addEventListener("niq:before-navigation", guardNavigation);
     document.addEventListener("click", guardLink, true);
-    return () => { window.removeEventListener("beforeunload", warn); document.removeEventListener("click", guardLink, true); };
-  }, [dirty]);
+    return () => { window.removeEventListener("beforeunload", warn); window.removeEventListener("niq:before-navigation", guardNavigation); document.removeEventListener("click", guardLink, true); };
+  }, [dirty, saving]);
 
   function discard() {
     if (!baseline) return;
