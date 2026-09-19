@@ -1,7 +1,7 @@
 import { idSchema, type OrganizationDetails, type OrganizationUser } from "@niq/application-contracts";
 import { Power, PowerOff } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DateDisplay } from "../components/DateDisplay";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -90,7 +90,7 @@ export function AdminOrganizationDetailPage() {
     <AlertDialog ariaLabel="Change organization status" isOpen={confirmStatus} onOpenChange={(open) => { if (!statusBusy) setConfirmStatus(open); }} isDismissable={!statusBusy}>
       <AlertDialogHeader><AlertDialogMedia>{organization.status === "ACTIVE" ? <PowerOff /> : <Power />}</AlertDialogMedia><AlertDialogTitle>{organization.status === "ACTIVE" ? "Disable" : "Enable"} {organization.displayName}?</AlertDialogTitle><AlertDialogDescription>{organization.status === "ACTIVE" ? "Users will be unable to sign in until you enable the organization again." : "Users will be able to sign in again."}</AlertDialogDescription></AlertDialogHeader>
       {statusError && <Alert variant="destructive"><AlertDescription>{statusError}</AlertDescription></Alert>}
-      <AlertDialogFooter><AlertDialogCancel isDisabled={statusBusy}>Cancel</AlertDialogCancel><AlertDialogAction variant={organization.status === "ACTIVE" ? "destructive" : "default"} isDisabled={statusBusy} onPress={changeStatus}>{statusBusy ? "Saving…" : organization.status === "ACTIVE" ? "Disable organization" : "Enable organization"}</AlertDialogAction></AlertDialogFooter>
+      <AlertDialogFooter><AlertDialogCancel isDisabled={statusBusy}>Cancel</AlertDialogCancel><Button variant={organization.status === "ACTIVE" ? "destructive" : "default"} isDisabled={statusBusy} onPress={changeStatus}>{statusBusy ? "Saving…" : organization.status === "ACTIVE" ? "Disable organization" : "Enable organization"}</Button></AlertDialogFooter>
     </AlertDialog>
   </>;
 }

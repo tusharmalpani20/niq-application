@@ -6,6 +6,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiRequestError, onboardOrganization } from "../lib/api";
 import { PageHeader } from "../components/Page";
@@ -27,6 +28,8 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
   const [displayName, setDisplayName] = useState("");
   const [slug, setSlug] = useState("");
   const [userLimit, setUserLimit] = useState("");
+  const [unlimitedUsers, setUnlimitedUsers] = useState(true);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [firstAdminEmail, setFirstAdminEmail] = useState("");
   const [logo, setLogo] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -78,7 +81,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
         legalName: displayName, displayName, slug,
         firstAdminEmail,
         primaryColor, secondaryColor, patientReferencePrefix,
-        userLimit: userLimit ? Number(userLimit) : null,
+        userLimit: unlimitedUsers ? null : Number(userLimit),
         logo: await organizationLogoPayload(logo),
       });
       setCreated(result);
@@ -97,7 +100,8 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
   if (created) {
     const invitationUrl = created.activationToken ? `${window.location.origin}/invite/${created.activationToken}` : null;
     return <section className="onboarding-success"><div className="success-icon"><Icon name="check" /></div><div><h2>Organization created</h2><p>{created.organization.displayName} and its first administrator invitation were created.</p></div>
-      {invitationUrl ? <Field><FieldLabel>Local invitation link</FieldLabel><Textarea readOnly value={invitationUrl} /><FieldDescription>Visible only in development. Production delivery will use the configured notification provider.</FieldDescription></Field> : <Alert><AlertDescription>The delivery provider will send the activation link to {created.invitation.email}.</AlertDescription></Alert>}
+      {invitationUrl ? <Field><FieldLabel>Invitation link</FieldLabel><Textarea aria-label="Invitation link" readOnly value={invitationUrl} /><FieldDescription>Share this link with {created.invitation.email}.</FieldDescription><Button type="button" variant="outline" onPress={async () => { try { await navigator.clipboard.writeText(invitationUrl); setLinkCopied(true); } catch { setMessage("Could not copy the link. Select and copy it above."); } }}>{linkCopied ? "Copied" : "Copy link"}</Button></Field> : <Alert><AlertDescription>An invitation was created for {created.invitation.email}.</AlertDescription></Alert>}
+      {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
       <div className="form-actions onboarding-success-actions">{onCancel ? <Button variant="outline" type="button" onPress={onCancel}>Close</Button> : <Link className={buttonVariants({ variant: "outline" })} to="/admin/organizations">All organizations</Link>}<Link className={buttonVariants()} to={`/admin/organizations/${created.organization.slug}`}>Manage organization</Link></div>
     </section>;
   }
@@ -110,14 +114,15 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     })}</TabsList>
 
     <TabsContent id={0} className="onboarding-panel" data-onboarding-step="0">
-      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" aria-invalid={errorField === "name"} onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} />{errorField === "name" && message && <FieldError>{message}</FieldError>}</Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated from the name.</FieldDescription></Field><Field><FieldLabel htmlFor="patientReferencePrefix">Patient prefix</FieldLabel><Input id="patientReferencePrefix" name="patientReferencePrefix" required minLength={2} maxLength={12} pattern="[A-Za-z][A-Za-z0-9]{1,11}" value={patientReferencePrefix} onChange={(event) => setPatientReferencePrefix(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12))} /><FieldDescription>Patient references begin at {patientReferencePrefix || "PREFIX"}-1.</FieldDescription></Field><Field><FieldLabel htmlFor="userLimit">User limit</FieldLabel><Input id="userLimit" name="userLimit" type="number" inputMode="numeric" min={1} step={1} value={userLimit} placeholder="Unlimited" onChange={(event) => { if (/^\d*$/.test(event.target.value)) setUserLimit(event.target.value); }} /><FieldDescription>Leave blank for unlimited users.</FieldDescription></Field></FieldGroup>
+      <FieldGroup className="field-grid"><Field><FieldLabel htmlFor="displayName">Name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" aria-invalid={errorField === "name"} onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} />{errorField === "name" && message && <FieldError>{message}</FieldError>}</Field><Field><FieldLabel htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated automatically from the organization name.</FieldDescription></Field><Field><FieldLabel htmlFor="patientReferencePrefix">Patient prefix</FieldLabel><Input id="patientReferencePrefix" name="patientReferencePrefix" required minLength={2} maxLength={12} pattern="[A-Za-z][A-Za-z0-9]{1,11}" value={patientReferencePrefix} onChange={(event) => setPatientReferencePrefix(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12))} /><FieldDescription>Example: {patientReferencePrefix || "PREFIX"}-1</FieldDescription></Field><Field><div className="flex items-center justify-between gap-4"><FieldLabel>Unlimited users</FieldLabel><Switch aria-label="Unlimited users" isSelected={unlimitedUsers} onChange={(value) => { setUnlimitedUsers(value); markDirty(); }} /></div>{unlimitedUsers ? <FieldDescription>No limit on organization users.</FieldDescription> : <><FieldLabel htmlFor="userLimit">User limit</FieldLabel><Input id="userLimit" name="userLimit" type="number" inputMode="numeric" required min={1} step={1} value={userLimit} onChange={(event) => { if (/^\d*$/.test(event.target.value)) setUserLimit(event.target.value); }} /></>}</Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={1} className="onboarding-panel" data-onboarding-step="1">
-      <FieldGroup><Field><FieldLabel htmlFor="firstAdminEmail">Email</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required value={firstAdminEmail} placeholder="admin@example-health.test" autoComplete="email" aria-invalid={errorField === "email"} onChange={(event) => setFirstAdminEmail(event.target.value)} />{errorField === "email" && message && <FieldError>{message}</FieldError>}<FieldDescription>We’ll create an invitation for this organization’s first administrator.</FieldDescription></Field></FieldGroup>
+      <FieldGroup><Field><FieldLabel htmlFor="firstAdminEmail">Email</FieldLabel><Input id="firstAdminEmail" name="firstAdminEmail" type="email" required value={firstAdminEmail} placeholder="admin@example-health.test" autoComplete="email" aria-invalid={errorField === "email"} onChange={(event) => setFirstAdminEmail(event.target.value)} />{errorField === "email" && message && <FieldError>{message}</FieldError>}<FieldDescription>This person will be invited to manage the organization and its users.</FieldDescription></Field></FieldGroup>
     </TabsContent>
 
     <TabsContent id={2} className="onboarding-panel" data-onboarding-step="2">
+      <p className="mb-5 text-sm text-muted-foreground">Branding is optional. Keep the defaults or add your own logo and colours.</p>
       <div className="branding-wizard-grid brand-customization-grid">
         <Field className="logo-field branding-card"><FieldLabel>Logo <small>Optional</small></FieldLabel><label className="logo-dropzone"><input type="file" accept={ORGANIZATION_LOGO_ACCEPT} onChange={(event) => chooseLogo(event.target.files?.[0] ?? null)} /><span className="logo-preview">{logoPreview ? <img src={logoPreview} alt="Organization logo preview" /> : <Icon name="building" size={26} />}</span><span><strong>{logo ? logo.name : "Upload a logo"}</strong><small>PNG, JPEG or WebP · maximum 2 MB</small></span></label>{logoMessage && <Alert variant="destructive"><AlertDescription>{logoMessage}</AlertDescription></Alert>}</Field>
         <div className="brand-colour-panel branding-card"><span className="branding-card-title">Brand colours</span><div className="brand-colour-grid"><label>Primary<span className="brand-colour-input"><input name="primaryColor" type="color" value={primaryColor} onChange={(event) => setPrimaryColor(event.target.value.toUpperCase())} /><span>{primaryColor}</span></span></label><label>Secondary<span className="brand-colour-input"><input name="secondaryColor" type="color" value={secondaryColor} onChange={(event) => setSecondaryColor(event.target.value.toUpperCase())} /><span>{secondaryColor}</span></span></label></div></div>
@@ -126,7 +131,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     </Tabs>
 
     {message && !errorField && <Alert variant="destructive" className="onboarding-error"><CircleAlert aria-hidden="true" /><AlertDescription>{message}</AlertDescription></Alert>}
-    <footer className="form-footer wizard-footer"><div>{onCancel ? <Button variant="outline" type="button" onPress={onCancel}>Cancel</Button> : <Link className={buttonVariants({ variant: "outline" })} to="/admin/organizations">Cancel</Link>}</div><div>{step > 0 && <Button variant="outline" type="button" onPress={() => setStep((step - 1) as Step)}>Back</Button>}{step < 2 ? <Button key="continue" type="button" onPress={moveNext}>Continue</Button> : <Button key="submit" type="submit" isDisabled={busy}>{busy ? "Creating…" : "Create"}</Button>}</div></footer>
+    <footer className="form-footer wizard-footer"><div>{onCancel ? <Button variant="outline" type="button" onPress={onCancel}>Cancel</Button> : <Link className={buttonVariants({ variant: "outline" })} to="/admin/organizations">Cancel</Link>}</div><div>{step > 0 && <Button variant="outline" type="button" onPress={() => setStep((step - 1) as Step)}>Back</Button>}{step < 2 ? <Button key="continue" type="button" onPress={moveNext}>Continue</Button> : <Button key="submit" type="submit" isDisabled={busy}>{busy ? "Creating…" : "Create organization"}</Button>}</div></footer>
   </form>;
 }
 
