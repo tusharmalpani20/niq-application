@@ -1,6 +1,6 @@
 import type { Organization } from "@niq/application-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChevronRight, Power, PowerOff, Plus, X } from "lucide-react";
+import { AlertTriangle, Power, PowerOff, Plus, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { DataTableColumn } from "../components/DataTable";
 import { DataTable } from "../components/DataTable";
@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
+import { DateDisplay } from "../components/DateDisplay";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { OrganizationOnboardingForm } from "./AdminCreateOrganizationPage";
 import { ApiRequestError, listOrganizations, setOrganizationStatus } from "../lib/api";
 
@@ -55,6 +57,7 @@ export function AdminOrganizationsPage() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState("all");
   const [statusTarget, setStatusTarget] = useState<Organization | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -101,20 +104,19 @@ export function AdminOrganizationsPage() {
   function organizationActions(organization: Organization) {
     return <div className="flex items-center justify-start gap-2">
       {organization.status !== "CLOSED" && <TooltipTrigger><Button variant="outline" size="icon" aria-label={organization.status === "ACTIVE" ? `Disable ${organization.displayName}` : `Enable ${organization.displayName}`} onPress={() => setStatusTarget(organization)}>{organization.status === "ACTIVE" ? <PowerOff className="size-4" /> : <Power className="size-4" />}</Button><Tooltip>{organization.status === "ACTIVE" ? "Disable organization" : "Enable organization"}</Tooltip></TooltipTrigger>}
-      <TooltipTrigger><Link className="row-link size-9" to={`/admin/organizations/${organization.slug}`} aria-label={`Manage ${organization.displayName}`}><ChevronRight className="size-5" /></Link><Tooltip>Manage organization</Tooltip></TooltipTrigger>
     </div>;
   }
 
   const columns: Array<DataTableColumn<Organization>> = [
-    { id: "organization", header: "Organization", cell: ({ row }) => <><strong>{row.original.displayName}</strong>{row.original.legalName !== row.original.displayName && <span className="cell-subtitle">{row.original.legalName}</span>}</> },
+    { id: "organization", header: "Organization", cell: ({ row }) => <><Link className="font-medium text-primary hover:underline" to={`/admin/organizations/${row.original.slug}`}>{row.original.displayName}</Link>{row.original.legalName !== row.original.displayName && <span className="cell-subtitle">{row.original.legalName}</span>}</> },
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={statusLabels[row.original.status]} /> },
-    { id: "created", header: "Created", cell: ({ row }) => row.original.createdAt.toLocaleDateString() },
+    { id: "created", header: "Created", cell: ({ row }) => <DateDisplay value={row.original.createdAt} /> },
     { id: "actions", header: "Actions", cell: ({ row }) => organizationActions(row.original) },
   ];
 
   const query = search.trim().toLocaleLowerCase();
   const filteredOrganizations = organizations.filter((organization) =>
-    [organization.displayName, organization.legalName, organization.slug]
+    (statusFilter === "all" || organization.status === statusFilter) && [organization.displayName, organization.legalName, organization.slug]
       .some((value) => value.toLocaleLowerCase().includes(query)),
   );
   const pageCount = Math.max(1, Math.ceil(filteredOrganizations.length / pageSize));
@@ -136,13 +138,14 @@ export function AdminOrganizationsPage() {
             <Input aria-label="Search organizations" placeholder="Search organizations…" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} className="h-10 pr-9" />
             {search && <Button type="button" variant="ghost" size="icon-sm" aria-label="Clear search" className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground" onPress={() => { setSearch(""); setPage(1); }}><X aria-hidden="true" /></Button>}
           </div>
-          <Button ref={addButtonRef} size="icon-lg" className="size-10 shrink-0" aria-label="Add organization" onPress={() => setShowOnboarding(true)}><Plus /><span className="sr-only">Add organization</span></Button>
+          <TooltipTrigger><Button ref={addButtonRef} size="icon-lg" className="size-10 shrink-0" aria-label="Add organization" onPress={() => setShowOnboarding(true)}><Plus /><span className="sr-only">Add organization</span></Button><Tooltip>Add organization</Tooltip></TooltipTrigger>
         </div>
       </div>
+      <Select aria-label="Filter organizations by status" selectedKey={statusFilter} onSelectionChange={(key) => { setStatusFilter(String(key)); setPage(1); }} className="w-full sm:w-64"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem>{Object.entries(statusLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>
       <section className="surface table-surface organization-table-card">
-        {organizations.length === 0 ? <EmptyState title="No organizations" description="Create the first client organization." /> : filteredOrganizations.length === 0 ? <EmptyState title="No matching organizations" description="Try a different organization name." /> : <>
+        {organizations.length === 0 ? <EmptyState title="No organizations" description="Create the first client organization." /> : filteredOrganizations.length === 0 ? <EmptyState title="No matching organizations" description="Try a different name or status filter." /> : <>
           <div className="desktop-table p-5"><DataTable columns={columns} data={visibleOrganizations} label="Organizations" /></div>
-          <div className="mobile-card-list">{visibleOrganizations.map((organization) => <article className="mobile-data-card" key={organization.id}><div><strong>{organization.displayName}</strong>{organization.legalName !== organization.displayName && <span>{organization.legalName}</span>}</div><div className="mobile-organization-meta"><StatusBadge status={statusLabels[organization.status]} />{organizationActions(organization)}</div></article>)}</div>
+          <div className="mobile-card-list">{visibleOrganizations.map((organization) => <article className="mobile-data-card" key={organization.id}><div><Link className="font-medium text-primary hover:underline" to={`/admin/organizations/${organization.slug}`}>{organization.displayName}</Link>{organization.legalName !== organization.displayName && <span>{organization.legalName}</span>}</div><div className="mobile-organization-meta"><StatusBadge status={statusLabels[organization.status]} />{organizationActions(organization)}</div></article>)}</div>
         </>}
       </section>
       {organizations.length > 0 && filteredOrganizations.length > 0 && <Pagination aria-label="Organizations pagination"><PaginationContent>
