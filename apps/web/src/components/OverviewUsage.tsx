@@ -1,6 +1,8 @@
 import type { ScoringOrganizationInfo } from "@niq/application-contracts";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
+import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { getScoringOrganizationInfo } from "../lib/api";
 
@@ -27,7 +29,7 @@ export function OverviewUsage({ organizationId }: { organizationId: string }) {
   }, [organizationId, attempt]);
   const period = data ? new Date(`${data.usage.period}-01T00:00:00Z`).toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" }) : "This calendar month";
   return <section className="mt-7 grid gap-4" aria-label="Scoring usage">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Scoring usage</h2><p className="text-sm text-muted-foreground">{period} · UTC</p></div><Button variant="outline" onPress={() => setAttempt((value) => value + 1)} isDisabled={!data && !error}>Refresh</Button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Scoring usage</h2><p className="text-sm text-muted-foreground">{period} · UTC</p></div><TooltipTrigger><Button variant="outline" size="icon" aria-label="Refresh scoring usage" onPress={() => setAttempt((value) => value + 1)} isDisabled={!data && !error}><RefreshCw aria-hidden="true" /></Button><Tooltip>Refresh scoring usage</Tooltip></TooltipTrigger></div>
     {error ? <div className="surface p-5"><p role="status">Scoring usage is unavailable.</p><Link className="text-primary underline" to="/settings/scoring">Check scoring connection</Link></div> : !data ? <p role="status" className="text-sm text-muted-foreground">Loading usage…</p> : <>
       <div className="grid gap-4 sm:grid-cols-2">
         <CapacityCard title="Scores" used={data.usage.scores} limit={data.limits.scoresPerMonth} detail={data.services.scoring.enabled ? "Scores used this month" : "Scoring is disabled"} to="/settings/scoring" />

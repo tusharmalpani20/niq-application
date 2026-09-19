@@ -116,3 +116,8 @@
 .client-workspace [data-slot="tabs-trigger"]::after { background: var(--primary); }
 .client-workspace [data-slot="tabs-trigger"] [data-slot="badge"] { background: var(--muted); color: var(--foreground); }
 :root[data-app-area="client"] [data-slot="dialog-content"] [data-slot="input"] { height: 2.5rem; }
+
+/* Connection identity follows tenant branding. Service status badges remain semantic. */
+.client-workspace .connection-summary { background: var(--primary-soft); border-color: color-mix(in srgb, var(--primary) 20%, var(--border)); }
+.client-workspace .connection-summary strong { color: var(--foreground); }
+.client-workspace .connection-summary-icon { color: var(--primary); background: transparent; }
