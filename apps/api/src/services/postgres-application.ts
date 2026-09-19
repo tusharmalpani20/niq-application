@@ -820,6 +820,53 @@ export class PostgresApplicationService implements ApplicationService {
       completedAt: row.completedAt,
     }));
   }
+  async invitationAccess(actor: Principal, organizationId: string) {
+    this.ensureOrganizationAccess(actor, organizationId, true);
+    if (actor.platformRole === "NIQ_ADMIN") return { allFacilities: true };
+    const assigned = await this.db.select({ id: facilityMemberships.facilityId }).from(facilityMemberships)
+      .where(and(eq(facilityMemberships.organizationId, organizationId), eq(facilityMemberships.organizationMembershipId, actor.membershipId)));
+    return { allFacilities: assigned.length === 0 };
+  }
+
+  async manageUserInvitation(actor: Principal, organizationId: string, invitationId: string, action: "revoke" | "regenerate", context: RequestContext) {
+    this.ensureOrganizationAccess(actor, organizationId, true);
+    const token = action === "regenerate" ? randomToken() : undefined;
+    try {
+      const invitation = await this.db.transaction(async (tx) => {
+        // Acceptance takes the same invitation lock, preventing accepted links being revived.
+        const [invite] = await tx.select().from(invitations).where(and(eq(invitations.id, invitationId), eq(invitations.organizationId, organizationId), eq(invitations.platformRole, "USER"))).for("update").limit(1);
+        if (!invite) throw new ServiceError("NOT_FOUND", "Invitation not found.");
+        if (invite.status !== "PENDING" && invite.status !== "EXPIRED") throw new ServiceError("CONFLICT", "This invitation has already been accepted or revoked.");
+        if (actor.platformRole !== "NIQ_ADMIN") {
+          const assigned = await tx.select({ facilityId: facilityMemberships.facilityId }).from(facilityMemberships).where(and(eq(facilityMemberships.organizationId, organizationId), eq(facilityMemberships.organizationMembershipId, actor.membershipId)));
+          if (assigned.length) {
+            const targets = await tx.select({ facilityId: invitationFacilities.facilityId }).from(invitationFacilities).where(and(eq(invitationFacilities.organizationId, organizationId), eq(invitationFacilities.invitationId, invitationId)));
+            if (!targets.length || targets.some((target) => !assigned.some((item) => item.facilityId === target.facilityId))) throw new ServiceError("FORBIDDEN", "You can manage invitations only for your assigned facilities.");
+          }
+        }
+        if (token) {
+          const [accounts, pending] = await Promise.all([
+            tx.select({ id: users.id }).from(users).where(eq(users.email, invite.email)).limit(1),
+            tx.select({ id: invitations.id }).from(invitations).where(and(eq(invitations.email, invite.email), ne(invitations.id, invitationId), eq(invitations.status, "PENDING"), gt(invitations.expiresAt, new Date()))).limit(1),
+          ]);
+          if (accounts.length || pending.length) throw new ServiceError("CONFLICT", "This email already has an account or another invitation.");
+          // Clear expired reservations before the capacity trigger checks the renewed seat.
+          await tx.update(invitations).set({ status: "EXPIRED", updatedAt: new Date() }).where(and(eq(invitations.organizationId, organizationId), eq(invitations.status, "PENDING"), sql`${invitations.expiresAt} <= now()`));
+        }
+        const [updated] = await tx.update(invitations).set(token
+          ? { status: "PENDING", tokenHash: await keyedHash(token, this.config.SESSION_SECRET), expiresAt: new Date(Date.now() + this.config.INVITATION_TTL_HOURS * 3_600_000), updatedAt: new Date() }
+          : { status: "REVOKED", updatedAt: new Date() }).where(eq(invitations.id, invitationId)).returning({ id: invitations.id, email: invitations.email, expiresAt: invitations.expiresAt });
+        await this.audit(tx, organizationId, context, token ? "USER_INVITATION_REGENERATED" : "USER_INVITATION_REVOKED", "invitation", invitationId, actor);
+        return updated;
+      });
+      return { invitation, token };
+    } catch (error) {
+      if (databaseCode(error) === "23514" && String(error).includes("user limit")) throw new ServiceError("USER_LIMIT_REACHED", "The organization user limit has been reached.");
+      if (databaseCode(error) === "23505") throw new ServiceError("CONFLICT", "Another invitation already exists for this email.");
+      throw error;
+    }
+  }
+
   async inviteUser(actor: Principal, organizationId: string, input: CreateInvitation, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true); const token = randomToken(); const invitationId = createEntityId();
     if (actor.platformRole !== "NIQ_ADMIN") {
@@ -850,17 +897,29 @@ export class PostgresApplicationService implements ApplicationService {
   }
   async listUsers(actor: Principal, organizationId: string) {
     this.ensureOrganizationAccess(actor, organizationId, true);
-    return this.db.select({ membershipId: organizationMemberships.id, userId: users.id, email: users.email, displayName: users.displayName, status: users.status, role: organizationMemberships.role, active: organizationMemberships.isActive, createdAt: organizationMemberships.createdAt })
+    const records = await this.db.select({ membershipId: organizationMemberships.id, userId: users.id, email: users.email, displayName: users.displayName, status: users.status, role: organizationMemberships.role, active: organizationMemberships.isActive, createdAt: organizationMemberships.createdAt })
       .from(organizationMemberships).innerJoin(users, eq(users.id, organizationMemberships.userId)).where(eq(organizationMemberships.organizationId, organizationId)).orderBy(users.displayName);
+    const assignments = await this.db.select({ membershipId: facilityMemberships.organizationMembershipId, id: facilities.id, name: facilities.name }).from(facilityMemberships).innerJoin(facilities, and(eq(facilities.id, facilityMemberships.facilityId), eq(facilities.organizationId, facilityMemberships.organizationId))).where(eq(facilityMemberships.organizationId, organizationId));
+    return records.map((record) => ({ ...record, facilities: assignments.filter((item) => item.membershipId === record.membershipId).map(({ id, name }) => ({ id, name })) }));
   }
   async setUserActive(actor: Principal, organizationId: string, membershipId: string, active: boolean, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, true);
     if (membershipId === actor.membershipId && !active) throw new ServiceError("CONFLICT", "You cannot deactivate your own membership.");
     try {
-      const [result] = await this.db.update(organizationMemberships).set({ isActive: active, updatedAt: new Date() }).where(and(eq(organizationMemberships.organizationId, organizationId), eq(organizationMemberships.id, membershipId))).returning();
-      if (!result) throw new ServiceError("NOT_FOUND", "User membership not found.");
-      if (!active) await this.db.update(authSessions).set({ revokedAt: new Date(), updatedAt: new Date() }).where(and(eq(authSessions.organizationId, organizationId), eq(authSessions.membershipId, membershipId), isNull(authSessions.revokedAt)));
-      await this.audit(this.db, organizationId, context, active ? "USER_REACTIVATED" : "USER_DEACTIVATED", "membership", membershipId, actor); return result;
+      return await this.db.transaction(async (tx) => {
+        // Serialize access changes so concurrent requests cannot disable every admin.
+        await tx.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, organizationId)).for("update");
+        const [target] = await tx.select().from(organizationMemberships).where(and(eq(organizationMemberships.organizationId, organizationId), eq(organizationMemberships.id, membershipId))).limit(1);
+        if (!target) throw new ServiceError("NOT_FOUND", "User membership not found.");
+        if (!active && target.role === "ORGANIZATION_ADMIN" && target.isActive) {
+          const remaining = await tx.select({ id: organizationMemberships.id }).from(organizationMemberships).innerJoin(users, eq(users.id, organizationMemberships.userId)).where(and(eq(organizationMemberships.organizationId, organizationId), ne(organizationMemberships.id, membershipId), eq(organizationMemberships.role, "ORGANIZATION_ADMIN"), eq(organizationMemberships.isActive, true), eq(users.status, "ACTIVE")));
+          if (!remaining.length) throw new ServiceError("CONFLICT", "Keep at least one enabled organization administrator.");
+        }
+        const [result] = await tx.update(organizationMemberships).set({ isActive: active, updatedAt: new Date() }).where(eq(organizationMemberships.id, membershipId)).returning();
+        if (!active) await tx.update(authSessions).set({ revokedAt: new Date(), updatedAt: new Date() }).where(and(eq(authSessions.organizationId, organizationId), eq(authSessions.membershipId, membershipId), isNull(authSessions.revokedAt)));
+        await this.audit(tx, organizationId, context, active ? "USER_REACTIVATED" : "USER_DEACTIVATED", "membership", membershipId, actor);
+        return result;
+      });
     } catch (error) {
       if (databaseCode(error) === "23514" && String(error).includes("user limit")) throw new ServiceError("USER_LIMIT_REACHED", "The organization user limit has been reached."); throw error;
     }

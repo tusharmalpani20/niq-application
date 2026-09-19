@@ -28,6 +28,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     getScoringOrganizationInfo: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], updateFacility: async () => ({}),
     createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [],
+    invitationAccess: async () => ({ allFacilities: true }), manageUserInvitation: async () => ({ invitation: {}, token: "replacement-token" }),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
     ...overrides,
   };
@@ -292,6 +293,32 @@ describe("local authentication routes", () => {
       expect((await request("revoke", id, "")).status).toBe(401);
       expect(regenerated).toBe(1);
       expect(revoked).toBe(1);
+    }
+  });
+
+  test("tenant invitation actions validate IDs and keep replacement tokens development-only", async () => {
+    const id = "01J00000000000000000000009";
+    for (const exposeDevelopmentTokens of [false, true]) {
+      let calls = 0;
+      const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, exposeDevelopmentTokens, service: fakeService({
+        manageUserInvitation: async (actor, organizationId, invitationId, action) => {
+          expect(actor.userId).toBe(principal.userId);
+          expect(organizationId).toBe(principal.organizationId);
+          expect(invitationId).toBe(id);
+          calls++;
+          return { invitation: { id }, ...(action === "regenerate" ? { token: "new-tenant-secret" } : {}) };
+        },
+      }) });
+      const request = (action: string, invitationId = id, cookie = "niq_session=valid-session") => app.request(`/v1/organizations/${principal.organizationId}/invitations/${invitationId}/${action}`, { method: "POST", headers: { cookie } });
+      const response = await request("regenerate");
+      expect(response.status).toBe(200);
+      expect((await response.json()).activationToken).toBe(exposeDevelopmentTokens ? "new-tenant-secret" : undefined);
+      const revoke = await request("revoke");
+      expect(revoke.status).toBe(200);
+      expect((await revoke.json()).activationToken).toBeUndefined();
+      expect((await request("revoke", "bad-id")).status).toBe(400);
+      expect((await request("revoke", id, "")).status).toBe(401);
+      expect(calls).toBe(2);
     }
   });
 

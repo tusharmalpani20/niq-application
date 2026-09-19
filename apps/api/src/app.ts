@@ -150,6 +150,14 @@ export function createApp(dependencies: AppDependencies) {
   app.get("/v1/organizations/:organizationId/patients/:patientLocator", zValidator("param", patientParamsSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.getPatient(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").patientLocator))));
   app.get("/v1/organizations/:organizationId/assessments", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json({ items: await dependencies.service!.listAssessments(context.get("principal"), context.req.valid("param").organizationId) }));
   app.get("/v1/organizations/:organizationId/users", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json({ items: await dependencies.service!.listUsers(context.get("principal"), context.req.valid("param").organizationId) }));
+  app.get("/v1/organizations/:organizationId/invitation-access", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json(await dependencies.service!.invitationAccess(context.get("principal"), context.req.valid("param").organizationId)));
+  for (const action of ["revoke", "regenerate"] as const) {
+    app.post(`/v1/organizations/:organizationId/invitations/:invitationId/${action}`, zValidator("param", z.object({ organizationId: idSchema, invitationId: idSchema }), validationFailure), async (context) => {
+      const { organizationId, invitationId } = context.req.valid("param");
+      const result = await dependencies.service!.manageUserInvitation(context.get("principal"), organizationId, invitationId, action, requestContext(context));
+      return context.json({ invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens && result.token ? { activationToken: result.token } : {}) });
+    });
+  }
   app.post("/v1/organizations/:organizationId/invitations", zValidator("param", idParamsSchema, validationFailure), zValidator("json", createInvitationSchema, validationFailure), async (context) => {
     const result = await dependencies.service!.inviteUser(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("json"), requestContext(context));
     return context.json({ invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens ? { activationToken: result.token } : {}) }, 201);

@@ -224,6 +224,7 @@ export const organizationUserSchema = z.object({
   status: z.enum(["INVITED", "ACTIVE", "SUSPENDED", "DEACTIVATED"]),
   role: membershipRoleSchema,
   active: z.boolean(),
+  facilities: z.array(z.object({ id: idSchema, name: z.string() })).optional(),
   createdAt: z.coerce.date(),
 });
 

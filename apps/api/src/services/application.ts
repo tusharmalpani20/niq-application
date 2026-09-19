@@ -83,6 +83,8 @@ export interface ApplicationService {
   listPatients(actor: Principal, organizationId: string): Promise<unknown[]>;
   getPatient(actor: Principal, organizationId: string, patientLocator: string): Promise<unknown>;
   listAssessments(actor: Principal, organizationId: string): Promise<unknown[]>;
+  invitationAccess(actor: Principal, organizationId: string): Promise<{ allFacilities: boolean }>;
+  manageUserInvitation(actor: Principal, organizationId: string, invitationId: string, action: "revoke" | "regenerate", context: RequestContext): Promise<{ invitation: unknown; token?: string }>;
   inviteUser(actor: Principal, organizationId: string, input: CreateInvitation, context: RequestContext): Promise<{ invitation: unknown; token: string }>;
   listUsers(actor: Principal, organizationId: string): Promise<unknown[]>;
   setUserActive(actor: Principal, organizationId: string, membershipId: string, active: boolean, context: RequestContext): Promise<unknown>;
