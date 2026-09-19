@@ -1,63 +1,29 @@
-import { createPlatformAdministratorInvitationSchema, type AuthenticatedUser, type PlatformAdministrator } from "@niq/application-contracts";
-import { AlertTriangle, Plus, Search, ShieldCheck } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type AuthenticatedUser, type PlatformAdministrator } from "@niq/application-contracts";
+import { AlertTriangle, Plus, Search } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import type { DataTableColumn } from "../components/DataTable";
+import { AdministratorInvitationDialog } from "../components/AdministratorInvitationDialog";
+import { DateDisplay } from "../components/DateDisplay";
+import { StatusBadge } from "../components/StatusBadge";
+import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { DataTable } from "../components/DataTable";
 import { EmptyState, ErrorState, LoadingState, PageHeader } from "../components/Page";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ApiRequestError, invitePlatformAdministrator, listPlatformAdministrators, setPlatformAdministratorActive } from "../lib/api";
+import { ApiRequestError, listPlatformAdministrators, setPlatformAdministratorActive } from "../lib/api";
 
 type AdministratorUser = Extract<PlatformAdministrator, { kind: "USER" }>;
 type AdministratorInvitation = Extract<PlatformAdministrator, { kind: "INVITATION" }>;
 const pageSize = 10;
 
-function AdministratorInvitationDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [invitationUrl, setInvitationUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) { setBusy(false); setMessage(null); setEmailError(null); setInvitationUrl(null); }
-  }, [open]);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setMessage(null);
-    const email = String(new FormData(event.currentTarget).get("email"));
-    const parsed = createPlatformAdministratorInvitationSchema.safeParse({ email });
-    if (!parsed.success) {
-      setEmailError("Enter a valid email address.");
-      return;
-    }
-    setEmailError(null);
-    setBusy(true);
-    try {
-      const result = await invitePlatformAdministrator(parsed.data);
-      onCreated();
-      if (result.activationToken) setInvitationUrl(`${window.location.origin}/invite/${result.activationToken}`);
-      else onClose();
-    } catch (error) {
-      setMessage(error instanceof ApiRequestError || error instanceof Error ? error.message : "The administrator invitation could not be created.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return <Dialog ariaLabel="Invite NIQ administrator" isOpen={open} onOpenChange={(next) => { if (!next && !busy) onClose(); }} isDismissable={!busy} className="sm:max-w-md">
-    <DialogHeader><DialogTitle>Invite administrator</DialogTitle></DialogHeader>
-    {invitationUrl ? <div className="grid gap-4"><Alert><ShieldCheck aria-hidden="true" /><AlertDescription>The invitation is ready. Share this development link securely.</AlertDescription></Alert><Field><FieldLabel htmlFor="platformInvitationUrl">Local invitation link</FieldLabel><Input id="platformInvitationUrl" readOnly value={invitationUrl} onFocus={(event) => event.currentTarget.select()} /><FieldDescription>Production delivery uses the configured notification provider.</FieldDescription></Field><div className="flex justify-end"><Button onPress={onClose}>Done</Button></div></div> : <form className="grid gap-4" noValidate onSubmit={submit}><Field data-invalid={emailError ? true : undefined}><FieldLabel htmlFor="platformAdminEmail">Email</FieldLabel><Input id="platformAdminEmail" name="email" type="email" autoComplete="email" required autoFocus aria-invalid={emailError ? true : undefined} onChange={() => setEmailError(null)} />{emailError && <FieldError>{emailError}</FieldError>}</Field>{message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}<div className="flex justify-end gap-2"><Button type="button" variant="outline" isDisabled={busy} onPress={onClose}>Cancel</Button><Button type="submit" isDisabled={busy}>{busy ? "Sending…" : "Send invitation"}</Button></div></form>}
-  </Dialog>;
+function OwnAccountLabel() {
+  return <TooltipTrigger><Button variant="ghost" size="sm" aria-label="Your account. You cannot disable your own account.">Your account</Button><Tooltip>You cannot disable your own account.</Tooltip></TooltipTrigger>;
 }
 
 export function AdminAdministratorsPage() {
@@ -106,13 +72,12 @@ export function AdminAdministratorsPage() {
 
   const userColumns: Array<DataTableColumn<AdministratorUser>> = [
     { id: "administrator", header: "Administrator", cell: ({ row }) => <><strong>{row.original.displayName}{row.original.userId === currentUser.userId ? " (you)" : ""}</strong><span className="cell-subtitle">{row.original.email}</span></> },
-    { id: "status", header: "Status", cell: ({ row }) => <Badge className={row.original.active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}>{row.original.active ? "Enabled" : "Disabled"}</Badge> },
-    { id: "access", header: "Access", cell: ({ row }) => <Button variant="outline" size="sm" isDisabled={row.original.userId === currentUser.userId} onPress={() => setAccessTarget(row.original)}>{row.original.active ? "Disable" : "Enable"}</Button> },
+    { id: "status", header: "Status", cell: ({ row }) => row.original.active ? <StatusBadge status="Active" /> : <Badge variant="secondary">Disabled</Badge> },
+    { id: "actions", header: "Actions", cell: ({ row }) => row.original.userId === currentUser.userId ? <OwnAccountLabel /> : <Button variant="outline" size="sm" onPress={() => setAccessTarget(row.original)}>{row.original.active ? "Disable" : "Enable"}</Button> },
   ];
   const invitationColumns: Array<DataTableColumn<AdministratorInvitation>> = [
     { id: "administrator", header: "Invitee", cell: ({ row }) => <strong>{row.original.email}</strong> },
-    { id: "expires", header: "Expires", cell: ({ row }) => row.original.expiresAt.toLocaleDateString() },
-    { id: "status", header: "Status", cell: () => <Badge variant="secondary">Pending</Badge> },
+    { id: "expires", header: "Expires", cell: ({ row }) => <DateDisplay value={row.original.expiresAt} /> },
   ];
 
   return <>
@@ -127,18 +92,15 @@ export function AdminAdministratorsPage() {
           </TabsList>
           <div className="mb-2 flex flex-1 items-center justify-end gap-2">
             <InputGroup className="h-10 max-w-72"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput value={search} onChange={(event) => { setSearch(event.target.value); setUserPage(1); setInvitationPage(1); }} placeholder={selectedTab === "users" ? "Search administrators..." : "Search invitations..."} aria-label={selectedTab === "users" ? "Search administrators" : "Search invitations"} /></InputGroup>
-            <Button size="icon-lg" className="size-10 shrink-0" aria-label="Invite administrator" onPress={() => setShowInvite(true)}><Plus aria-hidden="true" /></Button>
+            <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="Invite administrator" onPress={() => setShowInvite(true)}><Plus aria-hidden="true" /></Button><Tooltip>Invite administrator</Tooltip></TooltipTrigger>
           </div>
         </div>
-        <TabsContent id="users" className="grid gap-4"><section className="surface table-surface">{filteredUsers.length === 0 ? <EmptyState title={search ? "No matching administrators" : "No administrators"} description={search ? "Try a different search." : "Invite an administrator to help manage this application."} /> : <><div className="desktop-table p-5"><DataTable columns={userColumns} data={visibleUsers} label="NIQ administrators" /></div><div className="mobile-card-list">{visibleUsers.map((administrator) => <article className="mobile-data-card" key={administrator.userId}><div><strong>{administrator.displayName}{administrator.userId === currentUser.userId ? " (you)" : ""}</strong><span>{administrator.email}</span></div><div className="flex items-center justify-between gap-3"><Badge className={administrator.active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}>{administrator.active ? "Enabled" : "Disabled"}</Badge><Button variant="outline" size="sm" isDisabled={administrator.userId === currentUser.userId} onPress={() => setAccessTarget(administrator)}>{administrator.active ? "Disable" : "Enable"}</Button></div></article>)}</div></>}</section>{filteredUsers.length > 0 && <Pagination aria-label="Administrators pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={userPage === 1} onPress={() => setUserPage((page) => page - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {userPage} of {userPageCount} · {filteredUsers.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={userPage === userPageCount} onPress={() => setUserPage((page) => page + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}</TabsContent>
+        <TabsContent id="users" className="grid gap-4"><section className="surface table-surface">{filteredUsers.length === 0 ? <EmptyState title={normalizedSearch ? "No matching administrators" : "No administrators"} description={normalizedSearch ? "Try a different search." : "Invite an administrator to help manage this application."} /> : <><div className="desktop-table p-5"><DataTable columns={userColumns} data={visibleUsers} label="NIQ administrators" /></div><div className="mobile-card-list">{visibleUsers.map((administrator) => <article className="mobile-data-card" key={administrator.userId}><div><strong>{administrator.displayName}{administrator.userId === currentUser.userId ? " (you)" : ""}</strong><span>{administrator.email}</span></div><div className="flex items-center justify-between gap-3">{administrator.active ? <StatusBadge status="Active" /> : <Badge variant="secondary">Disabled</Badge>}{administrator.userId === currentUser.userId ? <OwnAccountLabel /> : <Button variant="outline" size="sm" onPress={() => setAccessTarget(administrator)}>{administrator.active ? "Disable" : "Enable"}</Button>}</div></article>)}</div></>}</section>{filteredUsers.length > 0 && <Pagination aria-label="Administrators pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={userPage === 1} onPress={() => setUserPage((page) => page - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {userPage} of {userPageCount} · {filteredUsers.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={userPage === userPageCount} onPress={() => setUserPage((page) => page + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}</TabsContent>
         <TabsContent id="invitations" className="grid gap-4">
           <section className="surface table-surface">
-            {filteredInvitations.length === 0 ? <>
-              <div className="desktop-table p-5"><DataTable columns={invitationColumns} data={[]} label="Pending administrator invitations" emptyContent={<div className="administrator-empty-table-action">{search ? <span>No matching invitations</span> : <Button className="administrator-empty-action" variant="outline" onPress={() => setShowInvite(true)}><Plus aria-hidden="true" />Invite administrator</Button>}</div>} /></div>
-              <div className="mobile-card-list administrator-empty-mobile">{search ? <span>No matching invitations</span> : <Button className="administrator-empty-action" variant="outline" onPress={() => setShowInvite(true)}><Plus aria-hidden="true" />Invite administrator</Button>}</div>
-            </> : <><div className="desktop-table p-5"><DataTable columns={invitationColumns} data={visibleInvitations} label="Pending administrator invitations" /></div><div className="mobile-card-list">{visibleInvitations.map((invitation) => <article className="mobile-data-card" key={invitation.invitationId}><strong>{invitation.email}</strong><div className="flex items-center justify-between gap-3"><Badge variant="secondary">Pending</Badge><span>Expires {invitation.expiresAt.toLocaleDateString()}</span></div></article>)}</div></>}
+            {filteredInvitations.length === 0 ? <EmptyState title={normalizedSearch ? "No matching invitations" : "No pending invitations"} description={normalizedSearch ? "Try a different search." : "Invite an administrator to help manage NIQ."} action={!normalizedSearch ? <Button onPress={() => setShowInvite(true)}><Plus aria-hidden="true" />Invite administrator</Button> : undefined} /> : <><div className="desktop-table p-5"><DataTable columns={invitationColumns} data={visibleInvitations} label="Pending administrator invitations" /></div><div className="mobile-card-list">{visibleInvitations.map((invitation) => <article className="mobile-data-card" key={invitation.invitationId}><strong>{invitation.email}</strong><div className="flex items-center justify-between gap-3"><Badge variant="secondary">Pending</Badge><span>Expires <DateDisplay value={invitation.expiresAt} /></span></div></article>)}</div></>}
           </section>
-          <Pagination aria-label="Invitations pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={invitationPage === 1} onPress={() => setInvitationPage((page) => page - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {invitationPage} of {invitationPageCount} · {filteredInvitations.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={invitationPage === invitationPageCount} onPress={() => setInvitationPage((page) => page + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>
+          {filteredInvitations.length > 0 && <Pagination aria-label="Invitations pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={invitationPage === 1} onPress={() => setInvitationPage((page) => page - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {invitationPage} of {invitationPageCount} · {filteredInvitations.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={invitationPage === invitationPageCount} onPress={() => setInvitationPage((page) => page + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
         </TabsContent>
       </Tabs>
     </div>}
