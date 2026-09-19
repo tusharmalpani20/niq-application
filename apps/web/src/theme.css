@@ -67,6 +67,56 @@
   --admin-shadow: 0 1px 3px color-mix(in srgb, var(--admin-ink) 7%, transparent);
   --admin-dialog-shadow: 0 16px 48px color-mix(in srgb, var(--admin-ink) 16%, transparent);
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  /* Existing clinical surfaces share the token source without changing their palette. */
+  --clinical-sidebar-background: #293f42;
+  --clinical-sidebar-foreground: #edf8f8;
+  --clinical-sidebar-muted: #b9cdcf;
+  --clinical-sidebar-link: #c5d4d5;
+  --health-success: #35a775;
+  --health-warning: #d89a24;
+  --health-warning-soft: #fff5da;
+  --review-foreground: #6751a4;
+  --review-background: #f0edfb;
+  --notice-warning-foreground: #765514;
+  --notice-warning-border: #ecd79e;
+  --notice-warning-background: #fffaf0;
+  --notice-error-border: #efc7c5;
+  --notice-error-background: #fff6f5;
+  --notice-info-foreground: #376668;
+  --notice-info-border: #c8e1e3;
+  --notice-info-background: #f1f9f9;
+  --track-background: #e8edef;
+  --draft-foreground: #73571a;
+  --draft-border: #efdda7;
+  --draft-background: #fff9e9;
+  --field-error-foreground: #8e2420;
+  --field-error-background: #fff1f0;
+  --auth-gradient-start: #eef7f7;
+  --auth-gradient-middle: #f8fafb;
+  --auth-gradient-end: #e7f1f2;
+  --upload-border: #aabbbc;
+  --control-border: #cbd5d6;
+  --control-border-strong: #ccd7d9;
+  --choice-border: #d9eeee;
+  --choice-background: #f8ffff;
+  --scan-background: #eefaf4;
+  --danger-button: #9a2e2e;
+  --danger-button-hover: #812424;
+  --nav-shadow-colour: rgb(0 0 0 / 12%);
+  --brand-shadow-colour: rgb(0 0 0 / 14%);
+  --discard-overlay: rgb(17 27 29 / 48%);
+  --scan-shadow-colour: rgb(20 40 40 / 25%);
+  --modal-overlay: rgb(24 39 41 / 48%);
+  --header-background: rgb(244 247 249 / 82%);
+  --inverse-border: rgb(255 255 255 / 10%);
+  --inverse-border-strong: rgb(255 255 255 / 18%);
+  --inverse-surface: rgb(255 255 255 / 5%);
+  --inverse-hover: rgb(255 255 255 / 6%);
+  --modal-shadow-colour: rgb(29 50 53 / 24%);
+  --discard-shadow-colour: rgb(35 54 56 / 18%);
+  --auth-shadow-colour: rgb(52 74 76 / 12%);
+  --surface-shadow-colour: rgb(88 89 91 / 7%);
+  --surface-border-colour: rgb(88 89 91 / 8%);
 }
 
 .dark {
