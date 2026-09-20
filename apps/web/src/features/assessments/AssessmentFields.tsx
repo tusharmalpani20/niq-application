@@ -1,4 +1,5 @@
 import { ASSESSMENT_ANSWER_TEXT_LIMIT, calculateAssessmentBmi, calculateAssessmentWeightChange, isAssessmentFieldApplicable, type AssessmentFormManifest, type FormAnswer, type FormAnswers, type FormField } from "@niq/application-contracts";
+import { AssessmentWeightComparison } from "./AssessmentWeightComparison";
 import { Tooltip, TooltipTrigger } from "../../components/ui/tooltip";
 import { X } from "lucide-react";
 import { SearchCombobox } from "../../components/ui/combobox";
@@ -92,5 +93,5 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
       {errorMarkup}
     </div>;
   };
-  return <div className="space-y-6">{assessmentFieldGroups(section.fields, answers).map(group => <div key={group[0]!.id} data-question-group={group[0]!.id} className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] items-start gap-x-6 gap-y-4 border-b border-border pb-6 last:border-b-0 last:pb-0">{group.map(renderField)}</div>)}</div>;
+  return <div className="space-y-6">{assessmentFieldGroups(section.fields, answers).map(group => <div key={group[0]!.id} data-question-group={group[0]!.id} className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] items-start gap-x-6 gap-y-4 border-b border-border pb-6 last:border-b-0 last:pb-0">{group.some(field => field.id === "weight_loss") && group.some(field => field.id === "previous_weight_kg") ? <AssessmentWeightComparison answers={answers}>{group.filter(field => field.id !== "weight_loss").map(renderField)}</AssessmentWeightComparison> : group.map(renderField)}</div>)}</div>;
 }
