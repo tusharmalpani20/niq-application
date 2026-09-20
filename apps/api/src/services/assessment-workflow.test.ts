@@ -1,7 +1,7 @@
 import { AssessmentFaceScanService } from "./assessment-face-scan";
 import {afterAll,beforeAll,describe,expect,test} from "bun:test";
 import {mkdtemp,rm} from "node:fs/promises";import {tmpdir} from "node:os";import {join} from "node:path";import {createHash} from "node:crypto";
-import postgres from "postgres";import {drizzle} from "drizzle-orm/postgres-js";import {eq} from "drizzle-orm";
+import postgres from "postgres";import {drizzle} from "drizzle-orm/postgres-js";import {and,eq} from "drizzle-orm";
 import {buildAssessmentForm} from "@niq/application-contracts";
 import {loadApplicationConfig} from "@niq/application-config";import {createEntityId} from "@niq/application-domain";
 import {AssessmentWorkflowService,patientAnswers,assessmentRejectionIssues} from "./assessment-workflow";import {PostgresApplicationService} from "./postgres-application";
@@ -176,7 +176,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
    calls++;const request=new URL(String(url));
    if(request.pathname==="/v1/face-scans"){
     const body=JSON.parse(String(init?.body));
-    const persisted=await db.select().from(tables.assessmentFaceScans).where(eq(tables.assessmentFaceScans.requestKey,body.idempotencyKey));
+    const persisted=await db.select().from(tables.assessmentFaceScans).where(and(eq(tables.assessmentFaceScans.organizationId,org),eq(tables.assessmentFaceScans.requestKey,body.idempotencyKey)));
     expect(persisted).toHaveLength(1);expect(JSON.stringify(persisted[0]!.snapshot)).not.toContain("1990-01-01");
     remote??={id:"remote-scan",state:"REQUESTED",context:body.context,assessmentReference:body.assessmentReference,organizationReference:body.organizationReference,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),completedAt:null,failureCode:null,result:null,score:null};
     if(uncertain){uncertain=false;throw new Error("lost response");}
@@ -184,7 +184,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
    return Response.json({session:remote,providerConfigured:true});
   });
   const input={revision:draft.revision,posture:"resting" as const,requestKey:"face-scan-operation-12345"};
-  const first=await scans.start(actor,org,scanAssessment,input,context);expect(first.failureCode).toBe("RECONCILIATION_REQUIRED");
+  const first=await scans.start(actor,org,scanAssessment,input,context);expect(first.failureCode).toBe("RECONCILIATION_REQUIRED");expect(first.state).toBe("RECONCILIATION_REQUIRED");
   const replay=await scans.start(actor,org,scanAssessment,input,context);expect(replay.id).toBe(first.id);expect(replay.failureCode).toBeNull();
   expect((await scans.start(actor,org,scanAssessment,{...input,requestKey:"another-tab-operation-12345"},context)).id).toBe(first.id);
   expect((await scans.list(actor,org,scanAssessment)).sessions).toHaveLength(1);
@@ -199,6 +199,24 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   expect(after!.workflow).toEqual(before!.workflow);expect(after!.revision).toBe(before!.revision);
   expect((await scans.start(actor,org,scanAssessment,input,context)).id).toBe(first.id);
   expect(calls).toBeGreaterThan(1);
+ });
+
+ test("face scan definitive setup rejection releases slot while unknown outcome retains it",async()=>{
+  const assessment=(await service.initialize(actor,org,{patientId:patient,requestKey:"scan-rejection-assessment-12345"},context)).assessmentId!;
+  const draft=await service.save(actor,org,assessment,{revision:0,answers:{height_cm:170,current_weight_kg:65}},context);
+  const enabled=new AssessmentWorkflowService({db,applicationService:service.applicationService,config:{...service.config,FACE_SCAN_ENABLED:true}});
+  let outcome="FACE_SCAN_DISABLED";
+  const scans=new AssessmentFaceScanService(enabled,async()=>{if(outcome==="unknown")throw new Error("timeout");return Response.json({error:outcome},{status:outcome==="UNAUTHORIZED"?401:503});});
+  const input={revision:draft.revision,posture:"resting" as const,requestKey:"rejected-face-scan-12345"};
+  const rejected=await scans.start(actor,org,assessment,input,context);
+  expect(rejected.state).toBe("FAILED");expect(rejected.failureCode).toBe("FACE_SCAN_DISABLED");
+  expect((await scans.row(org,assessment,rejected.id)).active).toBe(false);
+  outcome="unknown";
+  const uncertain=await scans.start(actor,org,assessment,{...input,requestKey:"uncertain-face-scan-12345"},context);
+  expect(uncertain.id).not.toBe(rejected.id);expect(uncertain.state).toBe("RECONCILIATION_REQUIRED");
+  outcome="UNAUTHORIZED";
+  expect((await scans.get(actor,org,assessment,uncertain.id)).state).toBe("RECONCILIATION_REQUIRED");
+  expect((await scans.row(org,assessment,uncertain.id)).active).toBe(true);
  });
 
 });
