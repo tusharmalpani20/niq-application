@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isDeepStrictEqual } from "node:util";
 import type { AssessmentPatient } from "../../../../packages/contracts/src/assessment-workflow";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
@@ -23,8 +24,9 @@ class FaceScanRejection extends ServiceError {
 }
 const terminal = new Set(["COMPLETED", "FAILED", "EXPIRED", "CANCELLED"]);
 // Failure/expiry can precede a delayed authenticated result; completed evidence stays immutable.
-const recoverable = (row: Row) => row.active || Boolean(row.remoteId && !["COMPLETED", "CANCELLED"].includes(row.state));
-const recoveryCondition = sql `(${assessmentFaceScans.active}=true or (${assessmentFaceScans.remoteId} is not null and ${assessmentFaceScans.state} not in ('COMPLETED','CANCELLED')))`;
+const needsScoreRepair = (row: Row) => row.state === "COMPLETED" && row.failureCode === "SCORE_MAPPING_UNAVAILABLE";
+const recoverable = (row: Row) => row.active || Boolean(row.remoteId && (!["COMPLETED", "CANCELLED"].includes(row.state) || needsScoreRepair(row)));
+const recoveryCondition = sql `(${assessmentFaceScans.active}=true or (${assessmentFaceScans.remoteId} is not null and (${assessmentFaceScans.state} not in ('COMPLETED','CANCELLED') or (${assessmentFaceScans.state}='COMPLETED' and ${assessmentFaceScans.failureCode}='SCORE_MAPPING_UNAVAILABLE'))))`;
 const remoteSchema = z.object({
   session: faceScanSessionSchema.extend({
     assessmentReference: z.string(),
@@ -208,10 +210,33 @@ export class AssessmentFaceScanService {
   private async project(row: Row, remote: FaceScanSession, token?: string, executor?: WorkflowExecutor) {
     const save = async (tx: WorkflowExecutor) => {
       const [current] = await tx.select().from(assessmentFaceScans).where(eq(assessmentFaceScans.id, row.id)).for("update");
-      if (!current || token && current.leaseToken !== token || current.state === "COMPLETED" || current.state === "CANCELLED" || !current.remoteId && current.state === "FAILED")
+      if (!current || token && current.leaseToken !== token || current.state === "CANCELLED" || !current.remoteId && current.state === "FAILED")
         return;
       if (current.projection && new Date(remote.updatedAt).getTime() < new Date(this.workflow.unseal<FaceScanSession>(current.projection).updatedAt).getTime())
         return;
+      if (current.state === "COMPLETED") {
+        if (!needsScoreRepair(current) || !current.projection) return;
+        const prior = this.workflow.unseal<FaceScanSession>(current.projection);
+        // Scoring alone retries the pinned optional mapping. A repair cannot replace provider evidence.
+        if (prior.score !== null || remote.state !== "COMPLETED" || remote.completedAt !== prior.completedAt ||
+            remote.createdAt !== prior.createdAt || !isDeepStrictEqual(remote.result, prior.result) ||
+            !isDeepStrictEqual(remote.context, prior.context))
+          throw new ServiceError("CONFLICT", "Scoring returned changed completion evidence during score recovery.");
+        const repaired = remote.score !== null && remote.failureCode === null;
+        if (repaired && (!["SCORED", "UNAVAILABLE"].includes(remote.score!.status) || typeof remote.score!.ruleVersionId !== "string"))
+          throw new ServiceError("CONFLICT", "Scoring returned incomplete mapping evidence.");
+        await tx.update(assessmentFaceScans).set({
+          ...(repaired ? {
+            projection: this.workflow.seal({...prior, score: remote.score, failureCode: null, updatedAt: remote.updatedAt}),
+            failureCode: null,
+          } : {}),
+          leaseToken: null,
+          leaseExpiresAt: null,
+          nextAttemptAt: repaired ? null : new Date(Date.now() + 300000),
+          updatedAt: new Date(),
+        }).where(eq(assessmentFaceScans.id, current.id));
+        return;
+      }
       // Never update assessment answers, measurements or frozen questionnaire submissions.
       await tx.update(assessmentFaceScans).set({
         remoteId: remote.id,
@@ -253,7 +278,7 @@ export class AssessmentFaceScanService {
           state: "FAILED",
           active: false
         } : {}),
-        failureCode: rejected ? error.rejectionCode : "RECONCILIATION_REQUIRED",
+        failureCode: rejected ? error.rejectionCode : needsScoreRepair(claimed) ? "SCORE_MAPPING_UNAVAILABLE" : "RECONCILIATION_REQUIRED",
         leaseToken: null,
         leaseExpiresAt: null,
         nextAttemptAt: rejected ? null : new Date(Date.now() + 60000),
