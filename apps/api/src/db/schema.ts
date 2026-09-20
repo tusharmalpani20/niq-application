@@ -411,6 +411,8 @@ export const assessments = pgTable(
     status: assessmentStatus("status").notNull().default("DRAFT"),
     assignedToMembershipId: entityId("assigned_to_membership_id"),
     createdByMembershipId: entityId("created_by_membership_id").notNull(),
+    revision: integer("revision").notNull().default(0),
+    workflow: jsonb("workflow"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     ...timestamps,
   },
@@ -629,3 +631,51 @@ export const auditEvents = pgTable(
     check("audit_events_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
   ],
 );
+
+// Initialization precedes any remote call; its ID is also the opaque remote assessment reference.
+export const assessmentInitializations = pgTable("assessment_initializations", {
+  id: entityId("id").primaryKey(), organizationId: entityId("organization_id").notNull().references(() => organizations.id),
+  patientId: entityId("patient_id").notNull(), facilityId: entityId("facility_id").notNull(),
+  creatorId: entityId("creator_id").notNull(), requestKey: text("request_key").notNull(),
+  status: text("status").notNull().default("PENDING"), assessmentId: entityId("assessment_id"),
+  connection: jsonb("connection").notNull(), failureCode: text("failure_code"), leaseToken: text("lease_token"),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }), ...timestamps,
+}, t => [
+  uniqueIndex("assessment_initializations_request_uidx").on(t.organizationId,t.creatorId,t.requestKey),
+  foreignKey({columns:[t.organizationId,t.patientId],foreignColumns:[patients.organizationId,patients.id]}),
+  foreignKey({columns:[t.organizationId,t.facilityId],foreignColumns:[facilities.organizationId,facilities.id]}),
+]);
+export const assessmentSubmissions = pgTable("assessment_submissions", {
+  id: entityId("id").primaryKey(), organizationId: entityId("organization_id").notNull(), assessmentId: entityId("assessment_id").notNull(),
+  revision: integer("revision").notNull(), snapshot: jsonb("snapshot").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(), status: text("status").notNull().default("PENDING"),
+  failureCode: text("failure_code"), leaseToken: text("lease_token"), leaseExpiresAt: timestamp("lease_expires_at",{withTimezone:true}),
+  result: jsonb("result"), ...timestamps,
+}, t => [
+  uniqueIndex("assessment_submissions_revision_uidx").on(t.assessmentId,t.revision),
+  uniqueIndex("assessment_submissions_key_uidx").on(t.organizationId,t.idempotencyKey),
+  foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),
+]);
+export const assessmentReports = pgTable("assessment_reports", {
+  id: entityId("id").primaryKey(), organizationId: entityId("organization_id").notNull(), assessmentId: entityId("assessment_id").notNull(),
+  label: text("label").notNull(), purpose: text("purpose").notNull(), datePrecision: text("date_precision").notNull(),
+  year: integer("year"), month: integer("month"), day: integer("day"), creatorId: entityId("creator_id").notNull(),
+  removedAt: timestamp("removed_at",{withTimezone:true}), ...timestamps,
+}, t => [
+  uniqueIndex("assessment_reports_org_id_uidx").on(t.organizationId,t.id),
+  foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),
+]);
+export const assessmentFiles = pgTable("assessment_files", {
+  id: entityId("id").primaryKey(), organizationId: entityId("organization_id").notNull(), assessmentId: entityId("assessment_id").notNull(),
+  patientId: entityId("patient_id").notNull(), reportId: entityId("report_id").notNull(), uploadKey: text("upload_key").notNull(),
+  originalFilename: text("original_filename").notNull(), mediaType: text("media_type").notNull(), size: integer("size").notNull(),
+  status: text("status").notNull().default("PENDING"), storageBackend: text("storage_backend").notNull().default("LOCAL"),
+  objectKey: text("object_key"), stagingKey: text("staging_key"), sha256: text("sha256"),
+  leaseToken: text("lease_token"), leaseExpiresAt: timestamp("lease_expires_at",{withTimezone:true}),
+  uploaderId: entityId("uploader_id").notNull(), ...timestamps,
+}, t => [
+  uniqueIndex("assessment_files_upload_uidx").on(t.assessmentId,t.uploadKey),
+  foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),
+  foreignKey({columns:[t.organizationId,t.patientId],foreignColumns:[patients.organizationId,patients.id]}),
+  foreignKey({columns:[t.organizationId,t.reportId],foreignColumns:[assessmentReports.organizationId,assessmentReports.id]}),
+]);
