@@ -14,6 +14,7 @@ import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/p
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
+import { PatientHeader } from "../components/PatientHeader";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
 import { ApiRequestError, getPatient, listAssessments, listFacilities, listPatients, registerPatient } from "../lib/api";
@@ -220,14 +221,7 @@ export function PatientDetailPage() {
   if (!patient) return <p className="muted">Loading patient…</p>;
   const age = patientAgeLabel(patient.dateOfBirth);
   return <>
-    <div className="breadcrumb"><Link to="/patients">Patients</Link><span>/</span><span>{patient.reference}</span></div>
-    <header className="patient-detail-header">
-      <div className="patient-detail-summary">
-        <div className="organization-title-row"><h1>{patient.displayName}</h1></div>
-        <p>{patient.reference} · {age} · {genderLabel(patient.gender)} · {patient.homeFacility?.name ?? "No facility"}</p>
-      </div>
-      {patientTab === "assessments" && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}
-    </header>
+    <PatientHeader patient={patient} action={patientTab === "assessments" && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>} />
     <Tabs selectedKey={patientTab} onSelectionChange={(key) => setPatientTab(String(key))} className="organization-detail-tabs gap-5">
       <TabsList variant="line" aria-label="Patient record" className="w-full justify-start gap-5 border-b p-0">
         <TabsTrigger id="details" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Details</TabsTrigger>
