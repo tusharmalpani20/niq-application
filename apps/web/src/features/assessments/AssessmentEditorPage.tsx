@@ -1,4 +1,4 @@
-import { getAssessmentCompletion, getAssessmentAnswerCoverage, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FormAnswers } from "@niq/application-contracts";
+import { clearInactiveAssessmentAnswers, getAssessmentCompletion, getAssessmentAnswerCoverage, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FormAnswers } from "@niq/application-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { PatientHeader } from "@/components/PatientHeader";
@@ -39,7 +39,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
   const dirty = !!record && JSON.stringify(answers) !== JSON.stringify(record.answers);
   const editable = record?.status === "DRAFT";
   const navigationDialog = useDraftNavigationGuard(dirty || reportDirty || reportBusy || contactOpen && !!phone);
-  const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.answers); setConflict(false); }, []);
+  const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers); setConflict(false); }, []);
   const handleError = useCallback((cause: unknown) => {
     if (cause instanceof AssessmentRequestError && cause.status === 401) {
       setAnswers({}); setRecord(null); window.location.assign("/sign-in"); return;
@@ -64,7 +64,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
         setConflict(true);
         setError("Saved answers changed while updating reports. Your local changes are preserved. Load the saved version before continuing.");
       } else if (!dirty) {
-        setAnswers(value.answers);
+        setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers);
       }
       setRecord(value);
     } catch (cause) { handleError(cause); throw cause; }
@@ -146,7 +146,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
       <div className="min-w-0 p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 id="assessment-section-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>{sectionCoverage && <span className="text-xs text-muted-foreground">{sectionCoverage.answered}/{sectionCoverage.total} answered · {sectionCoverage.percent ?? 0}%</span>}</div>
         {sectionId === "personal_details" && record.heightSource && <p className="mb-4 text-sm text-muted-foreground">Height from assessment on {new Date(record.heightSource.recordedAt).toLocaleDateString()}. Check and edit if needed.</p>}
         {sectionId === "face_scan" && <section className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center"><ScanFace className="mb-4 size-8 text-brand-ink" aria-hidden="true"/><h3 className="font-semibold">Face scan is not available yet</h3><p className="mt-2 max-w-sm text-sm text-muted-foreground">You can continue with the questionnaire. Face scanning does not affect its completion.</p><Button variant="outline" className="mt-5" isDisabled={locked} onPress={() => { void selectSection("disease_status"); }}>Continue to disease status<ArrowRight aria-hidden="true"/></Button></section>}
-        {section && <section><AssessmentFields section={section} answers={answers} errors={errors} readOnly={!editable || locked} onEditContact={() => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); }} onChange={(id, value) => { setAnswers(current => ({ ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
+        {section && <section><AssessmentFields section={section} answers={answers} errors={errors} readOnly={!editable || locked} onEditContact={() => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); }} onChange={(id, value) => { setAnswers(current => clearInactiveAssessmentAnswers(record.manifest, { ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
         <div hidden={sectionId !== "reports"}><AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} /></div>
         {sectionId === "review" && <AssessmentReview record={record} answers={answers} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}
       </div>

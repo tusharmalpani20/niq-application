@@ -157,3 +157,16 @@ test("readable assessment URL loads by reference and saves by internal ID", asyn
   await click("Save draft");
   expect(requests.find(request => request.method === "PATCH")?.url).toContain("/assessments/assessment-a");
 }, {}, "ASM-000001"));
+
+test("changing stage clears hidden site and details even after saving", async () => harness(async ({ click, requests }) => {
+  await click("Disease status");
+  const choose = async (value: string) => act(async () => document.querySelector<HTMLInputElement>(`input[type="radio"][value="${value}"]`)!.click());
+  await choose("stage_localized");
+  await click("Save draft");
+  const saved = requests.find(request => request.method === "PATCH")!.body.answers;
+  expect(saved.metastasis_site).toBeUndefined();
+  expect(saved.metastasis_other).toBeUndefined();
+  await choose("stage_metastatic");
+  expect(document.querySelector<HTMLInputElement>('input[type="radio"][value="others"]')?.checked).toBe(false);
+  expect(document.querySelector('#assessment-field-metastasis_other')).toBeNull();
+}, { answers: { ...recordFixture().answers, stage: "stage_metastatic", metastasis_site: "others", metastasis_other: "Old detail" } }));
