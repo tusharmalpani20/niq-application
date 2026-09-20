@@ -120,7 +120,7 @@ export class AssessmentReportWorkflow {
     const groups=await tx.select().from(reports).where(and(eq(reports.organizationId,organizationId),eq(reports.assessmentId,assessmentId),isNull(reports.removedAt)));
     const attachments=await tx.select().from(files).where(and(eq(files.organizationId,organizationId),eq(files.assessmentId,assessmentId),sql`${files.status} in ('READY','PENDING')`));
     if(attachments.some(x=>x.status==="PENDING")) throw new ServiceError("CONFLICT","Wait for uploads to finish or cancel them before submitting.");
-    for(const group of groups) if(!group.label.trim()||!group.purpose.trim()||!group.year||!group.month||(group.datePrecision==="DAY"&&!group.day)||!attachments.some(x=>x.reportId===group.id)) throw new ServiceError("VALIDATION_ERROR","Complete each report's details and add a file, or remove the empty report.");
+    for(const group of groups) if(!group.label.trim()||!group.year||!group.month||(group.datePrecision==="DAY"&&!group.day)||!attachments.some(x=>x.reportId===group.id)) throw new ServiceError("VALIDATION_ERROR","Complete each report's details and add a file, or remove the empty report.");
     return groups.map(group=>({...group,files:attachments.filter(x=>x.reportId===group.id).map(({id,objectKey,sha256,size,mediaType,originalFilename})=>({id,objectKey,sha256,size,mediaType,originalFilename}))}));
   }
   async cleanup(actor:Principal,organizationId:string,assessmentId:string) {
