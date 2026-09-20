@@ -75,7 +75,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
     if (busy) return;
     setBusy(true); setMessage("");
     const abort = new AbortController(); controller.current = abort;
-    setUploads(previous => previous.map(item => item.key === upload.key ? { ...item, state: "uploading", error: undefined } : item));
+    setUploads(previous => previous.map(item => item.key === upload.key ? { ...item, progress: 0, state: "uploading", error: undefined } : item));
     try {
       await uploadReportFile({ url: `${base}/${upload.reportId}/files`, file: upload.file, revision, requestKey: upload.key, signal: abort.signal, maxFileBytes: limits.fileBytes,
         onProgress: progress => setUploads(previous => previous.map(item => item.key === upload.key ? { ...item, progress } : item)),
@@ -107,7 +107,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
         {!readOnly && <div className="flex gap-2"><Button variant="outline" isDisabled={busy} onPress={() => { setMessage(""); setEditor({ id: report.id, label: report.label, purpose: report.purpose, datePrecision: report.datePrecision, date: dateValue(report) }); }}>Edit</Button><Button variant="destructive-outline" isDisabled={busy} onPress={() => setRemove({ reportId: report.id, label: report.label || "this report" })}>Remove</Button></div>}
       </div>
       <ul className="mt-3 flex flex-col gap-3">{report.files.map(file => <li key={file.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3">
-        <div className="min-w-0">{file.status === "READY" ? <a className="break-all text-sm text-primary underline underline-offset-2" href={`${base}/${report.id}/files/${file.id}`} download>{file.originalFilename}</a> : <span className="break-all text-sm">{file.originalFilename}</span>}<p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(1)} MB · {file.status === "READY" ? "Saved" : file.status}</p></div>
+        <div className="min-w-0">{file.status === "READY" ? <a className="break-all text-sm text-brand-ink underline underline-offset-2" href={`${base}/${report.id}/files/${file.id}`} download>{file.originalFilename}</a> : <span className="break-all text-sm">{file.originalFilename}</span>}<p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(1)} MB · {file.status === "READY" ? "Saved" : file.status}</p></div>
         {!readOnly && <Button variant="ghost" isDisabled={busy} aria-label={`Remove ${file.originalFilename}`} onPress={() => setRemove({ reportId: report.id, fileId: file.id, label: file.originalFilename })}>Remove</Button>}
       </li>)}</ul>
       {!readOnly && <div className="mt-4"><Field><FieldLabel htmlFor={`report-files-${report.id}`}>Add files</FieldLabel><Input id={`report-files-${report.id}`} type="file" multiple accept="application/pdf,image/jpeg,image/png" disabled={busy} onChange={event => { selectFiles(report, event.target.files); event.target.value = ""; }}/></Field></div>}
