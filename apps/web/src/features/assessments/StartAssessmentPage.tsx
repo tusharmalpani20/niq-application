@@ -5,13 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { getPatient, listFacilities, listPatients } from "@/lib/api";
-import { initializeAssessment, retryInitialization } from "./workflow-api";
+import { assessmentRequest, initializeAssessment, retryInitialization } from "./workflow-api";
 
 export function StartAssessmentPage() {
   const user = useOutletContext<AuthenticatedUser>();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   // A URL patient is only a candidate; the server authorizes it before creating a draft.
   const requestedPatient = params.get("patient");
+  const recoveryId = params.get("initialization");
+  const recoveryKey = params.get("requestKey");
   const navigate = useNavigate();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
@@ -22,7 +24,7 @@ export function StartAssessmentPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [initialization, setInitialization] = useState<AssessmentInitialization | null>(null);
-  const request = useRef({ patientId: "", key: crypto.randomUUID() });
+  const request = useRef({ patientId: requestedPatient ?? "", key: recoveryKey ?? crypto.randomUUID() });
   const inFlight = useRef(false);
   const [loadKey, setLoadKey] = useState(0);
   useEffect(() => {
@@ -31,19 +33,32 @@ export function StartAssessmentPage() {
     const load = requestedPatient
       ? getPatient(user.organizationId, requestedPatient).then(patient => { if (active) setSelected(patient); })
       : Promise.all([listPatients(user.organizationId), listFacilities(user.organizationId)]).then(([rows, branches]) => { if (active) { setPatients(rows); setFacilities(branches); } });
-    load.then(() => { if (active) setLoaded(true); }).catch(() => { if (active) setError("Patients could not be loaded. Check your access and try again."); });
+    const recovery = recoveryId
+      ? assessmentRequest<AssessmentInitialization>(user.organizationId, `/assessment-initializations/${encodeURIComponent(recoveryId)}`).then(value => {
+        if (!active) return;
+        setInitialization(value);
+        if (value.assessmentId) navigate(`/assessments/${value.assessmentId}`, { replace: true });
+      })
+      : Promise.resolve();
+    Promise.all([load, recovery]).then(() => { if (active) setLoaded(true); }).catch(() => { if (active) setError("The patient or assessment request could not be loaded. Check your access and try again."); });
     return () => { active = false; };
-  }, [user.organizationId, requestedPatient, loadKey]);
+  }, [user.organizationId, requestedPatient, recoveryId, loadKey, navigate]);
   const filtered = useMemo(() => patients.filter(patient => (!facility || patient.homeFacility?.id === facility) && `${patient.displayName} ${patient.reference}`.toLowerCase().includes(query.trim().toLowerCase())), [patients, facility, query]);
   async function start() {
     if (!selected || inFlight.current) return;
     inFlight.current = true; setBusy(true); setError("");
     if (request.current.patientId !== selected.id) request.current = { patientId: selected.id, key: crypto.randomUUID() };
+    // Store opaque recovery identifiers before I/O. A refresh/lost response must replay the same creation key.
+    const query = new URLSearchParams(params);
+    query.set("patient", selected.id); query.set("requestKey", request.current.key);
+    setParams(query, { replace: true });
     try {
       const result = initialization
         ? await retryInitialization(user.organizationId, initialization.id)
         : await initializeAssessment(user.organizationId, selected.id, request.current.key);
       setInitialization(result);
+      query.set("initialization", result.id);
+      setParams(query, { replace: true });
       if (result.assessmentId) navigate(`/assessments/${result.assessmentId}`, { replace: true });
       else setError("The questionnaire is not ready yet. Retry uses this same assessment request.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not start assessment."); }
