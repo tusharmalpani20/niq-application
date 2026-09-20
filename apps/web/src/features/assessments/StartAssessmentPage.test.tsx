@@ -1,23 +1,29 @@
 import { expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
-import { act, StrictMode } from "react";
+import { act, StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
 import { filterAssessmentPatients, StartAssessmentPage } from "./StartAssessmentPage";
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Real selected patient", dateOfBirth: "2000-01-01", gender: "FEMALE", homeFacility: null, createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
-async function harness(path: string, handler: (url: string, init?: RequestInit) => Promise<Response>, callback: (router: ReturnType<typeof createMemoryRouter>, click: () => Promise<void>) => Promise<void>) {
+async function harness(path: string, handler: (url: string, init?: RequestInit) => Promise<Response>, callback: (router: ReturnType<typeof createMemoryRouter>, click: () => Promise<void>, switchScope: () => Promise<void>) => Promise<void>) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   const values = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true };
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable: true });
   globalThis.fetch = ((url: unknown, init?: RequestInit) => handler(String(url), init)) as typeof fetch;
-  const router = createMemoryRouter([{ element: <Outlet context={{ userId: id, organizationId: id }} />, children: [{ path: "/assessments/new", element: <StartAssessmentPage /> }, { path: "/assessments/:id", element: <p>Persisted assessment</p> }] }], { initialEntries: [path] });
+  let updateScope: (() => void) | undefined;
+  function Scope() {
+    const [context, setContext] = useState({ userId: id, organizationId: id });
+    updateScope = () => setContext({ userId: "second-user", organizationId: "second-org" });
+    return <Outlet context={context} />;
+  }
+  const router = createMemoryRouter([{ element: <Scope />, children: [{ path: "/assessments/new", element: <StartAssessmentPage /> }, { path: "/assessments/:id", element: <p>Persisted assessment</p> }, { path: "/away", element: <p>Another page</p> }] }], { initialEntries: [path] });
   const root = createRoot(document.getElementById("root")!);
   try {
     await act(async () => { root.render(<StrictMode><RouterProvider router={router} /></StrictMode>); await new Promise(resolve => setTimeout(resolve, 0)); });
-    await callback(router, async () => { const button = [...document.querySelectorAll("button")].find(button => /Start assessment|Retry preparation/.test(button.textContent ?? "")); if (!button) throw new Error("Start button missing"); await act(async () => { button.click(); await new Promise(resolve => setTimeout(resolve, 0)); }); });
+    await callback(router, async () => { const button = [...document.querySelectorAll("button")].find(button => /Start assessment|Retry preparation/.test(button.textContent ?? "")); if (!button) throw new Error("Start button missing"); await act(async () => { button.click(); await new Promise(resolve => setTimeout(resolve, 0)); }); }, async () => { await act(async () => { updateScope!(); await new Promise(resolve => setTimeout(resolve, 0)); }); });
   } finally {
     await act(async () => root.unmount()); router.dispose(); dom.window.close();
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key]; }
@@ -75,5 +81,38 @@ test("failed initialization on refresh shows its reason without automatic retry"
   }, async () => {
     expect(document.body.textContent).toContain("Connect NIQ Scoring");
     expect(document.body.textContent).toContain("Retry preparation");
+  });
+});
+
+test("late initialization does not navigate after leaving the creation route", async () => {
+  let finish!: (value: Response) => void;
+  await harness(`/assessments/new?patient=${id}`, async (url, init) => {
+    if (url.includes("/patients/")) return Response.json(patient);
+    if (init?.method === "POST") return new Promise(resolve => { finish = resolve; });
+    throw new Error(`Unexpected ${url}`);
+  }, async router => {
+    expect(finish).toBeDefined();
+    await act(async () => { await router.navigate("/away"); });
+    await act(async () => { finish(Response.json({ id, status: "READY", assessmentId: id, failureCode: null })); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(router.state.location.pathname).toBe("/away");
+    expect(document.body.textContent).toContain("Another page");
+  });
+});
+
+test("scope switch clears patient state and ignores the previous user's pending result", async () => {
+  let finish!: (value: Response) => void;
+  await harness(`/assessments/new?patient=${id}`, async (url, init) => {
+    const second = url.includes("second-org");
+    if (url.includes("/patients/")) return Response.json({ ...patient, displayName: second ? "New scope patient" : patient.displayName });
+    if (init?.method === "POST") return new Promise(resolve => { if (!second) finish = resolve; });
+    throw new Error(`Unexpected ${url}`);
+  }, async (router, _click, switchScope) => {
+    expect(finish).toBeDefined();
+    await switchScope();
+    expect(document.body.textContent).toContain("New scope patient");
+    expect(document.body.textContent).not.toContain(patient.displayName);
+    await act(async () => { finish(Response.json({ id, status: "READY", assessmentId: id, failureCode: null })); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(router.state.location.pathname).toBe("/assessments/new");
+    expect(new URLSearchParams(router.state.location.search).get("initialization")).toBeNull();
   });
 });

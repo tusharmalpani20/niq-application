@@ -22,6 +22,10 @@ function preparationMessage(value: AssessmentInitialization): string {
 
 export function StartAssessmentPage() {
   const user = useOutletContext<AuthenticatedUser>();
+  return <ScopedStartAssessmentPage key={`${user.organizationId}:${user.userId}`} user={user} />;
+}
+
+function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
   const [params, setParams] = useSearchParams();
   // A URL patient is only a candidate; the server authorizes it before creating a draft.
   const requestedPatient = params.get("patient");
@@ -39,6 +43,8 @@ export function StartAssessmentPage() {
   const [initialization, setInitialization] = useState<AssessmentInitialization | null>(null);
   const request = useRef({ patientId: requestedPatient ?? "", key: recoveryKey ?? crypto.randomUUID() });
   const inFlight = useRef(false);
+  const lifecycle = useRef(0);
+  useEffect(() => () => { lifecycle.current += 1; }, []);
   const autoAttempted = useRef(false);
   const [loadKey, setLoadKey] = useState(0);
   useEffect(() => {
@@ -61,6 +67,7 @@ export function StartAssessmentPage() {
   const filtered = useMemo(() => filterAssessmentPatients(patients, facility, query), [patients, facility, query]);
   async function start() {
     if (!selected || inFlight.current) return;
+    const activeLifecycle = lifecycle.current;
     autoAttempted.current = true;
     inFlight.current = true; setBusy(true); setError("");
     if (request.current.patientId !== selected.id) request.current = { patientId: selected.id, key: crypto.randomUUID() };
@@ -72,13 +79,19 @@ export function StartAssessmentPage() {
       const result = initialization
         ? await retryInitialization(user.organizationId, initialization.id)
         : await initializeAssessment(user.organizationId, selected.id, request.current.key);
+      // The server may have completed after cancellation, navigation or a scope switch.
+      // Keep that persisted request recoverable without moving the user back into it.
+      if (lifecycle.current !== activeLifecycle) return;
       setInitialization(result);
       query.set("initialization", result.id);
       setParams(query, { replace: true });
       if (result.assessmentId) navigate(`/assessments/${result.assessmentId}`, { replace: true });
       else setError(preparationMessage(result));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not start assessment."); }
-    finally { inFlight.current = false; setBusy(false); }
+    } catch (cause) {
+      if (lifecycle.current === activeLifecycle) setError(cause instanceof Error ? cause.message : "Could not start assessment.");
+    } finally {
+      if (lifecycle.current === activeLifecycle) { inFlight.current = false; setBusy(false); }
+    }
   }
   useEffect(() => {
     // The patient-page action already expressed intent. Only the first authorized load
