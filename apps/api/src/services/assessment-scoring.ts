@@ -71,7 +71,15 @@ export async function requestAssessmentScoringStart(input: AssessmentScoringTran
   return parsed.data;
 }
 export async function requestAssessmentScoringCalculate(input: AssessmentScoringTransport & { binding: AssessmentScoringStart; idempotencyKey: string; answers: AssessmentScoringAnswers }): Promise<AssessmentScoringCalculation> {
-  const reply = await post(input, "calculate", { assessmentReference: input.binding.assessmentReference, idempotencyKey: input.idempotencyKey, answers: input.answers });
+  const allowed = new Set([
+    ...input.binding.questionnaire.sections.flatMap(s => s.fields.filter(f => f.type !== "calculated" && f.type !== "derived").map(f => f.id)),
+    ...input.binding.questionnaire.supportingInputs.map(f => f.id),
+  ]);
+  const answers = z.record(z.string(), z.union([z.string(), z.array(z.string()), z.number().finite(), z.null()])).safeParse(input.answers);
+  // Validate before JSON serialization: NaN/Infinity otherwise become null silently.
+  if (!answers.success || Object.keys(input.answers).some(key => !allowed.has(key)))
+    throw new AssessmentScoringRequestError("rejected", "INVALID_LOCAL_ANSWERS");
+  const reply = await post(input, "calculate", { assessmentReference: input.binding.assessmentReference, idempotencyKey: input.idempotencyKey, answers: answers.data });
   if (!reply.response.ok) {
     const rejection = z.object({ error: z.enum(["INVALID_ASSESSMENT_ANSWERS", "ASSESSMENT_INCOMPLETE"]), result: evaluationSchema }).strict().safeParse(reply.body);
     if (rejection.success && sameEvidence(rejection.data.result, input.binding) &&

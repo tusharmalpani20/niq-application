@@ -47,3 +47,11 @@ describe("assessment scoring transport", () => {
     await expect(requestAssessmentScoringCalculate({ ...transport, binding, idempotencyKey: "request-key", answers: {}, fetcher: async () => { throw new Error("secret upstream detail"); } })).rejects.toMatchObject({ kind: "uncertain", message: "Assessment scoring request uncertain: TRANSPORT_OR_RESPONSE_FAILURE" });
   });
 });
+
+test("never transmits identity, unknown fields or non-finite numbers", async () => {
+  let called = false;
+  for (const answers of ([{ name: "Private" }, { field_0: Infinity }, { field_0: NaN }] as Record<string, string | number>[])) {
+    await expect(requestAssessmentScoringCalculate({ ...transport, binding, idempotencyKey: "request-key", answers, fetcher: async () => { called = true; return Response.json(success()); } })).rejects.toMatchObject({ kind: "rejected", code: "INVALID_LOCAL_ANSWERS" });
+  }
+  expect(called).toBe(false);
+});
