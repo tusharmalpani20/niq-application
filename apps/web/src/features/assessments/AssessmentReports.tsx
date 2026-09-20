@@ -3,7 +3,8 @@ import { REPORT_LIMITS, reportInputSchema, type AssessmentReport, type Assessmen
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { NativeSelect } from "@/components/ui/native-select";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { FileText, Plus, Trash2, X } from "lucide-react";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ReportMutationError, mutateReport, reportBase, uploadReportFile, type ReportInput } from "./report-api";
@@ -96,37 +97,48 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
     } catch (error) { setMessage(errorMessage(error)); await refresh(); }
     finally { setBusy(false); }
   }
+  const reportEditor = editor && (
+      <form className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-4" onSubmit={saveReport}>
+        <Field><FieldLabel htmlFor="report-label">Report label</FieldLabel><Input id="report-label" value={editor.label} maxLength={120} disabled={busy} autoFocus onChange={event => { setEditor({ ...editor, label: event.target.value }); setDirty(true); }}/></Field>
+        <Field><FieldLabel htmlFor="report-purpose">Report for</FieldLabel><Input id="report-purpose" value={editor.purpose} maxLength={300} disabled={busy} onChange={event => { setEditor({ ...editor, purpose: event.target.value }); setDirty(true); }}/></Field>
+        <Field><FieldLabel htmlFor="report-date-precision">Date precision</FieldLabel><Select aria-label="Date precision" className="w-full" value={editor.datePrecision} isDisabled={busy} onChange={value => { const datePrecision = value as "DAY" | "MONTH"; setEditor({ ...editor, datePrecision, date: datePrecision === "MONTH" ? editor.date.slice(0, 7) : "" }); setDirty(true); }}><SelectTrigger id="report-date-precision" className="w-full"><SelectValue/></SelectTrigger><SelectContent><SelectItem id="DAY">Exact date</SelectItem><SelectItem id="MONTH">Month and year</SelectItem></SelectContent></Select></Field>
+        <Field><FieldLabel htmlFor="report-date">Report date</FieldLabel><Input id="report-date" type={editor.datePrecision === "DAY" ? "date" : "month"} value={editor.date} min={editor.datePrecision === "DAY" ? "1900-01-01" : "1900-01"} max={editor.datePrecision === "DAY" ? "9999-12-31" : "9999-12"} disabled={busy} onChange={event => { setEditor({ ...editor, date: event.target.value }); setDirty(true); }}/></Field>
+        
+        <div className="col-span-full flex flex-wrap justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => { setEditor(null); setDirty(false); }}>Cancel</Button><Button type="submit" isDisabled={busy}>{busy ? "Saving…" : "Save report"}</Button></div>
+      </form>
+  );
   return <section className="flex min-w-0 flex-col gap-5" aria-label="Reports">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Reports</h2>{!readOnly && <Button isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={() => { setMessage(""); setEditor({ label: "", purpose: "", datePrecision: "DAY", date: "" }); }}>Add report</Button>}</div>
-    <p className="text-sm text-muted-foreground">PDF, JPEG or PNG · Up to {formatReportMegabytes(limits.fileBytes)} MB per file</p>
+    <p className="text-sm text-muted-foreground">Attach reports with a label, purpose and date. PDF, JPEG or PNG · Up to {formatReportMegabytes(limits.fileBytes)} MB per file</p>
     {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
     {unconfirmed && <Alert><AlertDescription><p>Check whether this report was saved before adding it again.</p><dl className="mt-2 grid gap-1"><div><dt className="font-medium">Label</dt><dd className="break-words">{unconfirmed.label || "Not entered"}</dd></div><div><dt className="font-medium">Report for</dt><dd className="break-words">{unconfirmed.purpose || "Not entered"}</dd></div><div><dt className="font-medium">Date</dt><dd>{unconfirmed.date || "Not entered"}</dd></div></dl><Button className="mt-2" variant="outline" onPress={() => setUnconfirmed(null)}>Dismiss</Button></AlertDescription></Alert>}
-    {!reports.length && <p className="text-sm text-muted-foreground">No reports attached.</p>}
-    {reports.map(report => <article key={report.id} className="min-w-0 rounded-xl border border-border bg-card p-4 text-card-foreground">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words font-semibold">{report.label || "Untitled report"}</h3>{report.purpose && <p className="break-words text-sm text-muted-foreground">{report.purpose}</p>}<p className="text-sm text-muted-foreground">{dateValue(report) || "Date not entered"}{report.datePrecision === "MONTH" && report.year ? " (month/year)" : ""}</p></div>
-        {!readOnly && <div className="flex gap-2"><Button variant="outline" isDisabled={busy} onPress={() => { setMessage(""); setEditor({ id: report.id, label: report.label, purpose: report.purpose, datePrecision: report.datePrecision, date: dateValue(report) }); }}>Edit</Button><Button variant="destructive-outline" isDisabled={busy} onPress={() => setRemove({ reportId: report.id, label: report.label || "this report" })}>Remove</Button></div>}
+    {!reports.length && !editor && <div className="rounded-xl border border-border bg-card px-5 py-8 text-center"><FileText className="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true"/><h3 className="font-semibold">Add supporting reports</h3><p className="mt-2 text-sm text-muted-foreground">Group related files under one report.</p></div>}
+    {reports.map((report, index) => <article key={report.id} className="min-w-0 rounded-xl border border-border bg-card p-4 text-card-foreground">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Report {index + 1}</h3>
+        {!readOnly && <div className="flex gap-2"><Button variant="ghost" isDisabled={busy || !!editor} onPress={() => { setMessage(""); setEditor({ id: report.id, label: report.label, purpose: report.purpose, datePrecision: report.datePrecision, date: dateValue(report) }); }}>Edit details</Button><Button variant="ghost" className="text-destructive" isDisabled={busy || !!editor} onPress={() => setRemove({ reportId: report.id, label: report.label || "this report" })}><Trash2 aria-hidden="true"/>Remove report</Button></div>}
       </div>
-      <ul className="mt-3 flex flex-col gap-3">{report.files.map(file => <li key={file.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3">
-        <div className="min-w-0">{file.status === "READY" ? <a className="break-all text-sm text-brand-ink underline underline-offset-2" href={`${base}/${report.id}/files/${file.id}`} download>{file.originalFilename}</a> : <span className="break-all text-sm">{file.originalFilename}</span>}<p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(1)} MB · {file.status === "READY" ? "Saved" : file.status}</p></div>
-        {!readOnly && <Button variant="ghost" isDisabled={busy} aria-label={`Remove ${file.originalFilename}`} onPress={() => setRemove({ reportId: report.id, fileId: file.id, label: file.originalFilename })}>Remove</Button>}
+      {editor?.id === report.id ? reportEditor : <dl className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-4 text-sm">
+        <div><dt className="mb-1 text-muted-foreground">Report label</dt><dd className="break-words font-medium">{report.label || "Untitled report"}</dd></div>
+        <div><dt className="mb-1 text-muted-foreground">Report for</dt><dd className="break-words">{report.purpose || "Not specified"}</dd></div>
+        <div><dt className="mb-1 text-muted-foreground">Date precision</dt><dd>{report.datePrecision === "DAY" ? "Exact date" : "Month and year"}</dd></div>
+        <div><dt className="mb-1 text-muted-foreground">Report date</dt><dd>{dateValue(report) || "Not specified"}</dd></div>
+      </dl>}
+      <h4 className="mt-5 text-sm font-medium">Files ({report.files.length})</h4>
+      <ul className="mt-3 flex flex-col gap-3">{report.files.map(file => <li key={file.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 px-3 py-1">
+        <div className="flex min-w-0 flex-1 items-center gap-2"><FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/><div className="min-w-0">{file.status === "READY" ? <a className="break-all text-sm text-brand-ink underline underline-offset-2" href={`${base}/${report.id}/files/${file.id}`} download>{file.originalFilename}</a> : <span className="break-all text-sm">{file.originalFilename}</span>}<p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(1)} MB · {file.status === "READY" ? "Saved" : file.status}</p></div></div>
+        {!readOnly && <Button variant="ghost" size="icon" className="size-11" isDisabled={busy || !!editor} aria-label={`Remove ${file.originalFilename}`} onPress={() => setRemove({ reportId: report.id, fileId: file.id, label: file.originalFilename })}><X aria-hidden="true"/></Button>}
       </li>)}</ul>
-      {!readOnly && <div className="mt-4"><Field><FieldLabel htmlFor={`report-files-${report.id}`}>Add files</FieldLabel><Input id={`report-files-${report.id}`} type="file" multiple accept="application/pdf,image/jpeg,image/png" disabled={busy} onChange={event => { selectFiles(report, event.target.files); event.target.value = ""; }}/></Field></div>}
+      {!readOnly && <label className={`relative mt-3 flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-brand-ink hover:bg-muted focus-within:ring-2 focus-within:ring-ring ${busy || editor ? "opacity-50" : ""}`}>
+        <Plus className="size-4" aria-hidden="true"/>Add files
+        <input className="absolute inset-0 w-full cursor-pointer opacity-0" aria-label={`Add files to report ${index + 1}`} type="file" multiple accept="application/pdf,image/jpeg,image/png" disabled={busy || !!editor} onChange={event => { selectFiles(report, event.target.files); event.target.value = ""; }}/>
+      </label>}
       {uploads.filter(upload => upload.reportId === report.id).map(upload => <div className="mt-3 rounded-lg border border-border p-3" key={upload.key}>
         <p className="break-all text-sm font-medium">{upload.file.name}</p>
-        {upload.state === "uploading" ? <><progress className="mt-2 w-full accent-primary" max={100} value={upload.progress} aria-label={`Uploading ${upload.file.name}`}/><p className="text-xs text-muted-foreground" role="status">{upload.progress >= 99 ? "Finishing upload…" : `${upload.progress}% uploaded`}</p><Button variant="outline" onPress={() => controller.current?.abort()}>Cancel upload</Button></> : <div className="mt-2 flex flex-wrap gap-2"><Button isDisabled={busy || readOnly} onPress={() => void uploadFile(upload)}>{upload.state === "failed" ? "Retry upload" : "Upload"}</Button><Button variant="outline" isDisabled={busy} onPress={() => setUploads(previous => previous.filter(item => item.key !== upload.key))}>Remove from queue</Button></div>}
+        {upload.state === "uploading" ? <><progress className="mt-2 w-full accent-primary" max={100} value={upload.progress} aria-label={`Uploading ${upload.file.name}`}/><p className="text-xs text-muted-foreground" role="status">{upload.progress >= 99 ? "Finishing upload…" : `${upload.progress}% uploaded`}</p><Button variant="outline" onPress={() => controller.current?.abort()}>Cancel upload</Button></> : <div className="mt-2 flex flex-wrap gap-2"><Button isDisabled={busy || readOnly || !!editor} onPress={() => void uploadFile(upload)}>{upload.state === "failed" ? "Retry upload" : "Upload"}</Button><Button variant="outline" isDisabled={busy} onPress={() => setUploads(previous => previous.filter(item => item.key !== upload.key))}>Remove from queue</Button></div>}
         {upload.error && <p role="alert" className="mt-2 text-sm text-destructive">{upload.error}</p>}
       </div>)}
     </article>)}
-    {editor && <Dialog ariaLabel={editor.id ? "Edit report" : "Add report"} isOpen isDismissable={!busy} showCloseButton={!busy} onOpenChange={open => { if (!open && !busy) { setEditor(null); setDirty(false); } }}><DialogTitle>{editor.id ? "Edit report" : "Add report"}</DialogTitle>
-      <form className="flex flex-col gap-4" onSubmit={saveReport}>
-        <Field><FieldLabel htmlFor="report-label">Label</FieldLabel><Input id="report-label" value={editor.label} maxLength={120} disabled={busy} autoFocus onChange={event => { setEditor({ ...editor, label: event.target.value }); setDirty(true); }}/></Field>
-        <Field><FieldLabel htmlFor="report-purpose">Report for (optional)</FieldLabel><Input id="report-purpose" value={editor.purpose} maxLength={300} disabled={busy} onChange={event => { setEditor({ ...editor, purpose: event.target.value }); setDirty(true); }}/></Field>
-        <Field><FieldLabel htmlFor="report-date-precision">Date format</FieldLabel><NativeSelect id="report-date-precision" value={editor.datePrecision} disabled={busy} onChange={event => { const datePrecision = event.target.value as "DAY" | "MONTH"; setEditor({ ...editor, datePrecision, date: datePrecision === "MONTH" ? editor.date.slice(0, 7) : "" }); setDirty(true); }}><option value="DAY">Exact date</option><option value="MONTH">Month and year</option></NativeSelect></Field>
-        <Field><FieldLabel htmlFor="report-date">Report date</FieldLabel><Input id="report-date" type={editor.datePrecision === "DAY" ? "date" : "month"} value={editor.date} min={editor.datePrecision === "DAY" ? "1900-01-01" : "1900-01"} max={editor.datePrecision === "DAY" ? "9999-12-31" : "9999-12"} disabled={busy} onChange={event => { setEditor({ ...editor, date: event.target.value }); setDirty(true); }}/></Field>
-        {message && <p role="alert" className="text-sm text-destructive">{message}</p>}
-        <div className="flex justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => { setEditor(null); setDirty(false); }}>Cancel</Button><Button type="submit" isDisabled={busy}>{busy ? "Saving…" : "Save report"}</Button></div>
-      </form>
-    </Dialog>}
+    {editor && !editor.id && <article className="rounded-xl border border-border bg-card p-4"><h3 className="mb-4 font-semibold">Report {reports.length + 1}</h3>{reportEditor}<p className="mt-3 text-xs text-muted-foreground">Save report details to attach files.</p></article>}
+    {!readOnly && !editor && <Button variant="outline" className="min-h-11 w-full border-primary/30 text-brand-ink" isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={() => { setMessage(""); setEditor({ label: "", purpose: "", datePrecision: "DAY", date: "" }); }}><Plus aria-hidden="true"/>{reports.length ? "Add another report" : "Add report"}</Button>}
     {remove && <Dialog ariaLabel="Remove report attachment" isOpen isDismissable={!busy} showCloseButton={!busy} onOpenChange={open => { if (!open && !busy) setRemove(null); }}><DialogTitle>Remove {remove.fileId ? "file" : "report"}?</DialogTitle><p className="break-words">{remove.fileId ? `Remove ${remove.label}?` : `Remove ${remove.label} and all its files?`}</p><div className="flex justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => setRemove(null)}>Cancel</Button><Button variant="destructive" isDisabled={busy} onPress={() => void removeItem()}>Remove</Button></div></Dialog>}
   </section>;
 }
