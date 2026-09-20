@@ -18,12 +18,16 @@ test("missing birth date and contact remain missing",()=>expect(patientAnswers({
 describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQL lifecycle",()=>{
  const client=postgres(process.env.ASSESSMENT_TEST_DATABASE_URL!,{max:10,prepare:false}),db=drizzle(client);
  const org=createEntityId(),facility=createEntityId(),other=createEntityId(),patient=createEntityId(),user=createEntityId(),membership=createEntityId();
- const actor:Principal={userId:user,membershipId:membership,organizationId:org,email:"fixture@example.test",displayName:"Fixture",role:"MEDICAL",platformRole:"USER"};const context={requestId:"test"};let service:AssessmentWorkflowService,root:string,id:string;let starts=0;const keys:string[]=[];
+ const actor:Principal={userId:user,membershipId:membership,organizationId:org,email:"fixture@example.test",displayName:"Fixture",role:"MEDICAL",platformRole:"USER"};const context={requestId:"test"};let service:AssessmentWorkflowService,root:string,id:string;let starts=0;const keys:string[]=[];let behavior:"uncertain"|"rejected"|"success"="uncertain";let blockCalculate:(()=>Promise<void>)|undefined;
  beforeAll(async()=>{
  root=await mkdtemp(join(tmpdir(),"niq-workflow-"));const config=loadApplicationConfig({DATABASE_URL:process.env.ASSESSMENT_TEST_DATABASE_URL,SESSION_SECRET:"test-secret-32-characters-long-enough",SCORING_API_URL:"http://scoring.example.test",SCORING_CREDENTIAL_ENCRYPTION_KEY:Buffer.alloc(32,1).toString("base64"),REPORT_UPLOAD_ROOT:root});
  await db.insert(tables.organizations).values({id:org,legalName:"Fixture",displayName:"Fixture",slug:`fixture-${org.toLowerCase()}`});await db.insert(tables.users).values({id:user,email:`${user}@test.example`,displayName:"Fixture",status:"ACTIVE"});await db.insert(tables.organizationMemberships).values({id:membership,organizationId:org,userId:user,role:"MEDICAL"});await db.insert(tables.facilities).values([{id:facility,organizationId:org,name:"Allowed",code:"A"},{id:other,organizationId:org,name:"Hidden",code:"B"}]);await db.insert(tables.facilityMemberships).values({id:createEntityId(),organizationId:org,organizationMembershipId:membership,facilityId:facility});
  const key=patientDataKey(undefined,config.SESSION_SECRET);await db.insert(tables.patients).values({id:patient,organizationId:org,homeFacilityId:facility,encryptedExternalReference:encryptPatientData("MRN",key),externalReferenceLookupHash:patient,serialNumber:1,dateOfBirth:"1990-01-01",gender:"FEMALE",encryptedProfile:encryptPatientData(JSON.stringify({name:"Fixture Patient",phone:"1234567890"}),key),encryptionKeyVersion:"v1"});const credential=encryptCredential("mock",config.SCORING_CREDENTIAL_ENCRYPTION_KEY!);await db.insert(tables.scoringConnections).values({id:createEntityId(),organizationId:org,deploymentId:createEntityId(),scoringOrganizationId:createEntityId(),encryptedCredential:credential.ciphertext,credentialIv:credential.iv,keyVersion:"v1"});
- service=new AssessmentWorkflowService({db,config,applicationService:new PostgresApplicationService(db,config,{deliver:async()=>{}}),fetcher:async(url,init)=>{const body=JSON.parse(String(init?.body));if(String(url).endsWith("start")){starts++;expect((await db.select().from(tables.assessmentInitializations).where(eq(tables.assessmentInitializations.id,body.assessmentReference)))[0]).toBeDefined();return Response.json({assessmentReference:body.assessmentReference,bindingId:"binding",ruleVersionId:"rule",checksum:"a".repeat(64),version:"FINAL-1",questionnaire:questionnaire()});}keys.push(body.idempotencyKey);throw new Error("uncertain transport");}});
+ service=new AssessmentWorkflowService({db,config,applicationService:new PostgresApplicationService(db,config,{deliver:async()=>{}}),fetcher:async(url,init)=>{const body=JSON.parse(String(init?.body));if(String(url).endsWith("start")){starts++;expect((await db.select().from(tables.assessmentInitializations).where(eq(tables.assessmentInitializations.id,body.assessmentReference)))[0]).toBeDefined();return Response.json({assessmentReference:body.assessmentReference,bindingId:"binding",ruleVersionId:"rule",checksum:"a".repeat(64),version:"FINAL-1",questionnaire:questionnaire()});}keys.push(body.idempotencyKey);if(blockCalculate){const block=blockCalculate;blockCalculate=undefined;await block();}
+ if(behavior!=="uncertain"){
+ const result={assessmentReference:body.assessmentReference,bindingId:"binding",ruleVersionId:"rule",checksum:"a".repeat(64),version:"FINAL-1",formatVersion:2,profile:"NIQ_FINAL_ASSESSMENT",complete:behavior==="success",score:0,classification:{id:"low",label:"Low",interpretation:""},components:questionnaire().sections.flatMap(section=>section.fields.map(f=>({id:f.id,sectionId:section.id,label:f.label,points:null,status:"unanswered"}))),answerCoverage:{totalEntries:19,answeredEntries:0,unansweredEntries:19,pendingEntries:0,allUnanswered:true},derived:{weightLossPercent:null,proteinAdequacy:null},riskStatus:"CLIENT_CONFIRMED",clinicalUsePermitted:true,interventions:{status:"NOT_APPLICABLE"},issues:behavior==="rejected"?[{path:"answers.height_cm",code:"INVALID",message:"Correct answer"}]:[],calculatedAt:new Date().toISOString()};
+ return behavior==="success"?Response.json({result:{...result,resultReference:"test-result"},idempotencyKey:body.idempotencyKey}):Response.json({error:"INVALID_ASSESSMENT_ANSWERS",result},{status:400});
+ }throw new Error("uncertain transport");}});
  });
  afterAll(async()=>{await client.end();if(root)await rm(root,{recursive:true,force:true});});
  test("initialization is durable and idempotent, health snapshots encrypted",async()=>{const a=await service.initialize(actor,org,{patientId:patient,requestKey:"init-request-key-12345"},context);expect(a.status).toBe("READY");id=a.assessmentId!;expect((await service.initialize(actor,org,{patientId:patient,requestKey:"init-request-key-12345"},context)).assessmentId).toBe(id);expect(starts).toBe(1);expect(JSON.stringify((await db.select().from(tables.assessments).where(eq(tables.assessments.id,id)))[0]!.workflow)).not.toContain("Fixture Patient");});
@@ -43,5 +47,36 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
    controller.enqueue(bytes);controller.close();expect(await outcome).toBe("cancelled");
    expect((await service.read(actor,org,id)).reports[0]!.files).toHaveLength(1);
  });
- test("uncertain scoring freezes edits and preserves retry key",async()=>{let record=await service.read(actor,org,id);record=await service.submit(actor,org,id,record.revision,context);expect(record.status).toBe("SCORING_UNAVAILABLE");await expect(service.save(actor,org,id,{revision:record.revision,answers:{}},context)).rejects.toMatchObject({code:"CONFLICT"});await service.retrySubmission(actor,org,id,context);expect(keys).toHaveLength(2);expect(new Set(keys).size).toBe(1);});
+ test("uncertain scoring freezes edits and preserves retry key",async()=>{let record=await service.read(actor,org,id);record=await service.submit(actor,org,id,record.revision,context);expect(record.status).toBe("SCORING_UNAVAILABLE");await expect(service.save(actor,org,id,{revision:record.revision,answers:{}},context)).rejects.toMatchObject({code:"CONFLICT"});await expect(service.retrySubmission(actor,org,id,context)).rejects.toMatchObject({code:"CONFLICT"});await db.update(tables.assessmentSubmissions).set({nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,id));await service.retrySubmission(actor,org,id,context);expect(keys).toHaveLength(2);expect(new Set(keys).size).toBe(1);});
+ test("connection change preserves frozen answers and requires reconciliation",async()=>{
+ const [original]=await db.select().from(tables.scoringConnections).where(eq(tables.scoringConnections.organizationId,org));
+ await db.update(tables.scoringConnections).set({deploymentId:createEntityId()}).where(eq(tables.scoringConnections.organizationId,org));
+ await db.update(tables.assessmentSubmissions).set({nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,id));
+ const record=await service.retrySubmission(actor,org,id,context);expect(record.status).toBe("SCORING_UNAVAILABLE");expect(record.submission?.status).toBe("RECONCILIATION_REQUIRED");expect(keys).toHaveLength(2);
+ await db.update(tables.scoringConnections).set({deploymentId:original!.deploymentId}).where(eq(tables.scoringConnections.organizationId,org));
+ await service.retrySubmission(actor,org,id,context);expect(keys).toHaveLength(2);
+ });
+ test("operator same-key rejection reopens only corrected answers and retains frozen files",async()=>{
+ behavior="rejected";await db.update(tables.assessmentSubmissions).set({nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,id));
+ let record=await service.retrySubmission({...actor,role:"ORGANIZATION_ADMIN"},org,id,context,true);expect(record.status).toBe("DRAFT");expect(new Set(keys).size).toBe(1);
+ await expect(service.submit(actor,org,id,record.revision,context)).rejects.toMatchObject({code:"CONFLICT"});
+ const report=record.reports[0]!,file=report.files[0]!;const [stored]=await db.select().from(tables.assessmentFiles).where(eq(tables.assessmentFiles.id,file.id));
+ record=await service.reports.remove(actor,org,id,report.id,record.revision,context);
+ const retained=await service.storage!.open({organizationId:org,patientId:patient,assessmentId:id},stored!.objectKey!);expect(await new Response(retained.stream).text()).toContain("fixture");
+ record=await service.save(actor,org,id,{revision:record.revision,answers:{...record.answers,height_cm:180}},context);behavior="success";
+ record=await service.submit(actor,org,id,record.revision,context);expect(record.status).toBe("SCORED");expect(new Set(keys).size).toBe(2);
+ });
+
+ test("expired scoring lease fences a late worker from duplicating results",async()=>{
+ const initialized=await service.initialize(actor,org,{patientId:patient,requestKey:"lease-fencing-test-1234"},context);const otherId=initialized.assessmentId!;
+ let record=await service.read(actor,org,otherId);record=await service.save(actor,org,otherId,{revision:record.revision,answers:{height_cm:175,current_weight_kg:70}},context);
+ behavior="success";let release!:()=>void;blockCalculate=()=>new Promise<void>(resolve=>{release=resolve;});
+ const late=service.submit(actor,org,otherId,record.revision,context);
+ for(let n=0;n<100&&!release;n++)await Bun.sleep(5);
+ expect(release).toBeDefined();await db.update(tables.assessmentSubmissions).set({leaseExpiresAt:new Date(0),nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,otherId));
+ const recovered=await service.retrySubmission(actor,org,otherId,context);expect(recovered.status).toBe("SCORED");release();expect((await late).status).toBe("SCORED");
+ expect(await db.select().from(tables.scoringResults).where(eq(tables.scoringResults.assessmentId,otherId))).toHaveLength(1);
+ expect(await db.select().from(tables.measurements).where(eq(tables.measurements.assessmentId,otherId))).toHaveLength(1);
+ });
+
 });
