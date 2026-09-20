@@ -3,6 +3,7 @@ import { JSDOM } from "jsdom";
 import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { DEFAULT_ORGANIZATION_BRANDING } from "@niq/application-contracts";
+import { accessibleBrandInk, colourContrastRatio } from "./colour-contrast";
 import { brandingFromOrganization } from "./branding";
 import { BrandingProvider, useBranding } from "./branding-context";
 
@@ -37,11 +38,16 @@ test("saved tenant branding reaches the document theme and resets for another wo
     expect(document.querySelector("img")).toBeNull();
     expect(document.documentElement.style.getPropertyValue("--brand-primary")).toBe("#123456");
     expect(document.body.textContent).toBe("Second Clinic");
+    expect(document.documentElement.style.getPropertyValue("--brand-ink")).toBe("#123456");
+    await act(async () => controls.updateBranding(brandingFromOrganization({ ...savedOrganization, primaryColor: "#ffffdd" })));
+    expect(document.documentElement.style.getPropertyValue("--brand-primary")).toBe("#ffffdd");
+    expect(colourContrastRatio(document.documentElement.style.getPropertyValue("--brand-ink"), "#f6f8fb")).toBeGreaterThanOrEqual(4.5);
 
     await act(async () => controls.resetBranding());
     expect(document.documentElement.style.getPropertyValue("--brand-primary")).toBe(DEFAULT_ORGANIZATION_BRANDING.primaryColor);
     expect(document.documentElement.style.getPropertyValue("--brand-secondary")).toBe(DEFAULT_ORGANIZATION_BRANDING.secondaryColor);
     expect(document.body.textContent).toBe("NIQ");
+    expect(document.documentElement.style.getPropertyValue("--brand-ink")).toBe(accessibleBrandInk(DEFAULT_ORGANIZATION_BRANDING.primaryColor));
   } finally {
     await act(async () => root.unmount());
     dom.window.close();
