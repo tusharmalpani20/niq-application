@@ -36,6 +36,7 @@
         "@niq/application-contracts": "workspace:*",
         "@tanstack/react-table": "9.2.4",
         "@vitejs/plugin-react": "5.0.2",
+        "careplix-scan-sdk": "1.3.0",
         "class-variance-authority": "0.7.1",
         "cn": "0.3.0",
         "input-otp": "1.5.0",
@@ -448,6 +449,8 @@
     "callsites": ["callsites@3.1.0", "", {}, "sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ=="],
 
     "caniuse-lite": ["caniuse-lite@1.0.30001810", "", {}, "sha512-TITQPUkaz+aVk5GL6NhOdwk1aEaNTSDPsGFWrTuhKGtjTF70jL/Oht2W4c6rXUe5fu7Ie19VIahAXHIIiWWNeg=="],
+
+    "careplix-scan-sdk": ["careplix-scan-sdk@1.3.0", "", {}, "sha512-qSTlNmzbLk5KVwXWtoCuMfalAcdW1bVrERydcDqLOv6NSp+iO0wNjDEZGX53E/shyyqjGYCXCTJp3Fsr0WyU6A=="],
 
     "chalk": ["chalk@5.6.2", "", {}, "sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA=="],
 
