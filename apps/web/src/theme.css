@@ -181,6 +181,7 @@
   --ink-muted: var(--client-muted);
   --ring: var(--brand-ink, #0b7468);
   --sidebar-ring: var(--brand-ink, #0b7468);
+  --sidebar-accent-foreground: var(--brand-ink, #0b7468);
   --canvas: var(--admin-canvas);
   --border: var(--admin-border);
   --input: var(--border);

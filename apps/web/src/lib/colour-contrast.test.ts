@@ -21,3 +21,13 @@ test("brand ink meets normal-text contrast on light workspace surfaces without c
   expect(colourContrastRatio("#ffffff", "#000000")).toBe(21);
   expect(colourContrastRatio("invalid", "#000000")).toBe(0);
 });
+
+test("brand ink also contrasts with selected navigation's brand-tinted surfaces", () => {
+  for (const brand of ["#0E9384", "#ffffdd", "#6C17D3", "#123456"]) {
+    const ink = accessibleBrandInk(brand);
+    for (const surface of ["#f6f8fb", "#eef2f6", "#ffffff"]) {
+      const tinted = `#${[1, 3, 5].map(offset => Math.round(parseInt(surface.slice(offset, offset + 2), 16) * 0.9 + parseInt(brand.slice(offset, offset + 2), 16) * 0.1).toString(16).padStart(2, "0")).join("")}`;
+      expect(colourContrastRatio(ink, tinted)).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+});

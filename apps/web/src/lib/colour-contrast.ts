@@ -21,9 +21,13 @@ export function accessibleBrandInk(hex: string, surfaces: readonly string[] = ["
   const brand = isHex(hex) ? hex : "#0e9384";
   const backgrounds = surfaces.length && surfaces.every(isHex) ? surfaces : ["#f6f8fb", "#eef2f6", "#ffffff"];
   const channels = [1, 3, 5].map(offset => parseInt(brand.slice(offset, offset + 2), 16));
+  // Selected links use a 10% brand tint over the same surfaces. Validate that actual
+  // background too, rather than assuming the neutral canvas is the darkest surface.
+  const tinted = backgrounds.map(background => `#${[1, 3, 5].map((offset, index) => Math.round(parseInt(background.slice(offset, offset + 2), 16) * 0.9 + channels[index]! * 0.1).toString(16).padStart(2, "0")).join("")}`);
+  const renderedSurfaces = [...backgrounds, ...tinted];
   for (let percent = 100; percent >= 0; percent--) {
     const candidate = `#${channels.map(channel => Math.floor(channel * percent / 100).toString(16).padStart(2, "0")).join("")}`;
-    if (backgrounds.every(background => colourContrastRatio(candidate, background) >= 4.5)) return candidate;
+    if (renderedSurfaces.every(background => colourContrastRatio(candidate, background) >= 4.5)) return candidate;
   }
   return "#000000";
 }
