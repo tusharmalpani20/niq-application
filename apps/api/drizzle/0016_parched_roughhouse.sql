@@ -1,0 +1,1 @@
+ALTER TABLE "assessment_submissions" ADD COLUMN "failure_issues" jsonb;
