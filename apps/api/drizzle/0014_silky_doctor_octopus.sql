@@ -1,0 +1,2 @@
+ALTER TYPE "public"."measurement_provenance" ADD VALUE 'MANUAL' BEFORE 'AUTO_FACE_SCAN';--> statement-breakpoint
+ALTER TYPE "public"."measurement_provenance" ADD VALUE 'REUSED_PREVIOUS' BEFORE 'AUTO_FACE_SCAN';

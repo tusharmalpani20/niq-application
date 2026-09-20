@@ -50,6 +50,8 @@ export const assessmentStatus = pgEnum("assessment_status", [
   "VOIDED",
 ]);
 export const measurementProvenance = pgEnum("measurement_provenance", [
+  "MANUAL",
+  "REUSED_PREVIOUS",
   "AUTO_FACE_SCAN",
   "AUTOMATED_MANUAL_FALLBACK",
 ]);
