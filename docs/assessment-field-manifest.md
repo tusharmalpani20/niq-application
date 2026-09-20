@@ -16,7 +16,7 @@ Version: `niq-final-overlay-v1`. Scoring fields and options come exclusively fro
 
 Labs B82:F88 are deferred until units are confirmed: haemoglobin, SGPT, SGOT, total bilirubin, albumin, serum creatinine and C-reactive protein. No guessed units or progress penalty. Face scan is a separate deferred integration.
 
-Inactive dependent values remain saved for reversible editing but are excluded from effective validation/progress/submission. Explicit `[]` is answered none; absent/null/empty text is unanswered. Calculated fields do not count twice. No unconfirmed exclusive-choice symptom rules are imposed.
+Inactive dependent values are cleared recursively when a controlling answer changes, on draft load, and before draft persistence. Returning to a previous choice starts its follow-up fields empty. Submitted snapshots remain immutable. Explicit `[]` is answered none; absent/null/empty text is unanswered. Calculated fields do not count twice. No unconfirmed exclusive-choice symptom rules are imposed.
 
 Height uses assessment reference year minus birth year, eligible at 18+. Only earlier SCORED/COMPLETED valid measurements qualify. Repository callers must scope history to organization, patient and access before using the pure selector. Persist copied value and provenance once; never rerun default initialization on resume.
 
@@ -31,3 +31,5 @@ Cancer surgery Done/Planned requires its conditional date (H54). Previous surger
 Section switches retain in-memory questionnaire and report edits without a leave confirmation. Report metadata is persisted with Save report; questionnaire answers with Save draft/Save & continue. Actual route departures with unsaved edits use the shared discard dialog. Browser reload/close retains native unload protection. Face scan has a separate unavailable section until integration is delivered.
 
 Question groups keep visible conditional details with their controlling question; separators occur between groups. This includes stage/metastasis, surgery/date, previous surgeries/count, and family history/relationship. Previous weight appears before the derived weight change; protein's explanation sits with dietary intake and makes clear that NIQ Scoring derives it on submission. Weight inputs use numeric controls and reject negative changes while server-side bounds remain authoritative. Explicit None uses a removable chip; removing a final positive selection leaves the question unanswered rather than silently selecting None. Custom Other entries show the approved option label in the selector and typed text only in the companion field.
+
+Choice lists with at most six options (including an explicit None where supported) are displayed openly: radios for one answer and checkboxes for multiple answers. Longer lists retain searchable menus. This applies consistently to the pinned questionnaire option counts; no options are removed or invented.
