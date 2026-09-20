@@ -97,5 +97,9 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
     const parent = sections.flatMap(s => s.fields).find(f => f.id === condition.fieldId);
     if (!parent?.options?.some(o => o.id === condition.equals)) throw new Error("Unsupported conditional option");
   }
+  // Preserve workbook reading order even when a configured projection reorders its sections.
+  const order = ["personal_details", ...Object.keys(expected)];
+  sections.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  for (const section of sections) section.fields.sort((a, b) => Number(a.source.match(/\d+/)?.[0]) - Number(b.source.match(/\d+/)?.[0]));
   return { version: ASSESSMENT_FORM_VERSION, sections };
 }

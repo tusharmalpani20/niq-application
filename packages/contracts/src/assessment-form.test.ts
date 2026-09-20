@@ -23,6 +23,8 @@ test("overlay preserves remote labels and IDs, counts current weight only once, 
   const form = buildAssessmentForm(fixture());
   const fields = form.sections.flatMap(s => s.fields);
   expect(form.sections).toHaveLength(6);
+  expect(form.sections[0]!.fields.map(f => f.id)).toEqual(["patient_name", "age", "gender", "contact", "height_cm", "current_weight_kg", "bmi"]);
+  expect(form.sections[1]!.fields.map(f => f.id)).toEqual(["tumour_type", "cancer_type", "cancer_type_other", "stage", "metastasis_site", "metastasis_other", "relapse_status"]);
   expect(fields.filter(f => f.id === "current_weight_kg")).toHaveLength(1);
   expect(fields.find(f => f.id === "cancer_type")!.options).toHaveLength(24);
   expect(fields.find(f => f.id === "contact")).toMatchObject({ required: true, owner: "context", readOnly: true });
