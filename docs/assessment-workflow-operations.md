@@ -1,0 +1,41 @@
+# Assessment workflow operations
+
+## Configuration and migration
+
+Apply all API Drizzle migrations before starting the assessment routes. Migration 0013 creates durable initialization, report and submission tables; 0014 adds manual/reused measurement provenance; 0015 adds retry budgets. New uploads require a dedicated absolute `REPORT_UPLOAD_ROOT` outside source/Git/public directories, owned by the API account. File/group/assessment limits are centralized in application config. See [local report storage](report-storage.md).
+
+The organization needs an active NIQ Scoring connection assigned an approved `NIQ_FINAL_ASSESSMENT` format-2 questionnaire. The old TEST questionnaire cannot silently become a clinical questionnaire. A failed initialization remains a durable handle; retry that handle after fixing the connection/configuration. It does not authorize creating a new remote reference for the same attempt.
+
+## Identity, confidentiality and permissions
+
+Only current organization MEDICAL and ORGANIZATION_ADMIN memberships may access this workflow. SUPPORT and platform NIQ_ADMIN are excluded. Every request checks organization and current facility access plus the patient. Assessment reference sent to scoring is the generated initialization ID; patient identity never goes to scoring.
+
+The pinned scoring origin, deployment and scoring organization identity are recorded before the start request. Credential rotation on the same deployment is allowed; changing deployment blocks recovery without reopening a frozen submission. Restore the original deployment or reconcile operationally. Never change bindings or checksums to force a request through.
+
+Patient context, answers, submissions, raw scoring results and measurements are AES-GCM envelopes using the existing patient encryption key. Report labels/date metadata and original filenames are database metadata; file bytes are private local storage and require authenticated download. Preserve encryption keys when backing up/restoring. Logs/audits contain identifiers, revisions, changed field keys and status codes, not answer values, phone numbers or report contents.
+
+## Durable recovery
+
+Initialization shells exist before remote calls and use a 120-second lease. Repeated caller request keys return the same initialization. Scoring submissions freeze the answer/attachment snapshot and idempotency key before contacting the provider, with a separate 120-second lease. An expired lease can be claimed again; the token fences a late worker from overwriting the new worker's result.
+
+Draft saves require exact optimistic revisions. A successful submission freezes editing. Transport errors, wrong connection, unknown responses and `REQUEST_IN_PROGRESS` do **not** reopen editing or issue another key. Only a validated pre-charge answer rejection reopens the draft; another submission requires changed answers. Every old snapshot remains preserved.
+
+User retry endpoint: `POST /v1/organizations/:organizationId/assessments/:assessmentId/submission/retry`. Retries use the original key. Five-second backoff prevents rapid repeated calls. After three unsuccessful attempts the submission enters `RECONCILIATION_REQUIRED`; regular retries stop contacting scoring. The application cannot safely fix an abandoned provider operation itself.
+
+An organization administrator may explicitly check the **same key** through `POST .../submission/reconcile` after its 60-second cooldown. This never allocates another key or force-reopens the draft. If the provider remains in progress, inspect the provider's durable operation/usage state with its operator procedures. Do not delete provider idempotency records or alter clinical result evidence manually.
+
+`POST /v1/organizations/:organizationId/assessment-recovery` is an authenticated bounded manual recovery operation. It resumes up to ten accessible initializations owned by the actor and checks up to ten accessible draft/pending assessments, reclaiming expired upload leases and checking same-key scoring requests. It is safe after restart because handles, bindings, snapshots and keys persist in PostgreSQL. There is no background retry daemon; routine form reads recover expired upload metadata, while remote retry is explicit. A session with changed access cannot recover outside its current facility scope.
+
+## Reports and cleanup
+
+Uploads reserve count and declared bytes under the assessment lock, then stream without retaining that lock. Each upload carries a stable request key and SHA-256 content fingerprint. Retries compare filename/type/size/digest. READY replay returns the existing file; PENDING replay asks the caller to wait; REMOVED keys cannot resurrect attachments. Failed transfers can retry with a fresh lease but keep the logical file identity. Physical object keys include the attempt token to prevent an old cleanup handler deleting a later upload's bytes.
+
+Transfer leases last five minutes and the transfer is cancelled before expiry. Submission refuses pending uploads. Finalization rechecks lease and draft status under the assessment lock. Cancellation makes metadata inaccessible before filesystem cleanup. Files referenced by any frozen submission remain retained even when a rejected draft removes the report.
+
+`reports.cleanup(actor, organizationId, assessmentId)` expires dead leases and visits at most 200 filesystem entries with a 24-hour grace period while holding the assessment lock. It skips scopes with active transfers and protects ready/submitted objects. This prevents cleanup racing publication. Recovery invokes this bounded operation; larger stores need externally scheduled bounded traversal across scopes. Inspect stuck files/age without logging their original names. Pending metadata recovery does not depend on staging files existing.
+
+## Verification
+
+`bun test src/services/assessment-workflow.test.ts` includes a unit case and opt-in PostgreSQL integration cases. Set `ASSESSMENT_TEST_DATABASE_URL` to a **disposable migrated test database only**. Fixtures are generated per run and intentionally remain in that disposable database for inspection; upload folders are temporary and removed. Do not point it at application development or production data.
+
+Cases cover durable start/replay, encrypted snapshots, role/organization/live facility access, concurrent revisions, digest replay/download, upload cancellation racing submission, uncertain scoring retries, connection changes, retry budgets, explicit reconciliation, immutable report evidence and expired worker fencing. Scoring responses are contract fixtures; these tests consume no provider quota and do not claim live scoring-provider verification.
