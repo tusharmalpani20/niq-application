@@ -27,3 +27,9 @@ test("assessment mutations reject foreign origins and oversized answer bodies be
   expect((await send("http://localhost:5173")).status).toBe(200);
   expect(saves()).toBe(1);
 });
+
+test("read routes accept assessment references but writes retain internal IDs",async()=>{
+ const {app}=harness();const referencePath=path.replace(/[^/]+$/, "ASM-000001");
+ expect((await app.request(referencePath,{headers:{cookie:"niq_session=valid"}})).status).toBe(200);
+ expect((await app.request(referencePath,{method:"PATCH",headers:{cookie:"niq_session=valid",origin:"http://localhost:5173","content-type":"application/json"},body:JSON.stringify({revision:0,answers:{}})})).status).toBe(400);
+});

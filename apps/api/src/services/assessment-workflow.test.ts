@@ -37,6 +37,39 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  });
  afterAll(async()=>{await client.end();if(root)await rm(root,{recursive:true,force:true});});
  test("initialization is durable and idempotent, health snapshots encrypted",async()=>{const a=await service.initialize(actor,org,{patientId:patient,requestKey:"init-request-key-12345"},context);expect(a.status).toBe("READY");id=a.assessmentId!;expect((await service.initialize(actor,org,{patientId:patient,requestKey:"init-request-key-12345"},context)).assessmentId).toBe(id);expect(starts).toBe(1);expect(JSON.stringify((await db.select().from(tables.assessments).where(eq(tables.assessments.id,id)))[0]!.workflow)).not.toContain("Fixture Patient");});
+ test("readable references retain tenant and facility authorization",async()=>{
+   const record=await service.read(actor,org,id);
+   expect(record.reference).toBe("ASM-000001");
+   expect(record.serialNumber).toBe(1);
+   expect((await service.read(actor,org,record.reference)).id).toBe(id);
+   expect((await service.initialize(actor,org,{patientId:patient,requestKey:"init-request-key-12345"},context)).assessmentReference).toBe(record.reference);
+   await db.update(tables.facilityMemberships).set({facilityId:other}).where(eq(tables.facilityMemberships.organizationMembershipId,membership));
+   await expect(service.read(actor,org,record.reference)).rejects.toMatchObject({code:"NOT_FOUND"});
+   await db.update(tables.facilityMemberships).set({facilityId:facility}).where(eq(tables.facilityMemberships.organizationMembershipId,membership));
+ });
+ test("concurrent assessment numbers share a sequence across branches and remain immutable",async()=>{
+   const [base]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,id));
+   const rows=await Promise.all(Array.from({length:8},(_,n)=>db.insert(tables.assessments).values({...base!,id:createEntityId(),facilityId:n%2?other:facility}).returning()));
+   const serials=rows.flat().map(row=>row.serialNumber);
+   expect(new Set(serials).size).toBe(8);
+   expect(Math.min(...serials)).toBe(2);
+   expect(Math.max(...serials)).toBe(9);
+   await expect(db.update(tables.assessments).set({serialNumber:999}).where(eq(tables.assessments.id,id)).execute()).rejects.toMatchObject({cause:{message:"Assessment organization and serial are immutable"}});
+   const secondOrg=createEntityId(),secondMember=createEntityId(),secondPatient=createEntityId();
+   await db.insert(tables.organizations).values({id:secondOrg,legalName:"Other",displayName:"Other",slug:`other-${secondOrg.toLowerCase()}`});
+   await db.insert(tables.organizationMemberships).values({id:secondMember,organizationId:secondOrg,userId:user,role:"MEDICAL"});
+   const [patientRow]=await db.select().from(tables.patients).where(eq(tables.patients.id,patient));
+   await db.insert(tables.patients).values({...patientRow!,id:secondPatient,organizationId:secondOrg,homeFacilityId:null});
+   const [definition]=await db.select().from(tables.questionnaireDefinitions).where(eq(tables.questionnaireDefinitions.id,base!.questionnaireDefinitionId));
+   const secondDefinition=createEntityId();await db.insert(tables.questionnaireDefinitions).values({...definition!,id:secondDefinition,organizationId:secondOrg,scopeKey:secondOrg});
+   const [second]=await db.insert(tables.assessments).values({...base!,id:createEntityId(),organizationId:secondOrg,patientId:secondPatient,facilityId:null,createdByMembershipId:secondMember,questionnaireDefinitionId:secondDefinition,questionnaireScopeKey:secondOrg}).returning();
+   expect(second!.serialNumber).toBe(1);
+   // Aborted transactions do not consume serials.
+   const [before]=await db.select().from(tables.organizations).where(eq(tables.organizations.id,org));
+   await expect(db.transaction(async tx=>{await tx.insert(tables.assessments).values({...base!,id:createEntityId()});throw new Error("rollback");})).rejects.toThrow("rollback");
+   const [after]=await db.select().from(tables.organizations).where(eq(tables.organizations.id,org));
+   expect(after!.nextAssessmentSerial).toBe(before!.nextAssessmentSerial);
+ });
  test("delayed binding preserves initialization time and height reference year",async()=>{
  const [connection]=await db.select().from(tables.scoringConnections).where(eq(tables.scoringConnections.organizationId,org));
  const initializationId=createEntityId(),createdAt=new Date("2025-12-31T12:00:00Z");

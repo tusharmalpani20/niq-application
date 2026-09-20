@@ -1,5 +1,5 @@
 import type { ApplicationConfig } from "@niq/application-config";
-import { buildAssessmentForm, getAssessmentCompletion, getScoringAssessmentAnswers, validateAssessmentAnswers, type FormAnswers, type AssessmentFormManifest } from "@niq/application-contracts";
+import { formatAssessmentReference, buildAssessmentForm, getAssessmentCompletion, getScoringAssessmentAnswers, validateAssessmentAnswers, type FormAnswers, type AssessmentFormManifest } from "@niq/application-contracts";
 import type { AssessmentWorkflow, AssessmentPatient, AssessmentInitialization } from "../../../../packages/contracts/src/assessment-workflow";
 import { createEntityId, selectAssessmentHeight } from "@niq/application-domain";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
@@ -80,13 +80,17 @@ export class AssessmentWorkflowService {
     await this.applicationService.getPatient(actor,organizationId,row.patientId);
     return row;
   }
+  async initializationDto(row:typeof assessmentInitializations.$inferSelect):Promise<AssessmentInitialization> {
+    const [assessment] = row.assessmentId ? await this.db.select({serialNumber:assessments.serialNumber}).from(assessments).where(and(eq(assessments.id,row.assessmentId),eq(assessments.organizationId,row.organizationId))) : [];
+    return {...initializationDto(row),assessmentReference:assessment?formatAssessmentReference(assessment.serialNumber):null};
+  }
   async retryInitialization(actor:Principal,organizationId:string,id:string,context:RequestContext):Promise<AssessmentInitialization> {
     this.clinicalActor(actor,organizationId);
     const row=await this.getInitialization(actor,organizationId,id);
-    if(row.status==="READY") return initializationDto(row);
+    if(row.status==="READY") return this.initializationDto(row);
     const token=crypto.randomUUID();const now=new Date();
     const [claimed]=await this.db.update(assessmentInitializations).set({leaseToken:token,leaseExpiresAt:new Date(Date.now()+120_000),status:"PENDING",updatedAt:now}).where(and(eq(assessmentInitializations.id,id),sql`(${assessmentInitializations.leaseExpiresAt} is null or ${assessmentInitializations.leaseExpiresAt} < ${now.toISOString()})`,sql`${assessmentInitializations.status} <> 'READY'`)).returning();
-    if(!claimed) return initializationDto(row);
+    if(!claimed) return this.initializationDto(row);
     try {
       const transport=await this.transport(organizationId,context,row.connection as ConnectionIdentity);
       const binding=await requestAssessmentScoringStart({...transport,assessmentReference:id});
@@ -112,16 +116,25 @@ export class AssessmentWorkflowService {
     } catch(error) {
       await this.db.update(assessmentInitializations).set({status:"FAILED",failureCode:error instanceof AssessmentScoringRequestError?error.code:error instanceof ServiceError?error.code:"INITIALIZATION_FAILED",leaseToken:null,leaseExpiresAt:null,updatedAt:new Date()}).where(and(eq(assessmentInitializations.id,id),eq(assessmentInitializations.leaseToken,token)));
     }
-    return initializationDto(await this.getInitialization(actor,organizationId,id));
+    return this.initializationDto(await this.getInitialization(actor,organizationId,id));
   }
   async read(actor:Principal,organizationId:string,id:string):Promise<AssessmentWorkflow> {
+    // Resolve human references only for reads; all writes keep the internal immutable ID.
+    if (id.startsWith("ASM-")) {
+      const serial = Number(id.slice(4));
+      if (!Number.isInteger(serial) || serial < 1 || serial > 2147483647 || formatAssessmentReference(serial) !== id) throw new ServiceError("NOT_FOUND", "Assessment not found.");
+      this.clinicalActor(actor, organizationId);
+      const [match] = await this.db.select({id: assessments.id}).from(assessments).where(and(eq(assessments.organizationId, organizationId), eq(assessments.serialNumber, serial), facilityAccessCondition(actor,organizationId,assessments.facilityId)));
+      if (!match) throw new ServiceError("NOT_FOUND", "Assessment not found.");
+      id = match.id;
+    }
     const row=await this.authorize(actor,organizationId,id);
     await this.reports.expire(actor,organizationId,id);
     const state=this.unseal<StoredWorkflow>(row.workflow);
     const patient=row.status==="DRAFT"?await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient:state.patient;
     const answers=row.status==="DRAFT"?{...state.answers,...patientAnswers(patient,row.createdAt)}:state.answers;
     const [submission]=await this.db.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.assessmentId,id),eq(assessmentSubmissions.organizationId,organizationId))).orderBy(desc(assessmentSubmissions.createdAt)).limit(1);
-    return {id:row.id,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,patient,answers,manifest:state.manifest,progress:getAssessmentCompletion(state.manifest,answers),reports:await this.reports.list(organizationId,id),reportLimits:{fileBytes:this.config.REPORT_MAX_FILE_BYTES,filesPerReport:this.config.REPORT_MAX_FILES_PER_GROUP,reportsPerAssessment:this.config.REPORT_MAX_GROUPS,assessmentBytes:this.config.REPORT_MAX_ASSESSMENT_BYTES},binding:{version:state.binding.version,checksum:state.binding.checksum},result:submission?.result?this.unseal(submission.result):null,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode,nextRetryAt:submission.nextAttemptAt?.toISOString()??null,issues:submission.failureIssues?this.unseal(submission.failureIssues):[]}:null,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
+    return {id:row.id,reference:formatAssessmentReference(row.serialNumber),serialNumber:row.serialNumber,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,patient,answers,manifest:state.manifest,progress:getAssessmentCompletion(state.manifest,answers),reports:await this.reports.list(organizationId,id),reportLimits:{fileBytes:this.config.REPORT_MAX_FILE_BYTES,filesPerReport:this.config.REPORT_MAX_FILES_PER_GROUP,reportsPerAssessment:this.config.REPORT_MAX_GROUPS,assessmentBytes:this.config.REPORT_MAX_ASSESSMENT_BYTES},binding:{version:state.binding.version,checksum:state.binding.checksum},result:submission?.result?this.unseal(submission.result):null,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode,nextRetryAt:submission.nextAttemptAt?.toISOString()??null,issues:submission.failureIssues?this.unseal(submission.failureIssues):[]}:null,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
   }
   async save(actor:Principal,organizationId:string,id:string,input:{revision:number;answers:FormAnswers},context:RequestContext) {
     this.clinicalActor(actor,organizationId);

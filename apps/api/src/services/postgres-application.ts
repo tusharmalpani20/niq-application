@@ -1,3 +1,4 @@
+import { formatAssessmentReference } from "@niq/application-contracts";
 import type { ApplicationConfig } from "@niq/application-config";
 import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
@@ -794,6 +795,7 @@ export class PostgresApplicationService implements ApplicationService {
     this.ensureOrganizationAccess(actor, organizationId);
     const rows = await this.db.select({
       id: assessments.id,
+      serialNumber: assessments.serialNumber,
       organizationId: assessments.organizationId,
       patientId: patients.id,
       patientReferencePrefix: patients.referencePrefix,
@@ -812,6 +814,8 @@ export class PostgresApplicationService implements ApplicationService {
     const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
     return rows.map((row) => ({
       id: row.id,
+      reference: formatAssessmentReference(row.serialNumber),
+      serialNumber: row.serialNumber,
       organizationId: row.organizationId,
       patient: {
         id: row.patientId,
