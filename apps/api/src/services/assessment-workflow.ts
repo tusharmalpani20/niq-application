@@ -16,19 +16,23 @@ import { AssessmentReportWorkflow } from "./assessment-workflow-reports";
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 export type WorkflowExecutor = Database | Tx;
+type Fetcher=(input:Parameters<typeof fetch>[0],init?:Parameters<typeof fetch>[1])=>Promise<Response>;
 type ConnectionIdentity = { origin: string; deploymentId: string; scoringOrganizationId: string };
 export type StoredWorkflow = { binding: AssessmentScoringStart; connection: ConnectionIdentity; manifest: AssessmentFormManifest; patient: AssessmentPatient; answers: FormAnswers; heightSource: {assessmentId:string;recordedAt:string}|null };
 export type WorkflowRow = typeof assessments.$inferSelect;
 export class AssessmentWorkflowService {
   readonly db: Database; readonly applicationService: ApplicationService; readonly config: ApplicationConfig;
   readonly reports: AssessmentReportWorkflow; readonly storage: LocalReportStorage | null;
-  private fetcher?: typeof fetch;
-  constructor(input: {db:Database;applicationService:ApplicationService;config:ApplicationConfig;fetcher?:typeof fetch}) {
+  private fetcher?: Fetcher;
+  seal(value:unknown):{encrypted:string} {const key=patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY,this.config.SESSION_SECRET);return {encrypted:encryptPatientData(JSON.stringify(value),key).toString("base64")};}
+  unseal<T>(value:unknown):T {const encrypted=(value as {encrypted?:string})?.encrypted;if(!encrypted) throw new ServiceError("CONFLICT","Assessment data could not be read.");return JSON.parse(decryptPatientData(Buffer.from(encrypted,"base64"),patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY,this.config.SESSION_SECRET))) as T;}
+  constructor(input: {db:Database;applicationService:ApplicationService;config:ApplicationConfig;fetcher?:Fetcher}) {
     this.db=input.db;this.applicationService=input.applicationService;this.config=input.config;this.fetcher=input.fetcher;
     this.storage=input.config.REPORT_UPLOAD_ROOT ? new LocalReportStorage({root:input.config.REPORT_UPLOAD_ROOT,maxFileBytes:input.config.REPORT_MAX_FILE_BYTES}) : null;
     this.reports=new AssessmentReportWorkflow(this);
   }
   async authorize(actor:Principal,organizationId:string,assessmentId:string,executor:WorkflowExecutor=this.db,lock=false):Promise<WorkflowRow> {
+    this.clinicalActor(actor,organizationId);
     await this.applicationService.getOrganization(actor,organizationId);
     const query=executor.select().from(assessments).where(and(eq(assessments.id,assessmentId),eq(assessments.organizationId,organizationId),facilityAccessCondition(actor,organizationId,assessments.facilityId)));
     const [row]=await (lock?query.for("update"):query);
@@ -66,9 +70,10 @@ export class AssessmentWorkflowService {
     return this.retryInitialization(actor,organizationId,saved.id,context);
   }
   clinicalActor(actor:Principal,organizationId:string) {
-    if(actor.organizationId!==organizationId||!['ORGANIZATION_ADMIN','MEDICAL'].includes(actor.role)) throw new ServiceError("FORBIDDEN","A clinical organization membership is required.");
+    if(actor.platformRole!=="USER"||actor.organizationId!==organizationId||!['ORGANIZATION_ADMIN','MEDICAL'].includes(actor.role)) throw new ServiceError("FORBIDDEN","A clinical organization membership is required.");
   }
   async getInitialization(actor:Principal,organizationId:string,id:string) {
+    this.clinicalActor(actor,organizationId);
     await this.applicationService.getOrganization(actor,organizationId);
     const [row]=await this.db.select().from(assessmentInitializations).where(and(eq(assessmentInitializations.id,id),eq(assessmentInitializations.organizationId,organizationId),facilityAccessCondition(actor,organizationId,assessmentInitializations.facilityId)));
     if(!row) throw new ServiceError("NOT_FOUND","Assessment initialization not found.");
@@ -80,7 +85,7 @@ export class AssessmentWorkflowService {
     const row=await this.getInitialization(actor,organizationId,id);
     if(row.status==="READY") return initializationDto(row);
     const token=crypto.randomUUID();const now=new Date();
-    const [claimed]=await this.db.update(assessmentInitializations).set({leaseToken:token,leaseExpiresAt:new Date(Date.now()+120_000),status:"PENDING",updatedAt:now}).where(and(eq(assessmentInitializations.id,id),sql`(${assessmentInitializations.leaseExpiresAt} is null or ${assessmentInitializations.leaseExpiresAt} < ${now})`,sql`${assessmentInitializations.status} <> 'READY'`)).returning();
+    const [claimed]=await this.db.update(assessmentInitializations).set({leaseToken:token,leaseExpiresAt:new Date(Date.now()+120_000),status:"PENDING",updatedAt:now}).where(and(eq(assessmentInitializations.id,id),sql`(${assessmentInitializations.leaseExpiresAt} is null or ${assessmentInitializations.leaseExpiresAt} < ${now.toISOString()})`,sql`${assessmentInitializations.status} <> 'READY'`)).returning();
     if(!claimed) return initializationDto(row);
     try {
       const transport=await this.transport(organizationId,context,row.connection as ConnectionIdentity);
@@ -88,7 +93,9 @@ export class AssessmentWorkflowService {
       const manifest=buildAssessmentForm(binding.questionnaire);
       const patient=await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient;
       const previous=await this.db.select({assessmentId:assessments.id,measurementId:measurements.id,capturedAt:measurements.capturedAt,status:assessments.status,values:measurements.values}).from(measurements).innerJoin(assessments,and(eq(assessments.id,measurements.assessmentId),eq(assessments.organizationId,measurements.organizationId))).where(and(eq(assessments.organizationId,organizationId),eq(assessments.patientId,patient.id),facilityAccessCondition(actor,organizationId,assessments.facilityId))).orderBy(desc(measurements.capturedAt)).limit(100);
-      const height=selectAssessmentHeight({birthYear:Number(patient.dateOfBirth.slice(0,4)),referenceYear:row.createdAt.getUTCFullYear(),assessmentStartedAt:row.createdAt.toISOString(),candidates:previous.map(x=>({...x,capturedAt:x.capturedAt.toISOString(),heightCm:Number((x.values as Record<string,unknown>).height_cm)}))});
+      const [homeFacility]=await this.db.select().from(facilities).where(eq(facilities.id,row.facilityId));
+      const referenceYear=Number(new Intl.DateTimeFormat("en",{year:"numeric",timeZone:homeFacility?.timezone??"UTC"}).format(row.createdAt));
+      const height=selectAssessmentHeight({birthYear:patient.dateOfBirth?Number(patient.dateOfBirth.slice(0,4)):null,referenceYear,assessmentStartedAt:row.createdAt.toISOString(),candidates:previous.map(x=>({...x,capturedAt:x.capturedAt.toISOString(),heightCm:Number(this.unseal<Record<string,unknown>>(x.values).height_cm)}))});
       const answers=patientAnswers(patient,row.createdAt);
       if(height) answers.height_cm=height.heightCm;
       await this.db.transaction(async tx=>{
@@ -98,7 +105,7 @@ export class AssessmentWorkflowService {
         await tx.insert(questionnaireDefinitions).values({id:definitionId,organizationId,scopeKey:organizationId,key:binding.ruleVersionId,version:binding.checksum,schema:binding.questionnaire,checksum:binding.checksum,isPublished:true,publishedAt:now}).onConflictDoNothing();
         const [definition]=await tx.select().from(questionnaireDefinitions).where(and(eq(questionnaireDefinitions.scopeKey,organizationId),eq(questionnaireDefinitions.key,binding.ruleVersionId),eq(questionnaireDefinitions.version,binding.checksum)));
         if(!definition) throw new Error("Questionnaire binding was not saved");
-        await tx.insert(assessments).values({id,organizationId,patientId:patient.id,facilityId:row.facilityId,questionnaireDefinitionId:definition.id,questionnaireScopeKey:organizationId,createdByMembershipId:actor.membershipId,workflow:{binding,connection:transport.identity,manifest,patient,answers,heightSource:height?{assessmentId:height.assessmentId,recordedAt:height.capturedAt}:null} satisfies StoredWorkflow});
+        await tx.insert(assessments).values({id,organizationId,patientId:patient.id,facilityId:row.facilityId,questionnaireDefinitionId:definition.id,questionnaireScopeKey:organizationId,createdByMembershipId:actor.membershipId,workflow:this.seal({binding,connection:transport.identity,manifest,patient,answers,heightSource:height?{assessmentId:height.assessmentId,recordedAt:height.capturedAt}:null} satisfies StoredWorkflow)});
         await tx.update(assessmentInitializations).set({status:"READY",assessmentId:id,leaseToken:null,leaseExpiresAt:null,failureCode:null,updatedAt:new Date()}).where(eq(assessmentInitializations.id,id));
         await this.audit(tx,actor,context,id,"ASSESSMENT_CREATED");
       });
@@ -110,23 +117,24 @@ export class AssessmentWorkflowService {
   async read(actor:Principal,organizationId:string,id:string):Promise<AssessmentWorkflow> {
     const row=await this.authorize(actor,organizationId,id);
     await this.reports.expire(actor,organizationId,id);
-    const state=row.workflow as StoredWorkflow;
+    const state=this.unseal<StoredWorkflow>(row.workflow);
     const patient=row.status==="DRAFT"?await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient:state.patient;
     const answers=row.status==="DRAFT"?{...state.answers,...patientAnswers(patient,row.createdAt)}:state.answers;
     const [submission]=await this.db.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.assessmentId,id),eq(assessmentSubmissions.organizationId,organizationId))).orderBy(desc(assessmentSubmissions.createdAt)).limit(1);
-    return {id:row.id,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,patient,answers,manifest:state.manifest,progress:getAssessmentCompletion(state.manifest,answers),reports:await this.reports.list(organizationId,id),binding:{version:state.binding.version,checksum:state.binding.checksum},result:submission?.result??null,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode}:null,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
+    return {id:row.id,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,patient,answers,manifest:state.manifest,progress:getAssessmentCompletion(state.manifest,answers),reports:await this.reports.list(organizationId,id),binding:{version:state.binding.version,checksum:state.binding.checksum},result:submission?.result?this.unseal(submission.result):null,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode}:null,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
   }
   async save(actor:Principal,organizationId:string,id:string,input:{revision:number;answers:FormAnswers},context:RequestContext) {
     this.clinicalActor(actor,organizationId);
     await this.db.transaction(async tx=>{
       const row=await this.authorize(actor,organizationId,id,tx,true);this.editable(row,input.revision);
-      const state=row.workflow as StoredWorkflow;
+      const state=this.unseal<StoredWorkflow>(row.workflow);
       const patient=await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient;
       const answers={...input.answers,...patientAnswers(patient,row.createdAt)};
       const errors=validateAssessmentAnswers(state.manifest,answers);
       if(Object.keys(errors).length) throw new ServiceError("VALIDATION_ERROR","Some answers need attention.",{fields:errors});
-      await tx.update(assessments).set({workflow:{...state,answers,patient},revision:row.revision+1,updatedAt:new Date()}).where(eq(assessments.id,id));
-      for(const [questionKey,answer] of Object.entries(answers)) await tx.insert(assessmentAnswers).values({id:createEntityId(),organizationId,assessmentId:id,questionKey,answer,answeredByMembershipId:actor.membershipId}).onConflictDoUpdate({target:[assessmentAnswers.assessmentId,assessmentAnswers.questionKey],set:{answer,answeredByMembershipId:actor.membershipId,updatedAt:new Date()}});
+      await tx.update(assessments).set({workflow:this.seal({...state,answers,patient,heightSource:answers.height_cm===state.answers.height_cm?state.heightSource:null}),revision:row.revision+1,updatedAt:new Date()}).where(eq(assessments.id,id));
+      await tx.delete(assessmentAnswers).where(and(eq(assessmentAnswers.organizationId,organizationId),eq(assessmentAnswers.assessmentId,id)));
+      for(const [questionKey,answer] of Object.entries(answers)) await tx.insert(assessmentAnswers).values({id:createEntityId(),organizationId,assessmentId:id,questionKey,answer:this.seal(answer),answeredByMembershipId:actor.membershipId}).onConflictDoUpdate({target:[assessmentAnswers.assessmentId,assessmentAnswers.questionKey],set:{answer:this.seal(answer),answeredByMembershipId:actor.membershipId,updatedAt:new Date()}});
     });
     return this.read(actor,organizationId,id);
   }
@@ -136,17 +144,19 @@ export class AssessmentWorkflowService {
       const row=await this.authorize(actor,organizationId,id,tx,true);
       if(row.status!=="DRAFT") return; // Response-loss replay uses the already frozen submission.
       this.editable(row,revision);
-      const state=row.workflow as StoredWorkflow;
+      const state=this.unseal<StoredWorkflow>(row.workflow);
       const patient=await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient;
       const answers={...state.answers,...patientAnswers(patient,row.createdAt)};
       const errors=validateAssessmentAnswers(state.manifest,answers,{requireComplete:true});
       if(Object.keys(errors).length) throw new ServiceError("VALIDATION_ERROR","Complete the required answers before submitting.",{fields:errors});
       const manifest=await this.reports.submissionManifest(tx,organizationId,id);
+      const [previous]=await tx.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,organizationId),eq(assessmentSubmissions.assessmentId,id))).orderBy(desc(assessmentSubmissions.createdAt)).limit(1);
+      if(previous?.status==="REJECTED"&&JSON.stringify(this.unseal<StoredWorkflow>(previous.snapshot).answers)===JSON.stringify(answers)) throw new ServiceError("CONFLICT","Correct the rejected answers before submitting again.");
       const submissionId=createEntityId();
       const frozen={...state,patient,answers};
-      await tx.insert(assessmentSubmissions).values({id:submissionId,organizationId,assessmentId:id,revision:row.revision,snapshot:{...frozen,reports:manifest},idempotencyKey:submissionId});
+      await tx.insert(assessmentSubmissions).values({id:submissionId,organizationId,assessmentId:id,revision:row.revision,snapshot:this.seal({...frozen,reports:manifest}),idempotencyKey:submissionId});
       await tx.insert(scoringRequests).values({id:submissionId,organizationId,assessmentId:id,idempotencyKey:submissionId,requestedVersion:state.binding.version});
-      await tx.update(assessments).set({status:"SCORING_PENDING",workflow:frozen,revision:row.revision+1,updatedAt:new Date()}).where(eq(assessments.id,id));
+      await tx.update(assessments).set({status:"SCORING_PENDING",workflow:this.seal(frozen),revision:row.revision+1,updatedAt:new Date()}).where(eq(assessments.id,id));
       await this.audit(tx,actor,context,id,"ASSESSMENT_SUBMITTED",{submissionId});
     });
     return this.retrySubmission(actor,organizationId,id,context);
@@ -157,20 +167,20 @@ export class AssessmentWorkflowService {
     const [submission]=await this.db.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,organizationId),eq(assessmentSubmissions.assessmentId,id))).orderBy(desc(assessmentSubmissions.createdAt)).limit(1);
     if(!submission) throw new ServiceError("CONFLICT","Submit the assessment first.");
     if(["SUCCEEDED","REJECTED"].includes(submission.status)) return this.read(actor,organizationId,id);
-    const [claimed]=await this.db.update(assessmentSubmissions).set({leaseToken:token,leaseExpiresAt:new Date(Date.now()+120_000),status:"PENDING",updatedAt:now}).where(and(eq(assessmentSubmissions.id,submission.id),sql`(${assessmentSubmissions.leaseExpiresAt} is null or ${assessmentSubmissions.leaseExpiresAt}<${now})`,sql`${assessmentSubmissions.status} not in ('SUCCEEDED','REJECTED')`)).returning();
+    const [claimed]=await this.db.update(assessmentSubmissions).set({leaseToken:token,leaseExpiresAt:new Date(Date.now()+120_000),status:"PENDING",updatedAt:now}).where(and(eq(assessmentSubmissions.id,submission.id),sql`(${assessmentSubmissions.leaseExpiresAt} is null or ${assessmentSubmissions.leaseExpiresAt}<${now.toISOString()})`,sql`${assessmentSubmissions.status} not in ('SUCCEEDED','REJECTED')`)).returning();
     if(!claimed) return this.read(actor,organizationId,id);
-    const snapshot=submission.snapshot as StoredWorkflow;
+    const snapshot=this.unseal<StoredWorkflow>(submission.snapshot);
     try {
       const transport=await this.transport(organizationId,context,snapshot.connection);
       const calculated=await requestAssessmentScoringCalculate({...transport,binding:snapshot.binding,idempotencyKey:submission.idempotencyKey,answers:getScoringAssessmentAnswers(snapshot.manifest,snapshot.answers)});
       await this.db.transaction(async tx=>{
         const [live]=await tx.select().from(assessmentSubmissions).where(eq(assessmentSubmissions.id,submission.id)).for("update");
         if(live?.leaseToken!==token) return;
-        await tx.insert(scoringResults).values({id:createEntityId(),organizationId,assessmentId:id,scoringRequestId:submission.id,scoringVersion:calculated.result.version,ruleChecksum:calculated.result.checksum,result:calculated.result,calculatedAt:new Date(calculated.result.calculatedAt)}).onConflictDoNothing();
-        await tx.update(assessmentSubmissions).set({status:"SUCCEEDED",result:calculated.result,failureCode:null,leaseToken:null,leaseExpiresAt:null,updatedAt:new Date()}).where(eq(assessmentSubmissions.id,submission.id));
+        await tx.insert(scoringResults).values({id:createEntityId(),organizationId,assessmentId:id,scoringRequestId:submission.id,scoringVersion:calculated.result.version,ruleChecksum:calculated.result.checksum,result:this.seal(calculated.result),calculatedAt:new Date(calculated.result.calculatedAt)}).onConflictDoNothing();
+        await tx.update(assessmentSubmissions).set({status:"SUCCEEDED",result:this.seal(calculated.result),failureCode:null,leaseToken:null,leaseExpiresAt:null,updatedAt:new Date()}).where(eq(assessmentSubmissions.id,submission.id));
         await tx.update(scoringRequests).set({status:"SUCCEEDED",completedAt:new Date(),updatedAt:new Date()}).where(eq(scoringRequests.id,submission.id));
         await tx.update(assessments).set({status:"SCORED",completedAt:new Date(),updatedAt:new Date()}).where(eq(assessments.id,id));
-        await tx.insert(measurements).values({id:createEntityId(),organizationId,assessmentId:id,provenance:"AUTOMATED_MANUAL_FALLBACK",values:{height_cm:snapshot.answers.height_cm,current_weight_kg:snapshot.answers.current_weight_kg},capturedAt:submission.createdAt,recordedByMembershipId:actor.membershipId});
+        await tx.insert(measurements).values({id:createEntityId(),organizationId,assessmentId:id,provenance:snapshot.heightSource?"REUSED_PREVIOUS":"MANUAL",values:this.seal({height_cm:snapshot.answers.height_cm,current_weight_kg:snapshot.answers.current_weight_kg}),capturedAt:submission.createdAt,recordedByMembershipId:actor.membershipId});
         await this.audit(tx,actor,context,id,"ASSESSMENT_SCORED",{submissionId:submission.id});
       });
     } catch(error) {
@@ -187,6 +197,21 @@ export class AssessmentWorkflowService {
     }
     return this.read(actor,organizationId,id);
   }
+  /** Authorized recovery is bounded; remote calls always reuse persisted references and keys. */
+  async recover(actor:Principal,organizationId:string,context:RequestContext) {
+    this.clinicalActor(actor,organizationId);
+    const pending=await this.db.select().from(assessmentInitializations).where(and(eq(assessmentInitializations.organizationId,organizationId),eq(assessmentInitializations.creatorId,actor.membershipId),sql`${assessmentInitializations.status}<>'READY'`)).limit(10);
+    const initializations=[];
+    for(const item of pending) initializations.push(await this.retryInitialization(actor,organizationId,item.id,context));
+    const rows=await this.db.select().from(assessments).where(and(eq(assessments.organizationId,organizationId),facilityAccessCondition(actor,organizationId,assessments.facilityId),sql`${assessments.status} in ('SCORING_PENDING','SCORING_UNAVAILABLE','DRAFT')`)).orderBy(assessments.updatedAt).limit(10);
+    for(const row of rows) {
+      if(!row.workflow) continue;
+      await this.reports.expire(actor,organizationId,row.id);
+      if(row.status!=="DRAFT") await this.retrySubmission(actor,organizationId,row.id,context);
+      await this.reports.cleanup(actor,organizationId,row.id);
+    }
+    return {initializations,checkedAssessments:rows.length};
+  }
   async updateContact(actor:Principal,organizationId:string,patientId:string,phone:string) {
     this.clinicalActor(actor,organizationId);await this.applicationService.getPatient(actor,organizationId,patientId);
     await this.db.transaction(async tx=>{
@@ -202,6 +227,6 @@ export class AssessmentWorkflowService {
 export function patientAnswers(patient:AssessmentPatient,started:Date):FormAnswers {
   const born=new Date(`${patient.dateOfBirth}T00:00:00Z`);let age=started.getUTCFullYear()-born.getUTCFullYear();
   if(started.getUTCMonth()<born.getUTCMonth()||(started.getUTCMonth()===born.getUTCMonth()&&started.getUTCDate()<born.getUTCDate())) age--;
-  return {patient_name:patient.displayName,age,gender:patient.gender,contact:patient.phone??""};
+  return {patient_name:patient.displayName,age:Number.isFinite(age)?age:null,gender:patient.gender,contact:patient.phone??""};
 }
 function initializationDto(row:typeof assessmentInitializations.$inferSelect):AssessmentInitialization {return {id:row.id,status:row.status,assessmentId:row.assessmentId,failureCode:row.failureCode};}
