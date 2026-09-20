@@ -45,6 +45,11 @@ export const applicationConfigSchema = z.object({
   INVITATION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(72),
   BOOTSTRAP_TOKEN: z.string().min(32).optional(),
   DEV_OTP_DELIVERY: booleanFromString,
+  REPORT_UPLOAD_ROOT: z.string().startsWith("/").optional(),
+  REPORT_MAX_FILE_BYTES: z.coerce.number().int().positive().max(100 * 1024 * 1024).default(10 * 1024 * 1024),
+  REPORT_MAX_FILES_PER_GROUP: z.coerce.number().int().positive().default(10),
+  REPORT_MAX_GROUPS: z.coerce.number().int().positive().default(20),
+  REPORT_MAX_ASSESSMENT_BYTES: z.coerce.number().int().positive().default(100 * 1024 * 1024),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 }).superRefine((value, context) => {
   if (value.NODE_ENV === "production" && value.DEV_OTP_DELIVERY) {
