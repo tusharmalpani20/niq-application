@@ -1,7 +1,9 @@
-import { getAssessmentCompletion, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FormAnswers } from "@niq/application-contracts";
+import { getAssessmentCompletion, getAssessmentAnswerCoverage, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FormAnswers } from "@niq/application-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { ArrowLeft, ArrowRight, ScanFace } from "lucide-react";
+import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { AssessmentFields } from "./AssessmentFields";
 import { AssessmentSectionNavigation } from "./AssessmentSectionNavigation";
@@ -30,10 +32,12 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
   const [reportDirty, setReportDirty] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [phone, setPhone] = useState("");
+  const [contactOpen, setContactOpen] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const dirty = !!record && JSON.stringify(answers) !== JSON.stringify(record.answers);
   const editable = record?.status === "DRAFT";
-  useDraftNavigationGuard(dirty || reportDirty || reportBusy);
+  const navigationDialog = useDraftNavigationGuard(dirty || reportDirty || reportBusy || contactOpen && !!phone);
   const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.answers); setConflict(false); }, []);
   const handleError = useCallback((cause: unknown) => {
     if (cause instanceof AssessmentRequestError && cause.status === 401) {
@@ -78,9 +82,8 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
   }
   async function selectSection(id: string, save = false, fieldId?: string) {
     if (busy || reportBusy) return;
-    if (reportDirty && !window.confirm("Discard unsaved report details?")) return;
     if (save && editable && dirty && !await persist()) return;
-    setReportDirty(false); setSectionId(id); setError("");
+    setSectionId(id); setError("");
     requestAnimationFrame(() => (document.getElementById(fieldId ? `assessment-field-${fieldId}` : "assessment-section-heading") ?? document.getElementById("assessment-section-heading"))?.focus());
   }
   async function submit() {
@@ -108,21 +111,26 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
     if (!record || !phone.trim() || operation.current) return;
     if (dirty && !await persist()) return;
     setBusy(true); operation.current = true; setError("");
-    try { await assessmentRequest(organizationId, `/patients/${record.patientId}/contact`, "PATCH", { phone: phone.trim() }); await reload(); setPhone(""); setNotice("Patient contact updated"); }
+    try { await assessmentRequest(organizationId, `/patients/${record.patientId}/contact`, "PATCH", { phone: phone.trim() }); await reload(); setPhone(""); setContactOpen(false); setNotice("Patient contact updated"); }
     catch (cause) { handleError(cause); }
     finally { operation.current = false; setBusy(false); }
   }
   if (loading) return <p role="status">Loading assessment…</p>;
   if (!record) return <div className="grid gap-4"><h1 className="text-2xl font-semibold">Assessment unavailable</h1><p role="alert">{error || "This assessment could not be found."}</p><Button onPress={() => { setError(""); void reload().catch(handleError); }}>Retry</Button><Link to="/assessments">Back to assessments</Link></div>;
   const progress = getAssessmentCompletion(record.manifest, answers);
-  const tabs = [...record.manifest.sections.map(section => ({ id: section.id, title: section.title })), { id: "reports", title: "Reports" }, { id: "review", title: "Review & score" }];
+  const coverage = getAssessmentAnswerCoverage(record.manifest, answers);
+  const tabs = record.manifest.sections.flatMap(section => [{ id: section.id, title: section.title }, ...(section.id === "personal_details" ? [{ id: "face_scan", title: "Face scan" }] : [])]).concat([{ id: "reports", title: "Reports" }, { id: "review", title: "Review & score" }]);
+  const sectionCoverage = coverage.sections.find(item => item.id === sectionId);
   const section = record.manifest.sections.find(item => item.id === sectionId);
   const index = tabs.findIndex(tab => tab.id === sectionId);
   const locked = busy || reportBusy || conflict;
   return <div className="assessment-workflow @container">
-    <div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><Link className="text-sm text-brand-ink" to={`/patients/${record.patient.reference}`}>{record.patient.reference}</Link><h1 className="mt-1 text-2xl font-semibold">{record.patient.displayName}</h1><p className="mt-1 text-sm text-muted-foreground">{record.patient.homeFacility?.name} · Assessment · {record.status.replaceAll("_", " ").toLowerCase()}</p></div><Button variant="outline" isDisabled={!editable || locked || !dirty} onPress={() => { void persist(); }}>{busy ? "Saving…" : "Save draft"}</Button></div>
-    <div className="sticky top-0 z-10 mb-5 rounded-xl border border-border bg-background p-4 shadow-sm"><p className="mb-2 truncate text-sm font-medium">{record.patient.displayName} · {record.patient.reference}</p><div className="mb-2 flex flex-wrap justify-between gap-2 text-sm"><strong>{progress.percent ?? "—"}% complete</strong><span className="text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`} · {progress.answered}/{progress.required} required</span></div><div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Required questionnaire completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent ?? 0}><div className="h-full bg-primary transition-all" style={{ width: `${progress.percent ?? 0}%` }} /></div></div>
-    {error && <div role="alert" className="mb-4 rounded-lg border border-destructive/30 p-4"><p>{error}</p>{conflict && <Button className="mt-2" variant="outline" onPress={() => { if (window.confirm("Load the saved assessment and discard local changes?")) { setError(""); void reload().catch(handleError); } }}>Load saved version</Button>}</div>}
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><Link className="text-sm text-brand-ink" to={`/patients/${record.patient.reference}`}>{record.patient.reference}</Link><h1 className="mt-1 text-2xl font-semibold">{record.patient.displayName}</h1><p className="mt-1 text-sm text-muted-foreground">{record.patient.homeFacility?.name} · {record.status === "DRAFT" ? "Draft assessment" : record.status.replaceAll("_", " ").toLowerCase()}</p></div><span className="text-xs text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span></div>
+    <div className="sticky top-0 z-20 rounded-t-xl border border-border bg-card px-4 py-3 sm:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2"><div className="min-w-0 flex-1"><div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm"><span>Questionnaire <strong>{coverage.percent ?? "—"}% complete</strong></span><span className="text-xs text-muted-foreground">{coverage.answered}/{coverage.total} answered</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Overall questionnaire completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverage.percent ?? 0}><div className="h-full bg-primary transition-all" style={{ width: `${coverage.percent ?? 0}%` }} /></div></div><Button variant="ghost" className="h-9 gap-2 text-xs text-muted-foreground" isDisabled={locked} onPress={() => { void selectSection("face_scan"); }}><ScanFace className="size-4" aria-hidden="true"/>Face scan unavailable</Button></div>
+      <p className="mt-2 truncate text-xs text-muted-foreground">{record.patient.displayName} · {record.patient.reference} <span className="mx-1">·</span> {progress.answered}/{progress.required} required answers complete</p>
+    </div>
+    {error && <div role="alert" className="mb-4 rounded-lg border border-destructive/30 p-4"><p>{error}</p>{conflict && <Button className="mt-2" variant="outline" onPress={() => setDiscardOpen(true)}>Load saved version</Button>}</div>}
     {Object.keys(errors).length > 0 && <div className="mb-4 rounded-lg border border-destructive/30 p-4"><strong>Check these fields</strong><ul className="mt-2 list-inside list-disc">{Object.entries(errors).map(([id, message]) => { const owner = record.manifest.sections.find(item => item.fields.some(field => field.id === id)); const field = owner?.fields.find(item => item.id === id); return <li key={id}><button className="text-brand-ink underline" onClick={() => { if (owner) void selectSection(owner.id, false, id); }}>{field?.label ?? "Questionnaire"}: {message}</button></li>; })}</ul></div>}
     {record.submission?.status === "REJECTED" && <div role="alert" className="mb-5 rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Review the questionnaire answers</h2><p className="mt-2 text-sm text-muted-foreground">Scoring could not process these responses. Add or correct answers before submitting again. The previous submission has been preserved.</p>{!!record.submission.issues?.length && <ul className="mt-3 grid gap-2">{record.submission.issues.map(issue => {
       const owner = record.manifest.sections.find(item => item.fields.some(field => field.id === issue.fieldId));
@@ -131,14 +139,22 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
     })}</ul>}</div>}
     {!editable && !record.result && <div className="mb-5 rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "Administrator review needed" : record.status === "SCORING_PENDING" ? "Scoring result pending" : "Scoring needs attention"}</h2><p className="my-2 text-sm text-muted-foreground">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "The scoring service has not confirmed this request. An organisation administrator must check it. Your submitted answers and reports remain preserved." : "The submitted assessment is preserved. Retry checks the same scoring request."}</p>{record.submission?.status === "RECONCILIATION_REQUIRED" ? isAdmin && <Button variant="outline" isDisabled={busy} onPress={() => { void retry(true); }}>Check original scoring request</Button> : <Button variant="outline" isDisabled={busy} onPress={() => { void retry(); }}>Retry scoring</Button>}</div>}
     {record.result !== null && <div className="mb-5"><AssessmentResult record={record} onSection={id => { void selectSection(id); }} /></div>}
-    <div className="grid min-w-0 gap-5 @min-[55rem]:grid-cols-[220px_minmax(0,1fr)]"><AssessmentSectionNavigation tabs={tabs} selected={sectionId} progress={progress} disabled={locked} onSelect={id => { void selectSection(id); }} />
-      <div className="min-w-0"><h2 id="assessment-section-heading" tabIndex={-1} className="mb-4 scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>
-        {sectionId === "personal_details" && <><div className="mb-4 rounded-xl border border-border bg-card p-4"><h3 className="font-semibold">Face scan</h3><p className="mt-1 text-sm text-muted-foreground">Face scanning is not available yet. Enter height and weight below.</p></div>{record.heightSource && <p className="mb-4 text-sm text-muted-foreground">Height copied from assessment on {new Date(record.heightSource.recordedAt).toLocaleDateString()}. Check and edit it if needed.</p>}{editable && !answers.contact && <div className="mb-4 grid gap-3 rounded-lg border border-border p-4"><p>The patient profile needs a contact number before submission.</p><label className="grid gap-2">Patient phone number<Input type="tel" value={phone} onChange={event => setPhone(event.target.value)} disabled={locked} /></label><Button variant="outline" isDisabled={locked || !phone.trim()} onPress={updateContact}>Update patient profile</Button></div>}</>}
-        {section && <section className="rounded-xl border border-border bg-card p-5"><AssessmentFields section={section} answers={answers} errors={errors} readOnly={!editable || locked} onChange={(id, value) => { setAnswers(current => ({ ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
-        {sectionId === "reports" && <AssessmentReports organizationId={organizationId} assessmentId={assessmentId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />}
-        {sectionId === "review" && <><AssessmentReview record={record} answers={answers} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />{editable && <div className="mt-5 rounded-xl border border-border bg-card p-5"><p className="mb-4 text-sm text-muted-foreground">Submitting locks this set of responses and attached reports for scoring.</p><Button isDisabled={locked || reportDirty || progress.percent !== 100} onPress={submit}>Submit and request score</Button></div>}</>}
-        <div className="mt-5 flex justify-between gap-3"><Button variant="outline" isDisabled={index <= 0 || locked} onPress={() => { void selectSection(tabs[index - 1]!.id); }}>Back</Button>{index < tabs.length - 1 && <Button isDisabled={locked} onPress={() => { void selectSection(tabs[index + 1]!.id, true); }}>{editable ? "Save & continue" : "Continue"}</Button>}</div>
+    <div className="grid min-w-0 border-x border-border bg-card @min-[48rem]:grid-cols-[190px_minmax(0,1fr)]">
+      <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} disabled={locked} onSelect={id => { void selectSection(id); }} />
+      <div className="min-w-0 p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 id="assessment-section-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>{sectionCoverage && <span className="text-xs text-muted-foreground">{sectionCoverage.answered}/{sectionCoverage.total} answered · {sectionCoverage.percent ?? 0}%</span>}</div>
+        {sectionId === "personal_details" && record.heightSource && <p className="mb-4 text-sm text-muted-foreground">Height from assessment on {new Date(record.heightSource.recordedAt).toLocaleDateString()}. Check and edit if needed.</p>}
+        {sectionId === "face_scan" && <section className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center"><ScanFace className="mb-4 size-8 text-brand-ink" aria-hidden="true"/><h3 className="font-semibold">Face scan is not available yet</h3><p className="mt-2 max-w-sm text-sm text-muted-foreground">You can continue with the questionnaire. Face scanning does not affect its completion.</p><Button variant="outline" className="mt-5" isDisabled={locked} onPress={() => { void selectSection("disease_status"); }}>Continue to disease status<ArrowRight aria-hidden="true"/></Button></section>}
+        {section && <section><p className="mb-5 text-xs text-muted-foreground"><span aria-hidden="true">*</span> Required fields</p><AssessmentFields section={section} answers={answers} errors={errors} readOnly={!editable || locked} onEditContact={() => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); }} onChange={(id, value) => { setAnswers(current => ({ ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
+        <div hidden={sectionId !== "reports"}><AssessmentReports organizationId={organizationId} assessmentId={assessmentId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} /></div>
+        {sectionId === "review" && <AssessmentReview record={record} answers={answers} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}
       </div>
     </div>
+    <footer className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border border-border bg-card px-4 py-3 sm:px-5">
+      <Button variant="outline" className="h-10" isDisabled={index <= 0 || locked} onPress={() => { void selectSection(tabs[index - 1]!.id); }}><ArrowLeft aria-hidden="true"/>Back</Button>
+      <div className="flex flex-wrap gap-2">{editable && <Button variant="outline" className="h-10" isDisabled={locked || !dirty} onPress={() => { void persist(); }}>{busy ? "Saving…" : "Save draft"}</Button>}{index < tabs.length - 1 ? <Button className="h-10" isDisabled={locked} onPress={() => { void selectSection(tabs[index + 1]!.id, true); }}>{editable ? "Save & continue" : "Continue"}<ArrowRight aria-hidden="true"/></Button> : editable && <Button className="h-10" isDisabled={locked || reportDirty || progress.percent !== 100} onPress={submit}>Submit and request score<ArrowRight aria-hidden="true"/></Button>}</div>
+    </footer>
+    {contactOpen && <Dialog isOpen isDismissable={!busy} showCloseButton={!busy} ariaLabel="Update patient contact" onOpenChange={open => { if (!busy) setContactOpen(open); }}><DialogTitle>Patient contact</DialogTitle><p className="text-sm text-muted-foreground">This number is saved to the patient's profile.</p><form className="mt-4 grid gap-4" onSubmit={event => { event.preventDefault(); void updateContact(); }}><label className="grid gap-2 text-sm font-medium">Phone number<Input autoFocus type="tel" value={phone} onChange={event => setPhone(event.target.value)} disabled={busy}/></label>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<div className="flex justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => setContactOpen(false)}>Cancel</Button><Button type="submit" isDisabled={busy || !phone.trim()}>Save contact</Button></div></form></Dialog>}
+    {navigationDialog}
+    {discardOpen && <Dialog isOpen ariaLabel="Load saved assessment" onOpenChange={setDiscardOpen}><DialogTitle>Load saved assessment?</DialogTitle><p className="text-sm text-muted-foreground">Your local changes will be replaced with the saved answers.</p><div className="flex justify-end gap-2"><Button variant="outline" onPress={() => setDiscardOpen(false)}>Keep editing</Button><Button variant="destructive" onPress={() => { setDiscardOpen(false); setError(""); void reload().catch(handleError); }}>Load saved answers</Button></div></Dialog>}
   </div>;
 }

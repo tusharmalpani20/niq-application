@@ -39,7 +39,7 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
   const router = createMemoryRouter([{ element: <Outlet context={{ userId: "user-a", organizationId: "org-a" }} />, children: [{ path: "/assessments/:assessmentId", element: <AssessmentEditorPage /> }, { path: "/patients/:id", element: <p>Patient record</p> }] }], { initialEntries: ["/assessments/assessment-a"] });
   const root = createRoot(document.getElementById("root")!);
   async function click(label: string) {
-    const button = [...document.querySelectorAll("button")].filter(item => item.textContent?.trim() === label).at(-1);
+    const button = [...document.querySelectorAll("button")].filter(item => (item.textContent?.trim() === label || item.getAttribute("aria-label") === label)).at(-1);
     if (!button) throw new Error(`Missing button ${label}`);
     await act(async () => { button.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
   }
@@ -55,25 +55,25 @@ test("resumed real draft shows profile context read-only and saves dirty choices
   expect(document.body.textContent).toContain("Test patient");
   expect(document.querySelector("#assessment-field-contact input")).toBeNull();
   expect(document.querySelector("#assessment-field-contact")?.textContent).toContain("1234567890");
-  await click("Save & continue");
-  const checkbox = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
-  await act(async () => checkbox.click());
+  await click("Disease status");
+  await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
   expect(document.body.textContent).toContain("Unsaved changes");
   await click("Save draft");
   const saved = requests.find(request => request.method === "PATCH");
   expect(saved?.body.revision).toBe(3);
-  expect(saved?.body.answers.tumour_type).toEqual(["tumour_type_solid"]);
+  expect(saved?.body.answers.stage).toBe(recordFixture().manifest.sections.find(section => section.id === "disease_status")!.fields.find(field => field.id === "stage")!.options![0]!.id);
   expect(document.body.textContent).toContain("Draft saved");
 }));
 test("save conflict preserves local input and dirty navigation can be cancelled", async () => harness(async ({ click, conflict, router }) => {
-  await click("Save & continue");
-  await act(async () => document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+  await click("Disease status");
+  await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
   conflict(); await click("Save draft");
   expect(document.body.textContent).toContain("Saved version changed");
-  expect(document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true);
+  expect(document.querySelector<HTMLInputElement>('input[type="radio"]')!.checked).toBe(true);
   expect(document.body.textContent).toContain("Load saved version");
   await act(async () => { await router.navigate("/patients/PAT-1"); });
   expect(router.state.location.pathname).toBe("/assessments/assessment-a");
+  await click("Stay on assessment");
 }));
 
 test("review missing-answer link focuses its field after changing section", async () => harness(async ({ click }) => {
@@ -87,11 +87,11 @@ test("review missing-answer link focuses its field after changing section", asyn
 
 const reportFixture = { id: "report-a", label: "Blood report", purpose: "", datePrecision: "MONTH" as const, year: 2026, month: 8, day: null, files: [] };
 test("report refresh preserves local answers and blocks overwriting concurrent answer edits", async () => harness(async ({ click, remoteAnswers, requests }) => {
-  await click("Save & continue");
-  await act(async () => document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+  await click("Disease status");
+  await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
   await click("Reports");
   remoteAnswers({ ...recordFixture().answers, current_weight_kg: 72 });
-  await click("Remove");
+  await click("Remove report");
   await click("Remove");
   expect(document.body.textContent).toContain("Saved answers changed while updating reports");
   expect(document.body.textContent).toContain("Load saved version");
@@ -102,7 +102,7 @@ test("report refresh preserves local answers and blocks overwriting concurrent a
 test("report refresh adopts concurrent server answers when local answers are clean", async () => harness(async ({ click, remoteAnswers, requests }) => {
   await click("Reports");
   remoteAnswers({ ...recordFixture().answers, current_weight_kg: 72 });
-  await click("Remove");
+  await click("Remove report");
   await click("Remove");
   expect(document.body.textContent).not.toContain("Unsaved changes");
   expect(document.body.textContent).not.toContain("Load saved version");
@@ -117,3 +117,33 @@ test("persisted scoring rejection shows correction guidance and focuses the affe
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
   expect(document.activeElement?.id).toBe("assessment-field-current_weight_kg");
 }, { submission: { status: "REJECTED", failureCode: "VALIDATION_ERROR", issues: [{ fieldId: "current_weight_kg", message: "Check the value before submitting again." }] } }));
+
+
+test("questionnaire section changes preserve answers without a leave confirmation", async () => harness(async ({ click, dom }) => {
+  dom.window.confirm = () => { throw new Error("Section navigation must not use browser confirmation"); };
+  await click("Disease status");
+  await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
+  const selected = document.querySelector<HTMLInputElement>('input[type="radio"]:checked')!.value;
+  await click("Health history");
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await click("Disease status");
+  expect(document.querySelector<HTMLInputElement>('input[type="radio"]:checked')!.value).toBe(selected);
+  expect(document.body.textContent).toContain("Unsaved changes");
+}));
+
+test("report editor survives section changes without a discard prompt", async () => harness(async ({ click, dom }) => {
+  dom.window.confirm = () => { throw new Error("Section navigation must not use browser confirmation"); };
+  await click("Reports");
+  await click("Add report");
+  const input = document.querySelector<HTMLInputElement>('#report-label')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!.call(input, "Draft report label");
+    input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    input.dispatchEvent(new dom.window.KeyboardEvent("keyup", { bubbles: true, key: "l" }));
+  });
+  await click("Disease status");
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await click("Reports");
+  expect(document.querySelector<HTMLInputElement>('#report-label')?.value).toBe("Draft report label");
+}));
