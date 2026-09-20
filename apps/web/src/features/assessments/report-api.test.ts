@@ -6,9 +6,10 @@ class FakeXHR {
   headers = new Map<string, string>();
   upload = {} as XMLHttpRequestUpload;
   withCredentials = false;
+  timeout = 0;
   status = 200;
   responseText = "{}";
-  onload?: () => void; onerror?: () => void; onabort?: () => void;
+  onload?: () => void; onerror?: () => void; onabort?: () => void; ontimeout?: () => void;
   open() { FakeXHR.requests.push(this); }
   setRequestHeader(key: string, value: string) { this.headers.set(key, value); }
   send() {}
@@ -59,4 +60,30 @@ test("lost create response differs from a validation rejection and is never retr
     globalThis.fetch = (async () => new Response("{}", { status: 400 })) as typeof fetch;
     await expect(mutateReport("/reports", "POST")).rejects.toMatchObject({ uncertain: false });
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test("a lost upload response times out and can be retried with the same reference", async () => {
+  setup();
+  const pending = request(new AbortController().signal);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  const first = FakeXHR.requests[0]!;
+  expect(first.timeout).toBe(300_000);
+  first.ontimeout?.();
+  await expect(pending).rejects.toThrow("timed out");
+  const retry = request(new AbortController().signal);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  const second = FakeXHR.requests[1]!;
+  expect(second.headers.get("x-upload-key")).toBe(first.headers.get("x-upload-key"));
+  second.onload?.();
+  await retry;
+});
+test("an already cancelled upload does not read file bytes or open a request", async () => {
+  setup();
+  const abort = new AbortController(); abort.abort();
+  let read = false;
+  const file = new File(["pdf"], "report.pdf", { type: "application/pdf" });
+  file.arrayBuffer = async () => { read = true; return new ArrayBuffer(0); };
+  await expect(uploadReportFile({ url: "/files", file, requestKey: "cancelled", revision: 1, signal: abort.signal, onProgress() {} })).rejects.toThrow("cancelled");
+  expect(read).toBe(false);
+  expect(FakeXHR.requests).toHaveLength(0);
 });

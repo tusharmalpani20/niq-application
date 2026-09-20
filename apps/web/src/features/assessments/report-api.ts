@@ -20,6 +20,7 @@ export async function mutateReport(url: string, method: "POST" | "PATCH" | "DELE
 export async function uploadReportFile(input: {
   url: string; file: File; requestKey: string; revision: number; maxFileBytes?: number; signal: AbortSignal; onProgress: (percent: number) => void;
 }): Promise<AssessmentWorkflow> {
+  if (input.signal.aborted) throw new Error("Upload cancelled.");
   const maxBytes = input.maxFileBytes ?? REPORT_LIMITS.fileBytes;
   if (!input.file.size || input.file.size > maxBytes) throw new Error(`Choose a file up to ${Number((maxBytes / 1024 / 1024).toFixed(2))} MB.`);
   const digest = await crypto.subtle.digest("SHA-256", await input.file.arrayBuffer());
@@ -30,6 +31,8 @@ export async function uploadReportFile(input: {
     const cleanup = () => input.signal.removeEventListener("abort", abort);
     xhr.open("POST", input.url);
     xhr.withCredentials = true;
+    // The server bounds upload leases at five minutes; a lost response must not lock the editor forever.
+    xhr.timeout = 300_000;
     xhr.setRequestHeader("content-type", input.file.type || "application/octet-stream");
     xhr.setRequestHeader("x-upload-key", input.requestKey);
     xhr.setRequestHeader("x-file-sha256", checksum);
@@ -43,6 +46,7 @@ export async function uploadReportFile(input: {
       if (xhr.status < 200 || xhr.status >= 300) reject(failure(body));
       else { input.onProgress(100); resolve(body as AssessmentWorkflow); }
     };
+    xhr.ontimeout = () => { cleanup(); reject(new Error("Upload timed out. Check saved files; retry will use the same upload reference.")); };
     xhr.onerror = () => { cleanup(); reject(new Error("Upload could not be confirmed. Retry will use the same upload reference.")); };
     xhr.onabort = () => { cleanup(); reject(new Error("Upload cancelled. Check saved files before retrying.")); };
     input.signal.addEventListener("abort", abort, { once: true });
