@@ -1,4 +1,6 @@
 import { z } from "zod";
+export * from "./assessment-form";
+export * from "./assessment-form-validation";
 
 export const DEFAULT_ORGANIZATION_BRANDING = {
   primaryColor: "#0E9384",

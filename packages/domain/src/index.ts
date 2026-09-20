@@ -57,3 +57,4 @@ export function createEntityId(now = Date.now()): string {
 
   return `${encodeBase32(BigInt(now), 10)}${encodeBase32(randomness, 16)}`;
 }
+export * from "./assessment-form-height";
