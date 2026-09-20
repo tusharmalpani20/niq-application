@@ -15,14 +15,16 @@ function recordFixture(): AssessmentWorkflow {
     patient: { id: "patient-a", reference: "PAT-1", displayName: "Test patient", dateOfBirth: "2006-01-01", gender: "FEMALE", phone: "1234567890", homeFacility: { id: "facility-a", name: "Chennai" } },
     createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 }
-async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void }) => Promise<void>) {
+async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   const values = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true };
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable: true });
+  // React is imported before JSDOM; provide its legacy input-focus event hooks.
+  Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {} });
   dom.window.confirm = () => false;
-  let record = recordFixture(); let rejectSave = false;
+  let record = { ...recordFixture(), ...overrides }; let rejectSave = false;
   const requests: Array<{ method: string; body: any }> = [];
   globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
     const method = init?.method ?? "GET"; const body = init?.body ? JSON.parse(String(init.body)) : null;
@@ -72,3 +74,12 @@ test("save conflict preserves local input and dirty navigation can be cancelled"
   await act(async () => { await router.navigate("/patients/PAT-1"); });
   expect(router.state.location.pathname).toBe("/assessments/assessment-a");
 }));
+
+test("review missing-answer link focuses its field after changing section", async () => harness(async ({ click }) => {
+  await click("Review & score");
+  const label = [...document.querySelectorAll("button")].find(button => button.textContent?.includes("Height:") && button.textContent?.includes("Not answered"))?.textContent?.trim();
+  expect(label).toBeDefined();
+  await click(label!);
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+  expect(document.activeElement?.id).toBe("assessment-field-height_cm");
+}, { answers: { ...recordFixture().answers, height_cm: null } }));

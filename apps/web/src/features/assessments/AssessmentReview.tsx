@@ -1,12 +1,12 @@
 import { assessmentFieldError, getAssessmentCompletion, isAssessmentFieldApplicable, type AssessmentWorkflow, type FormAnswers } from "@niq/application-contracts";
 import { Button } from "@/components/ui/button";
 
-export function AssessmentReview({ record, answers, onSection }: { record: AssessmentWorkflow; answers: FormAnswers; onSection: (id: string) => void }) {
+export function AssessmentReview({ record, answers, onSection }: { record: AssessmentWorkflow; answers: FormAnswers; onSection: (id: string, fieldId?: string) => void }) {
   const completion = getAssessmentCompletion(record.manifest, answers);
   const missing = record.manifest.sections.flatMap(section => section.fields.filter(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers) && assessmentFieldError(field, answers[field.id])).map(field => ({ sectionId: section.id, field, error: assessmentFieldError(field, answers[field.id]) })));
   return <div className="grid min-w-0 gap-5">
     <section className="rounded-xl border border-border bg-card p-5"><h2 className="text-xl font-semibold">Review assessment</h2>
-      {missing.length > 0 ? <><p className="mt-2 text-sm text-muted-foreground">Check these answers before submitting.</p><ul className="mt-3 grid gap-1">{missing.map(({ sectionId, field, error }) => <li key={field.id}><Button className="h-auto min-h-11 whitespace-normal text-left" variant="link" onPress={() => onSection(sectionId)}>{field.label}: {error === "Required" ? "Not answered" : error}</Button></li>)}</ul></> : <p className="mt-2 text-sm text-muted-foreground">Required answers are complete.</p>}
+      {missing.length > 0 ? <><p className="mt-2 text-sm text-muted-foreground">Check these answers before submitting.</p><ul className="mt-3 grid gap-1">{missing.map(({ sectionId, field, error }) => <li key={field.id}><Button className="h-auto min-h-11 whitespace-normal text-left" variant="link" onPress={() => onSection(sectionId, field.id)}>{field.label}: {error === "Required" ? "Not answered" : error}</Button></li>)}</ul></> : <p className="mt-2 text-sm text-muted-foreground">Required answers are complete.</p>}
     </section>
     {record.manifest.sections.map(section => {
       const progress = completion.sections.find(item => item.id === section.id)!;
