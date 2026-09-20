@@ -109,7 +109,7 @@ export function createApp(dependencies: AppDependencies) {
   app.use("/v1/platform/*", requireSession);
   app.use("/v1/organizations/*", async (context, next) => {
     const path = context.req.path;
-    const assessmentMutation = /\/(?:assessment-initializations|assessments)(?:\/|$)/.test(path) || /\/patients\/[^/]+\/contact$/.test(path);
+    const assessmentMutation = /\/(?:assessment-initializations|assessment-recovery|assessments)(?:\/|$)/.test(path) || /\/patients\/[^/]+\/contact$/.test(path);
     if (!assessmentMutation || ["GET", "HEAD", "OPTIONS"].includes(context.req.method)) return next();
     if (context.req.header("origin") !== dependencies.allowedOrigin) return context.json(errorBody("FORBIDDEN", "The request origin is not allowed.", context.get("requestId")), 403);
     // Files stream through a separately bounded storage adapter; JSON drafts are bounded here.
