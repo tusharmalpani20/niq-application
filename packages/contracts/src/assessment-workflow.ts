@@ -1,0 +1,30 @@
+import { z } from "zod";
+import type { AssessmentFormManifest, FormAnswers } from "./assessment-form";
+import type { getAssessmentCompletion } from "./assessment-form-validation";
+
+const entity = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+export const initializeAssessmentSchema = z.object({ patientId: entity, requestKey: z.string().min(16).max(128) }).strict();
+export const saveAssessmentSchema = z.object({ revision: z.number().int().nonnegative(), answers: z.record(z.string().max(100), z.union([z.string().max(2000), z.number().finite(), z.array(z.string().max(100)).max(100), z.null()])) }).strict();
+export const assessmentRevisionSchema = z.object({ revision: z.number().int().nonnegative() }).strict();
+export const reportInputSchema = z.object({
+  revision: z.number().int().nonnegative(), label: z.string().trim().max(120), purpose: z.string().trim().max(300),
+  datePrecision: z.enum(["DAY", "MONTH"]), year: z.number().int().min(1900).max(9999).nullable(),
+  month: z.number().int().min(1).max(12).nullable(), day: z.number().int().min(1).max(31).nullable(),
+}).strict().superRefine((value, ctx) => {
+  if (value.datePrecision === "MONTH" && value.day !== null) ctx.addIssue({ code: "custom", path: ["day"], message: "Month precision must not contain a day" });
+  if (value.day && value.month && value.year && new Date(Date.UTC(value.year, value.month - 1, value.day)).getUTCMonth() !== value.month - 1) ctx.addIssue({ code: "custom", path: ["day"], message: "Invalid calendar date" });
+});
+export const REPORT_LIMITS = { fileBytes: 10 * 1024 * 1024, filesPerReport: 10, reportsPerAssessment: 20, assessmentBytes: 100 * 1024 * 1024 } as const;
+export type AssessmentPatient = { id: string; reference: string; displayName: string; dateOfBirth: string; gender: string; phone?: string; homeFacility: { id: string; name: string } | null };
+export type AssessmentReportFile = { id: string; reportId: string; originalFilename: string; mediaType: string; size: number; status: string; createdAt: string };
+export type AssessmentReport = { id: string; label: string; purpose: string; datePrecision: "DAY" | "MONTH"; year: number | null; month: number | null; day: number | null; files: AssessmentReportFile[] };
+export type AssessmentInitialization = { id: string; status: string; assessmentId: string | null; failureCode: string | null };
+export type AssessmentWorkflow = {
+  id: string; organizationId: string; patientId: string; facilityId: string | null; status: string; revision: number;
+  patient: AssessmentPatient; answers: FormAnswers; manifest: AssessmentFormManifest;
+  progress: ReturnType<typeof getAssessmentCompletion>; reports: AssessmentReport[];
+  binding: { version: string; checksum: string }; result: unknown | null;
+  submission: { id: string; status: string; failureCode: string | null } | null;
+  heightSource: { assessmentId: string; recordedAt: string } | null;
+  createdAt: string; updatedAt: string;
+};
