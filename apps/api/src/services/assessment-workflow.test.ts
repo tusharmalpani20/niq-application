@@ -190,6 +190,11 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   expect((await scans.list(actor,org,scanAssessment)).sessions).toHaveLength(1);
   await expect(scans.get({...actor,organizationId:other},org,scanAssessment,first.id)).rejects.toMatchObject({code:"FORBIDDEN"});
   await expect(scans.get(actor,org,id,first.id)).rejects.toMatchObject({code:"NOT_FOUND"});
+  remote={...remote,state:"EXPIRED",updatedAt:new Date().toISOString()};
+  expect((await scans.get(actor,org,scanAssessment,first.id)).state).toBe("EXPIRED");
+  expect((await scans.row(org,scanAssessment,first.id)).active).toBe(false);
+  // Existing evidence still reconciles after operators disable new scans.
+  enabled.config.FACE_SCAN_ENABLED=false;
   const [before]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,scanAssessment));
   await db.update(tables.assessments).set({status:"COMPLETED"}).where(eq(tables.assessments.id,scanAssessment));
   await expect(scans.mutate(actor,org,scanAssessment,first.id,"signal",{schemaVersion:1,raw_intensity:[{r:1,g:2,b:3}],ppg_time:[0],average_fps:30})).rejects.toMatchObject({code:"CONFLICT"});
