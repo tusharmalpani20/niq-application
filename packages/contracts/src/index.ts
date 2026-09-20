@@ -356,6 +356,8 @@ export const assessmentStatusSchema = z.enum([
 
 export const assessmentSummarySchema = z.object({
   id: idSchema,
+  reference: z.string().regex(/^ASM-[0-9]{6,}$/),
+  serialNumber: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   organizationId: idSchema,
   patient: patientSchema.pick({ id: true, reference: true, displayName: true }),
   facility: facilitySchema.pick({ id: true, name: true }).nullable(),
