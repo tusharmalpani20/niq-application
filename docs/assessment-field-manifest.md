@@ -2,11 +2,11 @@
 
 Source: `../../../Document Recieved/Final NIQ Assessment Form_with section_field_details.xlsx`, Sheet1 A2:H157. Runtime cell references: `packages/contracts/src/assessment-form.ts`; exact 24 cancer options: `assessment-form-options.ts`.
 
-Version: `niq-final-overlay-v1`. Scoring fields and options come exclusively from persisted public format-2 NIQ_FINAL_ASSESSMENT metadata. No scoring points, cutoffs or formulas are imported. Requiredness follows workbook column C: personal fields required, scoring entries optional. Explicit conditional detail requirements follow column H. Contact requiredness remains the documented working assumption pending product confirmation.
+Version: `niq-final-overlay-v1`. Scoring fields and options come exclusively from persisted public format-2 NIQ_FINAL_ASSESSMENT metadata. No scoring points, cutoffs or formulas are imported. Requiredness follows workbook column C: personal fields required, scoring entries optional. Explicit conditional detail requirements follow column H. Contact is required (Sheet1 B7/C7) and reads the patient profile as confirmed by the user. It is read-only in the assessment. Missing contact prompts an explicit patient-profile update before submission.
 
 | Section | Source | Fields |
 | --- | --- | --- |
-| Personal | B2:H10 | Read-only patient name, age and gender context; contact; height; fresh current weight (supporting input); derived BMI |
+| Personal | B2:H10 | Read-only patient name, age, gender and contact context; height; fresh current weight (supporting input); derived BMI |
 | Disease | B11:H49 | Remote tumour_type, stage, relapse_status; cancer type F15:F38 and conditional Other text; metastasis F42:F46 at metastatic stage and conditional Other text |
 | Treatment | B50:H88 | Remote treatment_status, cancer_surgical_status, current_cancer_treatment, current_medications, supplements_intake; palliative path/timing; conditional done/planned surgery date; cycle number/frequency |
 | History | B89:H100 | Remote co_morbidities, previous_surgeries, family_history_cancer; positive safe-integer surgery count if Yes; relationship if family history Yes |

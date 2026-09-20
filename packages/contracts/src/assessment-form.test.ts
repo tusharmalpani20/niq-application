@@ -25,7 +25,7 @@ test("overlay preserves remote labels and IDs, counts current weight only once, 
   expect(form.sections).toHaveLength(6);
   expect(fields.filter(f => f.id === "current_weight_kg")).toHaveLength(1);
   expect(fields.find(f => f.id === "cancer_type")!.options).toHaveLength(24);
-  expect(fields.find(f => f.id === "contact")!.required).toBe(true);
+  expect(fields.find(f => f.id === "contact")).toMatchObject({ required: true, owner: "context", readOnly: true });
   expect(fields.find(f => f.id === "tumour_type")!.required).toBe(false);
   expect(fields.some(f => f.id === "haemoglobin")).toBe(false);
 });

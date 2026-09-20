@@ -58,7 +58,7 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
     app("patient_name", "Patient name", "text", "B2:C2", { owner: "context", required: true, readOnly: true }),
     app("age", "Age", "number", "B3:C3", { owner: "context", required: true, readOnly: true, min: 0 }),
     app("gender", "Gender", "text", "B4:F6", { owner: "context", required: true, readOnly: true }),
-    app("contact", "Contact number", "text", "B7:C7", { required: true }),
+    app("contact", "Contact number", "text", "B7:C7", { required: true, owner: "context", readOnly: true }),
     app("height_cm", "Height", "number", "B8:C8", { required: true, min: 0, exclusiveMin: true, unit: "cm" }),
     app("bmi", "BMI", "calculated", "B10;H2", { readOnly: true }),
   ] };
