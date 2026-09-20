@@ -106,7 +106,7 @@ export class AssessmentFaceScanService {
         reason: "Face scan is not enabled for this deployment."
       } : {}),
       sessions: rows.map(row => this.dto(row)),
-      currentSessionId: rows[0]?.id ?? null
+      currentSessionId: rows.find(row => row.isCurrent)?.id ?? null
     };
   }
   async start(actor: Principal, org: string, assessment: string, input: {
@@ -125,7 +125,7 @@ export class AssessmentFaceScanService {
       this.workflow.editable(assessmentRow, input.revision);
       const [existing] = await tx.select().from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId, org), eq(assessmentFaceScans.assessmentId, assessment), eq(assessmentFaceScans.active, true)));
       if (existing)
-        return existing;
+        throw new ServiceError("CONFLICT", "A face scan attempt already exists. Restore it before starting another.", { currentSessionId: existing.id });
       if (!this.workflow.config.FACE_SCAN_ENABLED)
         throw new ServiceError("SCORING_UNAVAILABLE", "Face scan is not enabled.");
       const connection = await this.transport(org, undefined, tx);
@@ -133,11 +133,18 @@ export class AssessmentFaceScanService {
       const state = this.workflow.unseal<StoredWorkflow>(assessmentRow.workflow);
       const snapshot = frozenFaceScanContext(patient, state.answers, `${connection.identity.deploymentId}:${actor.membershipId}`);
       const id = createEntityId();
+      // Selection changes only for an explicit new attempt, never for delayed evidence.
+      await tx.update(assessmentFaceScans).set({ isCurrent: false }).where(and(
+        eq(assessmentFaceScans.organizationId, org),
+        eq(assessmentFaceScans.assessmentId, assessment),
+        eq(assessmentFaceScans.isCurrent, true),
+      ));
       const [row] = await tx.insert(assessmentFaceScans).values({
         id,
         organizationId: org,
         assessmentId: assessment,
         revision: assessmentRow.revision,
+        isCurrent: true,
         requestKey: input.requestKey,
         remoteRequestKey: `face-scan:${org}:${id}`,
         connection: connection.identity,
@@ -192,6 +199,8 @@ export class AssessmentFaceScanService {
     const text = await boundedResponse(response, 128 * 1024);
     const parsed = remoteSchema.parse(JSON.parse(text));
     const remote = parsed.session;
+    if (remote.state === "COMPLETED" && (!remote.result || !remote.completedAt))
+      throw new ServiceError("CONFLICT", "Scoring returned incomplete completion evidence.");
     if (remote.organizationReference !== row.organizationId || remote.assessmentReference !== row.assessmentId || row.remoteId && remote.id !== row.remoteId || !sameFields(remote.context, this.workflow.unseal<FaceScanContext>(row.snapshot), contextKeys))
       throw new ServiceError("CONFLICT", "Scoring returned a different scan identity.");
     return remote;

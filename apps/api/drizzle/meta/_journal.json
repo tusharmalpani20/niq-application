@@ -141,6 +141,13 @@
       "when": 1789929371152,
       "tag": "0019_sleepy_stryfe",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789929622931,
+      "tag": "0020_light_slapstick",
+      "breakpoints": true
     }
   ]
 }

@@ -694,11 +694,13 @@ export const assessmentFaceScans = pgTable("assessment_face_scans", {
   revision: integer("revision").notNull(), requestKey: text("request_key").notNull(), connection: jsonb("connection").notNull(),
   remoteRequestKey: text("remote_request_key"), reconciliationAttempts: integer("reconciliation_attempts").notNull().default(0),
   snapshot: jsonb("snapshot").notNull(), remoteId: text("remote_id"), state: text("state").notNull().default("REQUESTED"),
+  isCurrent: boolean("is_current").notNull().default(false),
   active: boolean("active").notNull().default(true), projection: jsonb("projection"), failureCode: text("failure_code"),
   leaseToken: text("lease_token"), leaseExpiresAt: timestamp("lease_expires_at",{withTimezone:true}), nextAttemptAt: timestamp("next_attempt_at",{withTimezone:true}),
   ...timestamps,
 }, t => [
   uniqueIndex("assessment_face_scans_key_uidx").on(t.organizationId,t.requestKey),
+  uniqueIndex("assessment_face_scans_current_uidx").on(t.organizationId,t.assessmentId).where(sql`${t.isCurrent} = true`),
   uniqueIndex("assessment_face_scans_active_uidx").on(t.organizationId,t.assessmentId).where(sql`${t.active} = true`),
   index("assessment_face_scans_recovery_idx").on(t.active,t.nextAttemptAt),
   foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),

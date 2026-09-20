@@ -186,7 +186,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   const input={revision:draft.revision,posture:"resting" as const,requestKey:"face-scan-operation-12345"};
   const first=await scans.start(actor,org,scanAssessment,input,context);expect(first.failureCode).toBe("RECONCILIATION_REQUIRED");expect(first.state).toBe("RECONCILIATION_REQUIRED");
   const replay=await scans.start(actor,org,scanAssessment,input,context);expect(replay.id).toBe(first.id);expect(replay.failureCode).toBeNull();
-  expect((await scans.start(actor,org,scanAssessment,{...input,requestKey:"another-tab-operation-12345"},context)).id).toBe(first.id);
+  await expect(scans.start(actor,org,scanAssessment,{...input,requestKey:"another-tab-operation-12345"},context)).rejects.toMatchObject({code:"CONFLICT",details:{currentSessionId:first.id}});
   expect((await scans.list(actor,org,scanAssessment)).sessions).toHaveLength(1);
   await expect(scans.get({...actor,organizationId:other},org,scanAssessment,first.id)).rejects.toMatchObject({code:"FORBIDDEN"});
   await expect(scans.get(actor,org,id,first.id)).rejects.toMatchObject({code:"NOT_FOUND"});
@@ -201,6 +201,8 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   const [before]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,scanAssessment));
   await db.update(tables.assessments).set({status:"COMPLETED"}).where(eq(tables.assessments.id,scanAssessment));
   await expect(scans.mutate(actor,org,scanAssessment,first.id,"signal",{schemaVersion:1,raw_intensity:[{r:1,g:2,b:3}],ppg_time:[0],average_fps:30})).rejects.toMatchObject({code:"CONFLICT"});
+  remote={...remote,state:"COMPLETED",updatedAt:new Date().toISOString(),completedAt:new Date().toISOString(),result:null};
+  expect((await scans.get(actor,org,scanAssessment,first.id)).state).toBe("RECONCILIATION_REQUIRED");
   remote={...remote,state:"COMPLETED",updatedAt:new Date().toISOString(),completedAt:new Date().toISOString(),result:{schemaVersion:1,providerScanId:"provider-scan",wellnessScore:60,healthRiskScore:null,vitals:{heartRate:70,oxygenSaturation:null,respiratoryRate:null,systolic:null,diastolic:null},physiologicalScore:null,mentalWellbeingScore:null}};
   expect((await scans.get(actor,org,scanAssessment,first.id)).result?.wellnessScore).toBe(60);
   const [after]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,scanAssessment));
@@ -222,6 +224,9 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   outcome="unknown";
   const uncertain=await scans.start(actor,org,assessment,{...input,requestKey:"uncertain-face-scan-12345"},context);
   expect(uncertain.id).not.toBe(rejected.id);expect(uncertain.state).toBe("RECONCILIATION_REQUIRED");
+  // Creation timestamps can precede older attempts after lock waits or clock changes.
+  await db.update(tables.assessmentFaceScans).set({createdAt:new Date("2000-01-01T00:00:00Z")}).where(eq(tables.assessmentFaceScans.id,uncertain.id));
+  expect((await scans.list(actor,org,assessment)).currentSessionId).toBe(uncertain.id);
   outcome="UNAUTHORIZED";
   const prior=await scans.row(org,assessment,uncertain.id);
   // A stale caller snapshot must not turn a later rejected replay into a definite first rejection.
