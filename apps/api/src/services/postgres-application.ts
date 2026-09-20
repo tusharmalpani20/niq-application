@@ -51,6 +51,7 @@ type PatientRecord = {
   dateOfBirth: string | null;
   gender: "FEMALE" | "MALE" | "OTHER" | "UNKNOWN";
   encryptedProfile: Uint8Array;
+  encryptedExternalReference: Uint8Array;
   facilityId: string | null;
   facilityName: string | null;
   createdAt: Date;
@@ -91,6 +92,7 @@ export class PostgresApplicationService implements ApplicationService {
       dateOfBirth: row.dateOfBirth,
       gender: row.gender,
       displayName: profile.name,
+      medicalRecordNumber: decryptPatientData(row.encryptedExternalReference, key),
       ...(profile.phone ? { phone: profile.phone } : {}),
       ...(profile.email ? { email: profile.email } : {}),
       createdAt: row.createdAt,
@@ -755,6 +757,7 @@ export class PostgresApplicationService implements ApplicationService {
       dateOfBirth: patients.dateOfBirth,
       gender: patients.gender,
       encryptedProfile: patients.encryptedProfile,
+      encryptedExternalReference: patients.encryptedExternalReference,
       facilityId: facilities.id,
       facilityName: facilities.name,
       createdAt: patients.createdAt,
@@ -777,6 +780,7 @@ export class PostgresApplicationService implements ApplicationService {
       dateOfBirth: patients.dateOfBirth,
       gender: patients.gender,
       encryptedProfile: patients.encryptedProfile,
+      encryptedExternalReference: patients.encryptedExternalReference,
       facilityId: facilities.id,
       facilityName: facilities.name,
       createdAt: patients.createdAt,

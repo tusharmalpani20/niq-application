@@ -3,7 +3,7 @@ import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
-import { StartAssessmentPage } from "./StartAssessmentPage";
+import { filterAssessmentPatients, StartAssessmentPage } from "./StartAssessmentPage";
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Real selected patient", dateOfBirth: "2000-01-01", gender: "FEMALE", homeFacility: null, createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 async function harness(path: string, handler: (url: string, init?: RequestInit) => Promise<Response>, callback: (router: ReturnType<typeof createMemoryRouter>, click: () => Promise<void>) => Promise<void>) {
@@ -58,4 +58,12 @@ test("inaccessible patient has no fallback and cannot initialize", async () => {
     expect([...document.querySelectorAll("button")].some(button => button.textContent === "Start assessment")).toBe(false);
     expect(document.body.textContent).not.toContain("NIQ-1042");
   });
+});
+
+test("picker MRN search preserves facility restriction and supports older responses", () => {
+  const first = { ...patient, medicalRecordNumber: "HOSP-42", homeFacility: { id: "facility-a", name: "A" }, createdAt: new Date(), updatedAt: new Date() };
+  const second = { ...first, id: "patient-b", homeFacility: { id: "facility-b", name: "B" } };
+  const legacy = { ...first, id: "patient-c", medicalRecordNumber: undefined };
+  expect(filterAssessmentPatients([first, second, legacy] as any, "facility-a", " hosp-42 ").map(item => item.id)).toEqual([id]);
+  expect(filterAssessmentPatients([legacy] as any, "", "PAT-1")).toHaveLength(1);
 });

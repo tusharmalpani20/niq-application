@@ -322,6 +322,7 @@ export const patientSchema = z.object({
   dateOfBirth: z.iso.date().nullable(),
   gender: patientGenderSchema,
   displayName: z.string(),
+  medicalRecordNumber: z.string().optional(),
   phone: z.string().optional(),
   email: z.email().optional(),
   createdAt: z.coerce.date(),
