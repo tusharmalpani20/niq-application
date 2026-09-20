@@ -687,3 +687,18 @@ export const assessmentFiles = pgTable("assessment_files", {
   foreignKey({columns:[t.organizationId,t.patientId],foreignColumns:[patients.organizationId,patients.id]}),
   foreignKey({columns:[t.organizationId,t.reportId],foreignColumns:[assessmentReports.organizationId,assessmentReports.id]}),
 ]);
+
+// Separate from legacy stub sessions: only these durable attempts may contact Scoring.
+export const assessmentFaceScans = pgTable("assessment_face_scans", {
+  id: entityId("id").primaryKey(), organizationId: entityId("organization_id").notNull(), assessmentId: entityId("assessment_id").notNull(),
+  revision: integer("revision").notNull(), requestKey: text("request_key").notNull(), connection: jsonb("connection").notNull(),
+  snapshot: jsonb("snapshot").notNull(), remoteId: text("remote_id"), state: text("state").notNull().default("REQUESTED"),
+  active: boolean("active").notNull().default(true), projection: jsonb("projection"), failureCode: text("failure_code"),
+  leaseToken: text("lease_token"), leaseExpiresAt: timestamp("lease_expires_at",{withTimezone:true}), nextAttemptAt: timestamp("next_attempt_at",{withTimezone:true}),
+  ...timestamps,
+}, t => [
+  uniqueIndex("assessment_face_scans_key_uidx").on(t.organizationId,t.requestKey),
+  uniqueIndex("assessment_face_scans_active_uidx").on(t.organizationId,t.assessmentId).where(sql`${t.active} = true`),
+  index("assessment_face_scans_recovery_idx").on(t.active,t.nextAttemptAt),
+  foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),
+]);

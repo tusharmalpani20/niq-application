@@ -418,3 +418,5 @@ export type UpdateFacility = z.infer<typeof updateFacilitySchema>;
 export type UpdateOrganization = z.infer<typeof updateOrganizationSchema>;
 export type VerifyMfaRequest = z.infer<typeof verifyMfaRequestSchema>;
 export type ResendMfaRequest = z.infer<typeof resendMfaRequestSchema>;
+
+export * from "./face-scan";

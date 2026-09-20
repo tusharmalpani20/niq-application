@@ -11,6 +11,9 @@ import { errorBody } from "./http/errors";
 import { secureEqual } from "./security/tokens";
 import type { ApplicationService, Principal, RequestContext } from "./services/application";
 import { ServiceError } from "./services/application";
+import { mountFaceScanRoutes } from "./face-scan-routes";
+import { AssessmentFaceScanService } from "./services/assessment-face-scan";
+import { FACE_SCAN_MAX_BYTES } from "../../../packages/contracts/src/face-scan";
 import { mountAssessmentRoutes } from "./assessment-routes";
 import type { AssessmentWorkflowService } from "./services/assessment-workflow";
 
@@ -114,7 +117,7 @@ export function createApp(dependencies: AppDependencies) {
     if (context.req.header("origin") !== dependencies.allowedOrigin) return context.json(errorBody("FORBIDDEN", "The request origin is not allowed.", context.get("requestId")), 403);
     // Files stream through a separately bounded storage adapter; JSON drafts are bounded here.
     if (/\/reports\/[^/]+\/files$/.test(path) && context.req.method === "POST") return next();
-    return bodyLimit({ maxSize: 256 * 1024, onError: c => c.json(errorBody("VALIDATION_ERROR", "The request is too large.", c.get("requestId")), 413) })(context, next);
+    return bodyLimit({ maxSize: /\/face-scans\/[^/]+\/signal$/.test(path) ? FACE_SCAN_MAX_BYTES : 256 * 1024, onError: c => c.json(errorBody("VALIDATION_ERROR", "The request is too large.", c.get("requestId")), 413) })(context, next);
   });
   app.get("/v1/auth/me", (context) => context.json({ user: context.get("principal") }));
   app.post("/v1/auth/sign-out", async (context) => {
@@ -176,7 +179,10 @@ export function createApp(dependencies: AppDependencies) {
     return context.json({ invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens ? { activationToken: result.token } : {}) }, 201);
   });
   app.patch("/v1/organizations/:organizationId/users/:membershipId", zValidator("param", idParamsSchema, validationFailure), zValidator("json", updateUserStatusSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.setUserActive(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").membershipId!, context.req.valid("json").active, requestContext(context)))));
-  if (dependencies.assessmentWorkflow) mountAssessmentRoutes(app, dependencies.assessmentWorkflow);
+  if (dependencies.assessmentWorkflow) {
+    mountAssessmentRoutes(app, dependencies.assessmentWorkflow);
+    mountFaceScanRoutes(app, new AssessmentFaceScanService(dependencies.assessmentWorkflow));
+  }
   app.notFound((context) => context.json(errorBody("NOT_FOUND", "The requested resource was not found.", context.get("requestId")), 404));
   app.onError((error, context) => {
     if (error instanceof ServiceError) {

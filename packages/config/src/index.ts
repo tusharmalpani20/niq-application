@@ -27,6 +27,8 @@ export const applicationConfigSchema = z.object({
   DATABASE_URL: z.string().min(1),
   DATABASE_SSL: booleanFromString,
   SCORING_API_URL: optionalUrl,
+  FACE_SCAN_ENABLED: booleanFromString,
+  FACE_SCAN_RECONCILE_INTERVAL_MS: z.coerce.number().int().min(5000).max(300000).default(30000),
   SCORING_TIMEOUT_MS: z.coerce.number().int().positive().max(60_000).default(10_000),
   SCORING_CREDENTIAL_ENCRYPTION_KEY: optionalEncryptionKey,
   SCORING_CREDENTIAL_KEY_VERSION: z.string().trim().min(1).max(64).default("local-v1"),

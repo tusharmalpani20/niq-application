@@ -127,6 +127,13 @@
       "when": 1789914142938,
       "tag": "0017_mean_thunderbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789927190970,
+      "tag": "0018_naive_azazel",
+      "breakpoints": true
     }
   ]
 }

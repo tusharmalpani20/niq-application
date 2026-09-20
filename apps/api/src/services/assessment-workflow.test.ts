@@ -1,3 +1,4 @@
+import { AssessmentFaceScanService } from "./assessment-face-scan";
 import {afterAll,beforeAll,describe,expect,test} from "bun:test";
 import {mkdtemp,rm} from "node:fs/promises";import {tmpdir} from "node:os";import {join} from "node:path";import {createHash} from "node:crypto";
 import postgres from "postgres";import {drizzle} from "drizzle-orm/postgres-js";import {eq} from "drizzle-orm";
@@ -163,6 +164,41 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  expect(keys.length).toBe(before+1);
  expect((await service.read(actor,org,cooldown)).status).toBe("SCORING_UNAVAILABLE");
  expect((await service.read(actor,org,due)).status).toBe("SCORED");
+ });
+
+ test("face scan durable replay, tenant scope, encrypted snapshot and late result isolation",async()=>{
+  const scanAssessment=(await service.initialize(actor,org,{patientId:patient,requestKey:"face-scan-assessment-12345"},context)).assessmentId!;
+  let draft=await service.read(actor,org,scanAssessment);
+  draft=await service.save(actor,org,scanAssessment,{revision:draft.revision,answers:{height_cm:170,current_weight_kg:65}},context);
+  const enabled=new AssessmentWorkflowService({db,applicationService:service.applicationService,config:{...service.config,FACE_SCAN_ENABLED:true}});
+  let remote:any;let uncertain=true;let calls=0;
+  const scans=new AssessmentFaceScanService(enabled,async(url,init)=>{
+   calls++;const request=new URL(String(url));
+   if(request.pathname==="/v1/face-scans"){
+    const body=JSON.parse(String(init?.body));
+    const persisted=await db.select().from(tables.assessmentFaceScans).where(eq(tables.assessmentFaceScans.requestKey,body.idempotencyKey));
+    expect(persisted).toHaveLength(1);expect(JSON.stringify(persisted[0]!.snapshot)).not.toContain("1990-01-01");
+    remote??={id:"remote-scan",state:"REQUESTED",context:body.context,assessmentReference:body.assessmentReference,organizationReference:body.organizationReference,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),completedAt:null,failureCode:null,result:null,score:null};
+    if(uncertain){uncertain=false;throw new Error("lost response");}
+   }
+   return Response.json({session:remote,providerConfigured:true});
+  });
+  const input={revision:draft.revision,posture:"resting" as const,requestKey:"face-scan-operation-12345"};
+  const first=await scans.start(actor,org,scanAssessment,input,context);expect(first.failureCode).toBe("RECONCILIATION_REQUIRED");
+  const replay=await scans.start(actor,org,scanAssessment,input,context);expect(replay.id).toBe(first.id);expect(replay.failureCode).toBeNull();
+  expect((await scans.start(actor,org,scanAssessment,{...input,requestKey:"another-tab-operation-12345"},context)).id).toBe(first.id);
+  expect((await scans.list(actor,org,scanAssessment)).sessions).toHaveLength(1);
+  await expect(scans.get({...actor,organizationId:other},org,scanAssessment,first.id)).rejects.toMatchObject({code:"FORBIDDEN"});
+  await expect(scans.get(actor,org,id,first.id)).rejects.toMatchObject({code:"NOT_FOUND"});
+  const [before]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,scanAssessment));
+  await db.update(tables.assessments).set({status:"COMPLETED"}).where(eq(tables.assessments.id,scanAssessment));
+  await expect(scans.mutate(actor,org,scanAssessment,first.id,"signal",{schemaVersion:1,raw_intensity:[{r:1,g:2,b:3}],ppg_time:[0],average_fps:30})).rejects.toMatchObject({code:"CONFLICT"});
+  remote={...remote,state:"COMPLETED",updatedAt:new Date().toISOString(),completedAt:new Date().toISOString(),result:{schemaVersion:1,providerScanId:"provider-scan",wellnessScore:60,healthRiskScore:null,vitals:{heartRate:70,oxygenSaturation:null,respiratoryRate:null,systolic:null,diastolic:null},physiologicalScore:null,mentalWellbeingScore:null}};
+  expect((await scans.get(actor,org,scanAssessment,first.id)).result?.wellnessScore).toBe(60);
+  const [after]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,scanAssessment));
+  expect(after!.workflow).toEqual(before!.workflow);expect(after!.revision).toBe(before!.revision);
+  expect((await scans.start(actor,org,scanAssessment,input,context)).id).toBe(first.id);
+  expect(calls).toBeGreaterThan(1);
  });
 
 });
