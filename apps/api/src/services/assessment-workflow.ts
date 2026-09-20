@@ -18,7 +18,7 @@ type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 export type WorkflowExecutor = Database | Tx;
 type Fetcher=(input:Parameters<typeof fetch>[0],init?:Parameters<typeof fetch>[1])=>Promise<Response>;
 type ConnectionIdentity = { origin: string; deploymentId: string; scoringOrganizationId: string };
-export type StoredWorkflow = { binding: AssessmentScoringStart; connection: ConnectionIdentity; manifest: AssessmentFormManifest; patient: AssessmentPatient; answers: FormAnswers; heightSource: {assessmentId:string;recordedAt:string}|null };
+export type StoredWorkflow = { binding: AssessmentScoringStart; connection: ConnectionIdentity; manifest: AssessmentFormManifest; patient: AssessmentPatient; answers: FormAnswers; heightReferenceYear?: number; heightSource: {assessmentId:string;recordedAt:string}|null };
 export type WorkflowRow = typeof assessments.$inferSelect;
 export class AssessmentWorkflowService {
   readonly db: Database; readonly applicationService: ApplicationService; readonly config: ApplicationConfig;
@@ -105,7 +105,7 @@ export class AssessmentWorkflowService {
         await tx.insert(questionnaireDefinitions).values({id:definitionId,organizationId,scopeKey:organizationId,key:binding.ruleVersionId,version:binding.checksum,schema:binding.questionnaire,checksum:binding.checksum,isPublished:true,publishedAt:now}).onConflictDoNothing();
         const [definition]=await tx.select().from(questionnaireDefinitions).where(and(eq(questionnaireDefinitions.scopeKey,organizationId),eq(questionnaireDefinitions.key,binding.ruleVersionId),eq(questionnaireDefinitions.version,binding.checksum)));
         if(!definition) throw new Error("Questionnaire binding was not saved");
-        await tx.insert(assessments).values({id,organizationId,patientId:patient.id,facilityId:row.facilityId,questionnaireDefinitionId:definition.id,questionnaireScopeKey:organizationId,createdByMembershipId:actor.membershipId,workflow:this.seal({binding,connection:transport.identity,manifest,patient,answers,heightSource:height?{assessmentId:height.assessmentId,recordedAt:height.capturedAt}:null} satisfies StoredWorkflow)});
+        await tx.insert(assessments).values({id,organizationId,patientId:patient.id,facilityId:row.facilityId,questionnaireDefinitionId:definition.id,questionnaireScopeKey:organizationId,createdByMembershipId:actor.membershipId,createdAt:row.createdAt,workflow:this.seal({binding,connection:transport.identity,manifest,patient,answers,heightReferenceYear:referenceYear,heightSource:height?{assessmentId:height.assessmentId,recordedAt:height.capturedAt}:null} satisfies StoredWorkflow)});
         await tx.update(assessmentInitializations).set({status:"READY",assessmentId:id,leaseToken:null,leaseExpiresAt:null,failureCode:null,updatedAt:new Date()}).where(eq(assessmentInitializations.id,id));
         await this.audit(tx,actor,context,id,"ASSESSMENT_CREATED");
       });
