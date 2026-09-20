@@ -1,3 +1,4 @@
+import { assessmentAnswerSchema } from "./assessment-workflow";
 import { ASSESSMENT_ANSWER_TEXT_LIMIT, type AssessmentFormManifest, type FormAnswers, type FormField } from "./assessment-form";
 
 export function isAssessmentFieldApplicable(field: FormField, answers: FormAnswers): boolean {
@@ -51,14 +52,20 @@ export function validateAssessmentAnswers(manifest: AssessmentFormManifest, answ
   for (const id of Object.keys(answers)) {
     const field = fields.find(field => field.id === id);
     if (!field) { errors[id] = "Unknown field"; continue; }
-    // Even inactive draft data must have the correct primitive type and allowed option identifiers.
+    // Keep dormant answers reversible without letting hidden, unfinished controls block saving.
+    // All retained data still obeys the same bounded primitive contract as the API request.
+    if (!assessmentAnswerSchema.safeParse(answers[id]).success) {
+      errors[id] = "Enter a valid answer";
+      continue;
+    }
+    if (!isAssessmentFieldApplicable(field, answers)) continue;
     if (!unanswered(answers[id])) {
       const error = assessmentFieldError(field, answers[id]);
       if (error) errors[id] = error;
     }
   }
   if (options.requireComplete) for (const field of fields) {
-    if (!isAssessmentFieldApplicable(field, answers) || field.kind === "calculated") { delete errors[field.id]; continue; }
+    if (!isAssessmentFieldApplicable(field, answers) || field.kind === "calculated") continue;
     const error = assessmentFieldError(field, answers[field.id]);
     if (error) errors[field.id] = error;
   }
