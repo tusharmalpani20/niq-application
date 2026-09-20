@@ -92,10 +92,10 @@ export class AssessmentWorkflowService {
       const binding=await requestAssessmentScoringStart({...transport,assessmentReference:id});
       const manifest=buildAssessmentForm(binding.questionnaire);
       const patient=await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient;
-      const previous=await this.db.select({assessmentId:assessments.id,measurementId:measurements.id,capturedAt:measurements.capturedAt,status:assessments.status,values:measurements.values}).from(measurements).innerJoin(assessments,and(eq(assessments.id,measurements.assessmentId),eq(assessments.organizationId,measurements.organizationId))).where(and(eq(assessments.organizationId,organizationId),eq(assessments.patientId,patient.id),facilityAccessCondition(actor,organizationId,assessments.facilityId))).orderBy(desc(measurements.capturedAt)).limit(100);
+      const previous=await this.db.select({assessmentId:assessments.id,measurementId:measurements.id,capturedAt:measurements.capturedAt,status:assessments.status,values:measurements.values}).from(measurements).innerJoin(assessments,and(eq(assessments.id,measurements.assessmentId),eq(assessments.organizationId,measurements.organizationId))).where(and(eq(assessments.organizationId,organizationId),eq(assessments.patientId,patient.id),facilityAccessCondition(actor,organizationId,assessments.facilityId))).orderBy(desc(measurements.capturedAt));
       const [homeFacility]=await this.db.select().from(facilities).where(eq(facilities.id,row.facilityId));
       const referenceYear=Number(new Intl.DateTimeFormat("en",{year:"numeric",timeZone:homeFacility?.timezone??"UTC"}).format(row.createdAt));
-      const height=selectAssessmentHeight({birthYear:patient.dateOfBirth?Number(patient.dateOfBirth.slice(0,4)):null,referenceYear,assessmentStartedAt:row.createdAt.toISOString(),candidates:previous.map(x=>({...x,capturedAt:x.capturedAt.toISOString(),heightCm:Number(this.unseal<Record<string,unknown>>(x.values).height_cm)}))});
+      const height=selectAssessmentHeight({birthYear:patient.dateOfBirth?Number(patient.dateOfBirth.slice(0,4)):null,referenceYear,assessmentStartedAt:row.createdAt.toISOString(),candidates:previous.map(x=>({...x,capturedAt:x.capturedAt.toISOString(),heightCm:Number((x.values as {encrypted?:string})?.encrypted?this.unseal<Record<string,unknown>>(x.values).height_cm:(x.values as Record<string,unknown>).height_cm)}))});
       const answers=patientAnswers(patient,row.createdAt);
       if(height) answers.height_cm=height.heightCm;
       await this.db.transaction(async tx=>{
@@ -121,7 +121,7 @@ export class AssessmentWorkflowService {
     const patient=row.status==="DRAFT"?await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient:state.patient;
     const answers=row.status==="DRAFT"?{...state.answers,...patientAnswers(patient,row.createdAt)}:state.answers;
     const [submission]=await this.db.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.assessmentId,id),eq(assessmentSubmissions.organizationId,organizationId))).orderBy(desc(assessmentSubmissions.createdAt)).limit(1);
-    return {id:row.id,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,patient,answers,manifest:state.manifest,progress:getAssessmentCompletion(state.manifest,answers),reports:await this.reports.list(organizationId,id),binding:{version:state.binding.version,checksum:state.binding.checksum},result:submission?.result?this.unseal(submission.result):null,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode}:null,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
+    return {id:row.id,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,patient,answers,manifest:state.manifest,progress:getAssessmentCompletion(state.manifest,answers),reports:await this.reports.list(organizationId,id),binding:{version:state.binding.version,checksum:state.binding.checksum},result:submission?.result?this.unseal(submission.result):null,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode,nextRetryAt:submission.nextAttemptAt?.toISOString()??null}:null,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
   }
   async save(actor:Principal,organizationId:string,id:string,input:{revision:number;answers:FormAnswers},context:RequestContext) {
     this.clinicalActor(actor,organizationId);
@@ -134,6 +134,7 @@ export class AssessmentWorkflowService {
       if(Object.keys(errors).length) throw new ServiceError("VALIDATION_ERROR","Some answers need attention.",{fields:errors});
       await tx.update(assessments).set({workflow:this.seal({...state,answers,patient,heightSource:answers.height_cm===state.answers.height_cm?state.heightSource:null}),revision:row.revision+1,updatedAt:new Date()}).where(eq(assessments.id,id));
       await tx.delete(assessmentAnswers).where(and(eq(assessmentAnswers.organizationId,organizationId),eq(assessmentAnswers.assessmentId,id)));
+      await this.audit(tx,actor,context,id,"ASSESSMENT_DRAFT_SAVED",{revision:row.revision+1,changedKeys:Object.keys(answers).filter(key=>JSON.stringify(answers[key])!==JSON.stringify(state.answers[key]))});
       for(const [questionKey,answer] of Object.entries(answers)) await tx.insert(assessmentAnswers).values({id:createEntityId(),organizationId,assessmentId:id,questionKey,answer:this.seal(answer),answeredByMembershipId:actor.membershipId}).onConflictDoUpdate({target:[assessmentAnswers.assessmentId,assessmentAnswers.questionKey],set:{answer:this.seal(answer),answeredByMembershipId:actor.membershipId,updatedAt:new Date()}});
     });
     return this.read(actor,organizationId,id);
@@ -161,13 +162,14 @@ export class AssessmentWorkflowService {
     });
     return this.retrySubmission(actor,organizationId,id,context);
   }
-  async retrySubmission(actor:Principal,organizationId:string,id:string,context:RequestContext) {
-    this.clinicalActor(actor,organizationId);await this.authorize(actor,organizationId,id);
+  async retrySubmission(actor:Principal,organizationId:string,id:string,context:RequestContext,operator=false) {
+    this.clinicalActor(actor,organizationId);if(operator&&actor.role!=="ORGANIZATION_ADMIN")throw new ServiceError("FORBIDDEN","An organization administrator must reconcile this request.");await this.authorize(actor,organizationId,id);
     const token=crypto.randomUUID();const now=new Date();
     const [submission]=await this.db.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,organizationId),eq(assessmentSubmissions.assessmentId,id))).orderBy(desc(assessmentSubmissions.createdAt)).limit(1);
     if(!submission) throw new ServiceError("CONFLICT","Submit the assessment first.");
-    if(["SUCCEEDED","REJECTED"].includes(submission.status)) return this.read(actor,organizationId,id);
-    const [claimed]=await this.db.update(assessmentSubmissions).set({leaseToken:token,leaseExpiresAt:new Date(Date.now()+120_000),status:"PENDING",updatedAt:now}).where(and(eq(assessmentSubmissions.id,submission.id),sql`(${assessmentSubmissions.leaseExpiresAt} is null or ${assessmentSubmissions.leaseExpiresAt}<${now.toISOString()})`,sql`${assessmentSubmissions.status} not in ('SUCCEEDED','REJECTED')`)).returning();
+    if(["SUCCEEDED","REJECTED"].includes(submission.status)||(submission.status==="RECONCILIATION_REQUIRED"&&!operator)) return this.read(actor,organizationId,id);
+    if(submission.nextAttemptAt&&submission.nextAttemptAt.getTime()>Date.now()) throw new ServiceError("CONFLICT","Wait before checking this scoring request again.",{retryAt:submission.nextAttemptAt.toISOString()});
+    const [claimed]=await this.db.update(assessmentSubmissions).set({leaseToken:token,leaseExpiresAt:new Date(Date.now()+120_000),status:"PENDING",attemptCount:sql`${assessmentSubmissions.attemptCount}+1`,updatedAt:now}).where(and(eq(assessmentSubmissions.id,submission.id),sql`(${assessmentSubmissions.leaseExpiresAt} is null or ${assessmentSubmissions.leaseExpiresAt}<${now.toISOString()})`,sql`${assessmentSubmissions.status} not in ('SUCCEEDED','REJECTED')`,sql`(${assessmentSubmissions.nextAttemptAt} is null or ${assessmentSubmissions.nextAttemptAt} <= ${now.toISOString()})`,operator?undefined:sql`${assessmentSubmissions.status} <> 'RECONCILIATION_REQUIRED'`)).returning();
     if(!claimed) return this.read(actor,organizationId,id);
     const snapshot=this.unseal<StoredWorkflow>(submission.snapshot);
     try {
@@ -189,7 +191,7 @@ export class AssessmentWorkflowService {
       await this.db.transaction(async tx=>{
         const [live]=await tx.select().from(assessmentSubmissions).where(eq(assessmentSubmissions.id,submission.id)).for("update");
         if(live?.leaseToken!==token) return;
-        await tx.update(assessmentSubmissions).set({status:rejected?"REJECTED":"UNAVAILABLE",failureCode:code,leaseToken:null,leaseExpiresAt:null,updatedAt:new Date()}).where(eq(assessmentSubmissions.id,submission.id));
+        await tx.update(assessmentSubmissions).set({status:rejected?"REJECTED":claimed.attemptCount>=3?"RECONCILIATION_REQUIRED":"UNAVAILABLE",failureCode:!rejected&&claimed.attemptCount>=3?"RECONCILIATION_REQUIRED":code,leaseToken:null,leaseExpiresAt:null,nextAttemptAt:rejected?null:new Date(Date.now()+(claimed.attemptCount>=3?60_000:5_000)),updatedAt:new Date()}).where(eq(assessmentSubmissions.id,submission.id));
         await tx.update(scoringRequests).set({status:rejected?"FAILED":"UNAVAILABLE",failureCode:code,updatedAt:new Date()}).where(eq(scoringRequests.id,submission.id));
         await tx.update(assessments).set({status:rejected?"DRAFT":"SCORING_UNAVAILABLE",updatedAt:new Date()}).where(eq(assessments.id,id));
         await this.audit(tx,actor,context,id,"ASSESSMENT_SCORING_FAILED",{submissionId:submission.id,code});
@@ -212,7 +214,7 @@ export class AssessmentWorkflowService {
     }
     return {initializations,checkedAssessments:rows.length};
   }
-  async updateContact(actor:Principal,organizationId:string,patientId:string,phone:string) {
+  async updateContact(actor:Principal,organizationId:string,patientId:string,phone:string,context:RequestContext={requestId:"patient-contact-update"}) {
     this.clinicalActor(actor,organizationId);await this.applicationService.getPatient(actor,organizationId,patientId);
     await this.db.transaction(async tx=>{
       const [row]=await tx.select().from(patients).where(and(eq(patients.id,patientId),eq(patients.organizationId,organizationId),facilityAccessCondition(actor,organizationId,patients.homeFacilityId))).for("update");
@@ -220,6 +222,7 @@ export class AssessmentWorkflowService {
       const key=patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY,this.config.SESSION_SECRET);
       const profile=JSON.parse(decryptPatientData(row.encryptedProfile,key));
       await tx.update(patients).set({encryptedProfile:encryptPatientData(JSON.stringify({...profile,phone}),key),updatedAt:new Date()}).where(eq(patients.id,patientId));
+      await tx.insert(auditEvents).values({id:createEntityId(),organizationId,actorMembershipId:actor.membershipId,actorType:"USER",action:"PATIENT_CONTACT_UPDATED",resourceType:"PATIENT",resourceId:patientId,requestId:context.requestId,metadata:{changedKeys:["phone"]}});
     });
     return this.applicationService.getPatient(actor,organizationId,patientId);
   }
