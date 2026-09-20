@@ -15,11 +15,11 @@ function recordFixture(): AssessmentWorkflow {
     patient: { id: "patient-a", reference: "PAT-1", displayName: "Test patient", dateOfBirth: "2006-01-01", gender: "FEMALE", phone: "1234567890", homeFacility: { id: "facility-a", name: "Chennai" } },
     createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 }
-async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}) {
+async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
-  const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
+  const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  const values = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true };
+  const values = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, NodeFilter: dom.window.NodeFilter, DocumentFragment: dom.window.DocumentFragment, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true };
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable: true });
   // React is imported before JSDOM; provide its legacy input-focus event hooks.
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {} });
@@ -33,18 +33,19 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
       if (rejectSave) return Response.json({ error: { message: "Saved version changed", code: "CONFLICT" } }, { status: 409 });
       record = { ...record, answers: body.answers, revision: record.revision + 1 };
     }
+    if (method === "DELETE") record = { ...record, reports: [], revision: record.revision + 1 };
     return Response.json(record);
   }) as typeof fetch;
   const router = createMemoryRouter([{ element: <Outlet context={{ userId: "user-a", organizationId: "org-a" }} />, children: [{ path: "/assessments/:assessmentId", element: <AssessmentEditorPage /> }, { path: "/patients/:id", element: <p>Patient record</p> }] }], { initialEntries: ["/assessments/assessment-a"] });
   const root = createRoot(document.getElementById("root")!);
   async function click(label: string) {
-    const button = [...document.querySelectorAll("button")].find(item => item.textContent?.trim() === label);
+    const button = [...document.querySelectorAll("button")].filter(item => item.textContent?.trim() === label).at(-1);
     if (!button) throw new Error(`Missing button ${label}`);
     await act(async () => { button.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
   }
   try {
     await act(async () => { root.render(<RouterProvider router={router} />); await new Promise(resolve => setTimeout(resolve, 0)); });
-    await callback({ dom, router, requests, click, conflict: () => { rejectSave = true; } });
+    await callback({ dom, router, requests, click, conflict: () => { rejectSave = true; }, remoteAnswers: answers => { record = { ...record, answers, revision: record.revision + 1 }; } });
   } finally {
     await act(async () => root.unmount()); router.dispose(); dom.window.close();
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key]; }
@@ -83,3 +84,28 @@ test("review missing-answer link focuses its field after changing section", asyn
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
   expect(document.activeElement?.id).toBe("assessment-field-height_cm");
 }, { answers: { ...recordFixture().answers, height_cm: null } }));
+
+const reportFixture = { id: "report-a", label: "Blood report", purpose: "", datePrecision: "MONTH" as const, year: 2026, month: 8, day: null, files: [] };
+test("report refresh preserves local answers and blocks overwriting concurrent answer edits", async () => harness(async ({ click, remoteAnswers, requests }) => {
+  await click("Save & continue");
+  await act(async () => document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+  await click("Reports");
+  remoteAnswers({ ...recordFixture().answers, current_weight_kg: 72 });
+  await click("Remove");
+  await click("Remove");
+  expect(document.body.textContent).toContain("Saved answers changed while updating reports");
+  expect(document.body.textContent).toContain("Load saved version");
+  await click("Save draft");
+  expect(requests.filter(request => request.method === "PATCH")).toHaveLength(0);
+}, { reports: [reportFixture] }));
+
+test("report refresh adopts concurrent server answers when local answers are clean", async () => harness(async ({ click, remoteAnswers, requests }) => {
+  await click("Reports");
+  remoteAnswers({ ...recordFixture().answers, current_weight_kg: 72 });
+  await click("Remove");
+  await click("Remove");
+  expect(document.body.textContent).not.toContain("Unsaved changes");
+  expect(document.body.textContent).not.toContain("Load saved version");
+  await click("Save draft");
+  expect(requests.filter(request => request.method === "PATCH")).toHaveLength(0);
+}, { reports: [reportFixture] }));

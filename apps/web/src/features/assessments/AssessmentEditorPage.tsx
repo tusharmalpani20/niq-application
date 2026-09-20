@@ -48,6 +48,21 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
     getAssessment(organizationId, assessmentId).then(value => { if (active) accept(value); }).catch(cause => { if (active) handleError(cause); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [organizationId, assessmentId, accept, handleError]);
+  async function refreshReports() {
+    try {
+      const value = await getAssessment(organizationId, assessmentId);
+      // A report mutation advances the same revision as answers. Do not silently
+      // adopt another editor's answer revision while retaining stale local answers.
+      const serverAnswersChanged = !!record && JSON.stringify(value.answers) !== JSON.stringify(record.answers);
+      if (dirty && (serverAnswersChanged || value.status !== "DRAFT")) {
+        setConflict(true);
+        setError("Saved answers changed while updating reports. Your local changes are preserved. Load the saved version before continuing.");
+      } else if (!dirty) {
+        setAnswers(value.answers);
+      }
+      setRecord(value);
+    } catch (cause) { handleError(cause); throw cause; }
+  }
   async function persist(): Promise<AssessmentWorkflow | null> {
     if (!record || !editable || conflict || operation.current) return null;
     const invalid = validateAssessmentAnswers(record.manifest, answers);
@@ -116,7 +131,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
       <div className="min-w-0"><h2 id="assessment-section-heading" tabIndex={-1} className="mb-4 scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>
         {sectionId === "personal_details" && <><div className="mb-4 rounded-xl border border-border bg-card p-4"><h3 className="font-semibold">Face scan</h3><p className="mt-1 text-sm text-muted-foreground">Face scanning is not available yet. Enter height and weight below.</p></div>{record.heightSource && <p className="mb-4 text-sm text-muted-foreground">Height copied from assessment on {new Date(record.heightSource.recordedAt).toLocaleDateString()}. Check and edit it if needed.</p>}{editable && !answers.contact && <div className="mb-4 grid gap-3 rounded-lg border border-border p-4"><p>The patient profile needs a contact number before submission.</p><label className="grid gap-2">Patient phone number<Input type="tel" value={phone} onChange={event => setPhone(event.target.value)} disabled={locked} /></label><Button variant="outline" isDisabled={locked || !phone.trim()} onPress={updateContact}>Update patient profile</Button></div>}</>}
         {section && <section className="rounded-xl border border-border bg-card p-5"><AssessmentFields section={section} answers={answers} errors={errors} readOnly={!editable || locked} onChange={(id, value) => { setAnswers(current => ({ ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
-        {sectionId === "reports" && <AssessmentReports organizationId={organizationId} assessmentId={assessmentId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!editable || busy || conflict} onChanged={async () => { const value = await getAssessment(organizationId, assessmentId); setRecord(value); }} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />}
+        {sectionId === "reports" && <AssessmentReports organizationId={organizationId} assessmentId={assessmentId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />}
         {sectionId === "review" && <><AssessmentReview record={record} answers={answers} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />{editable && <div className="mt-5 rounded-xl border border-border bg-card p-5"><p className="mb-4 text-sm text-muted-foreground">Submitting locks this set of responses and attached reports for scoring.</p><Button isDisabled={locked || reportDirty || progress.percent !== 100} onPress={submit}>Submit and request score</Button></div>}</>}
         <div className="mt-5 flex justify-between gap-3"><Button variant="outline" isDisabled={index <= 0 || locked} onPress={() => { void selectSection(tabs[index - 1]!.id); }}>Back</Button>{index < tabs.length - 1 && <Button isDisabled={locked} onPress={() => { void selectSection(tabs[index + 1]!.id, true); }}>{editable ? "Save & continue" : "Continue"}</Button>}</div>
       </div>
