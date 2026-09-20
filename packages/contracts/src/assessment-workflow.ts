@@ -15,6 +15,7 @@ export const reportInputSchema = z.object({
   if (value.day && value.month && value.year && new Date(Date.UTC(value.year, value.month - 1, value.day)).getUTCMonth() !== value.month - 1) ctx.addIssue({ code: "custom", path: ["day"], message: "Invalid calendar date" });
 });
 export const REPORT_LIMITS = { fileBytes: 10 * 1024 * 1024, filesPerReport: 10, reportsPerAssessment: 20, assessmentBytes: 100 * 1024 * 1024 } as const;
+export type AssessmentReportLimits = { fileBytes: number; filesPerReport: number; reportsPerAssessment: number; assessmentBytes: number };
 export type AssessmentPatient = { id: string; reference: string; displayName: string; dateOfBirth: string; gender: string; phone?: string; homeFacility: { id: string; name: string } | null };
 export type AssessmentReportFile = { id: string; reportId: string; originalFilename: string; mediaType: string; size: number; status: string; createdAt: string };
 export type AssessmentReport = { id: string; label: string; purpose: string; datePrecision: "DAY" | "MONTH"; year: number | null; month: number | null; day: number | null; files: AssessmentReportFile[] };
@@ -22,7 +23,7 @@ export type AssessmentInitialization = { id: string; status: string; assessmentI
 export type AssessmentWorkflow = {
   id: string; organizationId: string; patientId: string; facilityId: string | null; status: string; revision: number;
   patient: AssessmentPatient; answers: FormAnswers; manifest: AssessmentFormManifest;
-  progress: ReturnType<typeof getAssessmentCompletion>; reports: AssessmentReport[];
+  progress: ReturnType<typeof getAssessmentCompletion>; reports: AssessmentReport[]; reportLimits?: AssessmentReportLimits;
   binding: { version: string; checksum: string }; result: unknown | null;
   submission: { id: string; status: string; failureCode: string | null; nextRetryAt?: string | null } | null;
   heightSource: { assessmentId: string; recordedAt: string } | null;

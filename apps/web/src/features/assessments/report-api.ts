@@ -18,9 +18,10 @@ export async function mutateReport(url: string, method: "POST" | "PATCH" | "DELE
   if (!response.ok) throw new ReportMutationError(response.status >= 500, failure(await response.json().catch(() => null)).message);
 }
 export async function uploadReportFile(input: {
-  url: string; file: File; requestKey: string; revision: number; signal: AbortSignal; onProgress: (percent: number) => void;
+  url: string; file: File; requestKey: string; revision: number; maxFileBytes?: number; signal: AbortSignal; onProgress: (percent: number) => void;
 }): Promise<AssessmentWorkflow> {
-  if (!input.file.size || input.file.size > REPORT_LIMITS.fileBytes) throw new Error("Choose a file up to 10 MB.");
+  const maxBytes = input.maxFileBytes ?? REPORT_LIMITS.fileBytes;
+  if (!input.file.size || input.file.size > maxBytes) throw new Error(`Choose a file up to ${Number((maxBytes / 1024 / 1024).toFixed(2))} MB.`);
   const digest = await crypto.subtle.digest("SHA-256", await input.file.arrayBuffer());
   const checksum = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
   return new Promise((resolve, reject) => {

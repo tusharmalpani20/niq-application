@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { REPORT_LIMITS, reportInputSchema, type AssessmentReport } from "@niq/application-contracts";
+import { REPORT_LIMITS, reportInputSchema, type AssessmentReport, type AssessmentReportLimits } from "@niq/application-contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -9,12 +9,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ReportMutationError, mutateReport, reportBase, uploadReportFile, type ReportInput } from "./report-api";
 
 type Props = {
-  organizationId: string; assessmentId: string; reports: AssessmentReport[]; revision: number; readOnly?: boolean;
+  organizationId: string; assessmentId: string; reports: AssessmentReport[]; revision: number; readOnly?: boolean; limits?: AssessmentReportLimits;
   onChanged: () => Promise<void>; onBusyChange?: (busy: boolean) => void; onDirtyChange?: (dirty: boolean) => void;
 };
 type Upload = { key: string; reportId: string; file: File; progress: number; error?: string; state: "queued" | "uploading" | "failed" };
 type Editor = { id?: string; label: string; purpose: string; datePrecision: "DAY" | "MONTH"; date: string };
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "Something went wrong. Please try again.";
+export const formatReportMegabytes = (bytes: number) => Number((bytes / 1024 / 1024).toFixed(2)).toString();
 const supported = new Set(["application/pdf", "image/jpeg", "image/png"]);
 function dateValue(report: AssessmentReport) {
   if (!report.year || !report.month) return "";
@@ -22,7 +23,7 @@ function dateValue(report: AssessmentReport) {
   return report.datePrecision === "DAY" ? report.day ? `${month}-${String(report.day).padStart(2, "0")}` : "" : month;
 }
 
-export function AssessmentReports({ organizationId, assessmentId, reports, revision, readOnly = false, onChanged, onBusyChange, onDirtyChange }: Props) {
+export function AssessmentReports({ organizationId, assessmentId, reports, revision, readOnly = false, limits = REPORT_LIMITS, onChanged, onBusyChange, onDirtyChange }: Props) {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [dirty, setDirty] = useState(false);
   const [unconfirmed, setUnconfirmed] = useState<Editor | null>(null);
@@ -64,9 +65,9 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
     if (!files || busy) return;
     const next = Array.from(files);
     const queued = uploads.filter(upload => upload.reportId === report.id);
-    if (report.files.length + queued.length + next.length > REPORT_LIMITS.filesPerReport) { setMessage("Each report can contain up to 10 files."); return; }
-    if (next.some(file => !supported.has(file.type) || file.size === 0 || file.size > REPORT_LIMITS.fileBytes)) { setMessage("Choose PDF, JPEG or PNG files up to 10 MB each."); return; }
-    if (currentBytes + uploads.reduce((sum, upload) => sum + upload.file.size, 0) + next.reduce((sum, file) => sum + file.size, 0) > REPORT_LIMITS.assessmentBytes) { setMessage("This assessment can contain up to 100 MB of reports."); return; }
+    if (report.files.length + queued.length + next.length > limits.filesPerReport) { setMessage(`Each report can contain up to ${limits.filesPerReport} files.`); return; }
+    if (next.some(file => !supported.has(file.type) || file.size === 0 || file.size > limits.fileBytes)) { setMessage(`Choose PDF, JPEG or PNG files up to ${formatReportMegabytes(limits.fileBytes)} MB each.`); return; }
+    if (currentBytes + uploads.reduce((sum, upload) => sum + upload.file.size, 0) + next.reduce((sum, file) => sum + file.size, 0) > limits.assessmentBytes) { setMessage(`This assessment can contain up to ${formatReportMegabytes(limits.assessmentBytes)} MB of reports.`); return; }
     setMessage("");
     setUploads(previous => [...previous, ...next.map(file => ({ key: crypto.randomUUID(), reportId: report.id, file, progress: 0, state: "queued" as const }))]);
   }
@@ -76,7 +77,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
     const abort = new AbortController(); controller.current = abort;
     setUploads(previous => previous.map(item => item.key === upload.key ? { ...item, state: "uploading", error: undefined } : item));
     try {
-      await uploadReportFile({ url: `${base}/${upload.reportId}/files`, file: upload.file, revision, requestKey: upload.key, signal: abort.signal,
+      await uploadReportFile({ url: `${base}/${upload.reportId}/files`, file: upload.file, revision, requestKey: upload.key, signal: abort.signal, maxFileBytes: limits.fileBytes,
         onProgress: progress => setUploads(previous => previous.map(item => item.key === upload.key ? { ...item, progress } : item)),
       });
       setUploads(previous => previous.filter(item => item.key !== upload.key));
@@ -96,8 +97,8 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
     finally { setBusy(false); }
   }
   return <section className="flex min-w-0 flex-col gap-5" aria-label="Reports">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Reports</h2>{!readOnly && <Button isDisabled={busy || reports.length >= REPORT_LIMITS.reportsPerAssessment} onPress={() => { setMessage(""); setEditor({ label: "", purpose: "", datePrecision: "DAY", date: "" }); }}>Add report</Button>}</div>
-    <p className="text-sm text-muted-foreground">PDF, JPEG or PNG · Up to 10 MB per file</p>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Reports</h2>{!readOnly && <Button isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={() => { setMessage(""); setEditor({ label: "", purpose: "", datePrecision: "DAY", date: "" }); }}>Add report</Button>}</div>
+    <p className="text-sm text-muted-foreground">PDF, JPEG or PNG · Up to {formatReportMegabytes(limits.fileBytes)} MB per file</p>
     {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
     {unconfirmed && <Alert><AlertDescription><p>Check whether this report was saved before adding it again.</p><dl className="mt-2 grid gap-1"><div><dt className="font-medium">Label</dt><dd className="break-words">{unconfirmed.label || "Not entered"}</dd></div><div><dt className="font-medium">Report for</dt><dd className="break-words">{unconfirmed.purpose || "Not entered"}</dd></div><div><dt className="font-medium">Date</dt><dd>{unconfirmed.date || "Not entered"}</dd></div></dl><Button className="mt-2" variant="outline" onPress={() => setUnconfirmed(null)}>Dismiss</Button></AlertDescription></Alert>}
     {!reports.length && <p className="text-sm text-muted-foreground">No reports attached.</p>}
