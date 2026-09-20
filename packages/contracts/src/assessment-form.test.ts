@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { isAssessmentFieldApplicable, getEffectiveAssessmentAnswers, validateAssessmentAnswers } from "./assessment-form-validation";
 import { buildAssessmentForm } from "./assessment-form";
 function fixture() {
   const field = (id: string, type: string) => ({ id, type, label: id, options: type === "calculated" || type === "derived" ? [] : [{ id: `${id}_yes`, label: "Yes" }], dependencies: [] as string[] });
@@ -39,4 +40,31 @@ test("unknown versions, missing fields, conditional option changes and wrong dep
   expect(() => buildAssessmentForm(changed)).toThrow();
   const deps = fixture(); deps.sections[4]!.fields[0]!.dependencies = ["unknown"];
   expect(() => buildAssessmentForm(deps)).toThrow();
+});
+
+test("every workbook conditional detail is required only while its parent path is active", () => {
+  const form = buildAssessmentForm(fixture());
+  const fields = form.sections.flatMap(section => section.fields);
+  const cases = [
+    ["cancer_type_other", { cancer_type: "cancer_other" }, "Other cancer"],
+    ["metastasis_other", { stage: "stage_metastatic", metastasis_site: "others" }, "Other site"],
+    ["surgery_date", { cancer_surgical_status: "cancer_surgical_status_done" }, "2026-01-01"],
+    ["planned_surgery_date", { cancer_surgical_status: "cancer_surgical_status_planned" }, "2026-10-01"],
+    ["previous_surgery_count", { previous_surgeries: "previous_surgeries_yes" }, 1],
+    ["family_relationship", { family_history_cancer: "family_history_cancer_yes" }, "Parent"],
+    ["palliative_status", { treatment_status: "treatment_status_palliative_care" }, "post_treatment"],
+    ["palliative_timing", { treatment_status: "treatment_status_palliative_care", palliative_status: "post_treatment" }, "post_treatment"],
+  ] as const;
+  for (const [id, parents, value] of cases) {
+    const field = fields.find(field => field.id === id)!;
+    expect(isAssessmentFieldApplicable(field, {})).toBe(false);
+    expect(isAssessmentFieldApplicable(field, parents)).toBe(true);
+    expect(validateAssessmentAnswers(form, parents, { requireComplete: true })[id]).toBe("Required");
+    expect(validateAssessmentAnswers(form, { ...parents, [id]: value }, { requireComplete: true })[id]).toBeUndefined();
+    expect(getEffectiveAssessmentAnswers(form, { [id]: value })[id]).toBeUndefined();
+  }
+  const timing = fields.find(field => field.id === "palliative_timing")!;
+  expect(isAssessmentFieldApplicable(timing, { palliative_status: "post_treatment" })).toBe(false);
+  const site = fields.find(field => field.id === "metastasis_other")!;
+  expect(isAssessmentFieldApplicable(site, { metastasis_site: "others" })).toBe(false);
 });
