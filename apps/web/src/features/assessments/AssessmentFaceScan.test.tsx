@@ -7,7 +7,7 @@ import { AssessmentFaceScan } from "./AssessmentFaceScan";
 import { createCaptureController, type CaptureSDK } from "./careplix-capture";
 
 const session: FaceScanSession = { id: "session", state: "REQUESTED", context: { dob: "1990-01-01", gender: "female", heightCm: 170, weightKg: 70, posture: "resting", employeeId: "employee" }, createdAt: "2026-09-20T12:00:00.000Z", updatedAt: "2026-09-20T12:00:00.000Z", completedAt: null, failureCode: null, result: null, score: null };
-async function harness(run: (ctx: { click: (text: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean } = {}) {
+async function harness(run: (ctx: { click: (text: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "https://niq.test", pretendToBeVisual: true });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -23,7 +23,7 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; cons
     requests.push({ path, body });
     if (path.endsWith("/signal")) { current = { ...session, state: "UPLOAD_ACCEPTED" }; if (options.lostUpload) throw new Error("connection lost"); return Response.json(current); }
     if (path.endsWith("/cancel")) { current = { ...session, state: "CANCELLED" }; return Response.json(current); }
-    if (init?.method === "POST") { current = session; return Response.json(current); }
+    if (init?.method === "POST") { current = session; if (options.lostStart) throw new Error("Start response lost"); return Response.json(current); }
     const list: FaceScanList = { enabled: options.enabled ?? true, currentSessionId: current?.id ?? null, sessions: current ? [current] : [] };
     if (options.delayedStatus && ++reads === 2) return new Promise<Response>(resolve => { releaseStatus = () => resolve(Response.json(list)); });
     return Response.json(list);
@@ -79,3 +79,12 @@ test("backgrounding during preparation never starts a camera", async () => harne
   expect(starts()).toBe(0); expect(busy()).toBe(false);
   expect(document.body.textContent).toContain("Keep this page visible before starting the camera");
 }, { hiddenDuringSave: true }));
+
+test("lost start response restores the accepted attempt before camera retry", async () => harness(async ({ consent, click, starts, requests }) => {
+  await consent(); await click("Start face scan");
+  expect(starts()).toBe(0);
+  expect(document.body.textContent).toContain("Resume capture");
+  await click("Resume capture");
+  expect(starts()).toBe(1);
+  expect(requests.filter(r => r.body?.requestKey)).toHaveLength(1);
+}, { lostStart: true }));
