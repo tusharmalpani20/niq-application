@@ -28,3 +28,13 @@ export type AssessmentWorkflow = {
   heightSource: { assessmentId: string; recordedAt: string } | null;
   createdAt: string; updatedAt: string;
 };
+
+/** Read-only projection of the validated NIQ Scoring result for clinical workspace display. */
+export const assessmentScoreResultSchema = z.object({
+  formatVersion: z.literal(2), profile: z.literal("NIQ_FINAL_ASSESSMENT"), complete: z.literal(true),
+  score: z.number().finite().nonnegative(),
+  classification: z.object({ id: z.string(), label: z.string(), interpretation: z.string() }),
+  components: z.array(z.object({ id: z.string(), sectionId: z.string(), label: z.string(), points: z.number().finite().nonnegative().nullable(), status: z.enum(["answered", "unanswered", "pending"]), reason: z.string().optional() })),
+  version: z.string(), checksum: z.string().regex(/^[a-f0-9]{64}$/), resultReference: z.string(), calculatedAt: z.iso.datetime(), clinicalUsePermitted: z.boolean(),
+});
+export type AssessmentScoreResult = z.infer<typeof assessmentScoreResultSchema>;
