@@ -28,15 +28,15 @@ function calculated(field: FormField, answers: FormAnswers): string {
   return "Calculated when scored";
 }
 export function AssessmentFields({ section, answers, onChange, errors, readOnly }: AssessmentFieldsProps) {
-  return <div className="grid grid-cols-1 gap-6 md:grid-cols-2">{section.fields.filter(field => isAssessmentFieldApplicable(field, answers)).map(field => {
+  return <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-6">{section.fields.filter(field => isAssessmentFieldApplicable(field, answers)).map(field => {
     const id = `assessment-field-${field.id}`; const errorId = `${id}-error`; const error = errors[field.id];
     const value = answers[field.id]; const label = `${field.label}${field.unit ? ` (${field.unit})` : ""}`;
     const errorMarkup = error ? <p id={errorId} className="text-sm text-destructive" role="alert">{error}</p> : null;
     if (field.kind === "multi_select") {
       const selected = Array.isArray(value) ? value : [];
-      return <fieldset id={id} key={field.id} tabIndex={-1} disabled={readOnly} aria-describedby={error ? errorId : undefined} aria-invalid={Boolean(error)} className="space-y-3 md:col-span-2">
+      return <fieldset id={id} key={field.id} tabIndex={-1} disabled={readOnly} aria-describedby={error ? errorId : undefined} aria-invalid={Boolean(error)} className="col-[1/-1] min-w-0 space-y-3">
         <legend className="mb-2 font-medium">{label} <span className="text-sm font-normal text-muted-foreground">{field.required ? "Required" : "Optional"}</span></legend>
-        <div className="grid gap-2 sm:grid-cols-2">{field.options?.map(option => <label key={option.id} className="flex min-h-11 items-start gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-2">{field.options?.map(option => <label key={option.id} className="flex min-h-11 items-start gap-3 rounded-lg border border-border p-3 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
           <input type="checkbox" className="mt-1 size-4 accent-primary focus-visible:outline-ring" checked={selected.includes(option.id)} onChange={event => onChange(field.id, event.target.checked ? [...selected, option.id] : selected.filter(item => item !== option.id))} />
           <span>{option.label}</span>
         </label>)}</div>
