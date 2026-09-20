@@ -23,8 +23,8 @@ class FaceScanRejection extends ServiceError {
 }
 const terminal = new Set(["COMPLETED", "FAILED", "EXPIRED", "CANCELLED"]);
 // Failure/expiry can precede a delayed authenticated result; completed evidence stays immutable.
-const recoverable = (row: Row) => row.active || Boolean(row.remoteId && ["FAILED", "EXPIRED"].includes(row.state));
-const recoveryCondition = sql `(${assessmentFaceScans.active}=true or (${assessmentFaceScans.remoteId} is not null and ${assessmentFaceScans.state} in ('FAILED','EXPIRED')))`;
+const recoverable = (row: Row) => row.active || Boolean(row.remoteId && !["COMPLETED", "CANCELLED"].includes(row.state));
+const recoveryCondition = sql `(${assessmentFaceScans.active}=true or (${assessmentFaceScans.remoteId} is not null and ${assessmentFaceScans.state} not in ('COMPLETED','CANCELLED')))`;
 const remoteSchema = z.object({
   session: faceScanSessionSchema.extend({
     assessmentReference: z.string(),
@@ -139,6 +139,7 @@ export class AssessmentFaceScanService {
         assessmentId: assessment,
         revision: assessmentRow.revision,
         requestKey: input.requestKey,
+        remoteRequestKey: `face-scan:${org}:${id}`,
         connection: connection.identity,
         snapshot: this.workflow.seal(snapshot)
       }).returning();
@@ -166,7 +167,7 @@ export class AssessmentFaceScanService {
       clientId: transport.identity.scoringOrganizationId,
       organizationReference: row.organizationId,
       assessmentReference: row.assessmentId,
-      idempotencyKey: row.requestKey,
+      idempotencyKey: row.remoteRequestKey ?? row.requestKey,
       context: this.workflow.unseal(row.snapshot)
     } : body;
     const response = await this.fetcher(url, {
@@ -225,6 +226,7 @@ export class AssessmentFaceScanService {
       return;
     const token = crypto.randomUUID(), now = new Date();
     const [claimed] = await this.db.update(assessmentFaceScans).set({
+      reconciliationAttempts: sql`${assessmentFaceScans.reconciliationAttempts}+1`,
       leaseToken: token,
       leaseExpiresAt: new Date(Date.now() + 90000)
     }).where(and(eq(assessmentFaceScans.id, row.id), recoveryCondition, sql `(${assessmentFaceScans.leaseExpiresAt} is null or ${assessmentFaceScans.leaseExpiresAt}<${now.toISOString()})`)).returning();
@@ -236,7 +238,7 @@ export class AssessmentFaceScanService {
     catch (error) {
       // A rejection can release the active slot only when no earlier create outcome was uncertain.
       // After response loss or a crashed lease, even revoked credentials cannot prove no remote work exists.
-      const rejected = error instanceof FaceScanRejection && !row.remoteId && !row.failureCode && !row.leaseToken;
+      const rejected = error instanceof FaceScanRejection && !claimed.remoteId && claimed.reconciliationAttempts === 1;
       await this.db.update(assessmentFaceScans).set({
         ...(rejected ? {
           state: "FAILED",
@@ -266,7 +268,7 @@ export class AssessmentFaceScanService {
     return this.dto(await this.row(org, assessment, id));
   }
   async recoverPending() {
-    const rows = await this.db.select().from(assessmentFaceScans).where(and(recoveryCondition, sql `(${assessmentFaceScans.nextAttemptAt} is null or ${assessmentFaceScans.nextAttemptAt}<=now())`)).orderBy(assessmentFaceScans.updatedAt).limit(10);
+    const rows = await this.db.select().from(assessmentFaceScans).where(and(recoveryCondition, sql`(${assessmentFaceScans.leaseExpiresAt} is null or ${assessmentFaceScans.leaseExpiresAt}<now())`, sql `(${assessmentFaceScans.nextAttemptAt} is null or ${assessmentFaceScans.nextAttemptAt}<=now())`)).orderBy(assessmentFaceScans.updatedAt).limit(10);
     for (const row of rows)
       await this.reconcile(row);
   }

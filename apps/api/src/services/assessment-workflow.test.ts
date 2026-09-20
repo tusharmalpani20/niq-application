@@ -176,8 +176,8 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
    calls++;const request=new URL(String(url));
    if(request.pathname==="/v1/face-scans"){
     const body=JSON.parse(String(init?.body));
-    const persisted=await db.select().from(tables.assessmentFaceScans).where(and(eq(tables.assessmentFaceScans.organizationId,org),eq(tables.assessmentFaceScans.requestKey,body.idempotencyKey)));
-    expect(persisted).toHaveLength(1);expect(JSON.stringify(persisted[0]!.snapshot)).not.toContain("1990-01-01");
+    const persisted=await db.select().from(tables.assessmentFaceScans).where(and(eq(tables.assessmentFaceScans.organizationId,org),eq(tables.assessmentFaceScans.remoteRequestKey,body.idempotencyKey)));
+    expect(persisted).toHaveLength(1);expect(body.idempotencyKey).toBe(`face-scan:${org}:${persisted[0]!.id}`);expect(JSON.stringify(persisted[0]!.snapshot)).not.toContain("1990-01-01");
     remote??={id:"remote-scan",state:"REQUESTED",context:body.context,assessmentReference:body.assessmentReference,organizationReference:body.organizationReference,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),completedAt:null,failureCode:null,result:null,score:null};
     if(uncertain){uncertain=false;throw new Error("lost response");}
    }
@@ -195,6 +195,9 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   expect((await scans.row(org,scanAssessment,first.id)).active).toBe(false);
   // Existing evidence still reconciles after operators disable new scans.
   enabled.config.FACE_SCAN_ENABLED=false;
+  remote={...remote,state:"RECONCILIATION_REQUIRED",updatedAt:new Date().toISOString()};
+  expect((await scans.get(actor,org,scanAssessment,first.id)).state).toBe("RECONCILIATION_REQUIRED");
+  expect((await scans.row(org,scanAssessment,first.id)).active).toBe(false);
   const [before]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,scanAssessment));
   await db.update(tables.assessments).set({status:"COMPLETED"}).where(eq(tables.assessments.id,scanAssessment));
   await expect(scans.mutate(actor,org,scanAssessment,first.id,"signal",{schemaVersion:1,raw_intensity:[{r:1,g:2,b:3}],ppg_time:[0],average_fps:30})).rejects.toMatchObject({code:"CONFLICT"});
@@ -220,6 +223,10 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   const uncertain=await scans.start(actor,org,assessment,{...input,requestKey:"uncertain-face-scan-12345"},context);
   expect(uncertain.id).not.toBe(rejected.id);expect(uncertain.state).toBe("RECONCILIATION_REQUIRED");
   outcome="UNAUTHORIZED";
+  const prior=await scans.row(org,assessment,uncertain.id);
+  // A stale caller snapshot must not turn a later rejected replay into a definite first rejection.
+  await scans.reconcile({...prior,failureCode:null,leaseToken:null,reconciliationAttempts:0});
+  expect((await scans.row(org,assessment,uncertain.id)).active).toBe(true);
   expect((await scans.get(actor,org,assessment,uncertain.id)).state).toBe("RECONCILIATION_REQUIRED");
   expect((await scans.row(org,assessment,uncertain.id)).active).toBe(true);
  });

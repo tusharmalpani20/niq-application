@@ -134,6 +134,13 @@
       "when": 1789927190970,
       "tag": "0018_naive_azazel",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1789929371152,
+      "tag": "0019_sleepy_stryfe",
+      "breakpoints": true
     }
   ]
 }

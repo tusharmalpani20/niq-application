@@ -692,6 +692,7 @@ export const assessmentFiles = pgTable("assessment_files", {
 export const assessmentFaceScans = pgTable("assessment_face_scans", {
   id: entityId("id").primaryKey(), organizationId: entityId("organization_id").notNull(), assessmentId: entityId("assessment_id").notNull(),
   revision: integer("revision").notNull(), requestKey: text("request_key").notNull(), connection: jsonb("connection").notNull(),
+  remoteRequestKey: text("remote_request_key"), reconciliationAttempts: integer("reconciliation_attempts").notNull().default(0),
   snapshot: jsonb("snapshot").notNull(), remoteId: text("remote_id"), state: text("state").notNull().default("REQUESTED"),
   active: boolean("active").notNull().default(true), projection: jsonb("projection"), failureCode: text("failure_code"),
   leaseToken: text("lease_token"), leaseExpiresAt: timestamp("lease_expires_at",{withTimezone:true}), nextAttemptAt: timestamp("next_attempt_at",{withTimezone:true}),
