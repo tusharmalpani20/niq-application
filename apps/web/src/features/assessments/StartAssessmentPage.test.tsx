@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
-import { act } from "react";
+import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
 import { filterAssessmentPatients, StartAssessmentPage } from "./StartAssessmentPage";
@@ -16,7 +16,7 @@ async function harness(path: string, handler: (url: string, init?: RequestInit) 
   const router = createMemoryRouter([{ element: <Outlet context={{ userId: id, organizationId: id }} />, children: [{ path: "/assessments/new", element: <StartAssessmentPage /> }, { path: "/assessments/:id", element: <p>Persisted assessment</p> }] }], { initialEntries: [path] });
   const root = createRoot(document.getElementById("root")!);
   try {
-    await act(async () => { root.render(<RouterProvider router={router} />); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { root.render(<StrictMode><RouterProvider router={router} /></StrictMode>); await new Promise(resolve => setTimeout(resolve, 0)); });
     await callback(router, async () => { const button = [...document.querySelectorAll("button")].find(button => /Start assessment|Retry preparation/.test(button.textContent ?? "")); if (!button) throw new Error("Start button missing"); await act(async () => { button.click(); await new Promise(resolve => setTimeout(resolve, 0)); }); });
   } finally {
     await act(async () => root.unmount()); router.dispose(); dom.window.close();
@@ -32,7 +32,7 @@ test("patient entry authorizes actual patient and preserves creation key before 
   }, async (router, click) => {
     expect(document.body.textContent).toContain("Real selected patient");
     expect(document.querySelector('[role="radiogroup"]')).toBeNull();
-    await click();
+    expect(keys).toHaveLength(1);
     const query = new URLSearchParams(router.state.location.search);
     expect(query.get("patient")).toBe(id);
     expect(query.get("requestKey")).toBe(keys[0]);
@@ -46,7 +46,7 @@ test("refresh replays existing creation key and resumes returned initialization"
     if (url.includes("/patients/")) return Response.json(patient);
     if (init?.method === "POST") { expect(JSON.parse(String(init.body)).requestKey).toBe("persisted-creation-key"); return Response.json({ id, status: "PENDING", assessmentId: null, failureCode: null }); }
     return Response.json({ id, status: "PENDING", assessmentId: null, failureCode: null });
-  }, async (router, click) => { await click(); expect(new URLSearchParams(router.state.location.search).get("initialization")).toBe(id); });
+  }, async (router) => { expect(new URLSearchParams(router.state.location.search).get("initialization")).toBe(id); });
   await harness(`/assessments/new?patient=${id}&requestKey=persisted-creation-key&initialization=${id}`, async (url, init) => {
     expect(init?.method ?? "GET").toBe("GET");
     return Response.json(url.includes("/patients/") ? patient : { id, status: "READY", assessmentId: id, failureCode: null });
@@ -66,4 +66,14 @@ test("picker MRN search preserves facility restriction and supports older respon
   const legacy = { ...first, id: "patient-c", medicalRecordNumber: undefined };
   expect(filterAssessmentPatients([first, second, legacy] as any, "facility-a", " hosp-42 ").map(item => item.id)).toEqual([id]);
   expect(filterAssessmentPatients([legacy] as any, "", "PAT-1")).toHaveLength(1);
+});
+
+test("failed initialization on refresh shows its reason without automatic retry", async () => {
+  await harness(`/assessments/new?patient=${id}&requestKey=preserved-key&initialization=${id}`, async (url, init) => {
+    expect(init?.method ?? "GET").toBe("GET");
+    return Response.json(url.includes("/patients/") ? patient : { id, status: "FAILED", assessmentId: null, failureCode: "SCORING_NOT_CONFIGURED" });
+  }, async () => {
+    expect(document.body.textContent).toContain("Connect NIQ Scoring");
+    expect(document.body.textContent).toContain("Retry preparation");
+  });
 });

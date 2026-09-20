@@ -13,6 +13,13 @@ export function filterAssessmentPatients(patients: Patient[], facility: string, 
     && `${patient.displayName} ${patient.reference} ${patient.medicalRecordNumber ?? ""}`.toLowerCase().includes(search));
 }
 
+function preparationMessage(value: AssessmentInitialization): string {
+  if (value.failureCode === "SCORING_NOT_CONFIGURED") return "Connect NIQ Scoring before starting this assessment.";
+  if (value.failureCode === "UNSUPPORTED_QUESTIONNAIRE" || value.failureCode === "QUESTIONNAIRE_UNSUPPORTED") return "The scoring questionnaire is not supported. Ask your administrator to check the assigned questionnaire.";
+  if (value.failureCode) return `Questionnaire preparation failed (${value.failureCode}). Retry uses the same assessment request.`;
+  return "The questionnaire is not ready yet. Retry uses this same assessment request.";
+}
+
 export function StartAssessmentPage() {
   const user = useOutletContext<AuthenticatedUser>();
   const [params, setParams] = useSearchParams();
@@ -32,6 +39,7 @@ export function StartAssessmentPage() {
   const [initialization, setInitialization] = useState<AssessmentInitialization | null>(null);
   const request = useRef({ patientId: requestedPatient ?? "", key: recoveryKey ?? crypto.randomUUID() });
   const inFlight = useRef(false);
+  const autoAttempted = useRef(false);
   const [loadKey, setLoadKey] = useState(0);
   useEffect(() => {
     let active = true;
@@ -43,6 +51,7 @@ export function StartAssessmentPage() {
       ? assessmentRequest<AssessmentInitialization>(user.organizationId, `/assessment-initializations/${encodeURIComponent(recoveryId)}`).then(value => {
         if (!active) return;
         setInitialization(value);
+        if (!value.assessmentId) setError(preparationMessage(value));
         if (value.assessmentId) navigate(`/assessments/${value.assessmentId}`, { replace: true });
       })
       : Promise.resolve();
@@ -52,6 +61,7 @@ export function StartAssessmentPage() {
   const filtered = useMemo(() => filterAssessmentPatients(patients, facility, query), [patients, facility, query]);
   async function start() {
     if (!selected || inFlight.current) return;
+    autoAttempted.current = true;
     inFlight.current = true; setBusy(true); setError("");
     if (request.current.patientId !== selected.id) request.current = { patientId: selected.id, key: crypto.randomUUID() };
     // Store opaque recovery identifiers before I/O. A refresh/lost response must replay the same creation key.
@@ -66,10 +76,18 @@ export function StartAssessmentPage() {
       query.set("initialization", result.id);
       setParams(query, { replace: true });
       if (result.assessmentId) navigate(`/assessments/${result.assessmentId}`, { replace: true });
-      else setError("The questionnaire is not ready yet. Retry uses this same assessment request.");
+      else setError(preparationMessage(result));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not start assessment."); }
     finally { inFlight.current = false; setBusy(false); }
   }
+  useEffect(() => {
+    // The patient-page action already expressed intent. Only the first authorized load
+    // starts automatically; a failed/pending request always requires an explicit retry.
+    if (requestedPatient && loaded && selected && !recoveryId && !autoAttempted.current && !inFlight.current) {
+      autoAttempted.current = true;
+      void start();
+    }
+  }, [requestedPatient, loaded, selected, recoveryId]);
   const content = <>
     {error && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-destructive">{error}</div>}
     {!loaded ? <div className="grid gap-3"><p>Loading patient information…</p>{error && <Button variant="outline" onPress={() => setLoadKey(key => key + 1)}>Retry</Button>}</div> : <>
