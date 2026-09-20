@@ -10,12 +10,12 @@ import { AssessmentEditorPage } from "./AssessmentEditorPage";
 function recordFixture(): AssessmentWorkflow {
   const manifest = buildAssessmentForm(assessmentQuestionnaireFixture());
   const answers = { patient_name: "Test patient", age: 20, gender: "FEMALE", contact: "1234567890", height_cm: 165, current_weight_kg: 60 };
-  return { id: "assessment-a", organizationId: "org-a", patientId: "patient-a", facilityId: "facility-a", status: "DRAFT", revision: 3, answers, manifest,
+  return { id: "assessment-a", reference: "ASM-000001", serialNumber: 1, organizationId: "org-a", patientId: "patient-a", facilityId: "facility-a", status: "DRAFT", revision: 3, answers, manifest,
     progress: getAssessmentCompletion(manifest, answers), reports: [], binding: { version: "version-a", checksum: "checksum" }, result: null, submission: null, heightSource: null,
     patient: { id: "patient-a", reference: "PAT-1", displayName: "Test patient", dateOfBirth: "2006-01-01", gender: "FEMALE", phone: "1234567890", homeFacility: { id: "facility-a", name: "Chennai" } },
     createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 }
-async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}) {
+async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{url: string; method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}, locator = "assessment-a") {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -25,10 +25,10 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {} });
   dom.window.confirm = () => false;
   let record = { ...recordFixture(), ...overrides }; let rejectSave = false;
-  const requests: Array<{ method: string; body: any }> = [];
+  const requests: Array<{ url: string; method: string; body: any }> = [];
   globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
     const method = init?.method ?? "GET"; const body = init?.body ? JSON.parse(String(init.body)) : null;
-    requests.push({ method, body });
+    requests.push({ url: String(_url), method, body });
     if (method === "PATCH") {
       if (rejectSave) return Response.json({ error: { message: "Saved version changed", code: "CONFLICT" } }, { status: 409 });
       record = { ...record, answers: body.answers, revision: record.revision + 1 };
@@ -36,7 +36,7 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
     if (method === "DELETE") record = { ...record, reports: [], revision: record.revision + 1 };
     return Response.json(record);
   }) as typeof fetch;
-  const router = createMemoryRouter([{ element: <Outlet context={{ userId: "user-a", organizationId: "org-a" }} />, children: [{ path: "/assessments/:assessmentId", element: <AssessmentEditorPage /> }, { path: "/patients/:id", element: <p>Patient record</p> }] }], { initialEntries: ["/assessments/assessment-a"] });
+  const router = createMemoryRouter([{ element: <Outlet context={{ userId: "user-a", organizationId: "org-a" }} />, children: [{ path: "/assessments/:assessmentId", element: <AssessmentEditorPage /> }, { path: "/patients/:id", element: <p>Patient record</p> }] }], { initialEntries: [`/assessments/${locator}`] });
   const root = createRoot(document.getElementById("root")!);
   async function click(label: string) {
     const button = [...document.querySelectorAll("button")].filter(item => (item.textContent?.trim() === label || item.getAttribute("aria-label") === label)).at(-1);
@@ -147,3 +147,13 @@ test("report editor survives section changes without a discard prompt", async ()
   await click("Reports");
   expect(document.querySelector<HTMLInputElement>('#report-label')?.value).toBe("Draft report label");
 }));
+
+
+test("readable assessment URL loads by reference and saves by internal ID", async () => harness(async ({ requests, click }) => {
+  expect(requests[0]?.url).toContain("/assessments/ASM-000001");
+  expect(document.querySelector('[aria-label="Breadcrumb"]')?.textContent).toContain("ASM-000001");
+  await click("Disease status");
+  await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
+  await click("Save draft");
+  expect(requests.find(request => request.method === "PATCH")?.url).toContain("/assessments/assessment-a");
+}, {}, "ASM-000001"));

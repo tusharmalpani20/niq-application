@@ -55,8 +55,8 @@ test("refresh replays existing creation key and resumes returned initialization"
   }, async (router) => { expect(new URLSearchParams(router.state.location.search).get("initialization")).toBe(id); });
   await harness(`/assessments/new?patient=${id}&requestKey=persisted-creation-key&initialization=${id}`, async (url, init) => {
     expect(init?.method ?? "GET").toBe("GET");
-    return Response.json(url.includes("/patients/") ? patient : { id, status: "READY", assessmentId: id, failureCode: null });
-  }, async router => { expect(router.state.location.pathname).toBe(`/assessments/${id}`); });
+    return Response.json(url.includes("/patients/") ? patient : { id, status: "READY", assessmentId: id, assessmentReference: "ASM-000001", failureCode: null });
+  }, async router => { expect(router.state.location.pathname).toBe("/assessments/ASM-000001"); });
 });
 test("inaccessible patient has no fallback and cannot initialize", async () => {
   await harness(`/assessments/new?patient=${id}`, async () => Response.json({ error: { code: "FORBIDDEN", message: "No access" } }, { status: 403 }), async () => {

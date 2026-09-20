@@ -53,6 +53,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
     getAssessment(organizationId, assessmentId).then(value => { if (active) accept(value); }).catch(cause => { if (active) handleError(cause); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [organizationId, assessmentId, accept, handleError]);
+  const internalId = record?.id ?? assessmentId;
   async function refreshReports() {
     try {
       const value = await getAssessment(organizationId, assessmentId);
@@ -76,7 +77,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
     if (!dirty) return record;
     operation.current = true; setBusy(true); setError("");
     try {
-      const value = await saveAssessment(organizationId, assessmentId, record.revision, answers);
+      const value = await saveAssessment(organizationId, internalId, record.revision, answers);
       accept(value); setNotice("Draft saved"); return value;
     } catch (cause) { handleError(cause); return null; }
     finally { operation.current = false; setBusy(false); }
@@ -94,7 +95,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
     if (Object.keys(invalid).length) { setError("Complete required fields before requesting a score."); return; }
     const saved = await persist(); if (!saved) return;
     operation.current = true; setBusy(true); setError("");
-    try { const submitted = await submitAssessment(organizationId, assessmentId, saved.revision); accept(submitted); setNotice(submitted.status === "DRAFT" ? "Scoring needs corrected answers" : "Assessment submitted"); }
+    try { const submitted = await submitAssessment(organizationId, internalId, saved.revision); accept(submitted); setNotice(submitted.status === "DRAFT" ? "Scoring needs corrected answers" : "Assessment submitted"); }
     catch (cause) {
       handleError(cause);
       // Submission can be accepted before the response is lost. Reload the durable state before allowing another action.
@@ -104,7 +105,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
   async function retry(reconcile = false) {
     if (operation.current) return;
     operation.current = true; setBusy(true); setError("");
-    try { accept(await (reconcile ? reconcileAssessmentScoring : retryAssessmentScoring)(organizationId, assessmentId)); }
+    try { accept(await (reconcile ? reconcileAssessmentScoring : retryAssessmentScoring)(organizationId, internalId)); }
     catch (cause) { handleError(cause); }
     finally { operation.current = false; setBusy(false); }
   }
@@ -126,7 +127,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
   const index = tabs.findIndex(tab => tab.id === sectionId);
   const locked = busy || reportBusy || conflict;
   return <div className="assessment-workflow @container">
-    <PatientHeader patient={record.patient} assessmentLabel={`${record.status === "DRAFT" ? "Draft" : record.status.replaceAll("_", " ").toLowerCase()} assessment`} action={<span className="text-xs text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span>} />
+    <PatientHeader patient={record.patient} assessmentLabel={`${record.reference} · ${record.status === "DRAFT" ? "Draft" : record.status.replaceAll("_", " ").toLowerCase()} assessment`} action={<span className="text-xs text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span>} />
     <div className="sticky top-0 z-20 rounded-t-xl border border-border bg-card px-4 py-3 sm:px-5">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2"><div className="min-w-0 basis-full @min-[36rem]:flex-1 @min-[36rem]:basis-auto"><div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm"><span>Questionnaire <strong>{coverage.percent ?? "—"}% complete</strong></span><span className="text-xs text-muted-foreground">{coverage.answered}/{coverage.total} answered</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Overall questionnaire completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverage.percent ?? 0}><div className="h-full bg-primary transition-all" style={{ width: `${coverage.percent ?? 0}%` }} /></div></div><Button variant="ghost" className="h-9 gap-2 text-xs text-muted-foreground" isDisabled={locked} onPress={() => { void selectSection("face_scan"); }}><ScanFace className="size-4" aria-hidden="true"/>Face scan unavailable</Button></div>
       <p className="mt-2 truncate text-xs text-muted-foreground">{record.patient.displayName} · {record.patient.reference} <span className="mx-1">·</span> {progress.answered}/{progress.required} required answers complete</p>
@@ -146,7 +147,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
         {sectionId === "personal_details" && record.heightSource && <p className="mb-4 text-sm text-muted-foreground">Height from assessment on {new Date(record.heightSource.recordedAt).toLocaleDateString()}. Check and edit if needed.</p>}
         {sectionId === "face_scan" && <section className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center"><ScanFace className="mb-4 size-8 text-brand-ink" aria-hidden="true"/><h3 className="font-semibold">Face scan is not available yet</h3><p className="mt-2 max-w-sm text-sm text-muted-foreground">You can continue with the questionnaire. Face scanning does not affect its completion.</p><Button variant="outline" className="mt-5" isDisabled={locked} onPress={() => { void selectSection("disease_status"); }}>Continue to disease status<ArrowRight aria-hidden="true"/></Button></section>}
         {section && <section><p className="mb-5 text-xs text-muted-foreground"><span aria-hidden="true">*</span> Required fields</p><AssessmentFields section={section} answers={answers} errors={errors} readOnly={!editable || locked} onEditContact={() => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); }} onChange={(id, value) => { setAnswers(current => ({ ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
-        <div hidden={sectionId !== "reports"}><AssessmentReports organizationId={organizationId} assessmentId={assessmentId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} /></div>
+        <div hidden={sectionId !== "reports"}><AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} /></div>
         {sectionId === "review" && <AssessmentReview record={record} answers={answers} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}
       </div>
     </div>

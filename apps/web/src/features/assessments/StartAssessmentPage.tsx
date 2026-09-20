@@ -58,7 +58,7 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
         if (!active) return;
         setInitialization(value);
         if (!value.assessmentId) setError(preparationMessage(value));
-        if (value.assessmentId) navigate(`/assessments/${value.assessmentId}`, { replace: true });
+        if (value.assessmentId) navigate(`/assessments/${value.assessmentReference ?? value.assessmentId}`, { replace: true });
       })
       : Promise.resolve();
     Promise.all([load, recovery]).then(() => { if (active) setLoaded(true); }).catch(() => { if (active) setError("The patient or assessment request could not be loaded. Check your access and try again."); });
@@ -85,7 +85,7 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
       setInitialization(result);
       query.set("initialization", result.id);
       setParams(query, { replace: true });
-      if (result.assessmentId) navigate(`/assessments/${result.assessmentId}`, { replace: true });
+      if (result.assessmentId) navigate(`/assessments/${result.assessmentReference ?? result.assessmentId}`, { replace: true });
       else setError(preparationMessage(result));
     } catch (cause) {
       if (lifecycle.current === activeLifecycle) setError(cause instanceof Error ? cause.message : "Could not start assessment.");
