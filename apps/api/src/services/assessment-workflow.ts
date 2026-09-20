@@ -121,7 +121,7 @@ export class AssessmentWorkflowService {
     const patient=row.status==="DRAFT"?await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient:state.patient;
     const answers=row.status==="DRAFT"?{...state.answers,...patientAnswers(patient,row.createdAt)}:state.answers;
     const [submission]=await this.db.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.assessmentId,id),eq(assessmentSubmissions.organizationId,organizationId))).orderBy(desc(assessmentSubmissions.createdAt)).limit(1);
-    return {id:row.id,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,patient,answers,manifest:state.manifest,progress:getAssessmentCompletion(state.manifest,answers),reports:await this.reports.list(organizationId,id),reportLimits:{fileBytes:this.config.REPORT_MAX_FILE_BYTES,filesPerReport:this.config.REPORT_MAX_FILES_PER_GROUP,reportsPerAssessment:this.config.REPORT_MAX_GROUPS,assessmentBytes:this.config.REPORT_MAX_ASSESSMENT_BYTES},binding:{version:state.binding.version,checksum:state.binding.checksum},result:submission?.result?this.unseal(submission.result):null,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode,nextRetryAt:submission.nextAttemptAt?.toISOString()??null}:null,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
+    return {id:row.id,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,patient,answers,manifest:state.manifest,progress:getAssessmentCompletion(state.manifest,answers),reports:await this.reports.list(organizationId,id),reportLimits:{fileBytes:this.config.REPORT_MAX_FILE_BYTES,filesPerReport:this.config.REPORT_MAX_FILES_PER_GROUP,reportsPerAssessment:this.config.REPORT_MAX_GROUPS,assessmentBytes:this.config.REPORT_MAX_ASSESSMENT_BYTES},binding:{version:state.binding.version,checksum:state.binding.checksum},result:submission?.result?this.unseal(submission.result):null,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode,nextRetryAt:submission.nextAttemptAt?.toISOString()??null,issues:submission.failureIssues?this.unseal(submission.failureIssues):[]}:null,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
   }
   async save(actor:Principal,organizationId:string,id:string,input:{revision:number;answers:FormAnswers},context:RequestContext) {
     this.clinicalActor(actor,organizationId);
@@ -179,7 +179,7 @@ export class AssessmentWorkflowService {
         const [live]=await tx.select().from(assessmentSubmissions).where(eq(assessmentSubmissions.id,submission.id)).for("update");
         if(live?.leaseToken!==token) return;
         await tx.insert(scoringResults).values({id:createEntityId(),organizationId,assessmentId:id,scoringRequestId:submission.id,scoringVersion:calculated.result.version,ruleChecksum:calculated.result.checksum,result:this.seal(calculated.result),calculatedAt:new Date(calculated.result.calculatedAt)}).onConflictDoNothing();
-        await tx.update(assessmentSubmissions).set({status:"SUCCEEDED",result:this.seal(calculated.result),failureCode:null,leaseToken:null,leaseExpiresAt:null,updatedAt:new Date()}).where(eq(assessmentSubmissions.id,submission.id));
+        await tx.update(assessmentSubmissions).set({status:"SUCCEEDED",result:this.seal(calculated.result),failureCode:null,failureIssues:null,leaseToken:null,leaseExpiresAt:null,updatedAt:new Date()}).where(eq(assessmentSubmissions.id,submission.id));
         await tx.update(scoringRequests).set({status:"SUCCEEDED",completedAt:new Date(),updatedAt:new Date()}).where(eq(scoringRequests.id,submission.id));
         await tx.update(assessments).set({status:"SCORED",completedAt:new Date(),updatedAt:new Date()}).where(eq(assessments.id,id));
         await tx.insert(measurements).values([
@@ -194,7 +194,7 @@ export class AssessmentWorkflowService {
       await this.db.transaction(async tx=>{
         const [live]=await tx.select().from(assessmentSubmissions).where(eq(assessmentSubmissions.id,submission.id)).for("update");
         if(live?.leaseToken!==token) return;
-        await tx.update(assessmentSubmissions).set({status:rejected?"REJECTED":claimed.attemptCount>=3?"RECONCILIATION_REQUIRED":"UNAVAILABLE",failureCode:!rejected&&claimed.attemptCount>=3?"RECONCILIATION_REQUIRED":code,leaseToken:null,leaseExpiresAt:null,nextAttemptAt:rejected?null:new Date(Date.now()+(claimed.attemptCount>=3?60_000:5_000)),updatedAt:new Date()}).where(eq(assessmentSubmissions.id,submission.id));
+        await tx.update(assessmentSubmissions).set({status:rejected?"REJECTED":claimed.attemptCount>=3?"RECONCILIATION_REQUIRED":"UNAVAILABLE",failureCode:!rejected&&claimed.attemptCount>=3?"RECONCILIATION_REQUIRED":code,failureIssues:rejected?this.seal(assessmentRejectionIssues(snapshot.manifest,error.issues)):null,leaseToken:null,leaseExpiresAt:null,nextAttemptAt:rejected?null:new Date(Date.now()+(claimed.attemptCount>=3?60_000:5_000)),updatedAt:new Date()}).where(eq(assessmentSubmissions.id,submission.id));
         await tx.update(scoringRequests).set({status:rejected?"FAILED":"UNAVAILABLE",failureCode:code,updatedAt:new Date()}).where(eq(scoringRequests.id,submission.id));
         await tx.update(assessments).set({status:rejected?"DRAFT":"SCORING_UNAVAILABLE",updatedAt:new Date()}).where(eq(assessments.id,id));
         await this.audit(tx,actor,context,id,"ASSESSMENT_SCORING_FAILED",{submissionId:submission.id,code});
@@ -259,3 +259,15 @@ export function patientAnswers(patient:AssessmentPatient,started:Date):FormAnswe
   return {patient_name:patient.displayName,age:Number.isFinite(age)?age:null,gender:patient.gender==="UNKNOWN"?null:patient.gender,contact:patient.phone??""};
 }
 function initializationDto(row:typeof assessmentInitializations.$inferSelect):AssessmentInitialization {return {id:row.id,status:row.status,assessmentId:row.assessmentId,failureCode:row.failureCode};}
+
+/** Only known field references and local guidance may cross the upstream error boundary. */
+export function assessmentRejectionIssues(manifest:AssessmentFormManifest,issues:readonly {path:string;code:string;message:string}[]) {
+  const fields=new Set(manifest.sections.flatMap(section=>section.fields.map(field=>field.id)));
+  const result=new Map<string,{fieldId:string;message:string}>();
+  const messages:Record<string,string>={INVALID_WEIGHT:"Enter a weight greater than zero.",INVALID_COUNT:"Enter a positive whole number.",CONTRADICTORY_ANSWER:"Choose compatible answers for this question.",INACTIVE_DEPENDENCY:"Review this answer and its parent question.",INVALID_ARITHMETIC:"Review the number; its calculated result is outside the supported range."};
+  for(const issue of issues.slice(0,128)) {
+    const ids=issue.path==="answers.weight"?["previous_weight_kg","current_weight_kg"]:[issue.path.startsWith("answers.")?issue.path.slice(8):""];
+    for(const fieldId of ids) if(fields.has(fieldId)&&!result.has(fieldId)) result.set(fieldId,{fieldId,message:messages[issue.code]??"Review this answer before submitting again."});
+  }
+  return [...result.values()];
+}

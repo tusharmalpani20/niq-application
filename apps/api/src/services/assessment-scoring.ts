@@ -23,7 +23,7 @@ const evidenceSchema = z.object({ assessmentReference: id, bindingId: id, ruleVe
 export const assessmentScoringStartSchema = evidenceSchema.extend({ questionnaire: assessmentScoringQuestionnaireSchema }).strict();
 export type AssessmentScoringStart = z.infer<typeof assessmentScoringStartSchema>;
 export type AssessmentScoringBinding = z.infer<typeof evidenceSchema>;
-const issue = z.object({ path: z.string(), code: z.string(), message: z.string() }).strict();
+const issue = z.object({ path: z.string().max(300), code: z.string().max(100), message: z.string().max(1000) }).strict();
 const component = z.object({ id, sectionId: id, label: z.string(), points: z.number().finite().nonnegative().nullable(), status: z.enum(["answered", "unanswered", "pending"]), reason: z.string().optional() }).strict();
 const evaluationSchema = evidenceSchema.extend({
   formatVersion: z.literal(2), profile: z.literal("NIQ_FINAL_ASSESSMENT"), complete: z.boolean(),
@@ -31,7 +31,7 @@ const evaluationSchema = evidenceSchema.extend({
   components: z.array(component), answerCoverage: z.object({ totalEntries: z.literal(19), answeredEntries: z.number().int().nonnegative(), unansweredEntries: z.number().int().nonnegative(), pendingEntries: z.number().int().nonnegative(), allUnanswered: z.boolean() }).strict(),
   derived: z.object({ weightLossPercent: z.number().finite().nullable(), proteinAdequacy: z.enum(["adequate", "inadequate"]).nullable() }).strict(),
   riskStatus: z.enum(["DEVELOPMENT_PLACEHOLDER", "CLIENT_CONFIRMED"]), clinicalUsePermitted: z.boolean(),
-  interventions: z.object({ status: z.literal("NOT_APPLICABLE") }).strict(), issues: z.array(issue), calculatedAt: z.iso.datetime(),
+  interventions: z.object({ status: z.literal("NOT_APPLICABLE") }).strict(), issues: z.array(issue).max(128), calculatedAt: z.iso.datetime(),
 }).strict();
 export const assessmentScoringCalculationSchema = z.object({ result: evaluationSchema.extend({ resultReference: id }).strict(), idempotencyKey: id }).strict();
 export type AssessmentScoringCalculation = z.infer<typeof assessmentScoringCalculationSchema>;

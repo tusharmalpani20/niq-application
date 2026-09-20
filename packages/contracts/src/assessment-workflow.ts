@@ -26,7 +26,7 @@ export type AssessmentWorkflow = {
   patient: AssessmentPatient; answers: FormAnswers; manifest: AssessmentFormManifest;
   progress: ReturnType<typeof getAssessmentCompletion>; reports: AssessmentReport[]; reportLimits?: AssessmentReportLimits;
   binding: { version: string; checksum: string }; result: unknown | null;
-  submission: { id: string; status: string; failureCode: string | null; nextRetryAt?: string | null } | null;
+  submission: { id: string; status: string; failureCode: string | null; nextRetryAt?: string | null; issues?: Array<{ fieldId: string; message: string }> } | null;
   heightSource: { assessmentId: string; recordedAt: string } | null;
   createdAt: string; updatedAt: string;
 };

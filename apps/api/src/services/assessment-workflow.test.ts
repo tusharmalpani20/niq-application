@@ -1,8 +1,9 @@
 import {afterAll,beforeAll,describe,expect,test} from "bun:test";
 import {mkdtemp,rm} from "node:fs/promises";import {tmpdir} from "node:os";import {join} from "node:path";import {createHash} from "node:crypto";
 import postgres from "postgres";import {drizzle} from "drizzle-orm/postgres-js";import {eq} from "drizzle-orm";
+import {buildAssessmentForm} from "@niq/application-contracts";
 import {loadApplicationConfig} from "@niq/application-config";import {createEntityId} from "@niq/application-domain";
-import {AssessmentWorkflowService,patientAnswers} from "./assessment-workflow";import {PostgresApplicationService} from "./postgres-application";
+import {AssessmentWorkflowService,patientAnswers,assessmentRejectionIssues} from "./assessment-workflow";import {PostgresApplicationService} from "./postgres-application";
 import {encryptPatientData,patientDataKey} from "../security/patient-data";import {encryptCredential} from "../security/credential-encryption";
 import type {Principal} from "./application";import * as tables from "../db/schema";
 function questionnaire(){
@@ -14,6 +15,11 @@ function questionnaire(){
  return{formatVersion:2,profile:"NIQ_FINAL_ASSESSMENT",sections,supportingInputs:["palliative_status","palliative_timing","previous_surgery_count","previous_weight_kg","current_weight_kg","dietary_intake"].map(id=>({id,label:id,kind:id.includes("weight")||id.endsWith("count")?"number":"select",required:false,options:[{id:"post_treatment",label:"Post treatment",help:""}]}))};
 }
 test("missing birth date and contact remain missing",()=>expect(patientAnswers({id:"p",reference:"P",displayName:"Test",dateOfBirth:null as any,gender:"UNKNOWN",homeFacility:null},new Date())).toMatchObject({age:null,gender:null,contact:""}));
+test("rejection guidance excludes unknown paths and upstream private text",()=>{
+ const manifest=buildAssessmentForm(questionnaire());
+ expect(assessmentRejectionIssues(manifest,[{path:"answers.weight",code:"INVALID_WEIGHT",message:"private upstream answer"},{path:"answers.current_weight_kg",code:"INVALID_WEIGHT",message:"duplicate"},{path:"credentials.secret",code:"INVALID",message:"secret"}])).toEqual([
+ {fieldId:"previous_weight_kg",message:"Enter a weight greater than zero."},{fieldId:"current_weight_kg",message:"Enter a weight greater than zero."}]);
+});
 // Must point ONLY to an isolated, migrated disposable database.
 describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQL lifecycle",()=>{
  const client=postgres(process.env.ASSESSMENT_TEST_DATABASE_URL!,{max:10,prepare:false}),db=drizzle(client);
@@ -68,7 +74,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  });
  test("operator same-key rejection reopens only corrected answers and retains frozen files",async()=>{
  behavior="rejected";await db.update(tables.assessmentSubmissions).set({nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,id));
- let record=await service.retrySubmission({...actor,role:"ORGANIZATION_ADMIN"},org,id,context,true);expect(record.status).toBe("DRAFT");expect(new Set(keys).size).toBe(1);
+ let record=await service.retrySubmission({...actor,role:"ORGANIZATION_ADMIN"},org,id,context,true);expect(record.status).toBe("DRAFT");expect(record.submission?.issues).toEqual([{fieldId:"height_cm",message:"Review this answer before submitting again."}]);expect((await service.read(actor,org,id)).submission?.issues).toEqual(record.submission?.issues ?? []);expect(new Set(keys).size).toBe(1);
  await expect(service.submit(actor,org,id,record.revision,context)).rejects.toMatchObject({code:"CONFLICT"});
  const report=record.reports[0]!,file=report.files[0]!;const [stored]=await db.select().from(tables.assessmentFiles).where(eq(tables.assessmentFiles.id,file.id));
  record=await service.reports.remove(actor,org,id,report.id,record.revision,context);
