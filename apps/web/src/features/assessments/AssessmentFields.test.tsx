@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AssessmentFields, assessmentNumericInput, assessmentFieldGroups } from "./AssessmentFields";
 import type { FormAnswers, FormField } from "@niq/application-contracts";
-const field: FormField = { id: "choices", label: "Symptoms", kind: "multi_select", owner: "scoring", required: false, source: "F104", options: [{ id: "nausea", label: "Nausea" }] };
+const field: FormField = { id: "choices", label: "Symptoms", kind: "multi_select", owner: "scoring", required: false, source: "F104", options: [{ id: "nausea", label: "Nausea" }, ...Array.from({ length: 6 }, (_, i) => ({ id: `item${i}`, label: `Item ${i}` }))] };
 function render(fields: FormField[], answers: FormAnswers = {}) {
   return renderToStaticMarkup(<AssessmentFields section={{ id: "test", title: "Test", fields }} answers={answers} onChange={() => {}} errors={{}} readOnly={false} />);
 }
@@ -16,7 +16,7 @@ test("workbook None is shown only for supported empty selections", () => {
   expect(render([{ ...field, id: "co_morbidities" }], { co_morbidities: [] })).toContain(">None<");
 });
 test("short choices are radios and long choices use the shared combobox", () => {
-  expect(render([{ ...field, kind: "select" }])).toContain('role="radiogroup"');
+  expect(render([{ ...field, kind: "select", options: [{ id: "yes", label: "Yes" }] }])).toContain('role="radiogroup"');
   expect(render([{ ...field, kind: "select", options: Array.from({ length: 7 }, (_, i) => ({ id: String(i), label: `Choice ${i}` })) }])).toContain('role="combobox"');
 });
 test("inactive fields are hidden and calculated protein does not invent classifications", () => {
@@ -44,4 +44,13 @@ test("None is removable and weight uses a bounded numeric input", () => {
   expect(html).toContain('type="number"');
   expect(html).toContain('min="0"');
   expect(html).toContain('step="any"');
+});
+
+test("short multi-selects expose checkboxes and short Other lists expose radios", () => {
+  const html = render([{ ...field, options: [{ id: "solid", label: "Solid" }, { id: "in_situ", label: "In Situ" }] }], { choices: ["solid"] });
+  expect(html).toContain('type="checkbox"');
+  expect(html).not.toContain('role="combobox"');
+  expect(html).toContain("In Situ");
+  const other = render([{ ...field, id: "metastasis_site", kind: "select", options: [{ id: "brain", label: "Brain" }, { id: "others", label: "Others" }] }]);
+  expect(other).toContain('role="radiogroup"');
 });
