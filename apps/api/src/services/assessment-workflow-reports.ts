@@ -2,7 +2,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
 import type { z } from "zod";
 import type { AssessmentReport, reportInputSchema } from "../../../../packages/contracts/src/assessment-workflow";
-import { assessmentReports as reports, assessmentFiles as files, assessments } from "../db/schema";
+import { assessmentReports as reports, assessmentFiles as files, assessments, assessmentSubmissions } from "../db/schema";
 import type { Principal, RequestContext } from "./application";
 import { ServiceError } from "./application";
 import type { AssessmentWorkflowService, WorkflowExecutor, WorkflowRow } from "./assessment-workflow";
@@ -50,20 +50,24 @@ export class AssessmentReportWorkflow {
   }
   private async cleanFile(file:typeof files.$inferSelect) {
     if(!this.service.storage) return;
+    const snapshots=await this.service.db.select({snapshot:assessmentSubmissions.snapshot}).from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,file.organizationId),eq(assessmentSubmissions.assessmentId,file.assessmentId)));
+    if(snapshots.some(s=>JSON.stringify(this.service.unseal(s.snapshot)).includes(`"${file.id}"`))) return;
     const scope={organizationId:file.organizationId,patientId:file.patientId,assessmentId:file.assessmentId};
     if(file.objectKey) await this.service.storage.remove(scope,file.objectKey).catch(()=>{});
     if(file.stagingKey) await this.service.storage.discard({scope,stagingKey:file.stagingKey} as StagedReport).catch(()=>{});
   }
-  async upload(actor:Principal,organizationId:string,assessmentId:string,reportId:string,input:{revision:number;uploadKey:string;filename:string;mediaType:ReportMediaType;size:number;body:ReadableStream<Uint8Array>;signal?:AbortSignal},context:RequestContext) {
+  async upload(actor:Principal,organizationId:string,assessmentId:string,reportId:string,input:{revision:number;uploadKey:string;filename:string;mediaType:ReportMediaType;size:number;sha256:string;body:ReadableStream<Uint8Array>;signal?:AbortSignal},context:RequestContext) {
     this.service.clinicalActor(actor,organizationId);
     const storage=this.service.storage;if(!storage) throw new ServiceError("VALIDATION_ERROR","Report storage is not configured.");
     const reserved=await this.service.db.transaction(async tx=>{
       const row=await this.service.authorize(actor,organizationId,assessmentId,tx,true);
       const [existing]=await tx.select().from(files).where(and(eq(files.assessmentId,assessmentId),eq(files.organizationId,organizationId),eq(files.uploadKey,input.uploadKey)));
       if(existing) {
-        if(existing.reportId!==reportId||existing.originalFilename!==input.filename||existing.mediaType!==input.mediaType||existing.size!==input.size) throw new ServiceError("CONFLICT","This upload key belongs to a different file.");
+        if(existing.reportId!==reportId||existing.originalFilename!==input.filename||existing.mediaType!==input.mediaType||existing.size!==input.size||existing.sha256!==input.sha256) throw new ServiceError("CONFLICT","This upload key belongs to a different file.");
         // Return successful replays even after submission froze the draft. Never repeat bytes.
-        if(existing.status==="READY"||existing.status==="PENDING") return {file:existing,replay:true};
+        if(existing.status==="READY") return {file:existing,replay:true};
+        if(existing.status==="PENDING") throw new ServiceError("CONFLICT","This upload is still processing. Retry shortly.");
+        if(existing.status==="REMOVED") throw new ServiceError("CONFLICT","This upload was removed. Choose the file again.");
       }
       this.service.editable(row,input.revision);
       const [group]=await tx.select().from(reports).where(and(eq(reports.id,reportId),eq(reports.organizationId,organizationId),eq(reports.assessmentId,assessmentId),isNull(reports.removedAt)));
@@ -72,7 +76,7 @@ export class AssessmentReportWorkflow {
       const active=await tx.select().from(files).where(and(eq(files.organizationId,organizationId),eq(files.assessmentId,assessmentId),sql`${files.status} in ('READY','PENDING')`));
       if(active.filter(x=>x.reportId===reportId).length>=this.service.config.REPORT_MAX_FILES_PER_GROUP||active.reduce((sum,x)=>sum+x.size,0)+input.size>this.service.config.REPORT_MAX_ASSESSMENT_BYTES) throw new ServiceError("VALIDATION_ERROR","This assessment has reached its file limit.");
       const leaseToken=crypto.randomUUID();const values={status:"PENDING",leaseToken,leaseExpiresAt:new Date(Date.now()+300_000),updatedAt:new Date()};
-      const [file]=existing?await tx.update(files).set(values).where(eq(files.id,existing.id)).returning():await tx.insert(files).values({id:createEntityId(),organizationId,assessmentId,patientId:row.patientId,reportId,uploadKey:input.uploadKey,originalFilename:input.filename,mediaType:input.mediaType,size:input.size,uploaderId:actor.membershipId,...values}).returning();
+      const [file]=existing?await tx.update(files).set(values).where(eq(files.id,existing.id)).returning():await tx.insert(files).values({id:createEntityId(),organizationId,assessmentId,patientId:row.patientId,reportId,uploadKey:input.uploadKey,originalFilename:input.filename,mediaType:input.mediaType,size:input.size,sha256:input.sha256,uploaderId:actor.membershipId,...values}).returning();
       if(!file) throw new Error("File reservation was not saved");
       return {file,replay:false};
     });
@@ -82,8 +86,8 @@ export class AssessmentReportWorkflow {
     // Bounded lease also bounds transfer time. No late writer can finalize after expiry/cancel.
     const timer=setTimeout(()=>controller.abort(),290_000);
     try {
-      staged=await storage.stage(scope,file.id,input.body,{expectedMediaType:input.mediaType,signal:controller.signal});
-      if(staged.size!==input.size) throw new ServiceError("VALIDATION_ERROR","The uploaded file size changed.");
+      staged=await storage.stage(scope,`${file.id}-${file.leaseToken}`,input.body,{expectedMediaType:input.mediaType,signal:controller.signal});
+      if(staged.size!==input.size||staged.sha256!==input.sha256) throw new ServiceError("VALIDATION_ERROR","The uploaded file size changed.");
       const receipt=staged;
       await this.service.db.transaction(async tx=>{
         const row=await this.service.authorize(actor,organizationId,assessmentId,tx,true);
@@ -96,7 +100,11 @@ export class AssessmentReportWorkflow {
       });
     } catch(error) {
       await this.service.db.update(files).set({status:"FAILED",leaseToken:null,leaseExpiresAt:null,updatedAt:new Date()}).where(and(eq(files.id,file.id),eq(files.leaseToken,file.leaseToken!),eq(files.status,"PENDING")));
-      if(staged) {await storage.discard(staged).catch(()=>{});await storage.remove(scope,staged.objectKey).catch(()=>{});}
+      if(staged) {
+        // Commit response loss is ambiguous: never delete an object now referenced as ready.
+        const [current]=await this.service.db.select().from(files).where(eq(files.id,file.id));
+        if(current?.status!=="READY"||current.objectKey!==staged.objectKey) {await storage.discard(staged).catch(()=>{});await storage.remove(scope,staged.objectKey).catch(()=>{});}
+      }
       throw error;
     } finally {clearTimeout(timer);input.signal?.removeEventListener("abort",abort);}
     return this.service.read(actor,organizationId,assessmentId);
@@ -115,11 +123,25 @@ export class AssessmentReportWorkflow {
     for(const group of groups) if(!group.label.trim()||!group.purpose.trim()||!group.year||!group.month||(group.datePrecision==="DAY"&&!group.day)||!attachments.some(x=>x.reportId===group.id)) throw new ServiceError("VALIDATION_ERROR","Complete each report's details and add a file, or remove the empty report.");
     return groups.map(group=>({...group,files:attachments.filter(x=>x.reportId===group.id).map(({id,objectKey,sha256,size,mediaType,originalFilename})=>({id,objectKey,sha256,size,mediaType,originalFilename}))}));
   }
+  async cleanup(actor:Principal,organizationId:string,assessmentId:string) {
+    if(!this.service.storage) return [];
+    await this.expire(actor,organizationId,assessmentId);
+    return this.service.db.transaction(async tx=>{
+      const row=await this.service.authorize(actor,organizationId,assessmentId,tx,true);
+      const all=await tx.select().from(files).where(and(eq(files.organizationId,organizationId),eq(files.assessmentId,assessmentId)));
+      // Holding the assessment lock fences publication while bounded deletion checks references.
+      if(all.some(file=>file.status==="PENDING")) return [];
+      const snapshots=await tx.select({snapshot:assessmentSubmissions.snapshot}).from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,organizationId),eq(assessmentSubmissions.assessmentId,assessmentId)));
+      const manifests=snapshots.map(s=>JSON.stringify(this.service.unseal(s.snapshot)));
+      const protectedKeys=new Set(all.filter(file=>file.status==="READY"||manifests.some(s=>s.includes(`"${file.id}"`))).flatMap(file=>[file.objectKey,file.stagingKey].filter((key):key is string=>!!key)));
+      return this.service.storage!.cleanup({organizationId,patientId:row.patientId,assessmentId},{olderThan:new Date(Date.now()-24*60*60*1000),limit:200,isProtected:async key=>protectedKeys.has(key)});
+    });
+  }
   async expire(actor:Principal,organizationId:string,assessmentId:string) {
     // Runs on authorized reads; pending metadata can recover even when staging bytes disappeared.
     const expired=await this.service.db.transaction(async tx=>{
       await this.service.authorize(actor,organizationId,assessmentId,tx,true);
-      return tx.update(files).set({status:"FAILED",leaseToken:null,leaseExpiresAt:null,updatedAt:new Date()}).where(and(eq(files.organizationId,organizationId),eq(files.assessmentId,assessmentId),eq(files.status,"PENDING"),sql`${files.leaseExpiresAt}<${new Date()}`)).returning();
+      return tx.update(files).set({status:"FAILED",leaseToken:null,leaseExpiresAt:null,updatedAt:new Date()}).where(and(eq(files.organizationId,organizationId),eq(files.assessmentId,assessmentId),eq(files.status,"PENDING"),sql`${files.leaseExpiresAt}<${new Date().toISOString()}`)).returning();
     });
     for(const file of expired) await this.cleanFile(file);
   }
