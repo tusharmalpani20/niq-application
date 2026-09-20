@@ -406,3 +406,16 @@ button, a { -webkit-tap-highlight-color: transparent; }
   }
 }
 .assessment-workflow [id^="assessment-field-"] { scroll-margin-top: 10rem; }
+
+/* Shared dropdown scrollbars inherit tenant branding, including portalled menus. */
+.themed-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--primary) var(--muted);
+}
+.themed-scrollbar::-webkit-scrollbar { width: 10px; height: 10px; }
+.themed-scrollbar::-webkit-scrollbar-track { background: var(--muted); border-radius: 999px; }
+.themed-scrollbar::-webkit-scrollbar-thumb { background: var(--primary); border: 2px solid var(--muted); border-radius: 999px; }
+.themed-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--ring); }
+@media (forced-colors: active) {
+  .themed-scrollbar { scrollbar-color: auto; }
+}

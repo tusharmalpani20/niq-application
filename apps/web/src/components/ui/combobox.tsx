@@ -26,7 +26,7 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
     onBlur={() => setSearch(selectedLabel)} className="w-full min-w-0">
     <ComboBoxStateContext.Consumer>{state => <>
     <div className="flex min-h-11 items-center rounded-lg border border-input bg-background focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30">
-      <Input onInput={() => state?.open()} id={id} aria-describedby={describedBy} maxLength={2000} placeholder={placeholder} onKeyDown={event => {
+      <Input onClick={() => state?.open()} onInput={() => state?.open()} id={id} aria-describedby={describedBy} maxLength={2000} placeholder={placeholder} onKeyDown={event => {
         // React Aria commits a highlighted option itself. Enter without one is
         // also an explicit acceptance of the visible custom-answer action.
         if (event.key === "Enter" && !event.nativeEvent.isComposing && canCreate && !event.currentTarget.getAttribute("aria-activedescendant")) {
@@ -39,7 +39,7 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
       <Button variant="ghost" size="icon" className="mr-1 size-10" aria-label={`Show ${label} options`}><ChevronsUpDown className="size-4" /></Button>
     </div>
     <Popover placement="bottom start" offset={4} className="z-50 flex max-h-[var(--available-height,18rem)] flex-col w-(--trigger-width) max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg">
-      <ListBox<ComboboxOption> className="min-h-0 max-h-72 overflow-y-scroll overscroll-contain [scrollbar-gutter:stable] p-1.5 outline-none" renderEmptyState={() => <p className="p-3 text-sm text-muted-foreground">No matching options</p>}>
+      <ListBox<ComboboxOption> className="themed-scrollbar min-h-0 max-h-72 overflow-y-scroll overscroll-contain [scrollbar-gutter:stable] p-1.5 outline-none" renderEmptyState={() => <p className="p-3 text-sm text-muted-foreground">No matching options</p>}>
         {option => <ListBoxItem id={option.id} textValue={option.label} className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 text-sm outline-none data-focused:bg-accent data-focused:text-accent-foreground data-selected:font-medium">
           {({ isSelected }) => <><span className="break-words">{option.label}</span>{isSelected && <Check className="size-4 shrink-0" />}</>}
         </ListBoxItem>}

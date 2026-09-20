@@ -19,13 +19,16 @@ test("searchable menu preserves approved and custom choices through mouse, keybo
   const root = createRoot(document.getElementById("root")!);
   try {
     await act(async () => root.render(<Demo />));
-    await act(async () => document.querySelector<HTMLButtonElement>("button")!.click());
+    await act(async () => document.querySelector<HTMLInputElement>('input[role="combobox"]')!.click());
     const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent === "Breast cancer");
     expect(option).toBeDefined();
     await act(async () => option!.click());
+    expect(document.querySelector('input[role="combobox"]')?.getAttribute("aria-expanded")).toBe("false");
     expect(changes).toEqual(["breast"]);
     expect(document.querySelector<HTMLInputElement>('input[role="combobox"]')!.value).toBe("Breast cancer");
     const input = document.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    await act(async () => input.click());
+    expect(document.querySelector('[role="listbox"]')).not.toBeNull();
     await act(async () => input.focus());
     await act(async () => {
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!.call(input, "Rare subtype");

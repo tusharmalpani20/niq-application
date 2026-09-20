@@ -162,7 +162,7 @@ function SelectList<T extends object>({
     <ListBoxPrimitive
       data-slot="select-list"
       className={cn(
-        "group/select-list flex max-h-[min(20rem,var(--available-height))] flex-col gap-1.5 overflow-x-hidden overflow-y-auto p-1.5 outline-hidden",
+        "themed-scrollbar group/select-list flex max-h-[min(20rem,var(--available-height))] flex-col gap-1.5 overflow-x-hidden overflow-y-auto p-1.5 outline-hidden",
         className
       )}
       {...props}
