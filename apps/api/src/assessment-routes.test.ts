@@ -33,3 +33,13 @@ test("read routes accept assessment references but writes retain internal IDs",a
  expect((await app.request(referencePath,{headers:{cookie:"niq_session=valid"}})).status).toBe(200);
  expect((await app.request(referencePath,{method:"PATCH",headers:{cookie:"niq_session=valid",origin:"http://localhost:5173","content-type":"application/json"},body:JSON.stringify({revision:0,answers:{}})})).status).toBe(400);
 });
+
+test("face scan endpoints enforce session, origin and bounded upload before service access",async()=>{
+ const {app}=harness();const scans=`${path}/face-scans`;
+ expect((await app.request(scans)).status).toBe(401);
+ const send=(endpoint:string,origin:string,body:string)=>app.request(endpoint,{method:"POST",headers:{cookie:"niq_session=valid",origin,"content-type":"application/json"},body});
+ expect((await send(scans,"https://untrusted.invalid","{}")).status).toBe(403);
+ expect((await send(`${scans}/01J00000000000000000000005/signal`,"http://localhost:5173","x".repeat(2*1024*1024+1))).status).toBe(413);
+ // Signal requests larger than ordinary drafts reach their own JSON validation boundary.
+ expect((await send(`${scans}/01J00000000000000000000005/signal`,"http://localhost:5173",JSON.stringify({extra:"x".repeat(300000)}))).status).toBe(400);
+});

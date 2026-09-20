@@ -5,7 +5,7 @@ import { ServiceError } from "./services/application";
 import type { AssessmentFaceScanService } from "./services/assessment-face-scan";
 const id=z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 function parse<T>(schema:z.ZodType<T>,value:unknown):T{const result=schema.safeParse(value);if(!result.success)throw new ServiceError("VALIDATION_ERROR","The face scan request is invalid.");return result.data;}
-async function json(c:any){try{return await c.req.json();}catch{throw new ServiceError("VALIDATION_ERROR","Invalid JSON request.");}}
+async function json(c:any){try{return await c.req.json();}catch(error){if(!(error instanceof SyntaxError))throw error;throw new ServiceError("VALIDATION_ERROR","Invalid JSON request.");}}
 export function mountFaceScanRoutes(app:Hono<any>,service:AssessmentFaceScanService){
  const base="/v1/organizations/:organizationId/assessments/:assessmentId/face-scans";
  const parts=(c:any)=>[c.get("principal"),parse(id,c.req.param("organizationId")),parse(id,c.req.param("assessmentId"))] as const;
