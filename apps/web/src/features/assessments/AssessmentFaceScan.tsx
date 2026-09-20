@@ -35,19 +35,30 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const pendingSignal = useRef<{ sessionId: string; signal: FaceScanSignal } | null>(null);
   const startKey = useRef<string | null>(null);
   const captureId = useRef<string | null>(null);
+  const statusVersion = useRef(0);
   const session = data?.sessions.find(item => item.id === data.currentSessionId) ?? null;
   const blocked = phase !== "idle";
   const updateSession = useCallback((value: FaceScanSession) => {
     if (!alive.current) return;
+    statusVersion.current++;
     setData(current => current ? { ...current, currentSessionId: value.id, sessions: [value, ...current.sessions.filter(item => item.id !== value.id)] } : null);
   }, []);
   const refresh = useCallback(async () => {
-    const value = await listFaceScans(organizationId, record.id);
-    if (alive.current) { setData(value); setStale(false); }
-    return value;
+    const version = ++statusVersion.current;
+    try {
+      const value = await listFaceScans(organizationId, record.id);
+      if (alive.current && version === statusVersion.current) { setData(value); setStale(false); }
+      return value;
+    } catch (error) {
+      if (alive.current && version === statusVersion.current) setStale(true);
+      throw error;
+    }
   }, [organizationId, record.id]);
   useEffect(() => {
     alive.current = true;
+    return () => { alive.current = false; statusVersion.current++; controller.current.cancel(); pendingSignal.current = null; };
+  }, []);
+  useEffect(() => {
     let stopped = false, failures = 0;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
@@ -57,14 +68,19 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
         try {
           const value = await refresh(); failures = 0;
           const current = value.sessions.find(item => item.id === value.currentSessionId);
-          delay = current && !terminal.has(current.state) ? 5_000 : 30_000;
-        } catch { failures++; if (alive.current) setStale(true); delay = Math.min(60_000, 5_000 * 2 ** Math.min(failures, 4)); }
+          if (!current || terminal.has(current.state)) return;
+          delay = 5_000;
+        } catch { failures++; delay = Math.min(60_000, 5_000 * 2 ** Math.min(failures, 4)); }
       }
       if (!stopped) timer = setTimeout(() => { void poll(); }, delay);
     }
+    function visible() {
+      if (document.visibilityState !== "hidden") { clearTimeout(timer); void poll(); }
+    }
+    document.addEventListener("visibilitychange", visible);
     void poll();
-    return () => { stopped = true; alive.current = false; clearTimeout(timer); controller.current.cancel(); pendingSignal.current = null; };
-  }, [refresh]);
+    return () => { stopped = true; clearTimeout(timer); document.removeEventListener("visibilitychange", visible); };
+  }, [refresh, session?.state, active]);
   useEffect(() => { onBusyChange(blocked); return () => onBusyChange(false); }, [blocked, onBusyChange]);
   useEffect(() => { onStatusChange(session ? labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable"); }, [session, data?.enabled, onStatusChange]);
   useEffect(() => {
@@ -78,17 +94,18 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
 
   async function upload(id: string, signal: FaceScanSignal) {
     if (!alive.current) return;
+    statusVersion.current++;
     pendingSignal.current = { sessionId: id, signal }; setPhase("uploading"); setError("");
     try {
       const value = await uploadFaceScan(organizationId, record.id, id, signal);
       if (!alive.current) return;
-      updateSession(value); pendingSignal.current = null; setPhase("idle"); startKey.current = null;
+      updateSession(value); pendingSignal.current = null; captureId.current = null; setPhase("idle"); startKey.current = null;
     } catch {
       if (!alive.current) return;
       // The server may have accepted the upload before the connection failed.
       try {
         const found = (await refresh()).sessions.find(item => item.id === id);
-        if (found && found.state !== "REQUESTED") { pendingSignal.current = null; setPhase("idle"); return; }
+        if (found && found.state !== "REQUESTED") { pendingSignal.current = null; captureId.current = null; setPhase("idle"); return; }
       } catch { /* Keep the same payload for an idempotent upload retry. */ }
       setPhase("upload_failed"); setError("Upload could not be confirmed. Retry this upload without capturing another scan, or discard the local capture.");
     }
@@ -96,6 +113,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   async function start() {
     if (inFlight.current || blocked || disabled || !data?.enabled || !consented || record.status !== "DRAFT") return;
     inFlight.current = true; setPhase("preparing"); setError(""); setProgress(0); setLowPerformance(false);
+    statusVersion.current++;
     try {
       if (window.isSecureContext === false || !navigator.mediaDevices?.getUserMedia) throw new Error("Camera capture needs a supported browser on HTTPS (or localhost).");
       const saved = await beforeStart();
@@ -108,6 +126,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
       if (!alive.current) return;
       updateSession(value);
       if (value.state !== "REQUESTED") { setPhase("idle"); return; }
+      if (document.visibilityState === "hidden") throw new Error("Keep this page visible before starting the camera.");
       captureId.current = value.id;
       if (!video.current || !canvas.current) throw new Error("Camera preview is not ready. Please try again.");
       setPhase("capturing"); setGuidance("Preparing camera and scan files…");
@@ -116,14 +135,21 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
         finish: signal => { void upload(value.id, signal); },
         error: message => { if (alive.current) { setError(message); setPhase("idle"); } },
       });
-    } catch (cause) { if (alive.current) { setError(cause instanceof Error ? cause.message : "Could not prepare the scan."); setPhase("idle"); } }
+    } catch (cause) {
+      if (alive.current) {
+        setError(cause instanceof Error ? cause.message : "Could not prepare the scan."); setPhase("idle");
+        // Another tab may own the active attempt, or the create response was lost.
+        void refresh().catch(() => {});
+      }
+    }
     finally { inFlight.current = false; }
   }
   async function cancel() {
     if (inFlight.current || phase === "uploading") return;
+    const id = phase === "idle" ? session?.id : captureId.current ?? session?.id;
+    statusVersion.current++;
     controller.current.cancel(); pendingSignal.current = null; setPhase("preparing"); inFlight.current = true;
     try {
-      const id = captureId.current ?? session?.id;
       if (id) updateSession(await cancelFaceScan(organizationId, record.id, id));
       setError(""); startKey.current = null; captureId.current = null;
     } catch { setError("Cancellation could not be confirmed. Check the saved scan status before starting another attempt."); try { await refresh(); } catch { setStale(true); } }

@@ -4,9 +4,9 @@ export class AssessmentRequestError extends Error {
   constructor(message: string, public readonly status: number, public readonly code?: string) { super(message); }
 }
 
-export async function assessmentRequest<T>(organizationId: string, path: string, method = "GET", body?: unknown): Promise<T> {
+export async function assessmentRequest<T>(organizationId: string, path: string, method = "GET", body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/v1/organizations/${encodeURIComponent(organizationId)}${path}`, {
-    method, credentials: "include", headers: body ? { "content-type": "application/json" } : undefined,
+    method, signal, credentials: "include", headers: body ? { "content-type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await response.json().catch(() => null);
