@@ -39,7 +39,10 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
   const initials = user.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 
   function isActive(to: string, end?: boolean) { return end ? location.pathname === to : location.pathname.startsWith(to); }
-  function go(to: string) { if (!window.dispatchEvent(new Event("niq:before-navigation", { cancelable: true }))) return; navigate(to); setOpenMobile(false); }
+  function go(to: string) {
+    const proceed = () => { navigate(to); setOpenMobile(false); };
+    if (window.dispatchEvent(new CustomEvent("niq:before-navigation", { cancelable: true, detail: { to, proceed } }))) proceed();
+  }
 
   return <Sidebar collapsible="icon" className="border-r border-sidebar-border">
     <SidebarHeader className="p-3 group-data-[collapsible=icon]:p-1">
@@ -78,7 +81,10 @@ export function AppShell({ user }: { user: AuthenticatedUser }) {
     return () => { delete document.documentElement.dataset.appArea; };
   }, [refreshedLayout]);
   const navigate = useNavigate();
-  async function handleSignOut() { if (!window.dispatchEvent(new Event("niq:before-navigation", { cancelable: true }))) return; await signOut().catch(() => undefined); resetBranding(); navigate("/sign-in", { replace: true }); }
+  function handleSignOut() {
+    const proceed = async () => { await signOut().catch(() => undefined); resetBranding(); navigate("/sign-in", { replace: true }); };
+    if (window.dispatchEvent(new CustomEvent("niq:before-navigation", { cancelable: true, detail: { proceed } }))) void proceed();
+  }
 
   return <SidebarProvider className={refreshedLayout ? "client-workspace" : undefined}>
     <OrganizationSidebar user={user} onSignOut={handleSignOut} />
