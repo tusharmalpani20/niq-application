@@ -13,7 +13,7 @@ function questionnaire(){
  for(const[id,dependencies]of Object.entries({treatment_status:["palliative_status","palliative_timing"],previous_surgeries:["previous_surgery_count"],weight_loss:["previous_weight_kg","current_weight_kg"],protein_intake:["dietary_intake"]}))fields.find(f=>f.id===id)!.dependencies=dependencies;
  return{formatVersion:2,profile:"NIQ_FINAL_ASSESSMENT",sections,supportingInputs:["palliative_status","palliative_timing","previous_surgery_count","previous_weight_kg","current_weight_kg","dietary_intake"].map(id=>({id,label:id,kind:id.includes("weight")||id.endsWith("count")?"number":"select",required:false,options:[{id:"post_treatment",label:"Post treatment",help:""}]}))};
 }
-test("missing birth date and contact remain missing",()=>expect(patientAnswers({id:"p",reference:"P",displayName:"Test",dateOfBirth:null as any,gender:"UNKNOWN",homeFacility:null},new Date())).toMatchObject({age:null,contact:""}));
+test("missing birth date and contact remain missing",()=>expect(patientAnswers({id:"p",reference:"P",displayName:"Test",dateOfBirth:null as any,gender:"UNKNOWN",homeFacility:null},new Date())).toMatchObject({age:null,gender:null,contact:""}));
 // Must point ONLY to an isolated, migrated disposable database.
 describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQL lifecycle",()=>{
  const client=postgres(process.env.ASSESSMENT_TEST_DATABASE_URL!,{max:10,prepare:false}),db=drizzle(client);
@@ -76,7 +76,8 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  expect(release).toBeDefined();await db.update(tables.assessmentSubmissions).set({leaseExpiresAt:new Date(0),nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,otherId));
  const recovered=await service.retrySubmission(actor,org,otherId,context);expect(recovered.status).toBe("SCORED");release();expect((await late).status).toBe("SCORED");
  expect(await db.select().from(tables.scoringResults).where(eq(tables.scoringResults.assessmentId,otherId))).toHaveLength(1);
- expect(await db.select().from(tables.measurements).where(eq(tables.measurements.assessmentId,otherId))).toHaveLength(1);
+ const recorded=await db.select().from(tables.measurements).where(eq(tables.measurements.assessmentId,otherId));expect(recorded).toHaveLength(2);
+ const weight=recorded.find(row=>service.unseal<Record<string,unknown>>(row.values).current_weight_kg!==undefined);expect(weight?.provenance).toBe("MANUAL");
  });
 
 });

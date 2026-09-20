@@ -182,7 +182,10 @@ export class AssessmentWorkflowService {
         await tx.update(assessmentSubmissions).set({status:"SUCCEEDED",result:this.seal(calculated.result),failureCode:null,leaseToken:null,leaseExpiresAt:null,updatedAt:new Date()}).where(eq(assessmentSubmissions.id,submission.id));
         await tx.update(scoringRequests).set({status:"SUCCEEDED",completedAt:new Date(),updatedAt:new Date()}).where(eq(scoringRequests.id,submission.id));
         await tx.update(assessments).set({status:"SCORED",completedAt:new Date(),updatedAt:new Date()}).where(eq(assessments.id,id));
-        await tx.insert(measurements).values({id:createEntityId(),organizationId,assessmentId:id,provenance:snapshot.heightSource?"REUSED_PREVIOUS":"MANUAL",values:this.seal({height_cm:snapshot.answers.height_cm,current_weight_kg:snapshot.answers.current_weight_kg}),capturedAt:submission.createdAt,recordedByMembershipId:actor.membershipId});
+        await tx.insert(measurements).values([
+          {id:createEntityId(),organizationId,assessmentId:id,provenance:snapshot.heightSource?"REUSED_PREVIOUS":"MANUAL",values:this.seal({height_cm:snapshot.answers.height_cm,...(snapshot.heightSource?{sourceAssessmentId:snapshot.heightSource.assessmentId,sourceRecordedAt:snapshot.heightSource.recordedAt}:{})}),capturedAt:submission.createdAt,recordedByMembershipId:actor.membershipId},
+          {id:createEntityId(),organizationId,assessmentId:id,provenance:"MANUAL",values:this.seal({current_weight_kg:snapshot.answers.current_weight_kg}),capturedAt:submission.createdAt,recordedByMembershipId:actor.membershipId},
+        ]);
         await this.audit(tx,actor,context,id,"ASSESSMENT_SCORED",{submissionId:submission.id});
       });
     } catch(error) {
@@ -230,6 +233,6 @@ export class AssessmentWorkflowService {
 export function patientAnswers(patient:AssessmentPatient,started:Date):FormAnswers {
   const born=new Date(`${patient.dateOfBirth}T00:00:00Z`);let age=started.getUTCFullYear()-born.getUTCFullYear();
   if(started.getUTCMonth()<born.getUTCMonth()||(started.getUTCMonth()===born.getUTCMonth()&&started.getUTCDate()<born.getUTCDate())) age--;
-  return {patient_name:patient.displayName,age:Number.isFinite(age)?age:null,gender:patient.gender,contact:patient.phone??""};
+  return {patient_name:patient.displayName,age:Number.isFinite(age)?age:null,gender:patient.gender==="UNKNOWN"?null:patient.gender,contact:patient.phone??""};
 }
 function initializationDto(row:typeof assessmentInitializations.$inferSelect):AssessmentInitialization {return {id:row.id,status:row.status,assessmentId:row.assessmentId,failureCode:row.failureCode};}
