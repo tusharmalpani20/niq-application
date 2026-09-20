@@ -109,3 +109,11 @@ test("report refresh adopts concurrent server answers when local answers are cle
   await click("Save draft");
   expect(requests.filter(request => request.method === "PATCH")).toHaveLength(0);
 }, { reports: [reportFixture] }));
+
+
+test("persisted scoring rejection shows correction guidance and focuses the affected field", async () => harness(async ({ click }) => {
+  expect(document.body.textContent).toContain("Check the value before submitting again.");
+  await click("Current weight: Check the value before submitting again.");
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+  expect(document.activeElement?.id).toBe("assessment-field-current_weight_kg");
+}, { submission: { status: "REJECTED", failureCode: "VALIDATION_ERROR", issues: [{ fieldId: "current_weight_kg", message: "Check the value before submitting again." }] } }));
