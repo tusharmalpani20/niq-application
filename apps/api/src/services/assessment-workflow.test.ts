@@ -82,6 +82,28 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  });
  test("roles organization and changed facility permissions are enforced",async()=>{for(const denied of [{...actor,role:"SUPPORT" as const},{...actor,platformRole:"NIQ_ADMIN" as const},{...actor,organizationId:createEntityId()}])await expect(service.read(denied,org,id)).rejects.toMatchObject({code:"FORBIDDEN"});await db.update(tables.facilityMemberships).set({facilityId:other}).where(eq(tables.facilityMemberships.organizationMembershipId,membership));await expect(service.read(actor,org,id)).rejects.toMatchObject({code:"NOT_FOUND"});await db.update(tables.facilityMemberships).set({facilityId:facility}).where(eq(tables.facilityMemberships.organizationMembershipId,membership));});
  test("concurrent saves fence stale revisions and forged contact",async()=>{const outcomes=await Promise.allSettled([service.save(actor,org,id,{revision:0,answers:{height_cm:170,current_weight_kg:70,contact:"forged"}},context),service.save(actor,org,id,{revision:0,answers:{height_cm:160,current_weight_kg:65}},context)]);expect(outcomes.filter(r=>r.status==="fulfilled")).toHaveLength(1);expect((await service.read(actor,org,id)).answers.contact).toBe("1234567890");});
+ test("draft reads and saves remove inactive branches without restoring old details",async()=>{
+   let record=await service.read(actor,org,id);
+   record=await service.save(actor,org,id,{revision:record.revision,answers:{...record.answers,stage:"stage_metastatic",metastasis_site:"others",metastasis_other:"old detail"}},context);
+   expect(record.answers.metastasis_other).toBe("old detail");
+   // Simulate a legacy draft written by the former retention policy.
+   const [row]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,id));
+   const state=service["unseal"]<Record<string,unknown>>(row!.workflow);
+   await db.update(tables.assessments).set({workflow:service["seal"]({...state,answers:{...record.answers,stage:null}})}).where(eq(tables.assessments.id,id));
+   record=await service.read(actor,org,id);
+   expect(record.answers.metastasis_site).toBeUndefined();
+   expect(record.answers.metastasis_other).toBeUndefined();
+   record=await service.save(actor,org,id,{revision:record.revision,answers:{...record.answers,metastasis_site:"others",metastasis_other:"stale client value"}},context);
+   expect(record.answers.metastasis_other).toBeUndefined();
+   const stored=service["unseal"]<{answers:Record<string,unknown>}>((await db.select().from(tables.assessments).where(eq(tables.assessments.id,id)))[0]!.workflow);
+   expect(stored.answers.metastasis_site).toBeUndefined();
+   expect((await db.select().from(tables.assessmentAnswers).where(eq(tables.assessmentAnswers.assessmentId,id))).some(answer=>answer.questionKey==="metastasis_other")).toBe(false);
+   record=await service.save(actor,org,id,{revision:record.revision,answers:{...record.answers,stage:"stage_metastatic"}},context);
+   expect(record.answers.metastasis_site).toBeUndefined();
+   expect(record.answers.metastasis_other).toBeUndefined();
+   // Restore the optional parent before the submission lifecycle checks below.
+   await service.save(actor,org,id,{revision:record.revision,answers:{...record.answers,stage:null}},context);
+ });
  test("report digest validation successful replay and download",async()=>{let record=await service.read(actor,org,id);record=await service.reports.edit(actor,org,id,{revision:record.revision,label:"Report",purpose:"Baseline",datePrecision:"MONTH",year:2026,month:9,day:null},context);const report=record.reports[0]!,bytes=new TextEncoder().encode("%PDF-1.7\nfixture");const input={revision:record.revision,uploadKey:"upload-key-at-least-16",filename:"report.pdf",mediaType:"application/pdf" as const,size:bytes.length,sha256:createHash("sha256").update(bytes).digest("hex"),body:new Response(bytes).body!};record=await service.reports.upload(actor,org,id,report.id,input,context);expect(record.reports[0]!.files[0]!.status).toBe("READY");expect((await service.reports.upload(actor,org,id,report.id,{...input,body:new Response(bytes).body!},context)).revision).toBe(record.revision);await expect(service.reports.upload(actor,org,id,report.id,{...input,sha256:"0".repeat(64),body:new Response(bytes).body!},context)).rejects.toMatchObject({code:"CONFLICT"});const file=await service.reports.download(actor,org,id,report.id,record.reports[0]!.files[0]!.id);expect(await new Response(file.stream).text()).toContain("fixture");});
  test("pending upload blocks submission; cancellation fences late completion",async()=>{
    let record=await service.read(actor,org,id);const report=record.reports[0]!;const bytes=new TextEncoder().encode("%PDF-1.7\nlate");let controller!:ReadableStreamDefaultController<Uint8Array>;
