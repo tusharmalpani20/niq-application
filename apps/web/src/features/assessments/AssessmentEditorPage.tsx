@@ -9,15 +9,15 @@ import { AssessmentReview } from "./AssessmentReview";
 import { AssessmentResult } from "./AssessmentResult";
 import { AssessmentReports } from "./AssessmentReports";
 import { useDraftNavigationGuard } from "./useDraftNavigationGuard";
-import { assessmentRequest, AssessmentRequestError, getAssessment, retryAssessmentScoring, saveAssessment, submitAssessment } from "./workflow-api";
+import { assessmentRequest, AssessmentRequestError, getAssessment, reconcileAssessmentScoring, retryAssessmentScoring, saveAssessment, submitAssessment } from "./workflow-api";
 
 export function AssessmentEditorPage() {
   const user = useOutletContext<AuthenticatedUser>();
   const { assessmentId = "" } = useParams();
   // Remounting prevents a patient/org switch from retaining another patient's in-memory answers.
-  return <AssessmentEditor key={`${user.userId}:${user.organizationId}:${assessmentId}`} organizationId={user.organizationId} assessmentId={assessmentId} />;
+  return <AssessmentEditor key={`${user.userId}:${user.organizationId}:${assessmentId}`} organizationId={user.organizationId} assessmentId={assessmentId} isAdmin={user.role === "ORGANIZATION_ADMIN"} />;
 }
-function AssessmentEditor({ organizationId, assessmentId }: { organizationId: string; assessmentId: string }) {
+function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizationId: string; assessmentId: string; isAdmin: boolean }) {
   const [record, setRecord] = useState<AssessmentWorkflow | null>(null);
   const [answers, setAnswers] = useState<FormAnswers>({});
   const [sectionId, setSectionId] = useState("personal_details");
@@ -39,7 +39,7 @@ function AssessmentEditor({ organizationId, assessmentId }: { organizationId: st
     if (cause instanceof AssessmentRequestError && cause.status === 401) {
       setAnswers({}); setRecord(null); window.location.assign("/sign-in"); return;
     }
-    if (cause instanceof AssessmentRequestError && cause.status === 409) setConflict(true);
+    if (cause instanceof AssessmentRequestError && cause.status === 409 && /reload|changed|editable/i.test(cause.message)) setConflict(true);
     setError(cause instanceof Error ? cause.message : "Could not save assessment. Your changes are still on this page.");
   }, []);
   const reload = useCallback(async () => { const value = await getAssessment(organizationId, assessmentId); accept(value); }, [organizationId, assessmentId, accept]);
@@ -75,17 +75,17 @@ function AssessmentEditor({ organizationId, assessmentId }: { organizationId: st
     if (Object.keys(invalid).length) { setError("Complete required fields before requesting a score."); return; }
     const saved = await persist(); if (!saved) return;
     operation.current = true; setBusy(true); setError("");
-    try { accept(await submitAssessment(organizationId, assessmentId, saved.revision)); setNotice("Assessment submitted"); }
+    try { const submitted = await submitAssessment(organizationId, assessmentId, saved.revision); accept(submitted); setNotice(submitted.status === "DRAFT" ? "Scoring needs corrected answers" : "Assessment submitted"); }
     catch (cause) {
       handleError(cause);
       // Submission can be accepted before the response is lost. Reload the durable state before allowing another action.
       try { await reload(); } catch { setConflict(true); }
     } finally { operation.current = false; setBusy(false); }
   }
-  async function retry() {
+  async function retry(reconcile = false) {
     if (operation.current) return;
     operation.current = true; setBusy(true); setError("");
-    try { accept(await retryAssessmentScoring(organizationId, assessmentId)); }
+    try { accept(await (reconcile ? reconcileAssessmentScoring : retryAssessmentScoring)(organizationId, assessmentId)); }
     catch (cause) { handleError(cause); }
     finally { operation.current = false; setBusy(false); }
   }
@@ -106,13 +106,14 @@ function AssessmentEditor({ organizationId, assessmentId }: { organizationId: st
   const locked = busy || reportBusy || conflict;
   return <div className="assessment-workflow">
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><Link className="text-sm text-brand-ink" to={`/patients/${record.patient.reference}`}>{record.patient.reference}</Link><h1 className="mt-1 text-2xl font-semibold">{record.patient.displayName}</h1><p className="mt-1 text-sm text-muted-foreground">{record.patient.homeFacility?.name} · Assessment · {record.status.replaceAll("_", " ").toLowerCase()}</p></div><Button variant="outline" isDisabled={!editable || locked || !dirty} onPress={() => { void persist(); }}>{busy ? "Saving…" : "Save draft"}</Button></div>
-    <div className="sticky top-0 z-10 mb-5 rounded-xl border border-border bg-background p-4 shadow-sm"><div className="mb-2 flex flex-wrap justify-between gap-2 text-sm"><strong>{progress.percent ?? "—"}% complete</strong><span className="text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`} · {progress.answered}/{progress.required} required</span></div><div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Required questionnaire completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent ?? 0}><div className="h-full bg-primary transition-all" style={{ width: `${progress.percent ?? 0}%` }} /></div></div>
+    <div className="sticky top-0 z-10 mb-5 rounded-xl border border-border bg-background p-4 shadow-sm"><p className="mb-2 truncate text-sm font-medium">{record.patient.displayName} · {record.patient.reference}</p><div className="mb-2 flex flex-wrap justify-between gap-2 text-sm"><strong>{progress.percent ?? "—"}% complete</strong><span className="text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`} · {progress.answered}/{progress.required} required</span></div><div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Required questionnaire completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent ?? 0}><div className="h-full bg-primary transition-all" style={{ width: `${progress.percent ?? 0}%` }} /></div></div>
     {error && <div role="alert" className="mb-4 rounded-lg border border-destructive/30 p-4"><p>{error}</p>{conflict && <Button className="mt-2" variant="outline" onPress={() => { if (window.confirm("Load the saved assessment and discard local changes?")) { setError(""); void reload().catch(handleError); } }}>Load saved version</Button>}</div>}
     {Object.keys(errors).length > 0 && <div className="mb-4 rounded-lg border border-destructive/30 p-4"><strong>Check these fields</strong><ul className="mt-2 list-inside list-disc">{Object.entries(errors).map(([id, message]) => { const owner = record.manifest.sections.find(item => item.fields.some(field => field.id === id)); const field = owner?.fields.find(item => item.id === id); return <li key={id}><button className="text-brand-ink underline" onClick={() => { if (owner) { setSectionId(owner.id); requestAnimationFrame(() => document.getElementById(`assessment-field-${id}`)?.focus()); } }}>{field?.label ?? "Questionnaire"}: {message}</button></li>; })}</ul></div>}
-    {!editable && !record.result && <div className="mb-5 rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">{record.status === "SCORING_PENDING" ? "Scoring result pending" : "Scoring needs attention"}</h2><p className="my-2 text-sm text-muted-foreground">The submitted assessment is preserved. Retry checks the same scoring request.</p><Button variant="outline" isDisabled={busy} onPress={retry}>Retry scoring</Button></div>}
+    {record.submission?.status === "REJECTED" && <div role="alert" className="mb-5 rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Review the questionnaire answers</h2><p className="mt-2 text-sm text-muted-foreground">Scoring could not process these responses. Add or correct answers before submitting again. The previous submission has been preserved.</p></div>}
+    {!editable && !record.result && <div className="mb-5 rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "Administrator review needed" : record.status === "SCORING_PENDING" ? "Scoring result pending" : "Scoring needs attention"}</h2><p className="my-2 text-sm text-muted-foreground">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "The scoring service has not confirmed this request. An organisation administrator must check it. Your submitted answers and reports remain preserved." : "The submitted assessment is preserved. Retry checks the same scoring request."}</p>{record.submission?.status === "RECONCILIATION_REQUIRED" ? isAdmin && <Button variant="outline" isDisabled={busy} onPress={() => { void retry(true); }}>Check original scoring request</Button> : <Button variant="outline" isDisabled={busy} onPress={() => { void retry(); }}>Retry scoring</Button>}</div>}
     {record.result !== null && <div className="mb-5"><AssessmentResult record={record} onSection={id => { void selectSection(id); }} /></div>}
     <div className="grid min-w-0 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]"><AssessmentSectionNavigation tabs={tabs} selected={sectionId} progress={progress} disabled={locked} onSelect={id => { void selectSection(id); }} />
-      <div className="min-w-0"><h2 id="assessment-section-heading" tabIndex={-1} className="mb-4 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>
+      <div className="min-w-0"><h2 id="assessment-section-heading" tabIndex={-1} className="mb-4 scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>
         {sectionId === "personal_details" && <><div className="mb-4 rounded-xl border border-border bg-card p-4"><h3 className="font-semibold">Face scan</h3><p className="mt-1 text-sm text-muted-foreground">Face scanning is not available yet. Enter height and weight below.</p></div>{record.heightSource && <p className="mb-4 text-sm text-muted-foreground">Height copied from assessment on {new Date(record.heightSource.recordedAt).toLocaleDateString()}. Check and edit it if needed.</p>}{editable && !answers.contact && <div className="mb-4 grid gap-3 rounded-lg border border-border p-4"><p>The patient profile needs a contact number before submission.</p><label className="grid gap-2">Patient phone number<Input type="tel" value={phone} onChange={event => setPhone(event.target.value)} disabled={locked} /></label><Button variant="outline" isDisabled={locked || !phone.trim()} onPress={updateContact}>Update patient profile</Button></div>}</>}
         {section && <section className="rounded-xl border border-border bg-card p-5"><AssessmentFields section={section} answers={answers} errors={errors} readOnly={!editable || locked} onChange={(id, value) => { setAnswers(current => ({ ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
         {sectionId === "reports" && <AssessmentReports organizationId={organizationId} assessmentId={assessmentId} revision={record.revision} reports={record.reports} readOnly={!editable || busy || conflict} onChanged={async () => { const value = await getAssessment(organizationId, assessmentId); setRecord(value); }} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />}

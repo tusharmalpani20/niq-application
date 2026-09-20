@@ -405,3 +405,4 @@ button, a { -webkit-tap-highlight-color: transparent; }
     @apply font-sans;
   }
 }
+.assessment-workflow [id^="assessment-field-"] { scroll-margin-top: 10rem; }

@@ -19,3 +19,4 @@ export const getAssessment = (org: string, id: string) => assessmentRequest<Asse
 export const saveAssessment = (org: string, id: string, revision: number, answers: FormAnswers) => assessmentRequest<AssessmentWorkflow>(org, `/assessments/${id}`, "PATCH", { revision, answers });
 export const submitAssessment = (org: string, id: string, revision: number) => assessmentRequest<AssessmentWorkflow>(org, `/assessments/${id}/submit`, "POST", { revision });
 export const retryAssessmentScoring = (org: string, id: string) => assessmentRequest<AssessmentWorkflow>(org, `/assessments/${id}/submission/retry`, "POST");
+export const reconcileAssessmentScoring = (org: string, id: string) => assessmentRequest<AssessmentWorkflow>(org, `/assessments/${id}/submission/reconcile`, "POST");
