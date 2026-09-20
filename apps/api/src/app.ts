@@ -13,7 +13,7 @@ import type { ApplicationService, Principal, RequestContext } from "./services/a
 import { ServiceError } from "./services/application";
 import { mountFaceScanRoutes } from "./face-scan-routes";
 import { AssessmentFaceScanService } from "./services/assessment-face-scan";
-import { FACE_SCAN_MAX_BYTES } from "../../../packages/contracts/src/face-scan";
+import { BoundedBodyError } from "./http/bounded-json";
 import { mountAssessmentRoutes } from "./assessment-routes";
 import type { AssessmentWorkflowService } from "./services/assessment-workflow";
 
@@ -117,7 +117,8 @@ export function createApp(dependencies: AppDependencies) {
     if (context.req.header("origin") !== dependencies.allowedOrigin) return context.json(errorBody("FORBIDDEN", "The request origin is not allowed.", context.get("requestId")), 403);
     // Files stream through a separately bounded storage adapter; JSON drafts are bounded here.
     if (/\/reports\/[^/]+\/files$/.test(path) && context.req.method === "POST") return next();
-    return bodyLimit({ maxSize: /\/face-scans\/[^/]+\/signal$/.test(path) ? FACE_SCAN_MAX_BYTES : 256 * 1024, onError: c => c.json(errorBody("VALIDATION_ERROR", "The request is too large.", c.get("requestId")), 413) })(context, next);
+    if (/\/face-scans(?:\/|$)/.test(path)) return next(); // Routes count actual bytes and enforce an upload deadline.
+    return bodyLimit({ maxSize: 256 * 1024, onError: c => c.json(errorBody("VALIDATION_ERROR", "The request is too large.", c.get("requestId")), 413) })(context, next);
   });
   app.get("/v1/auth/me", (context) => context.json({ user: context.get("principal") }));
   app.post("/v1/auth/sign-out", async (context) => {
@@ -185,6 +186,7 @@ export function createApp(dependencies: AppDependencies) {
   }
   app.notFound((context) => context.json(errorBody("NOT_FOUND", "The requested resource was not found.", context.get("requestId")), 404));
   app.onError((error, context) => {
+    if (error instanceof BoundedBodyError) return context.json(errorBody("VALIDATION_ERROR", error.message, context.get("requestId")), error.status);
     if (error instanceof ServiceError) {
       const status = error.code === "FORBIDDEN" ? 403 : error.code === "NOT_FOUND" ? 404 : error.code === "VALIDATION_ERROR" ? 400 : error.code === "USER_LIMIT_REACHED" ? 409 : error.code === "ACCOUNT_LOCKED" ? 423 : error.code === "RATE_LIMITED" ? 429 : error.code === "INVALID_CREDENTIALS" || error.code === "INVALID_OR_EXPIRED_TOKEN" ? 401 : 409;
       return context.json(errorBody(error.code, error.message, context.get("requestId"), error.details), error.code === "SCORING_UNAVAILABLE" || error.code === "SCORING_NOT_CONFIGURED" ? 503 : status);
