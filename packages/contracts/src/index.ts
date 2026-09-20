@@ -368,6 +368,8 @@ export const assessmentListResponseSchema = z.object({ items: z.array(assessment
 export const measurementProvenanceSchema = z.enum([
   "AUTO_FACE_SCAN",
   "AUTOMATED_MANUAL_FALLBACK",
+  "MANUAL",
+  "REUSED_PREVIOUS",
 ]);
 
 export const createAssessmentSchema = z.object({
