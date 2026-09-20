@@ -33,24 +33,23 @@ test("searchable menu preserves approved and custom choices through mouse, keybo
       input.dispatchEvent(new dom.window.KeyboardEvent("keyup", { key: "e", bubbles: true }));
     });
     expect(changes).toEqual(["breast"]);
-    await act(async () => document.querySelector<HTMLButtonElement>("button")!.click());
     const custom = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent?.includes("Rare subtype"));
     expect(custom).toBeDefined();
     await act(async () => custom!.click());
     await act(async () => input.blur());
     expect(changes).toEqual(["breast", "custom:Rare subtype"]);
-    expect(input.value).toBe("Rare subtype");
+    expect(input.value).toBe("Other");
     await act(async () => input.focus());
     await act(async () => {
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!.call(input, "Another subtype");
       input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
       input.dispatchEvent(new dom.window.KeyboardEvent("keyup", { key: "e", bubbles: true }));
     });
-    await act(async () => input.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+    // No ArrowDown: Enter accepts the visible custom-answer action directly.
     await act(async () => input.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
     await act(async () => input.blur());
-    expect(changes.at(-1)).toBe("custom:Another subtype");
-    expect(input.value).toBe("Another subtype");
+    expect(changes).toEqual(["breast", "custom:Rare subtype", "custom:Another subtype"]);
+    expect(input.value).toBe("Other");
     await act(async () => input.focus());
     await act(async () => {
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!.call(input, "Uncommitted typing");
@@ -58,8 +57,8 @@ test("searchable menu preserves approved and custom choices through mouse, keybo
       input.dispatchEvent(new dom.window.KeyboardEvent("keyup", { key: "g", bubbles: true }));
     });
     await act(async () => input.blur());
-    expect(changes.at(-1)).toBe("custom:Another subtype");
-    expect(input.value).toBe("Another subtype");
+    expect(changes).toEqual(["breast", "custom:Rare subtype", "custom:Another subtype"]);
+    expect(input.value).toBe("Other");
 
 
 
