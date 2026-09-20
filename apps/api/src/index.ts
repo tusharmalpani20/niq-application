@@ -3,6 +3,7 @@ import { createApp } from "./app";
 import { createDatabase, isDatabaseSchemaReady } from "./db/client";
 import { DevelopmentOtpDelivery, UnconfiguredOtpDelivery } from "./services/dev-otp";
 import { PostgresApplicationService } from "./services/postgres-application";
+import { AssessmentWorkflowService } from "./services/assessment-workflow";
 
 const config = loadApplicationConfig(process.env);
 const { db, sql } = createDatabase(config);
@@ -14,6 +15,7 @@ const app = createApp({
   authMode: config.AUTH_MODE,
   checkDatabase: () => isDatabaseSchemaReady(sql),
   service,
+  assessmentWorkflow: new AssessmentWorkflowService({ db, applicationService: service, config }),
   sessionCookieName: config.SESSION_COOKIE_NAME,
   secureCookies: config.NODE_ENV === "production",
   bootstrapToken: config.BOOTSTRAP_TOKEN,

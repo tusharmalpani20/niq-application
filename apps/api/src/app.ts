@@ -3,6 +3,7 @@ import { acceptInvitationSchema, activateScoringSchema, bootstrapAdminSchema, cr
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
+import { bodyLimit } from "hono/body-limit";
 import { requestId } from "hono/request-id";
 import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
@@ -10,12 +11,15 @@ import { errorBody } from "./http/errors";
 import { secureEqual } from "./security/tokens";
 import type { ApplicationService, Principal, RequestContext } from "./services/application";
 import { ServiceError } from "./services/application";
+import { mountAssessmentRoutes } from "./assessment-routes";
+import type { AssessmentWorkflowService } from "./services/assessment-workflow";
 
 export type AppDependencies = {
   allowedOrigin: string;
   authMode: "disabled" | "local" | "oidc";
   checkDatabase: () => Promise<boolean>;
   service?: ApplicationService;
+  assessmentWorkflow?: AssessmentWorkflowService;
   sessionCookieName?: string;
   secureCookies?: boolean;
   bootstrapToken?: string;
@@ -103,6 +107,15 @@ export function createApp(dependencies: AppDependencies) {
   app.use("/v1/organizations", requireSession);
   app.use("/v1/organizations/*", requireSession);
   app.use("/v1/platform/*", requireSession);
+  app.use("/v1/organizations/*", async (context, next) => {
+    const path = context.req.path;
+    const assessmentMutation = /\/(?:assessment-initializations|assessments)(?:\/|$)/.test(path) || /\/patients\/[^/]+\/contact$/.test(path);
+    if (!assessmentMutation || ["GET", "HEAD", "OPTIONS"].includes(context.req.method)) return next();
+    if (context.req.header("origin") !== dependencies.allowedOrigin) return context.json(errorBody("FORBIDDEN", "The request origin is not allowed.", context.get("requestId")), 403);
+    // Files stream through a separately bounded storage adapter; JSON drafts are bounded here.
+    if (/\/reports\/[^/]+\/files$/.test(path) && context.req.method === "POST") return next();
+    return bodyLimit({ maxSize: 256 * 1024, onError: c => c.json(errorBody("VALIDATION_ERROR", "The request is too large.", c.get("requestId")), 413) })(context, next);
+  });
   app.get("/v1/auth/me", (context) => context.json({ user: context.get("principal") }));
   app.post("/v1/auth/sign-out", async (context) => {
     const token = getCookie(context, cookieName); if (token) await dependencies.service!.signOut(token, requestContext(context));
@@ -163,6 +176,7 @@ export function createApp(dependencies: AppDependencies) {
     return context.json({ invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens ? { activationToken: result.token } : {}) }, 201);
   });
   app.patch("/v1/organizations/:organizationId/users/:membershipId", zValidator("param", idParamsSchema, validationFailure), zValidator("json", updateUserStatusSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.setUserActive(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").membershipId!, context.req.valid("json").active, requestContext(context)))));
+  if (dependencies.assessmentWorkflow) mountAssessmentRoutes(app, dependencies.assessmentWorkflow);
   app.notFound((context) => context.json(errorBody("NOT_FOUND", "The requested resource was not found.", context.get("requestId")), 404));
   app.onError((error, context) => {
     if (error instanceof ServiceError) {
