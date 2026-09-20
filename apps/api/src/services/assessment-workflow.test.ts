@@ -90,4 +90,18 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  const weight=recorded.find(row=>service.unseal<Record<string,unknown>>(row.values).current_weight_kg!==undefined);expect(weight?.provenance).toBe("MANUAL");
  });
 
+ test("batch recovery skips inaccessible initialization and scoring cooldown",async()=>{
+ const cooldown=(await service.initialize(actor,org,{patientId:patient,requestKey:"recovery-cooldown-12345"},context)).assessmentId!;
+ const due=(await service.initialize(actor,org,{patientId:patient,requestKey:"recovery-due-123456789"},context)).assessmentId!;
+ behavior="uncertain";
+ for(const assessmentId of [cooldown,due]){let record=await service.read(actor,org,assessmentId);record=await service.save(actor,org,assessmentId,{revision:record.revision,answers:{height_cm:170,current_weight_kg:70}},context);await service.submit(actor,org,assessmentId,record.revision,context);}
+ await db.update(tables.assessmentSubmissions).set({nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,due));
+ await db.insert(tables.assessmentInitializations).values({id:createEntityId(),organizationId:org,patientId:patient,facilityId:other,creatorId:membership,requestKey:"inaccessible-recovery-12345",connection:{}});
+ const before=keys.length;behavior="success";
+ await service.recover(actor,org,context);
+ expect(keys.length).toBe(before+1);
+ expect((await service.read(actor,org,cooldown)).status).toBe("SCORING_UNAVAILABLE");
+ expect((await service.read(actor,org,due)).status).toBe("SCORED");
+ });
+
 });

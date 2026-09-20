@@ -205,17 +205,40 @@ export class AssessmentWorkflowService {
   /** Authorized recovery is bounded; remote calls always reuse persisted references and keys. */
   async recover(actor:Principal,organizationId:string,context:RequestContext) {
     this.clinicalActor(actor,organizationId);
-    const pending=await this.db.select().from(assessmentInitializations).where(and(eq(assessmentInitializations.organizationId,organizationId),eq(assessmentInitializations.creatorId,actor.membershipId),sql`${assessmentInitializations.status}<>'READY'`)).limit(10);
-    const initializations=[];
-    for(const item of pending) initializations.push(await this.retryInitialization(actor,organizationId,item.id,context));
-    const rows=await this.db.select().from(assessments).where(and(eq(assessments.organizationId,organizationId),facilityAccessCondition(actor,organizationId,assessments.facilityId),sql`${assessments.status} in ('SCORING_PENDING','SCORING_UNAVAILABLE','DRAFT')`)).orderBy(assessments.updatedAt).limit(10);
-    for(const row of rows) {
-      if(!row.workflow) continue;
+    await this.applicationService.getOrganization(actor,organizationId);
+    const now=new Date().toISOString();
+    const pending=await this.db.select().from(assessmentInitializations).where(and(
+      eq(assessmentInitializations.organizationId,organizationId),eq(assessmentInitializations.creatorId,actor.membershipId),
+      facilityAccessCondition(actor,organizationId,assessmentInitializations.facilityId),
+      sql`${assessmentInitializations.status}<>'READY'`,
+      sql`(${assessmentInitializations.leaseExpiresAt} is null or ${assessmentInitializations.leaseExpiresAt}<${now})`,
+    )).orderBy(assessmentInitializations.updatedAt).limit(10);
+    const initializations:AssessmentInitialization[]=[];
+    let skippedResources=0;
+    // A changed revision, lease, or access assignment affects one item, not the entire batch.
+    const attempt=async(work:()=>Promise<unknown>)=>{
+      try {await work();} catch(error) {
+        if(!(error instanceof ServiceError)||!['CONFLICT','NOT_FOUND','FORBIDDEN'].includes(error.code)) throw error;
+        skippedResources++;
+      }
+    };
+    for(const item of pending) await attempt(async()=>{initializations.push(await this.retryInitialization(actor,organizationId,item.id,context));});
+    const rows=await this.db.select().from(assessments).where(and(
+      eq(assessments.organizationId,organizationId),facilityAccessCondition(actor,organizationId,assessments.facilityId),
+      sql`${assessments.workflow} is not null`,
+      sql`(${assessments.status}='DRAFT' or (${assessments.status} in ('SCORING_PENDING','SCORING_UNAVAILABLE') and exists (
+        select 1 from assessment_submissions s where s.assessment_id=${assessments.id}
+          and s.organization_id=${organizationId} and s.status in ('PENDING','UNAVAILABLE')
+          and (s.next_attempt_at is null or s.next_attempt_at<=${now})
+          and (s.lease_expires_at is null or s.lease_expires_at<${now})
+      )))`,
+    )).orderBy(sql`case when ${assessments.status}='DRAFT' then 1 else 0 end`,assessments.updatedAt).limit(10);
+    for(const row of rows) await attempt(async()=>{
       await this.reports.expire(actor,organizationId,row.id);
       if(row.status!=="DRAFT") await this.retrySubmission(actor,organizationId,row.id,context);
       await this.reports.cleanup(actor,organizationId,row.id);
-    }
-    return {initializations,checkedAssessments:rows.length};
+    });
+    return {initializations,checkedAssessments:rows.length,skippedResources};
   }
   async updateContact(actor:Principal,organizationId:string,patientId:string,phone:string,context:RequestContext={requestId:"patient-contact-update"}) {
     this.clinicalActor(actor,organizationId);await this.applicationService.getPatient(actor,organizationId,patientId);
