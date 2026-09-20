@@ -652,7 +652,8 @@ export const assessmentSubmissions = pgTable("assessment_submissions", {
   revision: integer("revision").notNull(), snapshot: jsonb("snapshot").notNull(),
   idempotencyKey: text("idempotency_key").notNull(), status: text("status").notNull().default("PENDING"),
   failureCode: text("failure_code"), leaseToken: text("lease_token"), leaseExpiresAt: timestamp("lease_expires_at",{withTimezone:true}),
-  result: jsonb("result"), ...timestamps,
+  result: jsonb("result"), attemptCount: integer("attempt_count").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at",{withTimezone:true}), ...timestamps,
 }, t => [
   uniqueIndex("assessment_submissions_revision_uidx").on(t.assessmentId,t.revision),
   uniqueIndex("assessment_submissions_key_uidx").on(t.organizationId,t.idempotencyKey),
