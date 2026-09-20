@@ -18,7 +18,7 @@ export function assessmentNumericInput(raw: string): FormAnswer {
   return Number.isFinite(value) ? value : raw;
 }
 function calculated(field: FormField, answers: FormAnswers): string {
-  if (field.id === "protein_intake") return "Calculated when scored";
+  if (field.id === "protein_intake") return "Derived from dietary intake when you submit for scoring";
   const height = answers.height_cm; const current = answers.current_weight_kg; const previous = answers.previous_weight_kg;
   if (field.id === "bmi") {
     const bmi = typeof height === "number" && typeof current === "number" ? calculateAssessmentBmi(height, current) : null;
@@ -36,10 +36,23 @@ const otherFields: Record<string, { option: string; detail: string }> = {
   cancer_type: { option: "cancer_other", detail: "cancer_type_other" },
   metastasis_site: { option: "others", detail: "metastasis_other" },
 };
+/** Keep conditional follow-ups with their controlling question, not behind a separator. */
+export function assessmentFieldGroups(fields: FormField[], answers: FormAnswers): FormField[][] {
+  const visible = fields.filter(field => isAssessmentFieldApplicable(field, answers));
+  const parents: Record<string, string> = { age: "patient_name", gender: "patient_name", contact: "patient_name", current_weight_kg: "height_cm", bmi: "height_cm", previous_weight_kg: "weight_loss", protein_intake: "dietary_intake", treatment_cycle_number: "current_cancer_treatment", treatment_cycle_frequency: "current_cancer_treatment" };
+  const root = (field: FormField): string => {
+    const parentId = parents[field.id] ?? field.visibleWhen?.[0]?.fieldId;
+    const parent = visible.find(item => item.id === parentId);
+    return parent ? root(parent) : field.id;
+  };
+  const groups = new Map<string, FormField[]>();
+  for (const field of visible) { const id = root(field); groups.set(id, [...(groups.get(id) ?? []), field]); }
+  return [...groups.values()].map(group => group[0]?.id === "weight_loss" ? [...group.filter(field => field.id !== "weight_loss"), ...group.filter(field => field.id === "weight_loss")] : group);
+}
 export function AssessmentFields({ section, answers, onChange, errors, readOnly, onEditContact }: AssessmentFieldsProps) {
-  return <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] items-start gap-x-6 gap-y-5">{section.fields.filter(field => isAssessmentFieldApplicable(field, answers)).map(field => {
+  const renderField = (field: FormField) => {
     const id = `assessment-field-${field.id}`; const errorId = `${id}-error`; const error = errors[field.id];
-    const value = answers[field.id]; const label = `${field.label}${field.unit ? ` (${field.unit})` : ""}`;
+    const value = answers[field.id]; const label = `${field.label}${field.unit && field.unit !== "surgeries" ? ` (${field.unit})` : ""}`;
     const required = field.required ? <><span aria-hidden="true" className="ml-1 text-destructive">*</span><span className="sr-only"> (required)</span></> : null;
     const errorMarkup = error ? <p id={errorId} className="text-sm text-destructive" role="alert">{error}</p> : null;
     const reset = value !== undefined && value !== null && !readOnly ? <TooltipTrigger><Button variant="ghost" size="icon" className="size-8" aria-label={`Reset ${field.label}`} onPress={() => onChange(field.id, null)}><X className="size-3.5" /></Button><Tooltip>Reset {field.label.toLowerCase()}</Tooltip></TooltipTrigger> : null;
@@ -47,12 +60,12 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
       const selected = Array.isArray(value) ? value : [];
       const options = (field.options || []).filter(option => !selected.includes(option.id));
       if (explicitNoneFields.has(field.id)) options.push({ id: "__none__", label: "None" });
-      return <fieldset id={id} key={field.id} tabIndex={-1} disabled={readOnly} aria-describedby={error ? errorId : undefined} aria-invalid={Boolean(error)} className="col-[1/-1] min-w-0 space-y-3 border-b border-border pb-5">
+      return <fieldset id={id} key={field.id} tabIndex={-1} disabled={readOnly} aria-describedby={error ? errorId : undefined} aria-invalid={Boolean(error)} className="col-[1/-1] min-w-0 space-y-3">
         <legend className="mb-2 text-sm font-medium">{label}{required}</legend>
         {Array.isArray(value) && <div className="flex flex-wrap items-center gap-2">{selected.length ? selected.map(item => <span key={item} className="inline-flex max-w-full items-center rounded-full border border-primary/20 bg-primary/5 pl-3 text-sm">
           <span className="break-words">{field.options?.find(option => option.id === item)?.label || item}</span>
-          <Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove ${field.options?.find(option => option.id === item)?.label || item}`} onPress={() => onChange(field.id, selected.filter(choice => choice !== item))}><X className="size-3.5" /></Button>
-        </span>) : <span className="text-sm text-muted-foreground">{explicitNoneFields.has(field.id) ? "None" : "No selections"}</span>}{reset}</div>}
+          <Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove ${field.options?.find(option => option.id === item)?.label || item}`} onPress={() => onChange(field.id, selected.length === 1 ? null : selected.filter(choice => choice !== item))}><X className="size-3.5" /></Button>
+        </span>) : explicitNoneFields.has(field.id) ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 pl-3 text-sm">None<Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove None from ${field.label}`} onPress={() => onChange(field.id, null)}><X className="size-3.5" /></Button></span> : <span className="text-sm text-muted-foreground">No selections</span>}</div>}
         {!readOnly && <div className="max-w-md"><SearchCombobox key={JSON.stringify(value)} label={`Add ${field.label.toLowerCase()}`} placeholder={`Add ${field.label.toLowerCase()}…`} options={options} value={null} onChange={choice => onChange(field.id, choice === "__none__" ? [] : [...selected, choice])} invalid={Boolean(error)} describedBy={error ? errorId : undefined} /></div>}
         {errorMarkup}
       </fieldset>;
@@ -61,11 +74,15 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
       <p className="text-sm text-muted-foreground">{label}</p><p className="min-h-8 font-medium">{field.kind === "calculated" ? calculated(field, answers) : value === undefined || value === null || value === "" ? "Not provided" : String(value)}</p>{field.id === "contact" && onEditContact && !readOnly && <Button variant="link" className="px-0" onPress={onEditContact}>{value ? "Edit contact" : "Add contact"}</Button>}{errorMarkup}
     </div>;
     const other = otherFields[field.id];
-    const custom = other && value === other.option && typeof answers[other.detail] === "string" ? String(answers[other.detail]) : undefined;
-    return <div key={field.id} className={`min-w-0 space-y-2 ${field.kind === "select" && !other && (field.options?.length || 0) <= 6 ? "col-[1/-1] border-b border-border pb-5" : ""}`}>
+    return <div key={field.id} className={`min-w-0 space-y-2 ${field.kind === "select" && !other && (field.options?.length || 0) <= 6 ? "col-[1/-1]" : ""}`}>
       <div className="flex min-h-8 items-center justify-between gap-2"><label htmlFor={id} className="block text-sm font-medium">{label}{required}</label>{field.kind === "select" && reset}</div>
-      {field.kind === "select" ? !other && (field.options?.length || 0) <= 6 ? <ChoiceGroup id={id} label={label} options={field.options || []} value={typeof value === "string" ? value : ""} onChange={choice => onChange(field.id, choice)} disabled={readOnly} required={field.required} invalid={Boolean(error)} describedBy={error ? errorId : undefined} /> : <SearchCombobox id={id} label={label} options={field.options || []} value={typeof value === "string" ? value : null} onChange={choice => onChange(field.id, choice)} disabled={readOnly} required={field.required} invalid={Boolean(error)} describedBy={error ? errorId : undefined} customValue={custom} onCreate={other ? text => { onChange(field.id, other.option); onChange(other.detail, text); } : undefined} /> : <Input id={id} className="min-h-11 bg-background" disabled={readOnly} type={field.kind === "date" ? "date" : "text"} inputMode={field.kind === "number" ? "decimal" : undefined} maxLength={ASSESSMENT_ANSWER_TEXT_LIMIT} aria-required={field.required} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} value={typeof value === "string" || typeof value === "number" ? value : ""} onChange={event => onChange(field.id, field.kind === "number" ? assessmentNumericInput(event.target.value) : event.target.value || null)} />}
+      {field.kind === "select" ? !other && (field.options?.length || 0) <= 6 ? <ChoiceGroup id={id} label={label} options={field.options || []} value={typeof value === "string" ? value : ""} onChange={choice => onChange(field.id, choice)} disabled={readOnly} required={field.required} invalid={Boolean(error)} describedBy={error ? errorId : undefined} /> : <SearchCombobox id={id} label={label} options={field.options || []} value={typeof value === "string" ? value : null} onChange={choice => onChange(field.id, choice)} disabled={readOnly} required={field.required} invalid={Boolean(error)} describedBy={error ? errorId : undefined} onCreate={other ? text => { onChange(field.id, other.option); onChange(other.detail, text); } : undefined} /> : <Input id={id} className="min-h-11 bg-background" disabled={readOnly} type={field.kind === "date" ? "date" : field.kind === "number" ? "number" : "text"} min={field.kind === "number" ? field.min : undefined} step={field.kind === "number" ? field.integer ? 1 : "any" : undefined} inputMode={field.kind === "number" ? "decimal" : undefined} maxLength={ASSESSMENT_ANSWER_TEXT_LIMIT} aria-required={field.required} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} value={typeof value === "string" || typeof value === "number" ? value : ""} onChange={event => {
+        const next = field.kind === "number" ? assessmentNumericInput(event.target.value) : event.target.value || null;
+        if (field.kind === "number" && typeof next === "number" && field.min !== undefined && next < field.min) return;
+        onChange(field.id, next);
+      }} />}
       {errorMarkup}
     </div>;
-  })}</div>;
+  };
+  return <div className="space-y-6">{assessmentFieldGroups(section.fields, answers).map(group => <div key={group[0]!.id} data-question-group={group[0]!.id} className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] items-start gap-x-6 gap-y-4 border-b border-border pb-6 last:border-b-0 last:pb-0">{group.map(renderField)}</div>)}</div>;
 }
