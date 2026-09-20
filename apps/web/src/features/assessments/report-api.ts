@@ -1,4 +1,4 @@
-import { apiErrorSchema, reportInputSchema, type AssessmentWorkflow } from "@niq/application-contracts";
+import { REPORT_LIMITS, apiErrorSchema, reportInputSchema, type AssessmentWorkflow } from "@niq/application-contracts";
 export type ReportInput = ReturnType<typeof reportInputSchema.parse>;
 export function reportBase(organizationId: string, assessmentId: string) {
   return `/api/v1/organizations/${encodeURIComponent(organizationId)}/assessments/${encodeURIComponent(assessmentId)}/reports`;
@@ -11,9 +11,12 @@ export async function mutateReport(url: string, method: "POST" | "PATCH" | "DELE
   const response = await fetch(url, { method, credentials: "include", headers: input ? { "content-type": "application/json" } : undefined, body: input ? JSON.stringify(reportInputSchema.parse(input)) : undefined });
   if (!response.ok) throw failure(await response.json().catch(() => null));
 }
-export function uploadReportFile(input: {
+export async function uploadReportFile(input: {
   url: string; file: File; requestKey: string; revision: number; signal: AbortSignal; onProgress: (percent: number) => void;
 }): Promise<AssessmentWorkflow> {
+  if (!input.file.size || input.file.size > REPORT_LIMITS.fileBytes) throw new Error("Choose a file up to 10 MB.");
+  const digest = await crypto.subtle.digest("SHA-256", await input.file.arrayBuffer());
+  const checksum = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const abort = () => xhr.abort();
@@ -22,6 +25,7 @@ export function uploadReportFile(input: {
     xhr.withCredentials = true;
     xhr.setRequestHeader("content-type", input.file.type || "application/octet-stream");
     xhr.setRequestHeader("x-upload-key", input.requestKey);
+    xhr.setRequestHeader("x-file-sha256", checksum);
     xhr.setRequestHeader("x-file-name", encodeURIComponent(input.file.name));
     xhr.setRequestHeader("x-assessment-revision", String(input.revision));
     xhr.upload.onprogress = event => { if (event.lengthComputable) input.onProgress(Math.min(99, Math.floor(event.loaded / event.total * 100))); };
