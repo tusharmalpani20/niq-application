@@ -30,7 +30,7 @@ test("cancel during SDK download never starts the camera", async () => {
   await Promise.resolve(); controller.cancel(); resolve(f.sdk); await work;
   expect(starts).toBe(0);
 });
-test("camera startup cancellation settles before a subsequent start", async () => {
+test("camera startup cancellation settles before a remounted controller starts", async () => {
   let resolve!: () => void, starts = 0;
   const deferred = new Promise<void>(r => { resolve = r; });
   const f = fixture(async () => { starts++; if (starts === 1) await deferred; });
@@ -38,9 +38,11 @@ test("camera startup cancellation settles before a subsequent start", async () =
   const callbacks = { frame: () => {}, finish: () => {}, error: () => {} };
   const first = controller.start(f.elements, callbacks);
   await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
-  controller.cancel(); const second = controller.start(f.elements, callbacks);
+  controller.cancel();
+  const remounted = createCaptureController(async () => f.sdk);
+  const second = remounted.start(f.elements, callbacks);
   await Promise.resolve(); expect(starts).toBe(1);
-  resolve(); await first; await second; expect(starts).toBe(2); controller.cancel();
+  resolve(); await first; await second; expect(starts).toBe(2); remounted.cancel();
 });
 test("SDK errors are user-safe and stop capture", async () => {
   const f = fixture(), controller = createCaptureController(async () => f.sdk);

@@ -18,13 +18,15 @@ const errorMessages: Record<string, string> = {
   CMSCN01: "The camera signal could not be captured. Please try again.",
 };
 
+// The SDK singleton survives component unmounts, so its startup barrier must too.
+let startup: Promise<void> = Promise.resolve();
+
 /** A generation belongs to one capture. Late SDK promises/callbacks cannot restart a cancelled camera. */
 export function createCaptureController(load: () => Promise<CaptureSDK> = () => import("careplix-scan-sdk")) {
   let generation = 0;
   let sdk: CaptureSDK | null = null;
   let video: HTMLVideoElement | null = null;
   let watchdog: ReturnType<typeof setTimeout> | undefined;
-  let startup: Promise<void> = Promise.resolve();
   function stopCamera() {
     clearTimeout(watchdog);
     try { sdk?.facescan.stopScan(); } catch { /* Track cleanup must still run after SDK errors. */ }
