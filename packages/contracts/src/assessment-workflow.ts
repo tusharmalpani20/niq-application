@@ -1,10 +1,10 @@
 import { z } from "zod";
-import type { AssessmentFormManifest, FormAnswers } from "./assessment-form";
+import { ASSESSMENT_ANSWER_TEXT_LIMIT, type AssessmentFormManifest, type FormAnswers } from "./assessment-form";
 import type { getAssessmentCompletion } from "./assessment-form-validation";
 
 const entity = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 export const initializeAssessmentSchema = z.object({ patientId: entity, requestKey: z.string().min(16).max(128) }).strict();
-export const saveAssessmentSchema = z.object({ revision: z.number().int().nonnegative(), answers: z.record(z.string().max(100), z.union([z.string().max(2000), z.number().finite(), z.array(z.string().max(100)).max(100), z.null()])) }).strict();
+export const saveAssessmentSchema = z.object({ revision: z.number().int().nonnegative(), answers: z.record(z.string().max(100), z.union([z.string().max(ASSESSMENT_ANSWER_TEXT_LIMIT), z.number().finite(), z.array(z.string().max(100)).max(100), z.null()])) }).strict();
 export const assessmentRevisionSchema = z.object({ revision: z.number().int().nonnegative() }).strict();
 export const reportInputSchema = z.object({
   revision: z.number().int().nonnegative(), label: z.string().trim().max(120), purpose: z.string().trim().max(300),

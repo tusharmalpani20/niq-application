@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { cancerTypeOptions } from "./assessment-form-options";
 
+export const ASSESSMENT_ANSWER_TEXT_LIMIT = 2000;
 export const ASSESSMENT_FORM_VERSION = "niq-final-overlay-v1";
 export type FormAnswer = string | number | string[] | null;
 export type FormAnswers = Record<string, FormAnswer>;

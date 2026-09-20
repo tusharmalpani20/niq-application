@@ -1,4 +1,4 @@
-import type { AssessmentFormManifest, FormAnswers, FormField } from "./assessment-form";
+import { ASSESSMENT_ANSWER_TEXT_LIMIT, type AssessmentFormManifest, type FormAnswers, type FormField } from "./assessment-form";
 
 export function isAssessmentFieldApplicable(field: FormField, answers: FormAnswers): boolean {
   return (field.visibleWhen ?? []).every(test => answers[test.fieldId] === test.equals);
@@ -17,7 +17,7 @@ export function assessmentFieldError(field: FormField, value: unknown): string |
     if (!Array.isArray(value) || value.length > 200 || new Set(value).size !== value.length || !value.every(v => typeof v === "string" && field.options?.some(o => o.id === v))) return "Choose valid options";
     return null;
   }
-  if (typeof value !== "string" || value.length > 4000) return "Enter valid text";
+  if (typeof value !== "string" || value.length > ASSESSMENT_ANSWER_TEXT_LIMIT) return "Enter valid text";
   if (field.kind === "select" && !field.options?.some(o => o.id === value)) return "Choose a valid option";
   if (field.kind === "date") {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return "Enter a valid date";

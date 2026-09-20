@@ -1,4 +1,4 @@
-import { calculateAssessmentBmi, calculateAssessmentWeightChange, isAssessmentFieldApplicable, type AssessmentFormManifest, type FormAnswer, type FormAnswers, type FormField } from "@niq/application-contracts";
+import { ASSESSMENT_ANSWER_TEXT_LIMIT, calculateAssessmentBmi, calculateAssessmentWeightChange, isAssessmentFieldApplicable, type AssessmentFormManifest, type FormAnswer, type FormAnswers, type FormField } from "@niq/application-contracts";
 import { Button } from "../../components/ui/button";
 
 export type AssessmentFieldsProps = {
@@ -53,7 +53,7 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly 
       <label htmlFor={id} className="block font-medium">{label} <span className="text-sm font-normal text-muted-foreground">{field.required ? "Required" : "Optional"}</span></label>
       {field.kind === "select" ? <select id={id} className={control} disabled={readOnly} aria-required={field.required} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} value={typeof value === "string" ? value : ""} onChange={event => onChange(field.id, event.target.value || null)}>
         <option value="">Select an option</option>{field.options?.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-      </select> : <input id={id} className={control} disabled={readOnly} type={field.kind === "date" ? "date" : "text"} inputMode={field.kind === "number" ? "decimal" : undefined} maxLength={4000} aria-required={field.required} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} value={typeof value === "string" || typeof value === "number" ? value : ""} onChange={event => onChange(field.id, field.kind === "number" ? assessmentNumericInput(event.target.value) : event.target.value || null)} />}
+      </select> : <input id={id} className={control} disabled={readOnly} type={field.kind === "date" ? "date" : "text"} inputMode={field.kind === "number" ? "decimal" : undefined} maxLength={ASSESSMENT_ANSWER_TEXT_LIMIT} aria-required={field.required} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} value={typeof value === "string" || typeof value === "number" ? value : ""} onChange={event => onChange(field.id, field.kind === "number" ? assessmentNumericInput(event.target.value) : event.target.value || null)} />}
       {errorMarkup}
     </div>;
   })}</div>;

@@ -1,3 +1,4 @@
+import { saveAssessmentSchema } from "./assessment-workflow";
 import { describe, expect, test } from "bun:test";
 import type { AssessmentFormManifest } from "./assessment-form";
 import { getAssessmentCompletion, validateAssessmentAnswers, getScoringAssessmentAnswers, calculateAssessmentBmi } from "./assessment-form-validation";
@@ -51,4 +52,14 @@ test("derived values are never sent to scoring and supplied answers remain immut
   expect(getScoringAssessmentAnswers(withDerived, answers)).toEqual({ choice: [] });
   expect(validateAssessmentAnswers(withDerived, answers).protein_intake).toBeDefined();
   expect(answers.protein_intake).toBe("adequate");
+});
+
+test("text answers share the save request limit before being counted complete", () => {
+  const answers = { age: 0, choice: [], parent: "yes", detail: "x".repeat(2000) };
+  expect(validateAssessmentAnswers(manifest, answers)).toEqual({});
+  expect(saveAssessmentSchema.safeParse({ revision: 0, answers }).success).toBe(true);
+  const tooLong = { ...answers, detail: "x".repeat(2001) };
+  expect(validateAssessmentAnswers(manifest, tooLong).detail).toBeDefined();
+  expect(getAssessmentCompletion(manifest, tooLong).percent).toBe(66);
+  expect(saveAssessmentSchema.safeParse({ revision: 0, answers: tooLong }).success).toBe(false);
 });
