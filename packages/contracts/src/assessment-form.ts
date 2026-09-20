@@ -42,6 +42,9 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
     const fields = section.fields.map(field => {
       if (!spec[field.id] || spec[field.id]![0] !== field.type || seen.has(field.id)) throw new Error("Unsupported questionnaire field");
       seen.add(field.id);
+      const dependencies: Record<string, string[]> = { treatment_status: ["palliative_status", "palliative_timing"], previous_surgeries: ["previous_surgery_count"], weight_loss: ["previous_weight_kg", "current_weight_kg"], protein_intake: ["dietary_intake"] };
+      const requiredDependencies = dependencies[field.id] ?? [];
+      if (field.dependencies.length !== requiredDependencies.length || requiredDependencies.some((id, index) => field.dependencies[index] !== id)) throw new Error("Unsupported questionnaire dependencies");
       if (new Set(field.options.map(o => o.id)).size !== field.options.length) throw new Error("Duplicate option identifiers");
       const calculated = field.type === "calculated" || field.type === "derived";
       if (!calculated && !field.options.length) throw new Error("Questionnaire options missing");
