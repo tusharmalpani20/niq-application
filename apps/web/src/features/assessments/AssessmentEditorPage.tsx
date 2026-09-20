@@ -11,6 +11,7 @@ import { AssessmentSectionNavigation } from "./AssessmentSectionNavigation";
 import { AssessmentReview } from "./AssessmentReview";
 import { AssessmentResult } from "./AssessmentResult";
 import { AssessmentReports } from "./AssessmentReports";
+import { AssessmentFaceScan } from "./AssessmentFaceScan";
 import { useDraftNavigationGuard } from "./useDraftNavigationGuard";
 import { assessmentRequest, AssessmentRequestError, getAssessment, reconcileAssessmentScoring, retryAssessmentScoring, saveAssessment, submitAssessment } from "./workflow-api";
 
@@ -30,6 +31,8 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
   const [busy, setBusy] = useState(false);
   const operation = useRef(false);
   const [reportBusy, setReportBusy] = useState(false);
+  const [scanBusy, setScanBusy] = useState(false);
+  const [scanStatus, setScanStatus] = useState("Face scan unavailable");
   const [reportDirty, setReportDirty] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [phone, setPhone] = useState("");
@@ -38,7 +41,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
   const [notice, setNotice] = useState("");
   const dirty = !!record && JSON.stringify(answers) !== JSON.stringify(record.answers);
   const editable = record?.status === "DRAFT";
-  const navigationDialog = useDraftNavigationGuard(dirty || reportDirty || reportBusy || contactOpen && !!phone);
+  const navigationDialog = useDraftNavigationGuard(dirty || reportDirty || reportBusy || scanBusy || contactOpen && !!phone, scanBusy ? "Camera capture or upload is unfinished. Leaving may discard the local capture. Accepted uploads continue processing." : undefined);
   const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers); setConflict(false); }, []);
   const handleError = useCallback((cause: unknown) => {
     if (cause instanceof AssessmentRequestError && cause.status === 401) {
@@ -83,13 +86,13 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
     finally { operation.current = false; setBusy(false); }
   }
   async function selectSection(id: string, save = false, fieldId?: string) {
-    if (busy || reportBusy) return;
+    if (busy || reportBusy || scanBusy) return;
     if (save && editable && dirty && !await persist()) return;
     setSectionId(id); setError("");
     requestAnimationFrame(() => (document.getElementById(fieldId ? `assessment-field-${fieldId}` : "assessment-section-heading") ?? document.getElementById("assessment-section-heading"))?.focus());
   }
   async function submit() {
-    if (!record || busy || reportBusy || reportDirty || conflict) return;
+    if (!record || busy || reportBusy || scanBusy || reportDirty || conflict) return;
     const invalid = validateAssessmentAnswers(record.manifest, answers, { requireComplete: true });
     setErrors(invalid);
     if (Object.keys(invalid).length) { setError("Complete required fields before requesting a score."); return; }
@@ -125,11 +128,11 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
   const sectionCoverage = coverage.sections.find(item => item.id === sectionId);
   const section = record.manifest.sections.find(item => item.id === sectionId);
   const index = tabs.findIndex(tab => tab.id === sectionId);
-  const locked = busy || reportBusy || conflict;
+  const locked = busy || reportBusy || scanBusy || conflict;
   return <div className="assessment-workflow @container">
     <PatientHeader patient={record.patient} assessmentLabel={`${record.reference} · ${record.status === "DRAFT" ? "Draft" : record.status.replaceAll("_", " ").toLowerCase()} assessment`} action={<span className="text-xs text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span>} />
     <div className="sticky top-0 z-20 rounded-t-xl border border-border bg-card px-4 py-3 sm:px-5">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2"><div className="min-w-0 basis-full @min-[36rem]:flex-1 @min-[36rem]:basis-auto"><div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm"><span>Questionnaire <strong>{coverage.percent ?? "—"}% complete</strong></span><span className="text-xs text-muted-foreground">{coverage.answered}/{coverage.total} answered</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Overall questionnaire completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverage.percent ?? 0}><div className="h-full bg-primary transition-all" style={{ width: `${coverage.percent ?? 0}%` }} /></div></div><Button variant="ghost" className="h-9 gap-2 text-xs text-muted-foreground" isDisabled={locked} onPress={() => { void selectSection("face_scan"); }}><ScanFace className="size-4" aria-hidden="true"/>Face scan unavailable</Button></div>
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2"><div className="min-w-0 basis-full @min-[36rem]:flex-1 @min-[36rem]:basis-auto"><div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm"><span>Questionnaire <strong>{coverage.percent ?? "—"}% complete</strong></span><span className="text-xs text-muted-foreground">{coverage.answered}/{coverage.total} answered</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Overall questionnaire completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverage.percent ?? 0}><div className="h-full bg-primary transition-all" style={{ width: `${coverage.percent ?? 0}%` }} /></div></div><Button variant="ghost" className="h-9 gap-2 text-xs text-muted-foreground" isDisabled={locked} onPress={() => { void selectSection("face_scan"); }}><ScanFace className="size-4" aria-hidden="true"/>{scanStatus}</Button></div>
       <p className="mt-2 truncate text-xs text-muted-foreground">{record.patient.displayName} · {record.patient.reference} <span className="mx-1">·</span> {progress.answered}/{progress.required} required answers complete</p>
     </div>
     {error && <div role="alert" className="mb-4 rounded-lg border border-destructive/30 p-4"><p>{error}</p>{conflict && <Button className="mt-2" variant="outline" onPress={() => setDiscardOpen(true)}>Load saved version</Button>}</div>}
@@ -145,7 +148,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
       <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} disabled={locked} onSelect={id => { void selectSection(id); }} />
       <div className="min-w-0 p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 id="assessment-section-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>{sectionCoverage && <span className="text-xs text-muted-foreground">{sectionCoverage.answered}/{sectionCoverage.total} answered · {sectionCoverage.percent ?? 0}%</span>}</div>
         {sectionId === "personal_details" && record.heightSource && <p className="mb-4 text-sm text-muted-foreground">Height from assessment on {new Date(record.heightSource.recordedAt).toLocaleDateString()}. Check and edit if needed.</p>}
-        {sectionId === "face_scan" && <section className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center"><ScanFace className="mb-4 size-8 text-brand-ink" aria-hidden="true"/><h3 className="font-semibold">Face scan is not available yet</h3><p className="mt-2 max-w-sm text-sm text-muted-foreground">You can continue with the questionnaire. Face scanning does not affect its completion.</p><Button variant="outline" className="mt-5" isDisabled={locked} onPress={() => { void selectSection("disease_status"); }}>Continue to disease status<ArrowRight aria-hidden="true"/></Button></section>}
+        <AssessmentFaceScan organizationId={organizationId} record={record} active={sectionId === "face_scan"} disabled={busy || reportBusy || conflict} beforeStart={persist} onBusyChange={setScanBusy} onStatusChange={setScanStatus}/>
         {section && <section><AssessmentFields section={section} answers={answers} errors={errors} readOnly={!editable || locked} onEditContact={() => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); }} onChange={(id, value) => { setAnswers(current => clearInactiveAssessmentAnswers(record.manifest, { ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
         <div hidden={sectionId !== "reports"}><AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} /></div>
         {sectionId === "review" && <AssessmentReview record={record} answers={answers} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}

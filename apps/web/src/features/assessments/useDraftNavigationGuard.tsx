@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 /** Browser unload, router Back/links, and the shell's sign-out action share one guard. */
-export function useDraftNavigationGuard(dirty: boolean) {
+export function useDraftNavigationGuard(dirty: boolean, message?: string) {
   const allowNext = useRef(false);
   const { pathname } = useLocation();
   const [shellProceed, setShellProceed] = useState<(() => void) | null>(null);
@@ -39,7 +39,7 @@ export function useDraftNavigationGuard(dirty: boolean) {
   }
   return <Dialog isOpen={blocker.state === "blocked" || shellProceed !== null} onOpenChange={open => { if (!open) stay(); }}>
     <DialogTitle>Leave this assessment?</DialogTitle>
-    <DialogDescription>Your unsaved changes will be lost. Stay to save your draft before leaving.</DialogDescription>
+    <DialogDescription>{message ?? "Your unsaved changes will be lost. Stay to save your draft before leaving."}</DialogDescription>
     <DialogFooter>
       <Button variant="outline" autoFocus onPress={stay}>Stay on assessment</Button>
       <Button variant="destructive" onPress={leave}>Leave without saving</Button>
