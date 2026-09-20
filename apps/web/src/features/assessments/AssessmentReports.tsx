@@ -98,14 +98,14 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
     finally { setBusy(false); }
   }
   const reportEditor = editor && (
-      <form className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-4" onSubmit={saveReport}>
+      <form onSubmit={saveReport}><div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-4">
         <Field><FieldLabel htmlFor="report-label">Report label</FieldLabel><Input id="report-label" value={editor.label} maxLength={120} disabled={busy} autoFocus onChange={event => { setEditor({ ...editor, label: event.target.value }); setDirty(true); }}/></Field>
         <Field><FieldLabel htmlFor="report-purpose">Report for</FieldLabel><Input id="report-purpose" value={editor.purpose} maxLength={300} disabled={busy} onChange={event => { setEditor({ ...editor, purpose: event.target.value }); setDirty(true); }}/></Field>
         <Field><FieldLabel htmlFor="report-date-precision">Date precision</FieldLabel><Select aria-label="Date precision" className="w-full" value={editor.datePrecision} isDisabled={busy} onChange={value => { const datePrecision = value as "DAY" | "MONTH"; setEditor({ ...editor, datePrecision, date: datePrecision === "MONTH" ? editor.date.slice(0, 7) : "" }); setDirty(true); }}><SelectTrigger id="report-date-precision" className="w-full"><SelectValue/></SelectTrigger><SelectContent><SelectItem id="DAY">Exact date</SelectItem><SelectItem id="MONTH">Month and year</SelectItem></SelectContent></Select></Field>
         <Field><FieldLabel htmlFor="report-date">Report date</FieldLabel><Input id="report-date" type={editor.datePrecision === "DAY" ? "date" : "month"} value={editor.date} min={editor.datePrecision === "DAY" ? "1900-01-01" : "1900-01"} max={editor.datePrecision === "DAY" ? "9999-12-31" : "9999-12"} disabled={busy} onChange={event => { setEditor({ ...editor, date: event.target.value }); setDirty(true); }}/></Field>
         
         <div className="col-span-full flex flex-wrap justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => { setEditor(null); setDirty(false); }}>Cancel</Button><Button type="submit" isDisabled={busy}>{busy ? "Saving…" : "Save report"}</Button></div>
-      </form>
+      </div></form>
   );
   return <section className="flex min-w-0 flex-col gap-5" aria-label="Reports">
     <p className="text-sm text-muted-foreground">Attach reports with a label, purpose and date. PDF, JPEG or PNG · Up to {formatReportMegabytes(limits.fileBytes)} MB per file</p>
