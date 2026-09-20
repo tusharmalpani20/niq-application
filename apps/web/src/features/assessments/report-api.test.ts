@@ -47,3 +47,16 @@ test("bytes sent is not presented as upload completion until server confirms", a
   await expect(pending).rejects.toThrow("could not be confirmed");
   expect(progress).not.toContain(100);
 });
+
+test("lost create response differs from a validation rejection and is never retried", async () => {
+  const { mutateReport } = await import("./report-api");
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = (async () => { calls++; throw new Error("Connection lost"); }) as typeof fetch;
+    await expect(mutateReport("/reports", "POST")).rejects.toMatchObject({ uncertain: true });
+    expect(calls).toBe(1);
+    globalThis.fetch = (async () => new Response("{}", { status: 400 })) as typeof fetch;
+    await expect(mutateReport("/reports", "POST")).rejects.toMatchObject({ uncertain: false });
+  } finally { globalThis.fetch = originalFetch; }
+});

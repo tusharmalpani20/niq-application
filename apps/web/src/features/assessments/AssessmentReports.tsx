@@ -6,7 +6,7 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { mutateReport, reportBase, uploadReportFile, type ReportInput } from "./report-api";
+import { ReportMutationError, mutateReport, reportBase, uploadReportFile, type ReportInput } from "./report-api";
 
 type Props = {
   organizationId: string; assessmentId: string; reports: AssessmentReport[]; revision: number; readOnly?: boolean;
@@ -25,6 +25,7 @@ function dateValue(report: AssessmentReport) {
 export function AssessmentReports({ organizationId, assessmentId, reports, revision, readOnly = false, onChanged, onBusyChange, onDirtyChange }: Props) {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [unconfirmed, setUnconfirmed] = useState<Editor | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [uploads, setUploads] = useState<Upload[]>([]);
@@ -50,7 +51,13 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
     try {
       await mutateReport(editor.id ? `${base}/${editor.id}` : base, editor.id ? "PATCH" : "POST", parsed.data);
       setEditor(null); setDirty(false); await refresh();
-    } catch (error) { setMessage(errorMessage(error)); await refresh(); }
+    } catch (error) {
+      if (!editor.id && error instanceof ReportMutationError && error.uncertain) {
+        // A lost response may follow a committed POST. Do not offer the same create form as a retry.
+        setUnconfirmed(editor); setEditor(null); setDirty(false);
+      }
+      setMessage(errorMessage(error)); await refresh();
+    }
     finally { setBusy(false); }
   }
   function selectFiles(report: AssessmentReport, files: FileList | null) {
@@ -92,6 +99,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Reports</h2>{!readOnly && <Button isDisabled={busy || reports.length >= REPORT_LIMITS.reportsPerAssessment} onPress={() => { setMessage(""); setEditor({ label: "", purpose: "", datePrecision: "DAY", date: "" }); }}>Add report</Button>}</div>
     <p className="text-sm text-muted-foreground">PDF, JPEG or PNG · Up to 10 MB per file</p>
     {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
+    {unconfirmed && <Alert><AlertDescription><p>Check whether this report was saved before adding it again.</p><dl className="mt-2 grid gap-1"><div><dt className="font-medium">Label</dt><dd className="break-words">{unconfirmed.label || "Not entered"}</dd></div><div><dt className="font-medium">Report for</dt><dd className="break-words">{unconfirmed.purpose || "Not entered"}</dd></div><div><dt className="font-medium">Date</dt><dd>{unconfirmed.date || "Not entered"}</dd></div></dl><Button className="mt-2" variant="outline" onPress={() => setUnconfirmed(null)}>Dismiss</Button></AlertDescription></Alert>}
     {!reports.length && <p className="text-sm text-muted-foreground">No reports attached.</p>}
     {reports.map(report => <article key={report.id} className="min-w-0 rounded-xl border border-border bg-card p-4 text-card-foreground">
       <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words font-semibold">{report.label || "Untitled report"}</h3>{report.purpose && <p className="break-words text-sm text-muted-foreground">{report.purpose}</p>}<p className="text-sm text-muted-foreground">{dateValue(report) || "Date not entered"}{report.datePrecision === "MONTH" && report.year ? " (month/year)" : ""}</p></div>
