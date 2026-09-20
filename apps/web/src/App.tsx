@@ -6,7 +6,9 @@ import { AdminOrganizationsPage } from "./pages/AdminOrganizationsPage";
 import { AdminAdministratorsPage } from "./pages/AdminAdministratorsPage";
 import { AdminCreateOrganizationPage } from "./pages/AdminCreateOrganizationPage";
 import { AdminOrganizationDetailPage } from "./pages/AdminOrganizationDetailPage";
-import { AssessmentDetailPage, AssessmentsPage, StartAssessmentPage } from "./pages/AssessmentsPage";
+import { AssessmentsPage } from "./pages/AssessmentsPage";
+import { StartAssessmentPage } from "./features/assessments/StartAssessmentPage";
+import { AssessmentEditorPage } from "./features/assessments/AssessmentEditorPage";
 import { BrandingPage } from "./pages/BrandingPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FacilitiesPage } from "./pages/FacilitiesPage";
@@ -39,7 +41,7 @@ export function App() {
           <Route path="/patients/:patientLocator" element={<PatientDetailPage />} />
           <Route path="/assessments" element={<AssessmentsPage />} />
           <Route path="/assessments/new" element={<StartAssessmentPage />} />
-          <Route path="/assessments/:assessmentId" element={<AssessmentDetailPage />} />
+          <Route path="/assessments/:assessmentId" element={<AssessmentEditorPage />} />
           <Route path="/settings/branding" element={<BrandingPage />} />
           <Route path="/settings/scoring" element={<ScoringConnectionPage />} />
         </Route>

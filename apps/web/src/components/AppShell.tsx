@@ -69,8 +69,8 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
 export function AppShell({ user }: { user: AuthenticatedUser }) {
   const { resetBranding } = useBranding();
   const { pathname } = useLocation();
-  // Assessment creation and its existing detail view are outside this refresh.
-  const refreshedLayout = !pathname.startsWith("/assessments/");
+  // All clinical routes use the central organisation theme.
+  const refreshedLayout = true;
   const adminOnly = ["/users", "/settings/branding", "/settings/scoring"].includes(pathname);
   useLayoutEffect(() => {
     if (refreshedLayout) document.documentElement.dataset.appArea = "client";

@@ -242,7 +242,7 @@ export function PatientDetailPage() {
       <TabsContent id="assessments">
         <Card className="surface p-5">
           {historyState === "loading" ? <p>Loading assessments…</p> : historyState === "error" ? <div className="grid gap-3"><p>Assessment history could not be loaded.</p><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></div> : history.length ? <DataTable label="Patient assessments" data={history} columns={[
-            { id: "date", header: "Started", cell: ({ row }) => <DateDisplay value={row.original.createdAt} /> },
+            { id: "date", header: "Started", cell: ({ row }) => <Link className="text-primary underline" to={`/assessments/${row.original.id}`}><DateDisplay value={row.original.createdAt} /></Link> },
             { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "No facility" },
             { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
           ]} /> : <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center"><h2 className="font-semibold">Start this patient’s first assessment</h2><RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18} />New assessment</RouterButtonLink></div>}
