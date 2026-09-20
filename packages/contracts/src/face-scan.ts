@@ -35,6 +35,7 @@ const metric = z.number().finite().nullable();
 export const faceScanResultSchema = z.object({
   schemaVersion: z.literal(1),
   providerScanId: z.string(),
+  providerCompletedAt: z.string().refine(value => Number.isFinite(Date.parse(value))).nullable().optional(),
   wellnessScore: metric,
   healthRiskScore: metric,
   vitals: z.object({

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { loadApplicationConfig } from "@niq/application-config";
 import { frozenFaceScanContext } from "./assessment-face-scan";
-import { faceScanSignalSchema, startFaceScanSchema } from "../../../../packages/contracts/src/face-scan";
+import { faceScanSignalSchema, startFaceScanSchema, faceScanResultSchema } from "../../../../packages/contracts/src/face-scan";
 test("new capture is unavailable by default",()=>expect(loadApplicationConfig({DATABASE_URL:"postgres://test",SESSION_SECRET:"test-secret-that-is-at-least-32-characters"}).FACE_SCAN_ENABLED).toBe(false));
 test("snapshot derives real patient demographics and saved measurements",()=>{
  expect(frozenFaceScanContext({dateOfBirth:"1990-05-01",gender:"FEMALE"},{height_cm:170,current_weight_kg:65},"deployment:operator")).toEqual({dob:"1990-05-01",gender:"female",heightCm:170,weightKg:65,posture:"resting",employeeId:"deployment:operator"});
@@ -17,4 +17,10 @@ test("bounded signal validates measured RGB shape and aligned increasing timings
  const signal={raw_intensity:[{r:1,g:2,b:3},{r:2,g:3,b:4}],ppg_time:[0,1],average_fps:30};
  expect(faceScanSignalSchema.safeParse(signal).success).toBe(true);
  for(const changes of [{ppg_time:[1,1]},{ppg_time:[1]},{average_fps:Infinity},{raw_intensity:[[1,2,3],[2,3,4]]},{raw_intensity:Array(12001).fill({r:1,g:1,b:1}),ppg_time:Array.from({length:12001},(_,i)=>i)}])expect(faceScanSignalSchema.safeParse({...signal,...changes}).success).toBe(false);
+});
+
+test("normalized scoring result preserves provider completion evidence",()=>{
+ const result={schemaVersion:1,providerScanId:"provider-id",providerCompletedAt:"2026-09-20T12:00:00+05:30",wellnessScore:60,healthRiskScore:null,vitals:{heartRate:70,oxygenSaturation:null,respiratoryRate:null,systolic:null,diastolic:null},physiologicalScore:null,mentalWellbeingScore:null};
+ expect(faceScanResultSchema.parse(result).providerCompletedAt).toBe(result.providerCompletedAt);
+ expect(faceScanResultSchema.safeParse({...result,providerCompletedAt:"invalid"}).success).toBe(false);
 });
