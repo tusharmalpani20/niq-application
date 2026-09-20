@@ -106,3 +106,7 @@ Commits below are ordered oldest first. Package checks and focused tests were ru
 - `88ff641` fix(assessments): adapt section navigation to available content width
 - `9f74be9` fix(reports): pass assessment upload limits to report editor
 - `d9783ca` fix(reports): keep report purpose optional as planned
+
+## Follow-up implementation audit
+
+See [20 September audit and fixes](assessment-form-implementation-audit-2026-09-20.md) for subsequent corrections, additional tests, migration 0016 and remaining verification boundaries.
