@@ -26,3 +26,11 @@ test("rejects inconsistent persisted results instead of showing fabricated total
   expect(assessmentResultView({ ...record, result: { ...value, checksum: "b".repeat(64) } })).toBeNull();
   expect(assessmentResultView({ ...record, result: { ...value, components: [] } })).toBeNull();
 });
+
+test("unresolved component includes the server reason rather than implying processing", () => {
+  const original = record.result as { components: Array<Record<string, unknown>> };
+  const pending = { ...record, result: { ...original, components: original.components.map((component, index) => index === 1 ? { ...component, status: "pending", reason: "Enter both weights to calculate weight loss." } : component) } };
+  const html = renderToStaticMarkup(<AssessmentResult record={pending} onSection={() => {}}/>);
+  expect(html).toContain("B: Enter both weights to calculate weight loss.");
+  expect(html).not.toContain("Processing");
+});
