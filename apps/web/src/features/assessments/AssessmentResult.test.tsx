@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AssessmentResult, assessmentResultView } from "./AssessmentResult";
 import type { AssessmentWorkflow } from "@niq/application-contracts";
 const record = {
+  reference: "ASM-000001",
   result: { formatVersion: 2, profile: "NIQ_FINAL_ASSESSMENT", complete: true, score: 0, classification: { id: "low", label: "Low", interpretation: "" }, components: [
     { id: "a", sectionId: "diet", label: "A", points: 0, status: "answered" }, { id: "b", sectionId: "diet", label: "B", points: null, status: "unanswered" },
   ], version: "FINAL-1", checksum: "a".repeat(64), resultReference: "result", calculatedAt: "2026-09-20T00:00:00.000Z", clinicalUsePermitted: true },

@@ -2,7 +2,7 @@ import { assessmentScoreResultSchema, type AssessmentWorkflow } from "@niq/appli
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-type ScoreRecord = Pick<AssessmentWorkflow, "result" | "binding" | "manifest" | "progress" | "reports">;
+type ScoreRecord = Pick<AssessmentWorkflow, "reference" | "result" | "binding" | "manifest" | "progress" | "reports">;
 /** Group only returned points, never questionnaire option values or client-side cutoffs. */
 export function assessmentResultView(record: ScoreRecord) {
   const parsed = assessmentScoreResultSchema.safeParse(record.result);
@@ -30,7 +30,7 @@ export function AssessmentResult({ record, onSection }: { record: ScoreRecord; o
   if (!view) return <Alert variant="destructive"><AlertDescription>The saved score could not be verified. Refresh the assessment or contact your administrator.</AlertDescription></Alert>;
   const { result, sections } = view;
   return <div className="grid min-w-0 gap-5">
-    <section className="rounded-xl border border-border bg-card p-5"><h2 className="text-xl font-semibold">Assessment results</h2>
+    <section className="rounded-xl border border-border bg-card p-5"><h2 className="text-xl font-semibold">Assessment Report · {record.reference}</h2>
       <div className="mt-5 grid gap-5 sm:grid-cols-2"><div><p className="text-sm text-muted-foreground">Questionnaire completion</p><p className="mt-1 text-3xl font-semibold">{record.progress.percent === null ? "Unavailable" : `${record.progress.percent}%`}</p><p className="mt-1 text-sm text-muted-foreground">{record.progress.answered} of {record.progress.required} required answers</p></div>
         <div><p className="text-sm text-muted-foreground">NIQ questionnaire score</p><p className="mt-1 text-3xl font-semibold">{result.score} <span className="text-base font-normal">points</span></p><p className="mt-1 font-medium">{result.classification.label}</p></div></div>
       {result.classification.interpretation && <p className="mt-4 text-sm text-muted-foreground">{result.classification.interpretation}</p>}

@@ -67,6 +67,7 @@ describe("application contracts", () => {
 
   test("validates assessment list summaries", () => {
     const summary = {
+      reference: "ASM-000001", serialNumber: 1,
       id: "01ARZ3NDEKTSV4RRFFQ69G5FAY",
       organizationId,
       patient: { id: patientId, reference: "PAT-1", displayName: "Test Patient" },
