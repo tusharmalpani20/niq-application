@@ -82,7 +82,7 @@ export class AssessmentReportWorkflow {
     });
     if(reserved.replay) {await input.body.cancel().catch(()=>{});return this.service.read(actor,organizationId,assessmentId);}
     const file=reserved.file;const scope={organizationId,patientId:file.patientId,assessmentId};let staged:StagedReport|undefined;
-    const controller=new AbortController();const abort=()=>controller.abort();input.signal?.addEventListener("abort",abort,{once:true});
+    const controller=new AbortController();const abort=()=>controller.abort();input.signal?.addEventListener("abort",abort,{once:true});if(input.signal?.aborted)controller.abort();
     // Bounded lease also bounds transfer time. No late writer can finalize after expiry/cancel.
     const timer=setTimeout(()=>controller.abort(),290_000);
     try {
