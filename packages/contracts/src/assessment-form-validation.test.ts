@@ -32,3 +32,23 @@ describe("assessment completion", () => {
     expect(calculateAssessmentBmi(0, 80)).toBeNull();
   });
 });
+test("conditional details cease to block completion and scoring when their parent changes", () => {
+  const answers = { age: 0, choice: [], parent: "yes", detail: "Relationship" };
+  expect(getAssessmentCompletion(manifest, answers).percent).toBe(100);
+  expect(getAssessmentCompletion(manifest, { ...answers, parent: null }).required).toBe(2);
+  expect(getScoringAssessmentAnswers(manifest, { ...answers, parent: null })).toEqual({ choice: [] });
+  expect(validateAssessmentAnswers(manifest, { ...answers, parent: "yes", detail: " " }, { requireComplete: true }).detail).toBe("Required");
+});
+test("date validation catches calendar rollover and accepts leap day", () => {
+  const dates: AssessmentFormManifest = { version: "date-test", sections: [{ id: "dates", title: "Dates", fields: [{ id: "date", label: "Date", kind: "date", required: true, owner: "application", source: "H54" }] }] };
+  expect(validateAssessmentAnswers(dates, { date: "2025-02-29" }).date).toBeDefined();
+  expect(validateAssessmentAnswers(dates, { date: "2024-02-29" })).toEqual({});
+  expect(validateAssessmentAnswers(dates, { date: "2026-02-31" }).date).toBeDefined();
+});
+test("derived values are never sent to scoring and supplied answers remain immutable", () => {
+  const withDerived: AssessmentFormManifest = { ...manifest, sections: [{ ...manifest.sections[0]!, fields: [...manifest.sections[0]!.fields, { id: "protein_intake", label: "Protein", kind: "calculated", required: false, owner: "scoring", source: "F152" }] }] };
+  const answers = Object.freeze({ age: 0, choice: [], protein_intake: "adequate" });
+  expect(getScoringAssessmentAnswers(withDerived, answers)).toEqual({ choice: [] });
+  expect(validateAssessmentAnswers(withDerived, answers).protein_intake).toBeDefined();
+  expect(answers.protein_intake).toBe("adequate");
+});
