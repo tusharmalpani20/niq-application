@@ -71,6 +71,7 @@ export const organizations = pgTable(
     secondaryColor: text("secondary_color").notNull().default(DEFAULT_ORGANIZATION_BRANDING.secondaryColor),
     patientReferencePrefix: varchar("patient_reference_prefix", { length: 12 }).notNull().default("PAT"),
     nextPatientSerial: integer("next_patient_serial").notNull().default(1),
+    nextAssessmentSerial: integer("next_assessment_serial").notNull().default(1),
     ...timestamps,
   },
   (table) => [
@@ -78,6 +79,7 @@ export const organizations = pgTable(
     check("organizations_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
     check("organizations_patient_reference_prefix_ck", sql`${table.patientReferencePrefix} ~ '^[A-Z][A-Z0-9]{1,11}$'`),
     check("organizations_next_patient_serial_ck", sql`${table.nextPatientSerial} > 0`),
+    check("organizations_next_assessment_serial_ck", sql`${table.nextAssessmentSerial} > 0`),
   ],
 );
 
@@ -404,6 +406,7 @@ export const questionnaireDefinitions = pgTable(
 export const assessments = pgTable(
   "assessments",
   {
+    serialNumber: integer("serial_number").notNull().default(0),
     id: entityId("id").primaryKey(),
     organizationId: entityId("organization_id").notNull().references(() => organizations.id),
     patientId: entityId("patient_id").notNull(),
@@ -420,6 +423,8 @@ export const assessments = pgTable(
   },
   (table) => [
     uniqueIndex("assessments_org_id_uidx").on(table.organizationId, table.id),
+    uniqueIndex("assessments_org_serial_uidx").on(table.organizationId, table.serialNumber),
+    check("assessments_serial_number_ck", sql`${table.serialNumber} > 0`),
     index("assessments_org_status_idx").on(table.organizationId, table.status),
     index("assessments_org_patient_idx").on(table.organizationId, table.patientId),
     foreignKey({

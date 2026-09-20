@@ -55,6 +55,13 @@ describe("tenant data invariants", () => {
     expect(getTableConfig(patients).indexes.map((index) => index.config.name)).toContain("patients_org_serial_uidx");
   });
 
+  test("assessment serials are positive and unique within an organization", () => {
+    expect(organizations.nextAssessmentSerial.default).toBe(1);
+    expect(assessments.serialNumber.notNull).toBe(true);
+    expect(getTableConfig(assessments).indexes.map(index => index.config.name)).toContain("assessments_org_serial_uidx");
+    expect(getTableConfig(assessments).checks.map(check => check.name)).toContain("assessments_serial_number_ck");
+  });
+
   test("patient demographics use gender terminology", () => {
     expect(patients.gender.notNull).toBe(true);
     expect("sex" in patients).toBe(false);

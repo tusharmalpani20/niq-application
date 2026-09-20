@@ -120,6 +120,13 @@
       "when": 1789889135733,
       "tag": "0016_parched_roughhouse",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1789914142938,
+      "tag": "0017_mean_thunderbolt",
+      "breakpoints": true
     }
   ]
 }
