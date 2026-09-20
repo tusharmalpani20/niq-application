@@ -19,3 +19,13 @@ Labs B82:F88 are deferred until units are confirmed: haemoglobin, SGPT, SGOT, to
 Inactive dependent values remain saved for reversible editing but are excluded from effective validation/progress/submission. Explicit `[]` is answered none; absent/null/empty text is unanswered. Calculated fields do not count twice. No unconfirmed exclusive-choice symptom rules are imposed.
 
 Height uses assessment reference year minus birth year, eligible at 18+. Only earlier SCORED/COMPLETED valid measurements qualify. Repository callers must scope history to organization, patient and access before using the pure selector. Persist copied value and provenance once; never rerun default initialization on resume.
+
+## Questionnaire presentation and navigation
+
+Visible overall and section percentages use `getAssessmentAnswerCoverage`: all applicable non-calculated fields, including optional answers and patient context. `getAssessmentCompletion` remains the separate required-answer readiness gate for submission. Optional answers therefore change visible questionnaire progress without changing workbook requiredness. Reports, deferred labs and face scanning do not affect questionnaire coverage.
+
+Controls share theme tokens and React Aria primitives. Long lists are searchable; explicit custom entries map to existing Other IDs and companion text fields only for cancer type and metastatic site. Short single-choice lists use radio controls. Multiple answers use removable chips. The UI offers explicit None only for workbook medications (G66), supplements (G76), co-morbidities (G89), and GI symptoms (G104); tumour F11:F14 has no None option.
+
+Cancer surgery Done/Planned requires its conditional date (H54). Previous surgeries Yes requires the count (H97); the workbook does not specify names/dates for each historic surgery.
+
+Section switches retain in-memory questionnaire and report edits without a leave confirmation. Report metadata is persisted with Save report; questionnaire answers with Save draft/Save & continue. Actual route departures with unsaved edits use the shared discard dialog. Browser reload/close retains native unload protection. Face scan has a separate unavailable section until integration is delivered.
