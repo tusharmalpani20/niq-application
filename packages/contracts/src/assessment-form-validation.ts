@@ -4,6 +4,24 @@ import { ASSESSMENT_ANSWER_TEXT_LIMIT, type AssessmentFormManifest, type FormAns
 export function isAssessmentFieldApplicable(field: FormField, answers: FormAnswers): boolean {
   return (field.visibleWhen ?? []).every(test => answers[test.fieldId] === test.equals);
 }
+/** Clear hidden draft values, including descendants whose parent is itself cleared.
+ * Unknown keys remain present so normal validation can reject them.
+ */
+export function clearInactiveAssessmentAnswers(manifest: AssessmentFormManifest, answers: FormAnswers): FormAnswers {
+  const cleaned = { ...answers };
+  const conditionalFields = manifest.sections.flatMap(section => section.fields).filter(field => field.visibleWhen?.length);
+  let changed: boolean;
+  do {
+    changed = false;
+    for (const field of conditionalFields) {
+      if (Object.hasOwn(cleaned, field.id) && !isAssessmentFieldApplicable(field, cleaned)) {
+        delete cleaned[field.id];
+        changed = true;
+      }
+    }
+  } while (changed);
+  return cleaned;
+}
 const unanswered = (value: unknown) => value === undefined || value === null || value === "" || (typeof value === "string" && !value.trim());
 export function assessmentFieldError(field: FormField, value: unknown): string | null {
   if (unanswered(value)) return field.required ? "Required" : null;
@@ -45,15 +63,15 @@ export function getAssessmentCompletion(manifest: AssessmentFormManifest, answer
   const configurationError = duplicated || required === 0;
   return { answered, required, percent: configurationError ? null : Math.floor(answered / required * 100), configurationError, sections };
 }
-/** Missing draft values are accepted; known but inactive answers remain dormant for reversible editing. */
+/** Missing draft values are accepted; draft callers clear inactive values before validation. */
 export function validateAssessmentAnswers(manifest: AssessmentFormManifest, answers: FormAnswers, options: { requireComplete?: boolean } = {}): Record<string, string> {
   const fields = manifest.sections.flatMap(section => section.fields);
   const errors: Record<string, string> = {};
   for (const id of Object.keys(answers)) {
     const field = fields.find(field => field.id === id);
     if (!field) { errors[id] = "Unknown field"; continue; }
-    // Keep dormant answers reversible without letting hidden, unfinished controls block saving.
-    // All retained data still obeys the same bounded primitive contract as the API request.
+    // Hidden answers do not affect effective validation (historical snapshots may contain them).
+    // All supplied data still obeys the same bounded primitive contract as the API request.
     if (!assessmentAnswerSchema.safeParse(answers[id]).success) {
       errors[id] = "Enter a valid answer";
       continue;

@@ -1,7 +1,7 @@
 import { saveAssessmentSchema } from "./assessment-workflow";
 import { describe, expect, test } from "bun:test";
 import type { AssessmentFormManifest } from "./assessment-form";
-import { getAssessmentCompletion, validateAssessmentAnswers, getScoringAssessmentAnswers, getEffectiveAssessmentAnswers, calculateAssessmentBmi } from "./assessment-form-validation";
+import { clearInactiveAssessmentAnswers, getAssessmentCompletion, validateAssessmentAnswers, getScoringAssessmentAnswers, getEffectiveAssessmentAnswers, calculateAssessmentBmi } from "./assessment-form-validation";
 const manifest: AssessmentFormManifest = { version: "test", sections: [{ id: "one", title: "One", fields: [
   { id: "age", label: "Age", kind: "number", required: true, min: 0, owner: "context", source: "C3" },
   { id: "choice", label: "Choice", kind: "multi_select", required: true, options: [{ id: "yes", label: "Yes" }], owner: "scoring", source: "F11" },
@@ -64,7 +64,7 @@ test("text answers share the save request limit before being counted complete", 
   expect(saveAssessmentSchema.safeParse({ revision: 0, answers: tooLong }).success).toBe(false);
 });
 
-test("inactive unfinished numbers remain reversible without blocking draft save", () => {
+test("historical inactive unfinished numbers do not block effective validation", () => {
   const numericDetail: AssessmentFormManifest = { ...manifest, sections: [{ ...manifest.sections[0]!, fields: manifest.sections[0]!.fields.map(field => field.id === "detail" ? { ...field, kind: "number", min: 1, integer: true } : field) }] };
   const answers = { age: 0, choice: [], detail: "-" };
   expect(validateAssessmentAnswers(numericDetail, answers)).toEqual({});
@@ -74,4 +74,20 @@ test("inactive unfinished numbers remain reversible without blocking draft save"
   expect(validateAssessmentAnswers(numericDetail, { ...answers, detail: "x".repeat(2001) }).detail).toBeDefined();
   expect(validateAssessmentAnswers(numericDetail, { ...answers, detail: "x".repeat(2001) }, { requireComplete: true }).detail).toBeDefined();
   expect(validateAssessmentAnswers(numericDetail, { ...answers, unknown: "data" }).unknown).toBeDefined();
+});
+
+
+test("clearing inactive draft answers is recursive, immutable and preserves unknown keys for validation", () => {
+  const chained: AssessmentFormManifest = { ...manifest, sections: [{ ...manifest.sections[0]!, fields: [
+    // Descendant intentionally precedes parent to exercise fixed-point cleanup.
+    { id: "grandchild", label: "Grandchild", kind: "text", required: false, owner: "application", source: "test", visibleWhen: [{ fieldId: "detail", equals: "nested" }] },
+    ...manifest.sections[0]!.fields,
+  ] }] };
+  const original = Object.freeze({ age: 0, choice: [], parent: null, detail: "nested", grandchild: "old", unknown: "reject me" });
+  const cleared = clearInactiveAssessmentAnswers(chained, original);
+  expect(cleared).toEqual({ age: 0, choice: [], parent: null, unknown: "reject me" });
+  expect(original.detail).toBe("nested");
+  expect(validateAssessmentAnswers(chained, cleared).unknown).toBe("Unknown field");
+  expect(clearInactiveAssessmentAnswers(chained, { ...cleared, parent: "yes" }).detail).toBeUndefined();
+  expect(clearInactiveAssessmentAnswers(chained, { ...original, parent: "yes" })).toEqual({ ...original, parent: "yes" });
 });
