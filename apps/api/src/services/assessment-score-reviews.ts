@@ -12,8 +12,8 @@ import type { AssessmentWorkflowService, WorkflowExecutor, WorkflowRow } from ".
 
 export class AssessmentScoreReviewService {
   constructor(private service: AssessmentWorkflowService) {}
-  private async load(executor: WorkflowExecutor, organizationId: string, assessmentId: string, currentSubmissionId?:string|null) {
-    const [submission] = await executor.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId, organizationId), eq(assessmentSubmissions.assessmentId, assessmentId), currentSubmissionId ? eq(assessmentSubmissions.id,currentSubmissionId) : undefined)).orderBy(desc(assessmentSubmissions.createdAt)).limit(1);
+  private async load(executor: WorkflowExecutor, organizationId: string, assessmentId: string, currentSubmissionId:string) {
+    const [submission] = await executor.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId, organizationId), eq(assessmentSubmissions.assessmentId, assessmentId), eq(assessmentSubmissions.id,currentSubmissionId))).orderBy(desc(assessmentSubmissions.createdAt)).limit(1);
     if (submission?.status !== "SUCCEEDED" || !submission.result) throw new ServiceError("CONFLICT", "A completed NIQ score is required before reviewing points.");
     const parsed = assessmentScoreResultSchema.safeParse(this.service.unseal(submission.result));
     if (!parsed.success) throw new ServiceError("CONFLICT", "The NIQ result could not be read.");
@@ -51,9 +51,11 @@ export class AssessmentScoreReviewService {
       if(!patient)throw new ServiceError("NOT_FOUND","Patient not found.");
 
 
-      if (assessment.currentSubmissionId === null) throw new ServiceError("CONFLICT","This assessment has no current calculated result.");
+      if (!assessment.currentSubmissionId) throw new ServiceError("CONFLICT","This assessment has no current calculated result.");
       if (!canAdjustClinicalScore(this.service,assessment,actor)) throw new ServiceError("FORBIDDEN", "Only the responsible clinician can adjust the current score.");
       const { submission, result, rows, projection, scan } = await this.load(tx, organizationId, assessmentId,assessment.currentSubmissionId);
+      // Adjustment revisions restart for each scoring cycle; fence stale tabs by result too.
+      if (result.resultReference !== input.expectedResultReference) throw new ServiceError("CONFLICT", "The calculated result has changed. Reload before adjusting the score.");
       const replay = rows.find(row => row.actorId === actor.membershipId && row.requestKey === input.requestKey);
       if (replay) {
         const entry = this.service.unseal<ScoreReviewEntry>(replay.event);

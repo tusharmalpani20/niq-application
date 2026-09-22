@@ -4,14 +4,14 @@ import { assessmentScoreReviews, assessmentSubmissions, assessmentFaceScans, org
 import { AssessmentWorkflowService } from "./assessment-workflow";
 import type { Principal } from "./application";
 const actor={role:"DOCTOR",platformRole:"USER",organizationId:"org",membershipId:"actor-1",displayName:"First reviewer"} as Principal;
-const input={reason:"Clinical review",expectedRevision:0,requestKey:"review-request-1234",targetType:"item" as const,targetId:"item",points:4};
+const input={reason:"Clinical review",expectedResultReference:"result-1",expectedRevision:0,requestKey:"review-request-1234",targetType:"item" as const,targetId:"item",points:4};
 function fixture() {
  const scans:any[]=[];
  const result={formatVersion:2,profile:"NIQ_FINAL_ASSESSMENT",complete:true,score:3,classification:{id:"low",label:"Low",interpretation:""},components:[{id:"item",sectionId:"section",label:"Item",points:3,status:"answered"},{id:"missing",sectionId:"empty",label:"Missing",points:null,status:"unanswered"}],version:"v1",checksum:"a".repeat(64),resultReference:"result-1",calculatedAt:new Date().toISOString(),clinicalUsePermitted:true};
  const rows:any[]=[];const audits:any[]=[];
  const tx:any={select:()=>({from:(table:any)=>table===patients?{where:()=>({for:async()=>[{id:"patient"}]})}:table===organizationMemberships?{innerJoin:()=>({where:()=>({for:async()=>[{role:"DOCTOR"}]})})}:({where:()=>({orderBy:()=>table===assessmentSubmissions?{limit:async()=>[{id:"submission",status:"SUCCEEDED",result}]}:Promise.resolve(table===assessmentFaceScans ? [...scans] : [...rows])})})}),insert:(table:any)=>({values:async(value:any)=>{expect(table).toBe(assessmentScoreReviews);rows.push(value);}})};
  let denied=false, auditFailure=false;
- const workflow={clinicalActor:AssessmentWorkflowService.prototype.clinicalActor,db:{...tx,transaction:async(fn:any)=>{const length=rows.length;try{return await fn(tx);}catch(e){rows.splice(length);throw e;}}},authorize:async()=>{if(denied)throw new Error("denied");return {status:"SCORED"};},unseal:(value:any)=>structuredClone(value),seal:(value:any)=>structuredClone(value),audit:async(...args:any[])=>{if(auditFailure)throw new Error("audit failed");audits.push(args);}} as unknown as AssessmentWorkflowService;
+ const workflow={clinicalActor:AssessmentWorkflowService.prototype.clinicalActor,db:{...tx,transaction:async(fn:any)=>{const length=rows.length;try{return await fn(tx);}catch(e){rows.splice(length);throw e;}}},authorize:async()=>{if(denied)throw new Error("denied");return {status:"SCORED",currentSubmissionId:"submission"};},unseal:(value:any)=>structuredClone(value),seal:(value:any)=>structuredClone(value),audit:async(...args:any[])=>{if(auditFailure)throw new Error("audit failed");audits.push(args);}} as unknown as AssessmentWorkflowService;
  return {service:new AssessmentScoreReviewService(workflow),scans,rows,audits,result,deny:()=>denied=true,failAudit:()=>auditFailure=true};
 }
 test("reviews preserve original result, replay idempotently and retain all reviewers",async()=>{

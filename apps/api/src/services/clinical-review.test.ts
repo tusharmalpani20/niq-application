@@ -45,7 +45,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   expect(claims.filter(r=>r.status==="fulfilled")).toHaveLength(1);
   const state=await reviews.read(creator,org,id);const winner=state.assignee!.membershipId===creator.membershipId?creator:colleague;
   await command(winner,id,"TRANSFER",{assigneeId:nurse.membershipId,reason:"Handover"});
-  const adjustment={targetType:"item" as const,targetId:"item",points:4,reason:"Reviewed",expectedRevision:0,requestKey:createEntityId()};
+  const adjustment={expectedResultReference:"result-1",targetType:"item" as const,targetId:"item",points:4,reason:"Reviewed",expectedRevision:0,requestKey:createEntityId()};
   await expect(scores.add(winner,org,id,adjustment,context)).rejects.toMatchObject({code:"FORBIDDEN"});await scores.add(nurse,org,id,adjustment,context);
   const before=await reviews.read(nurse,org,id);await expect(reviews.command(nurse,org,id,{action:"COMPLETE",remark:"Done",expectedRevision:before.revision,expectedScoreRevision:0,requestKey:createEntityId()},context)).rejects.toMatchObject({code:"CONFLICT"});
   const complete=await command(nurse,id,"COMPLETE",{remark:"Final clinical remark"});expect(complete.state).toBe("COMPLETED");expect(complete.finalRemark).toBe("Final clinical remark");expect((await scores.read(nurse,org,id)).canAdjust).toBe(false);
@@ -62,6 +62,20 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   const resent=await command(colleague,id,"RESEND");expect(resent.assignee?.membershipId).toBe(nurse.membershipId);expect(resent.correctionPerson).toBeNull();
   expect(await db.select().from(t.assessmentSubmissions).where(eq(t.assessmentSubmissions.assessmentId,id))).toHaveLength(2);
  });
+ test("an adjustment from an earlier result cannot modify a rescored correction even when revisions match",async()=>{
+  const id=await assessment();
+  const oldAdjustment={expectedResultReference:"result-1",targetType:"item" as const,targetId:"item",points:7,reason:"Old open dialog",expectedRevision:0,requestKey:createEntityId()};
+  await command(creator,id,"RETURN_TO_DRAFT",{assigneeId:creator.membershipId,reason:"Correct questionnaire"});
+  const [row]=await db.select().from(t.assessments).where(eq(t.assessments.id,id));
+  const submission=createEntityId();
+  await db.insert(t.assessmentSubmissions).values({id:submission,organizationId:org,assessmentId:id,revision:row!.revision,snapshot:row!.workflow!,idempotencyKey:submission,status:"SUCCEEDED",result:workflow.seal({...result,resultReference:"corrected-result"})});
+  await db.update(t.assessments).set({status:"SCORED",currentSubmissionId:submission}).where(eq(t.assessments.id,id));
+  expect((await scores.read(creator,org,id)).revision).toBe(0);
+  await expect(scores.add(creator,org,id,oldAdjustment,context)).rejects.toMatchObject({code:"CONFLICT"});
+  expect(await db.select().from(t.assessmentScoreReviews).where(eq(t.assessmentScoreReviews.assessmentId,id))).toHaveLength(0);
+  const fresh=await scores.add(creator,org,id,{...oldAdjustment,expectedResultReference:"corrected-result",requestKey:createEntityId()},context);
+  expect(fresh.overall.reviewedPoints).toBe(7);
+ });
  test("released owner is not resurrected; inactive and out-of-scope recipients denied",async()=>{
   const id=await assessment();await command(creator,id,"SEND");await command(nurse,id,"CLAIM");await command(nurse,id,"RELEASE",{reason:"Unavailable"});await command(admin,id,"RETURN_TO_DRAFT",{assigneeId:creator.membershipId,reason:"Correction"});expect((await reviews.read(admin,org,id)).previousReviewer).toBeNull();
   await db.insert(t.facilityMemberships).values({id:createEntityId(),organizationId:org,organizationMembershipId:nurse.membershipId,facilityId:otherFacility});
@@ -75,7 +89,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   const id=await assessment();await command(creator,id,"SEND");await command(nurse,id,"CLAIM");const state=await reviews.read(nurse,org,id);
   const result=await Promise.allSettled([
    reviews.command(nurse,org,id,{action:"COMPLETE",remark:"Concurrent final",expectedRevision:state.revision,expectedScoreRevision:0,requestKey:createEntityId()},context),
-   scores.add(nurse,org,id,{targetType:"item",targetId:"item",points:8,reason:"Concurrent adjustment",expectedRevision:0,requestKey:createEntityId()},context),
+   scores.add(nurse,org,id,{expectedResultReference:"result-1",targetType:"item",targetId:"item",points:8,reason:"Concurrent adjustment",expectedRevision:0,requestKey:createEntityId()},context),
   ]);
   expect(result.filter(r=>r.status==="fulfilled")).toHaveLength(1);
   const latest=await reviews.read(nurse,org,id);if(latest.state==="COMPLETED")expect((await scores.read(nurse,org,id)).overall.reviewedPoints).toBe(3);else expect(latest.scoreRevision).toBe(1);

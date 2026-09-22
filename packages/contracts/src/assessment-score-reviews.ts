@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AssessmentScoreResult } from "./assessment-workflow";
 export const scoreReviewInputSchema = z.object({
+  expectedResultReference: z.string().min(1).max(200),
   expectedRevision: z.number().int().nonnegative(), requestKey: z.string().min(16).max(128),
   targetType: z.enum(["item", "section", "overall", "scan"]), targetId: z.string().min(1).max(100).nullable(),
   points: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),

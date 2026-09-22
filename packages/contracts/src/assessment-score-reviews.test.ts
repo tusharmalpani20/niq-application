@@ -16,13 +16,13 @@ test("parent overrides persist, resetting reveals latest child total",()=>{
 });
 test("zero override is preserved and inputs reject invalid target and numeric values",()=>{
  expect(projectScoreReviews(result,[event(1,"item","a",0)]).overall.reviewedPoints).toBe(2);
- const input={reason:"Clinical review",expectedRevision:0,requestKey:"test-request-123456",targetType:"overall",targetId:null,points:0};
+ const input={reason:"Clinical review",expectedResultReference:"result-1",expectedRevision:0,requestKey:"test-request-123456",targetType:"overall",targetId:null,points:0};
  expect(scoreReviewInputSchema.safeParse(input).success).toBe(true);
- for(const delta of [{reason:undefined},{reason:""},{reason:"   "},{points:-1},{points:Infinity},{points:NaN},{targetId:"x"},{targetType:"item"},{reason:"x".repeat(1001)}])expect(scoreReviewInputSchema.safeParse({...input,...delta}).success).toBe(false);
+ for(const delta of [{expectedResultReference:undefined},{expectedResultReference:""},{reason:undefined},{reason:""},{reason:"   "},{points:-1},{points:Infinity},{points:NaN},{targetId:"x"},{targetType:"item"},{reason:"x".repeat(1001)}])expect(scoreReviewInputSchema.safeParse({...input,...delta}).success).toBe(false);
 });
 
 test("restoring scores also requires a reason",()=>{
- const input={expectedRevision:1,requestKey:"restore-request-12345",targetType:"overall",targetId:null,points:null};
+ const input={expectedResultReference:"result-1",expectedRevision:1,requestKey:"restore-request-12345",targetType:"overall",targetId:null,points:null};
  expect(scoreReviewInputSchema.safeParse(input).success).toBe(false);
  expect(scoreReviewInputSchema.parse({...input,reason:"  Restore calculated total  "}).reason).toBe("Restore calculated total");
 });
