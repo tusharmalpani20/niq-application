@@ -359,6 +359,7 @@ These clarifications close implementation gaps without adding Organization rules
 - Reuse immutable evidence references rather than physically copying files on every cycle. Enforce upload limits on the intended working set and document retained-history storage implications.
 - Active scan capture/upload/processing or uncertain scan recovery must be resolved or explicitly cancelled through existing supported flows before sending/returning/completing a review. Do not freeze a changing scan projection as final evidence.
 - A terminal failed/unavailable optional scan does not by itself require an invented mandatory rescan. Persist the exact available/unavailable state and apply the existing scoring completeness rules.
+- Returning to draft retains the selected completed face scan, including its original capture date, inputs and results. Unrelated questionnaire corrections do not require another scan. A new scan must be explicitly started; it replaces the current selection without deleting earlier evidence.
 - If changed correction inputs affect a prior scan's validity, do not silently relabel that scan as newly measured or recalculate it locally. Verify the existing provider/scoring contract, preserve its original input snapshot, and clearly distinguish retained historical evidence from any new scan.
 - Late recovery may append a provider result to historical scan records for reconciliation, but cannot mutate a closed cycle's reviewed or completed projection. Serialize these decisions against workflow transitions.
 
