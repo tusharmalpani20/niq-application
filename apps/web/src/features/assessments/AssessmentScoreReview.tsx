@@ -24,6 +24,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   const [conflict, setConflict] = useState(false);
   const [loadKey, setLoadKey] = useState(0);
   const inFlight = useRef(false);
+  const editContext = useRef<{ revision: number; resultReference: string } | null>(null);
   // Retain this key for an identical retry after a lost response.
   const request = useRef<{ fingerprint: string; key: string } | null>(null);
   const path = `/assessments/${record.id}/score-reviews`;
@@ -33,24 +34,26 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   useEffect(() => {
     const controller = new AbortController();
     assessmentRequest<AssessmentScoreReviews>(organizationId, path, "GET", undefined, controller.signal)
-      .then(result => { setData(result); setError(""); })
+      .then(result => { if (!controller.signal.aborted) { setData(result); setError(""); } })
       .catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load score history."); });
     return () => controller.abort();
-  }, [organizationId, path, loadKey, scanStatus]);
+  }, [organizationId, path, loadKey, scanStatus, view?.result.resultReference]);
   useEffect(() => { onDirtyChange(!!target); return () => onDirtyChange(false); }, [target, onDirtyChange]);
   function edit(next: Target) {
-    if (!canReview || target || saving) return;
+    if (!canReview || !data?.canAdjust || !view || target || saving) return;
+    // Keep the result and revision the reviewer actually saw, even if a refresh finishes while editing.
+    editContext.current = { revision: data.revision, resultReference: view.result.resultReference };
     if (next.targetType === "section") setExpanded(next.targetId);
     if (next.targetType === "scan") setExpanded("face_scan");
     setTarget(next); setValue(String(next.reviewedPoints)); setReason(""); setError(""); setNotice(""); setConflict(false); request.current = null;
   }
   function cancel() { if (saving) return; setTarget(null); setError(""); if (conflict) { setData(null); setLoadKey(key => key + 1); } setConflict(false); }
   async function save(reset = false) {
-    if (!target || !data || inFlight.current || conflict) return;
+    if (!target || !data || !editContext.current || !canReview || !data.canAdjust || inFlight.current || conflict || editStale) return;
     if (!reason.trim()) { setError("Enter a reason for this score change."); return; }
     const number = reset ? null : Number(value);
     if (!reset && (!value.trim() || !Number.isFinite(number) || number! < 0 || number! > Number.MAX_SAFE_INTEGER)) { setError("Enter a valid, non-negative score."); return; }
-    const input: Omit<ScoreReviewInput, "requestKey"> = { expectedRevision: data.revision, targetType: target.targetType, targetId: target.targetId, points: number, reason: reason.trim() };
+    const input: Omit<ScoreReviewInput, "requestKey"> = { expectedRevision: editContext.current.revision, expectedResultReference: editContext.current.resultReference, targetType: target.targetType, targetId: target.targetId, points: number, reason: reason.trim() };
     const fingerprint = JSON.stringify(input);
     if (request.current?.fingerprint !== fingerprint) request.current = { fingerprint, key: crypto.randomUUID() };
     inFlight.current = true; setSaving(true); setError("");
@@ -63,24 +66,27 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
       } else setError(cause instanceof Error ? cause.message : "Could not save. Your change is still here. Try saving again.");
     } finally { inFlight.current = false; setSaving(false); }
   }
+  const editStale = !!target && editContext.current?.resultReference !== view?.result.resultReference;
+  const editBlocked = conflict || editStale || !canReview || !data?.canAdjust;
   const adjust = (next: Target, label: string) => canReview && data?.canAdjust && <Button variant="ghost" className="size-11 shrink-0 p-0 text-brand-ink" isDisabled={!!target || saving} aria-label={`Adjust ${next.label}`} onPress={() => edit(next)}><Pencil className="size-3.5" aria-hidden="true"/>{label}</Button>;
   if (!view) return <p role="alert">The saved score could not be verified.</p>;
   const { result, sections } = view;
   const overall = data?.overall;
   const adjustmentForm = target ? <form className="my-4 rounded-xl border border-border bg-card p-4" onSubmit={event => { event.preventDefault(); void save(); }} aria-label={`Adjust ${target.label}`}>
       <h3 className="font-semibold">Adjust {target.label}</h3>
+      {(editStale || !canReview || !data?.canAdjust) && <p role="alert" className="mt-2 text-sm text-destructive">The scoring result or your review access has changed. Cancel this edit and reload the assessment before continuing.</p>}
       <p className="mt-1 text-sm text-muted-foreground">Original score: {points(target.niqPoints)}{target.overridden ? ` · Current reviewed: ${points(target.reviewedPoints)}` : ""}</p>
       {(target.targetType === "section" || target.targetType === "overall") && <p className="mt-2 text-sm text-muted-foreground">This overrides the calculated {target.targetType === "overall" ? "total" : "section score"} until you restore it.</p>}
       {target.targetType === "item" && data?.sections.some(section => section.overridden && section.items.some(item => item.id === target.targetId)) && <p className="mt-2 text-sm text-muted-foreground">This section has an override. Changing these points will not change its total until the section score is restored.</p>}
       <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(8rem,12rem)_1fr]">
-        <label className="grid content-start gap-2 text-sm font-medium">Your score (points)<Input autoFocus type="number" min={0} max={Number.MAX_SAFE_INTEGER} step="any" required value={value} disabled={saving || conflict} onChange={event => setValue(event.target.value)} className="min-h-11"/></label>
-        <label className="grid gap-2 text-sm font-medium">Reason *<Textarea required value={reason} maxLength={1000} disabled={saving || conflict} onChange={event => setReason(event.target.value)} placeholder="Explain why you are changing this score"/></label>
+        <label className="grid content-start gap-2 text-sm font-medium">Your score (points)<Input autoFocus type="number" min={0} max={Number.MAX_SAFE_INTEGER} step="any" required value={value} disabled={saving || editBlocked} onChange={event => setValue(event.target.value)} className="min-h-11"/></label>
+        <label className="grid gap-2 text-sm font-medium">Reason *<Textarea required value={reason} maxLength={1000} disabled={saving || editBlocked} onChange={event => setReason(event.target.value)} placeholder="Explain why you are changing this score"/></label>
       </div>
       <p className="mt-3 text-xs text-muted-foreground">Saved with your name and time. Previous changes stay in history.</p>
       <div className="mt-4 flex flex-wrap justify-end gap-2">
-        {target.overridden && <Button variant="link" isDisabled={saving || conflict || !reason.trim()} onPress={() => { void save(true); }}>Restore {target.targetType === "item" ? "NIQ points" : "calculated score"}</Button>}
+        {target.overridden && <Button variant="link" isDisabled={saving || editBlocked || !reason.trim()} onPress={() => { void save(true); }}>Restore {target.targetType === "item" ? "NIQ points" : "calculated score"}</Button>}
         <Button variant="outline" isDisabled={saving} onPress={cancel}>Cancel</Button>
-        <Button type="submit" isDisabled={saving || conflict || !reason.trim() || !value.trim() || Number(value) === target.reviewedPoints}>{saving ? "Saving…" : "Save change"}</Button>
+        <Button type="submit" isDisabled={saving || editBlocked || !reason.trim() || !value.trim() || Number(value) === target.reviewedPoints}>{saving ? "Saving…" : "Save change"}</Button>
       </div>
     </form> : null;
   const scan = data?.scan;

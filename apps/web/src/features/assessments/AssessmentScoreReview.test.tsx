@@ -7,7 +7,7 @@ import { AssessmentScoreReview } from "./AssessmentScoreReview";
 const result: AssessmentScoreResult = {formatVersion:2,profile:"NIQ_FINAL_ASSESSMENT",complete:true,score:8,classification:{id:"low",label:"Low",interpretation:""},components:[{id:"stage",sectionId:"disease",label:"Stage",points:8,status:"answered"}],version:"V1",checksum:"a".repeat(64),resultReference:"result",calculatedAt:"2026-09-22T00:00:00.000Z",clinicalUsePermitted:true};
 const record = {id:"assessment",reference:"ASM-000002",result,binding:{version:"V1",checksum:"a".repeat(64)},answers:{stage:"metastatic",patient_name:"Example Patient"},manifest:{sections:[{id:"personal_details",title:"Personal details",fields:[{id:"patient_name",label:"Patient name",kind:"text",owner:"application"}]},{id:"disease",title:"Disease status",fields:[{id:"stage",label:"Stage",owner:"scoring",options:[{id:"metastatic",label:"Metastatic"}]}]}]},progress:{answered:1,required:1,sections:[]},reports:[]} as unknown as AssessmentWorkflow;
 const entry: ScoreReviewEntry = {id:"entry",revision:1,targetType:"item",targetId:"stage",previousPoints:8,points:10,reason:null,actorId:"actor",actorName:"Reviewer One",createdAt:"2026-09-22T00:00:00.000Z",resultReference:"result"};
-async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[]})=>Promise<void>, entries:ScoreReviewEntry[] = [], conflict=false) {
+async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[]; rerender:(next:AssessmentWorkflow,canReview?:boolean,scanStatus?:string)=>Promise<void>})=>Promise<void>, entries:ScoreReviewEntry[] = [], conflict=false) {
  const dom = new JSDOM("<html><body><div id='root'></div></body></html>",{url:"http://localhost",pretendToBeVisual:true});
  const values:Record<string,unknown>={window:dom.window,document:dom.window.document,navigator:dom.window.navigator,IS_REACT_ACT_ENVIRONMENT:true,requestAnimationFrame:(fn:()=>void)=>setTimeout(fn,0),cancelAnimationFrame:clearTimeout,getComputedStyle:dom.window.getComputedStyle};
  for(const key of ["FocusEvent","HTMLElement","SVGElement","Element","Node","NodeFilter","DocumentFragment","HTMLButtonElement","HTMLInputElement","HTMLTextAreaElement","HTMLSelectElement","MutationObserver"]) values[key]=(dom.window as any)[key];
@@ -17,11 +17,11 @@ async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[]}
  for(const [key,value] of Object.entries(values))Object.defineProperty(globalThis,key,{value,configurable:true});
  Object.assign(dom.window.HTMLElement.prototype,{attachEvent(){},detachEvent(){}});
  const root=createRoot(document.getElementById("root")!); const flush=()=>new Promise(resolve=>setTimeout(resolve,0));
- try {await act(async()=>{root.render(<AssessmentScoreReview record={record} organizationId="org" onDirtyChange={()=>{}} renderScan={()=><p>Scan details</p>} reportsContent={<p>Report details</p>}/>);await flush();});await run({posts,click:async name=>{const button=[...document.querySelectorAll("button")].find(b=>(b.getAttribute("aria-label")??b.textContent?.trim())===name);if(!button)throw new Error(`Missing ${name}`);await act(async()=>{button.click();await flush();});}});}finally{await act(async()=>root.unmount());dom.window.close();for(const [key,value] of Object.entries(previous))if(value)Object.defineProperty(globalThis,key,value);else delete (globalThis as any)[key];}
+ try {await act(async()=>{root.render(<AssessmentScoreReview record={record} organizationId="org" onDirtyChange={()=>{}} renderScan={()=><p>Scan details</p>} reportsContent={<p>Report details</p>}/>);await flush();});await run({posts,rerender:async(next,canReview=true,scanStatus)=>{await act(async()=>{root.render(<AssessmentScoreReview record={next} organizationId="org" canReview={canReview} scanStatus={scanStatus} onDirtyChange={()=>{}} renderScan={()=><p>Scan details</p>} reportsContent={<p>Report details</p>}/>);await flush();});},click:async name=>{const button=[...document.querySelectorAll("button")].find(b=>(b.getAttribute("aria-label")??b.textContent?.trim())===name);if(!button)throw new Error(`Missing ${name}`);await act(async()=>{button.click();await flush();});}});}finally{await act(async()=>root.unmount());dom.window.close();for(const [key,value] of Object.entries(previous))if(value)Object.defineProperty(globalThis,key,value);else delete (globalThis as any)[key];}
 }
 test("unreviewed assessment hides reviewed score and history and keeps patient answers read-only",async()=>harness(async({click,posts})=>{expect(document.body.textContent).not.toContain("Reviewed score");expect(document.body.textContent).not.toContain("Score history");await click("Disease status");expect(document.body.textContent).toContain("Metastatic");expect(document.querySelectorAll("input").length).toBe(0);await click("Adjust Stage");expect(document.body.textContent).toContain("Reason *");expect(posts).toHaveLength(0);await click("Cancel");expect(document.querySelector("form")).toBeNull();}));
 test("review history displays all actors and preserves original NIQ points",async()=>harness(async()=>{expect(document.body.textContent).toContain("Reviewed score");expect(document.body.textContent).toContain("Reviewer One");expect(document.body.textContent).toContain("Reviewer Two");expect(document.body.textContent).toContain("Reason not provided");expect(record.answers.stage).toBe("metastatic");expect(result.score).toBe(8);},[entry,{...entry,id:"entry2",revision:2,actorId:"actor2",actorName:"Reviewer Two",previousPoints:10,points:11}]));
-test("reset appends an explicit review request rather than modifying answers",async()=>harness(async({click,posts})=>{await click("Adjust total score");await act(async()=>{const area=document.querySelector("textarea")!; area.focus(); Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,"value")!.set!.call(area,"Restore calculated total"); area.dispatchEvent(new window.Event("input",{bubbles:true})); area.dispatchEvent(new window.KeyboardEvent("keyup",{bubbles:true,key:"l"}));});await click("Restore calculated score");expect(posts).toHaveLength(1);expect(posts[0]).toMatchObject({expectedRevision:1,targetType:"overall",targetId:null,points:null});expect(posts[0]).not.toHaveProperty("answers");expect(document.body.textContent).toContain("Score change saved.");},[{...entry,targetType:"overall",targetId:null}]));
+test("reset appends an explicit review request rather than modifying answers",async()=>harness(async({click,posts})=>{await click("Adjust total score");await act(async()=>{const area=document.querySelector("textarea")!; area.focus(); Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,"value")!.set!.call(area,"Restore calculated total"); area.dispatchEvent(new window.Event("input",{bubbles:true})); area.dispatchEvent(new window.KeyboardEvent("keyup",{bubbles:true,key:"l"}));});await click("Restore calculated score");expect(posts).toHaveLength(1);expect(posts[0]).toMatchObject({expectedRevision:1,expectedResultReference:"result",targetType:"overall",targetId:null,points:null});expect(posts[0]).not.toHaveProperty("answers");expect(document.body.textContent).toContain("Score change saved.");},[{...entry,targetType:"overall",targetId:null}]));
 test("concurrent edits preserve the form and block blind resubmission",async()=>harness(async({click,posts})=>{await click("Adjust total score");await act(async()=>{const area=document.querySelector("textarea")!; area.focus(); Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,"value")!.set!.call(area,"Restore calculated total"); area.dispatchEvent(new window.Event("input",{bubbles:true})); area.dispatchEvent(new window.KeyboardEvent("keyup",{bubbles:true,key:"l"}));});await click("Restore calculated score");expect(document.body.textContent).toContain("Someone updated the scores");expect(document.querySelector("form")).not.toBeNull();expect(posts).toHaveLength(1);await click("Cancel");expect(document.querySelector("form")).toBeNull();},[{...entry,targetType:"overall",targetId:null}],true));
 
 
@@ -73,3 +73,40 @@ test("scan matches form order, displays points and opens an audited edit inside 
  expect(document.body.textContent).not.toContain("Reviewed score");
  expect(posts).toHaveLength(0);
 }));
+
+for (const change of ["result", "permission"] as const) {
+  test(`an open score edit cannot be saved after the ${change} changes`, async () => harness(async ({ click, posts, rerender }) => {
+    await click("Adjust total score");
+    await act(async () => {
+      const area = document.querySelector("textarea")!; area.focus();
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!.call(area, "Keep my review note");
+      area.dispatchEvent(new window.Event("input", { bubbles: true }));
+      area.dispatchEvent(new window.KeyboardEvent("keyup", { bubbles: true, key: "e" }));
+    });
+    await rerender(change === "result" ? { ...record, result: { ...result, resultReference: "new-result" } } : record, change !== "permission");
+    expect(document.querySelector("textarea")?.value).toBe("Keep my review note");
+    expect(document.body.textContent).toContain("result or your review access has changed");
+    await click("Restore calculated score");
+    expect(posts).toHaveLength(0);
+    await click("Cancel");
+    expect(document.querySelector("form")).toBeNull();
+  }, [{ ...entry, targetType: "overall", targetId: null }]));
+}
+
+test("background score refresh does not advance the revision of an open edit", async () => {
+  const entries: ScoreReviewEntry[] = [{ ...entry, targetType: "overall", targetId: null }];
+  await harness(async ({ click, posts, rerender }) => {
+    await click("Adjust total score");
+    await act(async () => {
+      const area = document.querySelector("textarea")!; area.focus();
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!.call(area, "Restore my original view");
+      area.dispatchEvent(new window.Event("input", { bubbles: true }));
+      area.dispatchEvent(new window.KeyboardEvent("keyup", { bubbles: true, key: "w" }));
+    });
+    entries.push({ ...entry, id: "another-review", revision: 2 });
+    await rerender(record, true, "Scan complete");
+    await click("Restore calculated score");
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({ expectedRevision: 1, expectedResultReference: "result" });
+  }, entries);
+});
