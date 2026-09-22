@@ -75,3 +75,19 @@ test("completion waits for reviewed risk confirmation while handover remains ava
  await click("Complete review");
  expect(document.querySelector("textarea")).toBeNull();expect(posts).toHaveLength(0);
 },{review:{...review,riskClassificationPending:true}}));
+
+
+test("first review after corrections says send and preserves correction-owner command", async()=>harness(async({click,posts})=>{
+ expect(document.body.textContent).toContain("Ready for clinical review");
+ expect(document.body.textContent).not.toContain("resend");
+ await click("Send for clinical review");
+ expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Send this scored assessment to the clinical review queue.");
+ await click("Send for clinical review");
+ expect(posts[0]).toMatchObject({action:"RESEND"});
+},{review:{...review,state:"AWAITING_RESUBMISSION",allowedActions:["RESEND"]}}));
+
+test("previously submitted review still says resend after corrections", async()=>harness(async({click})=>{
+ expect(document.body.textContent).toContain("Awaiting resubmission");
+ await click("Resend for clinical review");
+ expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Resend to the previous reviewer");
+},{review:{...review,state:"AWAITING_RESUBMISSION",submittedAt:"2026-09-23T00:00:00Z",allowedActions:["RESEND"]}}));
