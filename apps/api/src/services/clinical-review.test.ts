@@ -94,6 +94,24 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   expect(result.filter(r=>r.status==="fulfilled")).toHaveLength(1);
   const latest=await reviews.read(nurse,org,id);if(latest.state==="COMPLETED")expect((await scores.read(nurse,org,id)).overall.reviewedPoints).toBe(3);else expect(latest.scoreRevision).toBe(1);
  });
+ test("membership scope changes between initial authorization and its lock reject review mutations",async()=>{
+  for(const kind of ["command","adjustment"] as const){
+   const id=await assessment();
+   await db.update(t.assessments).set({facilityId:otherFacility}).where(eq(t.assessments.id,id));
+   const authorize=workflow.authorize.bind(workflow);let first=true;
+   workflow.authorize=async(...args)=>{
+    const row=await authorize(...args);
+    if(first){first=false;await db.insert(t.facilityMemberships).values({id:createEntityId(),organizationId:org,organizationMembershipId:creator.membershipId,facilityId:facility});}
+    return row;
+   };
+   try{
+    const pending=kind==="command"?reviews.command(creator,org,id,{action:"SEND",expectedRevision:0,expectedScoreRevision:0,requestKey:createEntityId()},context):scores.add(creator,org,id,{expectedResultReference:"result-1",expectedRevision:0,requestKey:createEntityId(),targetType:"item",targetId:"item",points:4,reason:"Review"},context);
+    await expect(pending).rejects.toMatchObject({code:"NOT_FOUND"});
+    const [row]=await db.select().from(t.assessments).where(eq(t.assessments.id,id));expect(row!.status).toBe("SCORED");
+    expect(await db.select().from(t.assessmentScoreReviews).where(eq(t.assessmentScoreReviews.assessmentId,id))).toHaveLength(0);
+   }finally{workflow.authorize=authorize;await db.delete(t.facilityMemberships).where(eq(t.facilityMemberships.organizationMembershipId,creator.membershipId));}
+  }
+ });
  test("audit failure rolls back assignment and command history",async()=>{
   const id=await assessment();const audit=workflow.audit;workflow.audit=async()=>{throw new Error("test audit failure");};
   try {await expect(command(creator,id,"SEND")).rejects.toThrow("test audit failure");}finally{workflow.audit=audit;}

@@ -47,6 +47,8 @@ export class AssessmentScoreReviewService {
       // Hold membership and patient scope stable while the adjustment is committed.
       const [member]=await tx.select({role:organizationMemberships.role}).from(organizationMemberships).innerJoin(users,eq(users.id,organizationMemberships.userId)).where(and(eq(organizationMemberships.id,actor.membershipId),eq(organizationMemberships.organizationId,organizationId),eq(organizationMemberships.userId,actor.userId),eq(organizationMemberships.isActive,true),eq(users.status,"ACTIVE"),eq(users.platformRole,"USER"))).for("share");
       if(!member || !hasPermission(member.role,"scores.review"))throw new ServiceError("FORBIDDEN","Your clinical review access has changed.");
+      // Recheck assessment scope after holding membership stable against access edits.
+      await this.service.authorize(actor,organizationId,assessmentId,tx);
       const [patient]=await tx.select({id:patients.id}).from(patients).where(and(eq(patients.organizationId,organizationId),eq(patients.id,assessment.patientId),facilityAccessCondition(actor,organizationId,patients.homeFacilityId))).for("share");
       if(!patient)throw new ServiceError("NOT_FOUND","Patient not found.");
 

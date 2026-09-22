@@ -56,6 +56,8 @@ export class ClinicalReviewService {
   const parsed=clinicalReviewActionSchema.safeParse(raw);if(!parsed.success)throw new ServiceError("VALIDATION_ERROR","Complete the required clinical review fields.");const input=parsed.data;
   return this.service.db.transaction(async tx=>{
    const row=await this.service.authorize(actor,org,id,tx,true);await this.actor(actor,org,tx);
+   // Scope may have changed while waiting for the membership lock.
+   await this.service.authorize(actor,org,id,tx);
    if("assigneeId"in input) await tx.select().from(organizationMemberships).innerJoin(users,eq(users.id,organizationMemberships.userId)).where(and(eq(organizationMemberships.id,input.assigneeId),eq(organizationMemberships.organizationId,org))).for("share");
    const [replay]=await tx.select().from(assessmentHistory).where(and(eq(assessmentHistory.organizationId,org),eq(assessmentHistory.assessmentId,id),eq(assessmentHistory.actorId,actor.membershipId),eq(assessmentHistory.requestKey,input.requestKey)));
    if(replay){const payload=this.service.unseal<{command:ClinicalReviewAction}>(replay.payload);if(JSON.stringify(payload.command)!==JSON.stringify(input))throw new ServiceError("CONFLICT","This request key belongs to a different clinical review action.");return this.projection(actor,row,tx);}
