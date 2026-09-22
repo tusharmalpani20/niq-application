@@ -29,6 +29,7 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
   globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
     const method = init?.method ?? "GET"; const body = init?.body ? JSON.parse(String(init.body)) : null;
     requests.push({ url: String(_url), method, body });
+    if (String(_url).endsWith("/clinical-review")) return Response.json({ assessmentId:record.id, revision:0, scoreRevision:0, cycle:0, state:"NOT_SUBMITTED", allowedActions:[], history:[], canAdjustScores:role !== "ORGANIZATION_ADMIN", canEditDraft:record.canEditDraft ?? true });
     if (String(_url).endsWith("/score-reviews") && record.result) return Response.json(projectScoreReviews(record.result, []));
     if (method === "POST" && String(_url).endsWith("/submit") && submittedResult) record = { ...record, status: "SCORED", result: submittedResult };
     if (method === "PATCH") {
@@ -209,3 +210,9 @@ for (const role of ["DOCTOR", "NUTRITIONIST"] as const) {
     expect(document.body.textContent).toContain("Personal details");
   }, {}, "assessment-a", undefined, role));
 }
+
+test("returned draft assigned to another clinician is read only",async()=>harness(async({requests})=>{
+ expect([...document.querySelectorAll("button")].some(button=>button.textContent?.trim()==="Save draft")).toBe(false);
+ expect([...document.querySelectorAll("input")].filter(input=>!input.disabled&&!input.readOnly)).toHaveLength(0);
+ expect(requests.some(request=>request.method==="PATCH")).toBe(false);
+},{canEditDraft:false}));

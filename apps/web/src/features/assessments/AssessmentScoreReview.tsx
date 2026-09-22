@@ -10,8 +10,8 @@ import { assessmentRequest, AssessmentRequestError } from "./workflow-api";
 type Target = { targetType: "item" | "section" | "overall" | "scan"; targetId: string | null; label: string; niqPoints: number; reviewedPoints: number; overridden: boolean };
 const points = (value: number | null) => value === null ? "—" : `${value} pts`;
 
-export function AssessmentScoreReview({ record, organizationId, renderScan, reportsContent, onDirtyChange, canReview = true, scanStatus = "Face scan unavailable" }: {
-  canReview?: boolean; scanStatus?: string; record: AssessmentWorkflow; organizationId: string; renderScan: (active: boolean) => ReactNode; reportsContent: ReactNode; onDirtyChange: (dirty: boolean) => void;
+export function AssessmentScoreReview({ record, organizationId, renderScan, reportsContent, onDirtyChange, onSaved, canReview = true, scanStatus = "Face scan unavailable" }: {
+  onSaved?: () => Promise<unknown>; canReview?: boolean; scanStatus?: string; record: AssessmentWorkflow; organizationId: string; renderScan: (active: boolean) => ReactNode; reportsContent: ReactNode; onDirtyChange: (dirty: boolean) => void;
 }) {
   const [data, setData] = useState<AssessmentScoreReviews | null>(null);
   const [error, setError] = useState("");
@@ -56,7 +56,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
     inFlight.current = true; setSaving(true); setError("");
     try {
       setData(await assessmentRequest<AssessmentScoreReviews>(organizationId, path, "POST", { ...input, requestKey: request.current.key }));
-      setTarget(null); setNotice("Score change saved."); request.current = null;
+      setTarget(null); setNotice("Score change saved."); request.current = null; await onSaved?.();
     } catch (cause) {
       if (cause instanceof AssessmentRequestError && cause.status === 409) {
         setConflict(true); setError("Someone updated the scores. Cancel this edit and reload scores before making another change.");

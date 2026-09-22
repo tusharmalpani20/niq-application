@@ -11,6 +11,8 @@ import { AssessmentFields } from "./AssessmentFields";
 import { AssessmentSectionNavigation } from "./AssessmentSectionNavigation";
 import { AssessmentReview } from "./AssessmentReview";
 import { assessmentResultView, sectionScoreLabel } from "./AssessmentResult";
+import { ClinicalReviewPanel } from "./ClinicalReviewPanel";
+import { useClinicalReview } from "./useClinicalReview";
 import { AssessmentScoreReview } from "./AssessmentScoreReview";
 import { AssessmentReports } from "./AssessmentReports";
 import { AssessmentFaceScan } from "./AssessmentFaceScan";
@@ -26,6 +28,9 @@ export function AssessmentEditorPage() {
 }
 function AssessmentEditor({ organizationId, assessmentId, role }: { organizationId: string; assessmentId: string; role: MembershipRole }) {
   const [record, setRecord] = useState<AssessmentWorkflow | null>(null);
+  const clinical = useClinicalReview(organizationId, record?.id);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  useEffect(() => { if (record) void clinical.refresh(); }, [record?.status, record?.revision, clinical.refresh]);
   const [answers, setAnswers] = useState<FormAnswers>({});
   const [sectionId, setSectionId] = useState("personal_details");
   const [error, setError] = useState("");
@@ -45,8 +50,8 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const [discardOpen, setDiscardOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const dirty = !!record && JSON.stringify(answers) !== JSON.stringify(record.answers);
-  const editable = record?.status === "DRAFT" && hasPermission(role, "assessments.edit");
-  const navigationDialog = useDraftNavigationGuard(dirty || scoreDirty || reportDirty || reportBusy || scanBusy || contactOpen && !!phone, scanBusy ? "Camera capture or upload is unfinished. Leaving may discard the local capture. Accepted uploads continue processing." : undefined);
+  const editable = record?.status === "DRAFT" && hasPermission(role, "assessments.edit") && (record.canEditDraft ?? true) && clinical.review?.canEditDraft !== false && !clinical.error;
+  const navigationDialog = useDraftNavigationGuard(dirty || scoreDirty || reportDirty || reportBusy || scanBusy || reviewBusy || contactOpen && !!phone, scanBusy ? "Camera capture or upload is unfinished. Leaving may discard the local capture. Accepted uploads continue processing." : undefined);
   const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers); setConflict(false); if (value.result) { setShowScoredAnswers(false); requestAnimationFrame(() => document.getElementById("assessment-summary-heading")?.focus()); } }, []);
   const handleError = useCallback((cause: unknown) => {
     if (cause instanceof AssessmentRequestError && cause.status === 401) {
@@ -123,7 +128,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
     if (!record || !phone.trim() || operation.current) return;
     if (dirty && !await persist()) return;
     setBusy(true); operation.current = true; setError("");
-    try { await assessmentRequest(organizationId, `/patients/${record.patientId}/contact`, "PATCH", { phone: phone.trim() }); await reload(); setPhone(""); setContactOpen(false); setNotice("Patient contact updated"); }
+    try { await assessmentRequest(organizationId, `/patients/${record.patientId}/contact`, "PATCH", { phone: phone.trim(), assessmentId: internalId, revision: record.revision }); await reload(); setPhone(""); setContactOpen(false); setNotice("Patient contact updated"); }
     catch (cause) { handleError(cause); }
     finally { operation.current = false; setBusy(false); }
   }
@@ -137,7 +142,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const sectionCoverage = coverage.sections.find(item => item.id === sectionId);
   const section = record.manifest.sections.find(item => item.id === sectionId);
   const index = tabs.findIndex(tab => tab.id === sectionId);
-  const locked = busy || reportBusy || scanBusy || scoreDirty || conflict;
+  const locked = busy || reportBusy || scanBusy || scoreDirty || reviewBusy || conflict;
   return <div className="assessment-workflow @container">
     <PatientHeader compact patient={record.patient} assessmentLabel={`${record.reference} · ${record.status === "DRAFT" ? "Draft" : record.status.replaceAll("_", " ").toLowerCase()} assessment`} action={<span className="text-xs text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span>} />
     <div className="sticky top-0 z-20 bg-background">
@@ -154,14 +159,15 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
       return owner && field ? <li key={issue.fieldId}><Button variant="link" className="h-auto min-h-11 whitespace-normal text-left" onPress={() => { void selectSection(owner.id, false, field.id); }}>{field.label}: {issue.message}</Button></li> : null;
     })}</ul>}</div>}
     {!editable && !record.result && <div className="mb-5 rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "Administrator review needed" : record.status === "SCORING_PENDING" ? "Scoring result pending" : "Scoring needs attention"}</h2><p className="my-2 text-sm text-muted-foreground">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "The scoring service has not confirmed this request. An organisation administrator must check it. Your submitted answers and reports remain preserved." : "The submitted assessment is preserved. Retry checks the same scoring request."}</p>{record.submission?.status === "RECONCILIATION_REQUIRED" ? hasPermission(role, "assessments.reconcile") && <Button variant="outline" isDisabled={busy} onPress={() => { void retry(true); }}>Check original scoring request</Button> : hasPermission(role, "assessments.submit") && <Button variant="outline" isDisabled={busy} onPress={() => { void retry(); }}>Retry scoring</Button>}</div>}
-    {record.result !== null && !showScoredAnswers && <AssessmentScoreReview canReview={hasPermission(role, "scores.review")} scanStatus={scanStatus} record={record} organizationId={organizationId} onDirtyChange={setScoreDirty} renderScan={active => <AssessmentFaceScan organizationId={organizationId} record={record} active={active} disabled={!hasPermission(role, "scans.perform") || busy || reportBusy || conflict} beforeStart={persist} onBusyChange={setScanBusy} onStatusChange={setScanStatus}/>} reportsContent={<AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!hasPermission(role, "reports.manage") || !editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />} />}
+    <ClinicalReviewPanel organizationId={organizationId} assessmentId={internalId} review={clinical.review} error={clinical.error} loading={clinical.loading} blocked={dirty || scoreDirty || reportDirty || busy || reportBusy || scanBusy || contactOpen || conflict} onRefresh={clinical.refresh} onChanged={async () => { await reload(); await clinical.refresh(); }} onBusyChange={setReviewBusy} />
+    {record.result !== null && !showScoredAnswers && <AssessmentScoreReview canReview={hasPermission(role, "scores.review") && clinical.review?.canAdjustScores === true && !reviewBusy && !clinical.loading && !clinical.error} onSaved={clinical.refresh} scanStatus={scanStatus} record={record} organizationId={organizationId} onDirtyChange={setScoreDirty} renderScan={active => <AssessmentFaceScan organizationId={organizationId} record={record} active={active} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onBusyChange={setScanBusy} onStatusChange={setScanStatus}/>} reportsContent={<AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!hasPermission(role, "reports.manage") || !editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />} />}
     {record.result !== null && showScoredAnswers && <Button className="my-4" variant="outline" onPress={() => setShowScoredAnswers(false)}><ArrowLeft aria-hidden="true"/>Back to summary</Button>}
     <div hidden={record.result !== null && !showScoredAnswers}>
     <div className={`grid min-w-0 border-x border-border bg-card @min-[48rem]:grid-cols-[250px_minmax(0,1fr)] ${record.result !== null ? "rounded-t-xl border-t" : ""}`}>
       <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} scores={sectionScores} scanStatus={scanStatus === "Scan complete" ? "Done" : scanStatus === "Face scan ready" ? "Pending" : scanStatus.replace(/^Face scan |^Scan /, "")} disabled={locked} onSelect={id => { void selectSection(id); }} />
       <div className="min-w-0 p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 id="assessment-section-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>{sectionCoverage && <span className="text-xs text-muted-foreground">{sectionCoverage.answered}/{sectionCoverage.total} answered · {sectionCoverage.percent ?? 0}%</span>}</div>
-        {(record.result === null || showScoredAnswers) && <AssessmentFaceScan organizationId={organizationId} record={record} active={sectionId === "face_scan"} disabled={!hasPermission(role, "scans.perform") || busy || reportBusy || conflict} beforeStart={persist} onBusyChange={setScanBusy} onStatusChange={setScanStatus}/>}
-        {section && <section><AssessmentFields heightSourceDate={record.heightSource?.recordedAt} section={section} answers={answers} errors={errors} readOnly={!editable || locked} onEditContact={() => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); }} onChange={(id, value) => { setAnswers(current => clearInactiveAssessmentAnswers(record.manifest, { ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
+        {(record.result === null || showScoredAnswers) && <AssessmentFaceScan organizationId={organizationId} record={record} active={sectionId === "face_scan"} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onBusyChange={setScanBusy} onStatusChange={setScanStatus}/>}
+        {section && <section><AssessmentFields heightSourceDate={record.heightSource?.recordedAt} section={section} answers={answers} errors={errors} readOnly={!editable || locked} onEditContact={editable ? () => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); } : undefined} onChange={(id, value) => { setAnswers(current => clearInactiveAssessmentAnswers(record.manifest, { ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
         <div hidden={sectionId !== "reports"}>{(record.result === null || showScoredAnswers) && <AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!hasPermission(role, "reports.manage") || !editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />}</div>
         {sectionId === "review" && <AssessmentReview record={record} answers={answers} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}
       </div>
