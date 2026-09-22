@@ -1,0 +1,103 @@
+import { useEffect, useRef, useState } from "react";
+import { membershipRoleLabels, type ClinicalReview, type ClinicalReviewAction, type ClinicalReviewer } from "@niq/application-contracts";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SearchCombobox } from "@/components/ui/combobox";
+import { Textarea } from "@/components/ui/textarea";
+import { useUnsavedFormClose } from "@/components/useUnsavedFormClose";
+import { changeClinicalReview, clinicalActionLabels, clinicalReviewLabels, getClinicalReviewers } from "./clinical-review-api";
+import { AssessmentRequestError } from "./workflow-api";
+
+type Action = ClinicalReviewAction["action"];
+export const recipientActions: Action[] = ["TRANSFER", "RETURN_TO_DRAFT", "REASSIGN_CORRECTION"];
+const noteActions: Action[] = [...recipientActions, "RELEASE", "COMPLETE"];
+function actionLabel(action: Action, review: ClinicalReview) {
+  return action === "TRANSFER" && !review.assignee ? "Assign reviewer" : clinicalActionLabels[action];
+}
+export function ClinicalReviewPanel({ organizationId, assessmentId, review, error, loading, blocked, onRefresh, onChanged, onBusyChange }: {
+  organizationId: string; assessmentId: string; review: ClinicalReview | null; error: string; loading: boolean; blocked: boolean;
+  onRefresh: () => Promise<unknown>; onChanged: () => Promise<unknown>; onBusyChange: (busy: boolean) => void;
+}) {
+  const [action, setAction] = useState<Action | null>(null);
+  return <section aria-label="Clinical review" className="my-5 rounded-xl border border-border bg-card p-4 sm:p-6">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl">Clinical review</h2>{review && <span className="text-sm text-muted-foreground">{clinicalReviewLabels[review.state]}</span>}</div>
+    {loading && <p className="mt-3 text-sm" role="status">Loading review…</p>}
+    {error && <div role="alert" className="mt-3 text-sm text-destructive">{error}<Button variant="link" isDisabled={blocked || loading} onPress={() => { void onRefresh(); }}>Reload review</Button></div>}
+    {review && <>
+      {review.assignee && <p className="mt-3 text-sm">Reviewer: {review.assignee.displayName}</p>}
+      {review.correctionPerson && <p className="mt-3 text-sm">Correction person: {review.correctionPerson.displayName}</p>}
+      {review.returnReason && (review.state === "RETURNED" || review.state === "AWAITING_RESUBMISSION") && <div className="mt-3 rounded-lg bg-muted p-3 text-sm"><p>Return reason</p><p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{review.returnReason}</p></div>}
+      {review.state === "NOT_SUBMITTED" && <p className="mt-3 text-sm text-muted-foreground">The original assessment creator can send the scored assessment for clinical review.</p>}
+      {review.state === "QUEUED" && <p className="mt-3 text-sm text-muted-foreground">An eligible clinician can claim this review.</p>}
+      {review.state === "RETURNED" && <p className="mt-3 text-sm text-muted-foreground">The correction person updates the questionnaire, requests a new score, then resends it for clinical review.</p>}
+      {review.state === "AWAITING_RESUBMISSION" && <p className="mt-3 text-sm text-muted-foreground">The correction person can resend this scored assessment. It returns to the previous reviewer if they are still eligible, otherwise to the queue.</p>}
+      {review.state === "COMPLETED" && <div className="mt-3 text-sm"><p>This review is final and cannot be reopened.</p>{review.finalRemark && <p className="mt-2 whitespace-pre-wrap break-words">{review.finalRemark}</p>}</div>}
+      {blocked && !!review.allowedActions?.length && <p className="mt-3 text-sm text-muted-foreground">Finish or cancel your current changes before changing the review workflow.</p>}
+      <div className="mt-4 flex flex-wrap gap-2">{review.allowedActions?.map(next => <Button key={next} variant={["SEND", "CLAIM", "RESEND", "COMPLETE"].includes(next) ? "default" : "outline"} isDisabled={blocked || loading || !!error || !!action} onPress={() => setAction(next)}>{actionLabel(next, review)}</Button>)}</div>
+      {!!review.history?.length && <details className="mt-4 border-t border-border pt-3"><summary className="min-h-11 cursor-pointer">Review history</summary><ol className="divide-y divide-border">{[...review.history].reverse().map(event => <li className="py-3 text-sm" key={event.id}><p>{clinicalActionLabels[event.action]} · {event.actor.displayName}{event.assignee ? ` → ${event.assignee.displayName}` : ""}</p><time className="text-xs text-muted-foreground" dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString("en-GB")}</time><span className="ml-2 text-xs text-muted-foreground">Cycle {event.cycle}</span>{(event.reason || event.remark) && <p className="mt-1 whitespace-pre-wrap break-words">{event.reason || event.remark}</p>}</li>)}</ol></details>}
+      {action && <ClinicalReviewCommandDialog key={action} action={action} review={review} organizationId={organizationId} assessmentId={assessmentId} blocked={blocked || loading || !!error} onClose={() => setAction(null)} onChanged={onChanged} onRefresh={onRefresh} onBusyChange={onBusyChange} />}
+    </>}
+  </section>;
+}
+
+export function ClinicalReviewCommandDialog({ action, review, organizationId, assessmentId, blocked, onClose, onChanged, onRefresh, onBusyChange }: {
+  action: Action; review: ClinicalReview; organizationId: string; assessmentId: string; blocked: boolean; onClose: () => void;
+  onChanged: () => Promise<unknown>; onRefresh: () => Promise<unknown>; onBusyChange: (busy: boolean) => void;
+}) {
+  const needsRecipient = recipientActions.includes(action);
+  const needsNote = noteActions.includes(action);
+  const [recipients, setRecipients] = useState<ClinicalReviewer[]>([]);
+  const [recipient, setRecipient] = useState<string | null>(null);
+  const initialRecipient = useRef<string | null>(null);
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(needsRecipient);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [conflict, setConflict] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const inFlight = useRef(false);
+  const request = useRef<{ fingerprint: string; key: string } | null>(null);
+  useEffect(() => {
+    if (!needsRecipient) return;
+    const controller = new AbortController(); setLoading(true);
+    getClinicalReviewers(organizationId, assessmentId, controller.signal).then(items => {
+      if (controller.signal.aborted) return;
+      const current = action === "REASSIGN_CORRECTION" ? review.correctionPerson?.membershipId : action === "TRANSFER" ? review.assignee?.membershipId : undefined;
+      setRecipients(items.filter(item => item.membershipId !== current)); setError("");
+      if (action === "RETURN_TO_DRAFT" && items.some(item => item.membershipId === review.defaultCorrectionPersonId)) {
+        initialRecipient.current = review.defaultCorrectionPersonId; setRecipient(value => value ?? review.defaultCorrectionPersonId);
+      }
+    }).catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load eligible people."); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [organizationId, assessmentId, action, needsRecipient, review.defaultCorrectionPersonId, review.correctionPerson?.membershipId, review.assignee?.membershipId, retry]);
+  const { requestClose, confirmation } = useUnsavedFormClose({ subject: "review", isDirty: () => !!note || recipient !== initialRecipient.current, isBusy: () => inFlight.current, onClose });
+  async function submit() {
+    if (inFlight.current || blocked || loading || conflict || !review.allowedActions.includes(action)) return;
+    if (needsNote && !note.trim()) { setError(action === "COMPLETE" ? "Enter a final remark." : "Enter a reason."); return; }
+    if (needsRecipient && !recipients.some(item => item.membershipId === recipient)) { setError("Choose an eligible person."); return; }
+    const body = { action, expectedRevision: review.revision, expectedScoreRevision: review.scoreRevision,
+      ...(needsRecipient ? { assigneeId: recipient! } : {}), ...(needsNote ? action === "COMPLETE" ? { remark: note.trim() } : { reason: note.trim() } : {}) };
+    const fingerprint = JSON.stringify(body);
+    if (request.current?.fingerprint !== fingerprint) request.current = { fingerprint, key: crypto.randomUUID() };
+    inFlight.current = true; setBusy(true); onBusyChange(true); setError("");
+    try {
+      await changeClinicalReview(organizationId, assessmentId, { ...body, requestKey: request.current.key } as ClinicalReviewAction);
+      await onChanged(); onClose();
+    } catch (cause) {
+      if (cause instanceof AssessmentRequestError && [403, 409].includes(cause.status)) { setConflict(true); setError("This review or your access has changed. Reload the review before continuing. Your entered details are preserved."); }
+      else setError(cause instanceof Error ? cause.message : "Could not update the review. Your details are preserved; try again.");
+    } finally { inFlight.current = false; setBusy(false); onBusyChange(false); }
+  }
+  return <><Dialog isOpen isDismissable={!busy} showCloseButton={!busy} onOpenChange={open => { if (!open) requestClose(); }} ariaLabel={actionLabel(action, review)} className="facility-dialog">
+    <DialogHeader><DialogTitle>{actionLabel(action, review)}</DialogTitle></DialogHeader>
+    <form className="clinical-form" onSubmit={event => { event.preventDefault(); void submit(); }}>
+      <div className="form-fields space-y-4">
+        <p className="text-sm text-muted-foreground">{action === "COMPLETE" ? "Complete this clinical review with a final remark. Completion is permanent; the assessment cannot be reopened or edited." : action === "RETURN_TO_DRAFT" ? "Return this assessment for corrections and a new score. Existing submitted answers, results and adjustments stay in history." : action === "RELEASE" ? "Release ownership so another eligible clinician can claim the review. Saved work stays in history." : action === "RESEND" ? "Resend to the previous reviewer if they remain eligible, otherwise to the unclaimed queue." : action === "SEND" ? "Send this scored assessment to the clinical review queue." : action === "CLAIM" ? "You will become responsible for this clinical review." : "The selected person will become responsible immediately. This change is recorded in review history."}</p>
+        {needsRecipient && <div className="grid gap-2"><label htmlFor="clinical-review-recipient">{action === "TRANSFER" ? "Reviewer" : "Correction person"} *</label><SearchCombobox id="clinical-review-recipient" label={action === "TRANSFER" ? "Reviewer" : "Correction person"} value={recipient} onChange={setRecipient} options={recipients.map(item => ({ id: item.membershipId, label: `${item.displayName} · ${membershipRoleLabels[item.role]}` }))} required disabled={busy || loading || conflict} placeholder="Search or select a person…" />{loading ? <p role="status" className="text-sm">Loading eligible people…</p> : !recipients.length && <p className="text-sm">No eligible people are available. An administrator needs to check clinical roles and facility access.</p>}</div>}
+        {needsNote && <label className="grid gap-2">{action === "COMPLETE" ? "Final remark" : "Reason"} *<Textarea value={note} onChange={event => setNote(event.target.value)} required maxLength={4000} disabled={busy || conflict} /></label>}
+        {error && <div role="alert" className="text-sm text-destructive">{error}{conflict ? <Button variant="link" isDisabled={busy} onPress={async () => { const fresh = await onRefresh(); if (fresh) { setConflict(false); setError(""); } }}>Reload review</Button> : needsRecipient && !recipients.length && <Button variant="link" onPress={() => setRetry(value => value + 1)}>Retry loading people</Button>}</div>}
+      </div>
+      <footer className="form-footer"><Button variant="outline" isDisabled={busy} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={busy || blocked || loading || conflict || !review.allowedActions.includes(action) || (needsNote && !note.trim()) || (needsRecipient && !recipient)}>{busy ? "Saving…" : actionLabel(action, review)}</Button></footer>
+    </form>
+  </Dialog>{confirmation}</>;
+}
