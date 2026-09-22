@@ -66,3 +66,12 @@ test("reload after a recipient conflict removes people who are no longer eligibl
     expect(posts).toHaveLength(1);
   }, { conflict: true, review: { ...review, defaultCorrectionPersonId: "creator" }, recipients: () => eligible ? [{ membershipId: "creator", displayName: "Original creator", role: "DOCTOR" }] : [] });
 });
+
+test("completion waits for reviewed risk confirmation while handover remains available",async()=>harness(async({click,posts})=>{
+ expect(document.body.textContent).toContain("NIQ must confirm the current reviewed risk");
+ const buttons=[...document.querySelectorAll("button")];
+ expect(buttons.find(b=>b.textContent==="Complete review")?.disabled).toBe(true);
+ expect(buttons.find(b=>b.textContent==="Transfer review")?.disabled).toBe(false);
+ await click("Complete review");
+ expect(document.querySelector("textarea")).toBeNull();expect(posts).toHaveLength(0);
+},{review:{...review,riskClassificationPending:true}}));
