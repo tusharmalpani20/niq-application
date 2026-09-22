@@ -99,13 +99,13 @@ export function PatientsPage() {
       : loadState === "error" ? <><strong>Patients could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></>
       : hasFilters
       ? <><strong>No matching patients</strong><span>Try changing the search or filters.</span></>
-      : <Button className="patient-empty-action" variant="outline" size="sm" onPress={() => setShowRegistration(true)}><Icon name="plus" size={16} />Register patient</Button>}
+      : <><p className="text-sm text-foreground">No patients yet</p><p className="text-sm">Register a patient to start recording assessments.</p><Button className="patient-empty-action" variant="outline" size="sm" onPress={() => setShowRegistration(true)}><Icon name="plus" size={16} />Register patient</Button></>}
   </div>;
   return <>
     <h1 className="patient-page-title">Patients</h1>
     <div className="patient-list-header">
       <div className="patient-list-heading"><span className="patient-list-label">Patients</span><span>{filtered.length}</span></div>
-      <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search patients" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search patients…" /></InputGroup>{(patients.length > 0 || !!hasFilters) && <TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="Add patient" onPress={() => setShowRegistration(true)}><Icon name="plus" size={20} /></Button><Tooltip>Add patient</Tooltip></TooltipTrigger>}</div>
+      <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search patients" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search patients…" /></InputGroup><TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="Add patient" onPress={() => setShowRegistration(true)}><Icon name="plus" size={20} /></Button><Tooltip>Add patient</Tooltip></TooltipTrigger></div>
     </div>
     {registeredThisMonth && <div className="flex items-center gap-3 text-sm"><span>Registered this month ({new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })})</span><Button variant="link" onPress={() => { setSearchParams(params => { params.delete("registered"); return params; }); setPage(1); }}>Clear</Button></div>}
     <div className="patient-filter-bar">
@@ -114,7 +114,7 @@ export function PatientsPage() {
     </div>
     {assessmentState === "error" && <Alert><AlertDescription>Assessment history could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button></AlertDescription></Alert>}
     <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><div className="mobile-data-card" key={patient.id}><Link className="min-w-0 flex-1" to={`/patients/${patient.reference}`}><div><div className="font-normal">{patient.displayName}</div><span>{patient.reference} · {patient.age} · {patient.gender}</span></div><span>{patient.facility}</span></Link>{editAction(patient)}</div>) : emptyContent}</div>
-      <div className="desktop-table p-5">{visiblePatients.length ? <DataTable columns={columns} data={visiblePatients} label="Patients" /> : emptyContent}</div>
+      <div className="desktop-table p-5"><DataTable columns={columns} data={visiblePatients} label="Patients" emptyContent={emptyContent} /></div>
     </section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Patients pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
     {editingPatient && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={editingPatient} onClose={() => setEditingPatient(null)} onSaved={updated => { setPatients(current => current.map(item => item.id === updated.id ? updated : item)); setEditingPatient(null); }} />}
