@@ -23,7 +23,7 @@ test("edit schemas clear optional contact fields and reject invalid dates, roles
 describe.skipIf(!process.env.PROFILE_TEST_DATABASE_URL)("profile edits PostgreSQL", () => {
   const client = postgres(process.env.PROFILE_TEST_DATABASE_URL!, { max: 4 });
   const db = drizzle(client);
-  const config = loadApplicationConfig({ DATABASE_URL: process.env.PROFILE_TEST_DATABASE_URL, SESSION_SECRET: "profile-test-secret-at-least-32-characters" });
+  const config = loadApplicationConfig({ DATABASE_URL: process.env.PROFILE_TEST_DATABASE_URL ?? "postgres://localhost/unused", SESSION_SECRET: "profile-test-secret-at-least-32-characters" });
   const service = new PostgresApplicationService(db, config, { deliver: async () => {} });
   const org = createEntityId(), org2 = createEntityId(), a = createEntityId(), b = createEntityId(), user = createEntityId(), member = createEntityId(), targetUser = createEntityId(), targetMember = createEntityId();
   const actor: Principal = { userId: user, membershipId: member, organizationId: org, displayName: "Admin", email: `${user}@test.example`, role: "ORGANIZATION_ADMIN", platformRole: "USER" };
