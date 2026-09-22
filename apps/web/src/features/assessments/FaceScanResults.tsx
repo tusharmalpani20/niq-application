@@ -64,6 +64,8 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
     </ResultGroup>)}
     <ResultGroup title="Scan details">
       <MetricRows metrics={[
+        { label: "Date of birth at scan", value: session.context.dob, unit: "" },
+        { label: "Gender at scan", value: session.context.gender === "female" ? "Female" : "Male", unit: "" },
         { label: "Height at scan", value: session.context.heightCm, unit: "cm" },
         { label: "Weight at scan", value: session.context.weightKg, unit: "kg" },
         { label: "Posture", value: scanPostureLabels[session.context.posture], unit: "" },

@@ -43,6 +43,12 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const statusVersion = useRef(0);
   const session = data?.sessions.find(item => item.id === data.currentSessionId) ?? null;
   useEffect(() => { setRescanRequested(false); }, [session?.id]);
+  const changedScanInputs = session?.state === "COMPLETED" ? [
+    session.context.dob !== record.patient.dateOfBirth ? "date of birth" : null,
+    session.context.gender !== record.patient.gender.toLowerCase() ? "gender" : null,
+    session.context.heightCm !== record.answers.height_cm ? "height" : null,
+    session.context.weightKg !== record.answers.current_weight_kg ? "weight" : null,
+  ].filter(Boolean) : [];
   const blocked = phase !== "idle";
   const rejected = session?.state === "RECONCILIATION_REQUIRED" && session.failureCode === "PROVIDER_REJECTED";
   const statusLabel = session ? rejected ? "Scan failed" : labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable";
@@ -176,6 +182,8 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {session?.state === "UPLOAD_ACCEPTED" && <p className="text-sm text-muted-foreground">Your capture is saved and waiting to be sent for analysis. You can continue the questionnaire. Results will appear here when available.</p>}
     {session?.state === "PROCESSING" && <p className="text-sm text-muted-foreground">Your scan is being processed. You can continue filling in the form and return here for the result.</p>}
     {session?.state === "FAILED" && <p className="text-sm text-muted-foreground">The scan didn’t finish. Please try again.</p>}
+    {session?.state === "COMPLETED" && record.status === "DRAFT" && <p className="text-sm text-muted-foreground">The saved face scan is retained. Scan again only if a new measurement is needed.</p>}
+    {changedScanInputs.length > 0 && <p role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm">The saved scan used different {changedScanInputs.join(", ")}. Its results still reflect the original scan details shown below; changing questionnaire answers does not update those results.</p>}
     {session && <FaceScanResults session={session}/>}
     <div hidden={phase !== "capturing" && phase !== "preparing"} className="relative aspect-[4/3] max-h-96 overflow-hidden rounded-lg bg-muted">
       <video ref={video} autoPlay muted playsInline className="absolute size-px opacity-0" aria-hidden="true"/>

@@ -7,7 +7,7 @@ import { AssessmentFaceScan } from "./AssessmentFaceScan";
 import { createCaptureController, type CaptureSDK } from "./careplix-capture";
 
 const session: FaceScanSession = { id: "session", state: "REQUESTED", context: { dob: "1990-01-01", gender: "female", heightCm: 170, weightKg: 70, posture: "resting", employeeId: "employee" }, createdAt: "2026-09-20T12:00:00.000Z", updatedAt: "2026-09-20T12:00:00.000Z", completedAt: null, failureCode: null, result: null, score: null };
-async function harness(run: (ctx: { click: (text: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean } = {}) {
+async function harness(run: (ctx: { click: (text: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "https://niq.test", pretendToBeVisual: true });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -31,7 +31,7 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; cons
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable: true });
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {} });
   const root = createRoot(document.getElementById("root")!);
-  const record = { id: "assessment", revision: 3, status: "DRAFT" } as AssessmentWorkflow;
+  const record = { id: "assessment", revision: 3, status: "DRAFT", patient: { dateOfBirth: "1990-01-01", gender: "FEMALE" }, answers: { height_cm: 170, current_weight_kg: options.weight ?? 70 } } as AssessmentWorkflow;
   const flush = () => new Promise(resolve => setTimeout(resolve, 0));
   try {
     await act(async () => { root.render(<AssessmentFaceScan organizationId="org" record={record} active disabled={false} beforeStart={async () => { saves++; if (options.hiddenDuringSave) Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true }); return { ...record, revision: 4 }; }} onBusyChange={value => { busy = value; }} onStatusChange={() => {}} captureFactory={() => createCaptureController(async () => sdk)}/>); await flush(); });
@@ -142,3 +142,19 @@ test("completed scan keeps rescan setup closed until explicitly requested", asyn
   expect(document.querySelector('input[type="checkbox"]')).toBeNull();
   expect(document.body.textContent).toContain("Scan again");
 }, { existing: { ...session, state: "COMPLETED" } }));
+
+
+test("retained scan stays visible without requiring another capture", async () => harness(async ({ starts, requests }) => {
+  expect(document.body.textContent).toContain("The saved face scan is retained");
+  expect(document.body.textContent).not.toContain("The saved scan used different");
+  expect(document.body.textContent).toContain("Scan again");
+  expect(document.body.textContent).not.toContain("Start face scan");
+  expect(starts()).toBe(0);
+  expect(requests.every(request => request.body === null)).toBe(true);
+}, { existing: { ...session, state: "COMPLETED" } }));
+
+test("changed weight flags the retained scan without replacing it", async () => harness(async ({ starts }) => {
+  expect(document.body.textContent).toContain("The saved scan used different weight.");
+  expect(document.body.textContent).toContain("Scan again");
+  expect(starts()).toBe(0);
+}, { existing: { ...session, state: "COMPLETED" }, weight: 75 }));
