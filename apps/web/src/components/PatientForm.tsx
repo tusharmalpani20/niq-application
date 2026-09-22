@@ -1,9 +1,9 @@
 import { registerPatientSchema, updatePatientSchema, type Facility, type Patient } from "@niq/application-contracts";
-import { useRef, useState, type FormEvent } from "react";
+import { useImperativeHandle, useRef, useState, type FormEvent, type Ref } from "react";
 import { Alert, AlertDescription } from "./ui/alert";
 import { Button } from "./ui/button";
-import { DateInput } from "./ui/date-input";
-import { Dialog, DialogHeader, DialogTitle } from "./ui/dialog";
+import { DateInput, displayDate } from "./ui/date-input";
+import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Field, FieldLabel } from "./ui/field";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -11,7 +11,10 @@ import { ApiRequestError, registerPatient } from "../lib/api";
 import { updatePatient } from "../lib/patient-edit";
 import { todayDate } from "../lib/patient-display";
 
+type PatientFormHandle = { requestClose: () => void };
+
 type Props = {
+  ref?: Ref<PatientFormHandle>;
   organizationId: string;
   facilities: Facility[];
   patient?: Patient;
@@ -20,11 +23,28 @@ type Props = {
   onBusyChange?: (busy: boolean) => void;
 };
 
-export function PatientForm({ organizationId, facilities, patient, onCancel, onSaved, onBusyChange }: Props) {
+export function PatientForm({ organizationId, facilities, patient, onCancel, onSaved, onBusyChange, ref }: Props) {
   const [facilityId, setFacilityId] = useState<string | null>(patient?.homeFacility?.id ?? null);
   const [gender, setGender] = useState<Patient["gender"] | null>(patient?.gender ?? null);
   const [birth, setBirth] = useState(patient?.dateOfBirth ?? "");
+  const formRef = useRef<HTMLFormElement>(null);
+  const [confirmClose, setConfirmClose] = useState(false);
   const submitting = useRef(false);
+
+  function requestClose() {
+    if (submitting.current) return;
+    // Read actual input values at dismissal so browser autofill is protected too.
+    const form = formRef.current;
+    const changedText = ["name", "mrn", "phone", "email"].some(name => {
+      const input = form?.elements.namedItem(name) as HTMLInputElement | null;
+      return input && input.value !== input.defaultValue;
+    });
+    const changedBirth = form?.querySelector<HTMLInputElement>("#patient-birth")?.value !== displayDate(patient?.dateOfBirth ?? "");
+    const dirty = changedText || changedBirth || facilityId !== (patient?.homeFacility?.id ?? null) || gender !== (patient?.gender ?? null);
+    if (dirty) setConfirmClose(true);
+    else onCancel();
+  }
+  useImperativeHandle(ref, () => ({ requestClose }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [birthInvalid, setBirthInvalid] = useState(false);
@@ -66,7 +86,7 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
     }
   }
 
-  return <form className="clinical-form" onSubmit={submit}>
+  return <><form ref={formRef} className="clinical-form" onSubmit={submit}>
     <fieldset disabled={isSubmitting} className="form-fields facility-dialog-fields m-0 min-w-0 border-0 grid gap-5">
       <div className="grid gap-4">
         <h3 className="font-semibold">Patient details</h3>
@@ -85,15 +105,21 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
       {!options.length && !missingCurrent && <Alert><AlertDescription>Add an active facility before registering a patient.</AlertDescription></Alert>}
       {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
     </fieldset>
-    <div className="form-footer"><Button type="button" variant="outline" isDisabled={isSubmitting} onPress={onCancel}>Cancel</Button><Button type="submit" isDisabled={isSubmitting || (!options.length && !missingCurrent)}>{isSubmitting ? "Saving…" : patient ? "Save changes" : "Register patient"}</Button></div>
-  </form>;
+    <div className="form-footer"><Button type="button" variant="outline" isDisabled={isSubmitting} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={isSubmitting || (!options.length && !missingCurrent)}>{isSubmitting ? "Saving…" : patient ? "Save changes" : "Register patient"}</Button></div>
+  </form>
+    <Dialog isOpen={confirmClose} onOpenChange={setConfirmClose} ariaLabel="Discard patient changes?">
+      <DialogHeader><DialogTitle>Discard patient changes?</DialogTitle><DialogDescription>The details you entered have not been saved. Leaving will discard your changes.</DialogDescription></DialogHeader>
+      <DialogFooter><Button variant="outline" autoFocus onPress={() => setConfirmClose(false)}>Keep editing</Button><Button variant="destructive" onPress={() => { setConfirmClose(false); onCancel(); }}>Discard changes</Button></DialogFooter>
+    </Dialog>
+  </>;
 }
 
-export function PatientFormDialog({ onClose, ...props }: Omit<Props, "onCancel" | "onBusyChange"> & { onClose: () => void }) {
+export function PatientFormDialog({ onClose, ...props }: Omit<Props, "onCancel" | "onBusyChange" | "ref"> & { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
+  const form = useRef<PatientFormHandle>(null);
   const title = props.patient ? "Edit patient" : "Register patient";
-  return <Dialog ariaLabel={title} className="facility-dialog patient-registration-dialog" isOpen isDismissable={!busy} isKeyboardDismissDisabled={busy} showCloseButton={!busy} onOpenChange={open => { if (!open && !busy) onClose(); }}>
+  return <Dialog ariaLabel={title} className="facility-dialog patient-registration-dialog" isOpen isDismissable={!busy} isKeyboardDismissDisabled={busy} showCloseButton={!busy} onOpenChange={open => { if (!open && !busy) form.current?.requestClose(); }}>
     <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-    <PatientForm {...props} onBusyChange={setBusy} onCancel={onClose} />
+    <PatientForm {...props} ref={form} onBusyChange={setBusy} onCancel={onClose} />
   </Dialog>;
 }
