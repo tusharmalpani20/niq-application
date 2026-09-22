@@ -1,4 +1,5 @@
-import { hasPermission, membershipRoleLabels } from "@niq/application-contracts";
+import { canVisitOrganizationRoute } from "../lib/route-permissions";
+import { membershipRoleLabels } from "@niq/application-contracts";
 import type { AuthenticatedUser } from "@niq/application-contracts";
 import { LogOut } from "lucide-react";
 import { useLayoutEffect, useState } from "react";
@@ -14,11 +15,7 @@ import { signOut } from "../lib/api";
 import { useBranding } from "../lib/branding-context";
 import { Icon } from "../lib/icons";
 
-const restrictedRoutes = { "/users": "users.manage", "/settings/branding": "organization.manage", "/settings/scoring": "scoring.manage" } as const;
-function canVisit(user: AuthenticatedUser, path: string) {
-  const permission = restrictedRoutes[path as keyof typeof restrictedRoutes];
-  return !permission || hasPermission(user.role, permission);
-}
+const canVisit = (user: AuthenticatedUser, path: string) => canVisitOrganizationRoute(user.role, path);
 
 const navigation = [
   { to: "/", label: "Overview", icon: "dashboard", end: true },
