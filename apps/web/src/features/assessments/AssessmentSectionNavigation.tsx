@@ -14,7 +14,7 @@ export function AssessmentSectionNavigation({ tabs, selected, coverage, scores =
   const items = tabs.map(tab => {
     const completion = coverage.sections.find(item => item.id === tab.id);
     const Icon = icons[tab.id as keyof typeof icons] ?? ClipboardList;
-    return <Button key={tab.id} variant="ghost" aria-label={tab.id === "face_scan" ? `${tab.title}: ${scanStatus}` : tab.title} className={`h-12 w-full justify-start gap-2.5 whitespace-nowrap rounded-lg px-3 py-2.5 text-left text-sm ${selected === tab.id ? "assessment-active-step bg-primary/10 text-brand-ink font-semibold" : "text-muted-foreground"}`} aria-current={selected === tab.id ? "step" : undefined} isDisabled={disabled} onPress={() => { onSelect(tab.id); }}><Icon className="size-4 shrink-0" aria-hidden="true" /><span className="min-w-0 flex-1 truncate">{shortLabels[tab.id] ?? tab.title}</span>{tab.id === "face_scan" ? <span title={scanStatus} className="max-w-16 shrink-0 truncate text-[11px]">{scanStatus}</span> : completion?.percent !== null && completion?.percent !== undefined && <span title={scores[tab.id]} className="max-w-16 shrink-0 truncate text-[11px] tabular-nums">{scores[tab.id] ?? `${completion.percent}%`}</span>}</Button>;
+    return <Button key={tab.id} variant="ghost" aria-label={tab.id === "face_scan" ? `${tab.title}: ${scanStatus}` : tab.title} className={`h-12 w-full justify-start gap-2.5 whitespace-nowrap rounded-lg px-3 py-2.5 text-left text-sm ${selected === tab.id ? "assessment-active-step text-brand-ink font-semibold" : "text-muted-foreground"}`} aria-current={selected === tab.id ? "step" : undefined} isDisabled={disabled} onPress={() => { onSelect(tab.id); }}><Icon className="size-4 shrink-0" aria-hidden="true" /><span className="min-w-0 flex-1 truncate">{shortLabels[tab.id] ?? tab.title}</span>{tab.id === "face_scan" ? <span title={scanStatus} className="max-w-16 shrink-0 truncate text-[11px]">{scanStatus}</span> : completion?.percent !== null && completion?.percent !== undefined && <span title={scores[tab.id]} className="max-w-16 shrink-0 truncate text-[11px] tabular-nums">{scores[tab.id] ?? `${completion.percent}%`}</span>}</Button>;
   });
   return <nav aria-label="Assessment sections" className="min-w-0 rounded-tl-xl @min-[48rem]:border-r @min-[48rem]:border-border @min-[48rem]:bg-muted/20">
     <div className="px-4 pt-4 @min-[48rem]:hidden">
@@ -34,6 +34,6 @@ export function AssessmentSectionNavigation({ tabs, selected, coverage, scores =
         </SelectPopover>
       </Select>
     </div>
-    <div className="sticky top-28 hidden gap-1 p-3 @min-[48rem]:grid">{items}</div>
+    <div className="sticky top-28 hidden gap-1 px-4 py-3 @min-[48rem]:grid">{items}</div>
   </nav>;
 }
