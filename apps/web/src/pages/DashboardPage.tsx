@@ -1,3 +1,4 @@
+import { hasPermission } from "@niq/application-contracts";
 import type { AuthenticatedUser, Patient } from "@niq/application-contracts";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
@@ -11,7 +12,7 @@ type Overview = { patients: Patient[]; facilityCount: number; enabledUsers: numb
 
 export function DashboardPage() {
   const user = useOutletContext<AuthenticatedUser>();
-  const isAdmin = user.role === "ORGANIZATION_ADMIN";
+  const isAdmin = hasPermission(user.role, "users.manage");
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);

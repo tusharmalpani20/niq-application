@@ -1,3 +1,4 @@
+import { hasPermission } from "@niq/application-contracts";
 import { DEFAULT_ORGANIZATION_BRANDING, type AuthenticatedUser, type Organization } from "@niq/application-contracts";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
@@ -40,7 +41,7 @@ export function BrandingPage() {
   const [loadError, setLoadError] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const dirty = baseline !== null && (JSON.stringify(draft) !== JSON.stringify(baseline) || logo !== null);
-  const disabled = user.role !== "ORGANIZATION_ADMIN" || !baseline || saving;
+  const disabled = !hasPermission(user.role, "organization.manage") || !baseline || saving;
 
   useEffect(() => {
     let active = true;

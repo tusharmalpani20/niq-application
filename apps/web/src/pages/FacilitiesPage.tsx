@@ -1,3 +1,4 @@
+import { hasPermission } from "@niq/application-contracts";
 import type { AuthenticatedUser, Facility } from "@niq/application-contracts";
 import { Search, Pencil, Power } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
@@ -22,7 +23,7 @@ const pageSize = 10;
 
 export function FacilitiesPage() {
   const user = useOutletContext<AuthenticatedUser>();
-  const canManage = user.role === "ORGANIZATION_ADMIN";
+  const canManage = hasPermission(user.role, "facilities.manage");
   const [editing, setEditing] = useState<Facility | null>(null);
   const [changingStatus, setChangingStatus] = useState<Facility | null>(null);
   const [savingStatus, setSavingStatus] = useState(false);

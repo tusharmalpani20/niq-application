@@ -3,7 +3,7 @@ import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
-import { buildAssessmentForm, getAssessmentCompletion, projectScoreReviews, type AssessmentScoreResult, type AssessmentWorkflow } from "@niq/application-contracts";
+import { buildAssessmentForm, getAssessmentCompletion, projectScoreReviews, type AssessmentScoreResult, type AssessmentWorkflow, type MembershipRole } from "@niq/application-contracts";
 import { assessmentQuestionnaireFixture } from "./test-fixture";
 import { AssessmentEditorPage } from "./AssessmentEditorPage";
 
@@ -15,7 +15,7 @@ function recordFixture(): AssessmentWorkflow {
     patient: { id: "patient-a", reference: "PAT-1", displayName: "Test patient", dateOfBirth: "2006-01-01", gender: "FEMALE", phone: "1234567890", homeFacility: { id: "facility-a", name: "Chennai" } },
     createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 }
-async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{url: string; method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}, locator = "assessment-a", submittedResult?: AssessmentScoreResult) {
+async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{url: string; method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}, locator = "assessment-a", submittedResult?: AssessmentScoreResult, role: MembershipRole = "OTHER_MEDICAL") {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -38,7 +38,7 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
     if (method === "DELETE") record = { ...record, reports: [], revision: record.revision + 1 };
     return Response.json(record);
   }) as typeof fetch;
-  const router = createMemoryRouter([{ element: <Outlet context={{ userId: "user-a", organizationId: "org-a" }} />, children: [{ path: "/assessments/:assessmentId", element: <AssessmentEditorPage /> }, { path: "/patients/:id", element: <p>Patient record</p> }] }], { initialEntries: [`/assessments/${locator}`] });
+  const router = createMemoryRouter([{ element: <Outlet context={{ userId: "user-a", organizationId: "org-a", role }} />, children: [{ path: "/assessments", element: <p>Assessment list</p> }, { path: "/assessments/:assessmentId", element: <AssessmentEditorPage /> }, { path: "/patients/:id", element: <p>Patient record</p> }] }], { initialEntries: [`/assessments/${locator}`] });
   const root = createRoot(document.getElementById("root")!);
   async function click(label: string) {
     const button = [...document.querySelectorAll("button")].filter(item => (item.textContent?.trim() === label || item.getAttribute("aria-label") === label)).at(-1);
@@ -196,3 +196,16 @@ test("clearing a controlling answer clears dependent answers in the saved draft"
   expect(saved.metastasis_site).toBeUndefined();
   expect(saved.metastasis_other).toBeUndefined();
 }, { answers: { ...recordFixture().answers, stage: "stage_metastatic", metastasis_site: "others", metastasis_other: "Old detail" } }));
+
+test("support cannot open clinical editor or fetch its data", async () => harness(async ({ router, requests }) => {
+  expect(router.state.location.pathname).toBe("/assessments");
+  expect(requests).toHaveLength(0);
+}, {}, "assessment-a", undefined, "SUPPORT"));
+
+for (const role of ["DOCTOR", "NUTRITIONIST"] as const) {
+  test(role + " can open an assessment", async () => harness(async ({ router, requests }) => {
+    expect(router.state.location.pathname).toBe("/assessments/assessment-a");
+    expect(requests.some(request => request.url.endsWith("/assessments/assessment-a"))).toBe(true);
+    expect(document.body.textContent).toContain("Personal details");
+  }, {}, "assessment-a", undefined, role));
+}

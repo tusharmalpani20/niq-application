@@ -4,9 +4,10 @@ import { act, StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
 import { filterAssessmentPatients, StartAssessmentPage } from "./StartAssessmentPage";
+import type { MembershipRole } from "@niq/application-contracts";
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Real selected patient", dateOfBirth: "2000-01-01", gender: "FEMALE", homeFacility: null, createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
-async function harness(path: string, handler: (url: string, init?: RequestInit) => Promise<Response>, callback: (router: ReturnType<typeof createMemoryRouter>, click: () => Promise<void>, switchScope: () => Promise<void>) => Promise<void>) {
+async function harness(path: string, handler: (url: string, init?: RequestInit) => Promise<Response>, callback: (router: ReturnType<typeof createMemoryRouter>, click: () => Promise<void>, switchScope: () => Promise<void>) => Promise<void>, role: MembershipRole = "OTHER_MEDICAL") {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -15,11 +16,11 @@ async function harness(path: string, handler: (url: string, init?: RequestInit) 
   globalThis.fetch = ((url: unknown, init?: RequestInit) => handler(String(url), init)) as typeof fetch;
   let updateScope: (() => void) | undefined;
   function Scope() {
-    const [context, setContext] = useState({ userId: id, organizationId: id });
-    updateScope = () => setContext({ userId: "second-user", organizationId: "second-org" });
+    const [context, setContext] = useState({ userId: id, organizationId: id, role });
+    updateScope = () => setContext({ userId: "second-user", organizationId: "second-org", role });
     return <Outlet context={context} />;
   }
-  const router = createMemoryRouter([{ element: <Scope />, children: [{ path: "/assessments/new", element: <StartAssessmentPage /> }, { path: "/assessments/:id", element: <p>Persisted assessment</p> }, { path: "/away", element: <p>Another page</p> }] }], { initialEntries: [path] });
+  const router = createMemoryRouter([{ element: <Scope />, children: [{ path: "/assessments", element: <p>Assessment list</p> }, { path: "/assessments/new", element: <StartAssessmentPage /> }, { path: "/assessments/:id", element: <p>Persisted assessment</p> }, { path: "/away", element: <p>Another page</p> }] }], { initialEntries: [path] });
   const root = createRoot(document.getElementById("root")!);
   try {
     await act(async () => { root.render(<StrictMode><RouterProvider router={router} /></StrictMode>); await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -115,4 +116,12 @@ test("scope switch clears patient state and ignores the previous user's pending 
     expect(router.state.location.pathname).toBe("/assessments/new");
     expect(new URLSearchParams(router.state.location.search).get("initialization")).toBeNull();
   });
+});
+
+test("support cannot start an assessment from a direct patient URL", async () => {
+  let requests = 0;
+  await harness(`/assessments/new?patient=${id}`, async () => { requests++; return Response.json(patient); }, async router => {
+    expect(router.state.location.pathname).toBe("/assessments");
+    expect(requests).toBe(0);
+  }, "SUPPORT");
 });

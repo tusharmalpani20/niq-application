@@ -1,3 +1,4 @@
+import { membershipRoleLabels } from "@niq/application-contracts";
 import type { OrganizationUser } from "@niq/application-contracts";
 import { X } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -11,7 +12,7 @@ import { DateDisplay } from "./DateDisplay";
 import { StatusBadge } from "./StatusBadge";
 
 const pageSize = 10;
-const roleLabels = { ORGANIZATION_ADMIN: "Organization admin", MEDICAL: "Medical", SUPPORT: "Support" } as const;
+const roleLabels = membershipRoleLabels;
 const statusLabels = { INVITED: "Invited", ACTIVE: "Active", SUSPENDED: "Suspended", DEACTIVATED: "Deactivated" } as const;
 
 function UserStatus({ user }: { user: OrganizationUser }) {

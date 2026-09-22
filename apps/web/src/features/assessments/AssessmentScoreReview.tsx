@@ -10,8 +10,8 @@ import { assessmentRequest, AssessmentRequestError } from "./workflow-api";
 type Target = { targetType: "item" | "section" | "overall" | "scan"; targetId: string | null; label: string; niqPoints: number; reviewedPoints: number; overridden: boolean };
 const points = (value: number | null) => value === null ? "—" : `${value} pts`;
 
-export function AssessmentScoreReview({ record, organizationId, renderScan, reportsContent, onDirtyChange, scanStatus = "Face scan unavailable" }: {
-  scanStatus?: string; record: AssessmentWorkflow; organizationId: string; renderScan: (active: boolean) => ReactNode; reportsContent: ReactNode; onDirtyChange: (dirty: boolean) => void;
+export function AssessmentScoreReview({ record, organizationId, renderScan, reportsContent, onDirtyChange, canReview = true, scanStatus = "Face scan unavailable" }: {
+  canReview?: boolean; scanStatus?: string; record: AssessmentWorkflow; organizationId: string; renderScan: (active: boolean) => ReactNode; reportsContent: ReactNode; onDirtyChange: (dirty: boolean) => void;
 }) {
   const [data, setData] = useState<AssessmentScoreReviews | null>(null);
   const [error, setError] = useState("");
@@ -39,7 +39,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   }, [organizationId, path, loadKey, scanStatus]);
   useEffect(() => { onDirtyChange(!!target); return () => onDirtyChange(false); }, [target, onDirtyChange]);
   function edit(next: Target) {
-    if (target || saving) return;
+    if (!canReview || target || saving) return;
     if (next.targetType === "section") setExpanded(next.targetId);
     if (next.targetType === "scan") setExpanded("face_scan");
     setTarget(next); setValue(String(next.reviewedPoints)); setReason(""); setError(""); setNotice(""); setConflict(false); request.current = null;
@@ -63,7 +63,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
       } else setError(cause instanceof Error ? cause.message : "Could not save. Your change is still here. Try saving again.");
     } finally { inFlight.current = false; setSaving(false); }
   }
-  const adjust = (next: Target, label: string) => data?.canAdjust && <Button variant="ghost" className="size-11 shrink-0 p-0 text-brand-ink" isDisabled={!!target || saving} aria-label={`Adjust ${next.label}`} onPress={() => edit(next)}><Pencil className="size-3.5" aria-hidden="true"/>{label}</Button>;
+  const adjust = (next: Target, label: string) => canReview && data?.canAdjust && <Button variant="ghost" className="size-11 shrink-0 p-0 text-brand-ink" isDisabled={!!target || saving} aria-label={`Adjust ${next.label}`} onPress={() => edit(next)}><Pencil className="size-3.5" aria-hidden="true"/>{label}</Button>;
   if (!view) return <p role="alert">The saved score could not be verified.</p>;
   const { result, sections } = view;
   const overall = data?.overall;

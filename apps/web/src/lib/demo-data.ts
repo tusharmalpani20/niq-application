@@ -13,9 +13,9 @@ export const facilities = [
 ];
 export const users = [
   { name: "Ananya Rao", email: "ananya@example.test", role: "Organization admin", facility: "All facilities", status: "Active" as const, mfa: true },
-  { name: "Meera Shah", email: "meera@example.test", role: "Medical user", facility: "Chennai Central", status: "Active" as const, mfa: true },
-  { name: "Arjun Nair", email: "arjun@example.test", role: "Medical user", facility: "Hyderabad", status: "Invited" as const, mfa: false },
-  { name: "Devika Iyer", email: "devika@example.test", role: "Medical user", facility: "Bengaluru", status: "Active" as const, mfa: false },
+  { name: "Meera Shah", email: "meera@example.test", role: "Other Medical Personnel", facility: "Chennai Central", status: "Active" as const, mfa: true },
+  { name: "Arjun Nair", email: "arjun@example.test", role: "Other Medical Personnel", facility: "Hyderabad", status: "Invited" as const, mfa: false },
+  { name: "Devika Iyer", email: "devika@example.test", role: "Other Medical Personnel", facility: "Bengaluru", status: "Active" as const, mfa: false },
 ];
 export const assessments = [
   { id: "ASM-2048", patientId: patients[0]!.id, patient: patients[0]!.displayName, facility: "Chennai Central", date: "12 Sep 2026", status: "Under review" as AssessmentStatus, version: "NIQ-DRAFT-2026-09" },

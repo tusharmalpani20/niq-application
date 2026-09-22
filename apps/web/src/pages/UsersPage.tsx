@@ -1,3 +1,4 @@
+import { hasPermission } from "@niq/application-contracts";
 import { type AuthenticatedUser, type Facility, type OrganizationDetails, type OrganizationUser } from "@niq/application-contracts";
 import { useCallback, useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
@@ -37,7 +38,7 @@ export function UsersPage() {
   const [invite, setInvite] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const canManage = currentUser.role === "ORGANIZATION_ADMIN";
+  const canManage = hasPermission(currentUser.role, "users.manage");
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {

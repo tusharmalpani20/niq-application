@@ -1,3 +1,4 @@
+import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility, Patient, RegisterPatient } from "@niq/application-contracts";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
@@ -221,7 +222,7 @@ export function PatientDetailPage() {
   if (!patient) return <p className="muted">Loading patient…</p>;
   const age = patientAgeLabel(patient.dateOfBirth);
   return <>
-    <PatientHeader patient={patient} action={patientTab === "assessments" && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>} />
+    <PatientHeader patient={patient} action={patientTab === "assessments" && hasPermission(user.role, "assessments.edit") && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>} />
     <Tabs selectedKey={patientTab} onSelectionChange={(key) => setPatientTab(String(key))} className="organization-detail-tabs gap-5">
       <TabsList variant="line" aria-label="Patient record" className="w-full justify-start gap-5 border-b p-0">
         <TabsTrigger id="details" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Details</TabsTrigger>
@@ -236,11 +237,11 @@ export function PatientDetailPage() {
       <TabsContent id="assessments">
         <Card className="surface p-5">
           {historyState === "loading" ? <p>Loading assessments…</p> : historyState === "error" ? <div className="grid gap-3"><p>Assessment history could not be loaded.</p><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></div> : history.length ? <DataTable label="Patient assessments" data={history} columns={[
-            { id: "reference", header: "Assessment", cell: ({ row }) => <Link className="text-foreground hover:underline font-normal" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> },
-            { id: "date", header: "Started", cell: ({ row }) => <Link className="text-foreground underline" to={`/assessments/${row.original.reference}`}><DateDisplay value={row.original.createdAt} /></Link> },
+            { id: "reference", header: "Assessment", cell: ({ row }) => hasPermission(user.role, "assessments.read") ? <Link className="text-foreground hover:underline font-normal" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> : row.original.reference },
+            { id: "date", header: "Started", cell: ({ row }) => hasPermission(user.role, "assessments.read") ? <Link className="text-foreground underline" to={`/assessments/${row.original.reference}`}><DateDisplay value={row.original.createdAt} /></Link> : <DateDisplay value={row.original.createdAt} /> },
             { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "No facility" },
             { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
-          ]} /> : <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center"><h2 className="font-semibold">Start this patient’s first assessment</h2><RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18} />New assessment</RouterButtonLink></div>}
+          ]} /> : <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center"><h2 className="font-semibold">{hasPermission(user.role, "assessments.edit") ? "Start this patient’s first assessment" : "No assessments yet"}</h2>{hasPermission(user.role, "assessments.edit") && <RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18} />New assessment</RouterButtonLink>}</div>}
         </Card>
       </TabsContent>
     </Tabs>

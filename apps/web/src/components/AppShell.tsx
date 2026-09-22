@@ -1,3 +1,4 @@
+import { hasPermission, membershipRoleLabels } from "@niq/application-contracts";
 import type { AuthenticatedUser } from "@niq/application-contracts";
 import { LogOut } from "lucide-react";
 import { useLayoutEffect, useState } from "react";
@@ -12,6 +13,12 @@ import {
 import { signOut } from "../lib/api";
 import { useBranding } from "../lib/branding-context";
 import { Icon } from "../lib/icons";
+
+const restrictedRoutes = { "/users": "users.manage", "/settings/branding": "organization.manage", "/settings/scoring": "scoring.manage" } as const;
+function canVisit(user: AuthenticatedUser, path: string) {
+  const permission = restrictedRoutes[path as keyof typeof restrictedRoutes];
+  return !permission || hasPermission(user.role, permission);
+}
 
 const navigation = [
   { to: "/", label: "Overview", icon: "dashboard", end: true },
@@ -53,7 +60,7 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
       </div>
     </SidebarHeader>
     <SidebarContent><SidebarGroup><SidebarGroupContent><SidebarMenu className="gap-1">
-      {navigation.filter((item) => !["/users", "/settings/branding", "/settings/scoring"].includes(item.to) || user.role === "ORGANIZATION_ADMIN").map((item) => <SidebarMenuItem key={item.to}>
+      {navigation.filter((item) => canVisit(user, item.to)).map((item) => <SidebarMenuItem key={item.to}>
         <SidebarMenuButton isActive={isActive(item.to, item.end)} tooltip={item.label} onPress={() => go(item.to)} className="h-10 text-sm">
           <Icon name={item.icon} /><span>{item.label}</span>
         </SidebarMenuButton>
@@ -62,7 +69,7 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
     <SidebarFooter className="border-t border-sidebar-border p-3 group-data-[collapsible=icon]:p-1">
       <div className="flex items-center gap-2 overflow-hidden group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
         <Avatar className="size-7 shrink-0"><AvatarFallback className="text-xs">{initials}</AvatarFallback></Avatar>
-        <div className="grid min-w-0 flex-1 group-data-[collapsible=icon]:hidden"><strong className="truncate text-xs">{user.displayName}</strong><span className="truncate text-[.68rem] text-muted-foreground">{user.role === "ORGANIZATION_ADMIN" ? "Organization admin" : user.role === "MEDICAL" ? "Medical user" : "Support user"}</span></div>
+        <div className="grid min-w-0 flex-1 group-data-[collapsible=icon]:hidden"><strong className="truncate text-xs">{user.displayName}</strong><span className="truncate text-[.68rem] text-muted-foreground">{membershipRoleLabels[user.role]}</span></div>
         <Button variant="ghost" size="icon-sm" aria-label="Sign out" onPress={onSignOut}><LogOut /></Button>
       </div>
     </SidebarFooter>
@@ -74,7 +81,7 @@ export function AppShell({ user }: { user: AuthenticatedUser }) {
   const { pathname } = useLocation();
   // All clinical routes use the central organisation theme.
   const refreshedLayout = true;
-  const adminOnly = ["/users", "/settings/branding", "/settings/scoring"].includes(pathname);
+  const allowed = canVisit(user, pathname);
   useLayoutEffect(() => {
     if (refreshedLayout) document.documentElement.dataset.appArea = "client";
     else delete document.documentElement.dataset.appArea;
@@ -90,7 +97,7 @@ export function AppShell({ user }: { user: AuthenticatedUser }) {
     <OrganizationSidebar user={user} onSignOut={handleSignOut} />
     <SidebarInset className="min-w-0">
       <header className="client-mobile-nav"><SidebarTrigger aria-label="Toggle navigation" /></header>
-      <main className="content">{adminOnly && user.role !== "ORGANIZATION_ADMIN" ? <Navigate to="/" replace /> : <Outlet context={user} />}</main>
+      <main className="content">{!allowed ? <Navigate to="/" replace /> : <Outlet context={user} />}</main>
     </SidebarInset>
   </SidebarProvider>;
 }

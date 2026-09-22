@@ -1,3 +1,4 @@
+import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility } from "@niq/application-contracts";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router-dom";
@@ -23,6 +24,8 @@ const assessmentDate = (date: Date) => new Intl.DateTimeFormat("en-GB", { day: "
 export function AssessmentsPage() {
   const user = useOutletContext<AuthenticatedUser>();
   const navigate = useNavigate();
+  const canOpen = hasPermission(user.role, "assessments.read");
+  const canCreate = hasPermission(user.role, "assessments.edit");
   const [records, setRecords] = useState<AssessmentSummary[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [reload, setReload] = useState(0);
@@ -48,25 +51,25 @@ export function AssessmentsPage() {
   const currentPage = Math.min(page, pageCount);
   const visible = filtered.slice((currentPage - 1) * assessmentPageSize, currentPage * assessmentPageSize);
   const columns: Array<DataTableColumn<AssessmentSummary>> = [
-    { id: "reference", header: "Assessment", cell: ({ row }) => <Link className="text-foreground hover:underline font-normal" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> },
-    { id: "patient", header: "Patient", cell: ({ row }) => <div className="grid gap-1"><Link className="text-foreground hover:underline font-normal" to={`/assessments/${row.original.reference}`}>{row.original.patient.displayName}</Link><span className="text-xs text-muted-foreground">{row.original.patient.reference}</span></div> },
+    { id: "reference", header: "Assessment", cell: ({ row }) => canOpen ? <Link className="text-foreground hover:underline font-normal" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> : row.original.reference },
+    { id: "patient", header: "Patient", cell: ({ row }) => <div className="grid gap-1"><Link className="text-foreground hover:underline font-normal" to={`/patients/${row.original.patient.reference}`}>{row.original.patient.displayName}</Link><span className="text-xs text-muted-foreground">{row.original.patient.reference}</span></div> },
     { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "—" },
     { id: "created", header: "Started", cell: ({ row }) => <DateDisplay value={row.original.createdAt} /> },
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
   ];
   const hasFilters = query.trim() || facility !== "all" || status !== "all";
-  const emptyContent = <div className="table-empty-content">{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : <><strong>Create your first assessment</strong><RouterButtonLink to="/assessments/new"><Icon name="plus" size={18} />New assessment</RouterButtonLink></>}</div>;
+  const emptyContent = <div className="table-empty-content">{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : <><strong>{canCreate ? "Create your first assessment" : "No assessments yet"}</strong>{canCreate && <RouterButtonLink to="/assessments/new"><Icon name="plus" size={18} />New assessment</RouterButtonLink>}</>}</div>;
   return <>
     <h1 className="patient-page-title">Assessments</h1>
     <div className="patient-list-header">
       <div className="patient-list-heading"><span className="patient-list-label">Assessments</span><span>{records.length}</span></div>
-      <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search by assessment ID, patient name or patient ID" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search assessments or patients…" /></InputGroup><TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="New assessment" onPress={() => navigate("/assessments/new")}><Icon name="plus" size={20}/></Button><Tooltip>New assessment</Tooltip></TooltipTrigger></div>
+      <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search by assessment ID, patient name or patient ID" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search assessments or patients…" /></InputGroup>{canCreate && <TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="New assessment" onPress={() => navigate("/assessments/new")}><Icon name="plus" size={20}/></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>
     </div>
     <div className="patient-filter-bar assessment-filter-bar">
       <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { setFacility(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
       <Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem>{Object.entries(assessmentStatusLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>
     </div>
-    <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card" key={record.id}><div><Link className="font-normal text-foreground hover:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link><span>{record.patient.reference} · {record.patient.displayName}</span></div><StatusBadge status={assessmentStatusLabels[record.status]}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
+    <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card" key={record.id}><div>{canOpen ? <Link className="font-normal text-foreground hover:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}<span>{record.patient.reference} · {record.patient.displayName}</span></div><StatusBadge status={assessmentStatusLabels[record.status]}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
   </>;
 }

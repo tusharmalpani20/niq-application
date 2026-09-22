@@ -1,3 +1,4 @@
+import { hasPermission } from "@niq/application-contracts";
 import type { AuthenticatedUser, OrganizationDetails } from "@niq/application-contracts";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useOutletContext } from "react-router-dom";
@@ -15,7 +16,7 @@ export function ScoringConnectionPage() {
   }, [user.organizationId]);
   useEffect(() => { load(); }, [load]);
 
-  if (user.role !== "ORGANIZATION_ADMIN") return <Navigate replace to="/" />;
+  if (!hasPermission(user.role, "scoring.manage")) return <Navigate replace to="/" />;
   if (state === "loading") return <section className="surface"><LoadingState label="Loading scoring connection" /></section>;
   if (state === "error" || !details) return <ErrorState retry={load} />;
   return <><PageHeader title="Scoring connection" /><ScoringConnectionPanel organizationId={user.organizationId} connection={details.scoringConnection} onActivated={(connection) => setDetails({ ...details, scoringConnection: connection })} onDisconnected={() => setDetails({ ...details, scoringConnection: null })} className="surface admin-detail-card" showHeading={false} /></>;
