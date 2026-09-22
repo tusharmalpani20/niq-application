@@ -1,6 +1,6 @@
 # Clinical review and assessment correction — implementation plan
 
-Status: planning only; implementation is paused pending a separate instruction to proceed.
+Status: implemented 23 September 2026. See companion implementation log, permissions/state guide, history/operations guide and verification record for delivered behavior and limits.
 Date: 23 September 2026.
 Plan audit: revised 23 September 2026; see section 16 and the companion plan audit.
 Application repository: `/home/tm/Desktop/work/NIQ/application/niq-application`.
@@ -13,7 +13,7 @@ Extend scored assessments with a clinical review queue, accountable ownership, t
 
 This plan supersedes the earlier clinical review draft that excluded correction/rescoring and suggested an administrator submission fallback. The confirmed decisions below take precedence over that draft and over any partially written code.
 
-Writing this plan does not authorize resuming implementation. No incomplete workflow code should be committed as finished functionality.
+Implementation was separately authorized after this plan and audit were completed. No incomplete workflow code should be represented as finished functionality.
 
 ## 2. Confirmed product decisions
 
@@ -396,4 +396,4 @@ These clarifications close implementation gaps without adding Organization rules
 
 Audited against confirmed conversation decisions and existing workflow, score-adjustment, report, scan and facility-access code on 23 September 2026. Corrected administrative submission eligibility, post-rescoring correction ownership, previous-reviewer routing, evidence finalization, replay ordering, historical retrieval and rollout requirements.
 
-No application behavior was changed during this audit. Implementation remains paused. External scoring/scan protocol capabilities and migration data inventory are explicit implementation verification gates, not assumed working features. Record their findings in the required implementation log before enabling correction transitions.
+No application behavior was changed during the plan audit. Implementation was subsequently authorized. External scoring/scan protocol capabilities and migration data inventory are explicit implementation verification gates, not assumed working features. Record their findings in the required implementation log before enabling correction transitions.
