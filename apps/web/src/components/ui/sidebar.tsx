@@ -186,13 +186,14 @@ function Sidebar({
     return (
       <Sheet
         ariaLabel="Navigation"
+        showCloseButton={false}
         isOpen={openMobile}
         onOpenChange={setOpenMobile}
         dir={dir}
         data-sidebar="sidebar"
         data-slot="sidebar"
         data-mobile="true"
-        className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+        className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground"
         style={
           {
             "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
