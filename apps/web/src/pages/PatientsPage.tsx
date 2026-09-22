@@ -1,29 +1,27 @@
 import { hasPermission } from "@niq/application-contracts";
-import type { AssessmentSummary, AuthenticatedUser, Facility, Patient, RegisterPatient } from "@niq/application-contracts";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import type { AssessmentSummary, AuthenticatedUser, Facility, Patient } from "@niq/application-contracts";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Pencil, Search } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
+import { PatientForm, PatientFormDialog } from "../components/PatientForm";
 import { PatientHeader } from "../components/PatientHeader";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
-import { ApiRequestError, getPatient, listAssessments, listFacilities, listPatients, registerPatient } from "../lib/api";
+import { getPatient, listAssessments, listFacilities, listPatients } from "../lib/api";
 import { Icon } from "../lib/icons";
 
 import { DateDisplay } from "../components/DateDisplay";
 import { StatusBadge } from "../components/StatusBadge";
-import { patientAgeLabel, latestAssessmentDates, todayDate, assessmentStatusLabels } from "../lib/patient-display";
+import { patientAgeLabel, latestAssessmentDates, assessmentStatusLabels } from "../lib/patient-display";
 
 const pageSize = 10;
 type PatientRow = { id: string; reference: string; displayName: string; age: string; createdAt: Date; gender: string; facility: string; facilityId: string | null; lastAssessment: Date | null };
@@ -117,72 +115,8 @@ export function PatientsPage() {
       <div className="desktop-table p-5">{visiblePatients.length ? <DataTable columns={columns} data={visiblePatients} label="Patients" /> : emptyContent}</div>
     </section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Patients pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
-    {showRegistration && <PatientRegistrationDialog organizationId={user.organizationId} facilities={facilityOptions.filter(item => item.status === "ACTIVE")} onClose={() => setShowRegistration(false)} onRegistered={(patient) => { setPatients((current) => [patient, ...current]); setShowRegistration(false); }} />}
+    {showRegistration && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions.filter(item => item.status === "ACTIVE")} onClose={() => setShowRegistration(false)} onSaved={(patient) => { setPatients((current) => [patient, ...current]); setShowRegistration(false); }} />}
   </>;
-}
-
-function PatientRegistrationForm({ organizationId, facilities, onCancel, onRegistered, onBusyChange }: { organizationId: string; facilities: Facility[]; onCancel: () => void; onRegistered: (patient: Patient) => void; onBusyChange?: (busy: boolean) => void }) {
-  const [facilityId, setFacilityId] = useState<string | null>(null);
-  const [gender, setGender] = useState<Patient["gender"] | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!facilityId || !gender) {
-      setMessage("Select a facility and gender.");
-      return;
-    }
-    const form = new FormData(event.currentTarget);
-    const phone = String(form.get("phone") ?? "").trim();
-    const email = String(form.get("email") ?? "").trim();
-    const input: RegisterPatient = {
-      medicalRecordNumber: String(form.get("mrn") ?? ""),
-      homeFacilityId: facilityId,
-      dateOfBirth: String(form.get("dateOfBirth") ?? ""),
-      gender,
-      name: String(form.get("name") ?? ""),
-      ...(phone ? { phone } : {}),
-      ...(email ? { email } : {}),
-    };
-    if (input.dateOfBirth > todayDate()) { setMessage("Date of birth cannot be in the future."); return; }
-    setIsSubmitting(true);
-    onBusyChange?.(true);
-    setMessage(null);
-    try {
-      onRegistered(await registerPatient(organizationId, input));
-    } catch (error) {
-      setMessage(error instanceof ApiRequestError ? error.message : "The patient could not be registered. Please try again.");
-      setIsSubmitting(false);
-      onBusyChange?.(false);
-    }
-  }
-
-  return <form className="p-5 grid gap-5" onSubmit={submit}>
-    <fieldset disabled={isSubmitting} className="grid gap-4">
-      <legend className="mb-4 font-semibold">Patient details</legend>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field><FieldLabel htmlFor="patient-name">Patient name</FieldLabel><Input id="patient-name" name="name" autoComplete="name" required autoFocus /></Field>
-        <Field><FieldLabel htmlFor="patient-mrn">Medical record number</FieldLabel><Input id="patient-mrn" name="mrn" placeholder="Hospital MRN" required /></Field>
-        <Field><FieldLabel>Facility</FieldLabel><Select aria-label="Facility" placeholder="Select facility" selectedKey={facilityId} onSelectionChange={key => setFacilityId(String(key))} isRequired isDisabled={isSubmitting}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field>
-        <Field><FieldLabel htmlFor="patient-birth">Date of birth</FieldLabel><Input id="patient-birth" type="date" name="dateOfBirth" max={todayDate()} required /></Field>
-        <Field><FieldLabel>Gender</FieldLabel><Select aria-label="Gender" placeholder="Select gender" selectedKey={gender} onSelectionChange={key => setGender(String(key) as Patient["gender"])} isRequired isDisabled={isSubmitting}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(["FEMALE", "MALE", "OTHER", "UNKNOWN"] as const).map(value => <SelectItem id={value} key={value}>{genderLabel(value)}</SelectItem>)}</SelectContent></Select></Field>
-      </div>
-    </fieldset>
-    <fieldset disabled={isSubmitting} className="border-t pt-4 grid gap-4"><legend className="font-semibold">Contact details</legend><div className="grid gap-4 sm:grid-cols-2">
-      <Field><FieldLabel htmlFor="patient-phone">Mobile number (optional)</FieldLabel><Input id="patient-phone" name="phone" type="tel" autoComplete="tel" /></Field>
-      <Field><FieldLabel htmlFor="patient-email">Email address (optional)</FieldLabel><Input id="patient-email" name="email" type="email" autoComplete="email" /></Field>
-    </div></fieldset>
-    {facilities.length === 0 && <Alert><AlertDescription>Add an active facility before registering a patient.</AlertDescription></Alert>}
-    {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
-    <div className="form-footer"><Button type="button" variant="outline" isDisabled={isSubmitting} onPress={onCancel}>Cancel</Button><Button type="submit" isDisabled={isSubmitting || facilities.length === 0}>{isSubmitting ? "Registering…" : "Register patient"}</Button></div></form>;
-}
-
-function PatientRegistrationDialog({ organizationId, facilities, onClose, onRegistered }: { organizationId: string; facilities: Facility[]; onClose: () => void; onRegistered: (patient: Patient) => void }) {
-  const [busy, setBusy] = useState(false);
-  return <Dialog ariaLabel="Register patient" isOpen isDismissable={!busy} isKeyboardDismissDisabled={busy} showCloseButton={!busy} onOpenChange={(open) => { if (!open && !busy) onClose(); }} className="patient-registration-dialog">
-    <DialogHeader className="patient-registration-dialog-header"><DialogTitle>Register patient</DialogTitle></DialogHeader>
-    <div className="patient-registration-dialog-body"><PatientRegistrationForm organizationId={organizationId} facilities={facilities} onBusyChange={setBusy} onCancel={onClose} onRegistered={onRegistered} /></div>
-  </Dialog>;
 }
 
 export function RegisterPatientPage() {
@@ -191,18 +125,38 @@ export function RegisterPatientPage() {
   const [facilityOptions, setFacilityOptions] = useState<Facility[]>([]);
   useEffect(() => { listFacilities(user.organizationId).then((items) => setFacilityOptions(items.filter((item) => item.status === "ACTIVE"))).catch(() => setFacilityOptions([])); }, [user.organizationId]);
   return <><PageHeader eyebrow="Patient registration" title="Register a patient" description="Only collect information required for care and assessment."/>
-    <div className="surface"><PatientRegistrationForm organizationId={user.organizationId} facilities={facilityOptions} onCancel={() => navigate("/patients")} onRegistered={() => navigate("/patients")} /></div>
+    <div className="surface"><PatientForm organizationId={user.organizationId} facilities={facilityOptions} onCancel={() => navigate("/patients")} onSaved={() => navigate("/patients")} /></div>
   </>;
 }
 
 export function PatientDetailPage() {
   const user = useOutletContext<AuthenticatedUser>();
-  const navigate = useNavigate();
   const { patientLocator = "" } = useParams();
+  // Reset the record and any open editor when navigation or account scope changes.
+  return <PatientDetailView key={`${user.organizationId}:${user.userId}:${user.membershipId}:${user.role}:${patientLocator}`} user={user} patientLocator={patientLocator} />;
+}
+
+function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; patientLocator: string }) {
+  const navigate = useNavigate();
+  const mounted = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [failed, setFailed] = useState(false);
   const [reload, setReload] = useState(0);
   const [history, setHistory] = useState<AssessmentSummary[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [editFacilities, setEditFacilities] = useState<Facility[]>([]);
+  const [editLoad, setEditLoad] = useState<"idle" | "loading" | "error">("idle");
+  async function openEdit() {
+    setEditLoad("loading");
+    try {
+      const facilities = await listFacilities(user.organizationId);
+      if (!mounted.current) return;
+      setEditFacilities(facilities);
+      setEditLoad("idle");
+      setEditing(true);
+    } catch { if (mounted.current) setEditLoad("error"); }
+  }
   const [patientTab, setPatientTab] = useState("details");
   const [historyState, setHistoryState] = useState<"loading" | "ready" | "error">("loading");
   useEffect(() => {
@@ -222,7 +176,9 @@ export function PatientDetailPage() {
   if (!patient) return <p className="muted">Loading patient…</p>;
   const age = patientAgeLabel(patient.dateOfBirth);
   return <>
-    <PatientHeader patient={patient} action={patientTab === "assessments" && hasPermission(user.role, "assessments.edit") && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>} />
+    <PatientHeader patient={patient} action={<div className="flex gap-2">{hasPermission(user.role, "patients.edit") && <Button variant="outline" isDisabled={editLoad === "loading"} onPress={() => void openEdit()}><Pencil className="size-4" />{editLoad === "loading" ? "Loading…" : "Edit patient"}</Button>}{patientTab === "assessments" && hasPermission(user.role, "assessments.edit") && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>} />
+    {editLoad === "error" && <Alert variant="destructive"><AlertDescription>Facilities could not be loaded. <Button variant="link" onPress={() => void openEdit()}>Retry</Button></AlertDescription></Alert>}
+    {editing && <PatientFormDialog organizationId={user.organizationId} facilities={editFacilities} patient={patient} onClose={() => setEditing(false)} onSaved={updated => { setPatient(updated); setEditing(false); }} />}
     <Tabs selectedKey={patientTab} onSelectionChange={(key) => setPatientTab(String(key))} className="organization-detail-tabs gap-5">
       <TabsList variant="line" aria-label="Patient record" className="w-full justify-start gap-5 border-b p-0">
         <TabsTrigger id="details" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Details</TabsTrigger>

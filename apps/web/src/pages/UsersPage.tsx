@@ -1,8 +1,9 @@
+import { UserEditDialog, canEditOrganizationUser } from "../components/UserEditDialog";
 import { hasPermission } from "@niq/application-contracts";
 import { type AuthenticatedUser, type Facility, type OrganizationDetails, type OrganizationUser } from "@niq/application-contracts";
 import { useCallback, useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import { Plus, Search, RefreshCw, CircleX, Power } from "lucide-react";
+import { Pencil, Plus, Search, RefreshCw, CircleX, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DateDisplay } from "../components/DateDisplay";
 import { EmptyState } from "../components/Page";
@@ -35,6 +36,7 @@ export function UsersPage() {
   const [accessTarget, setAccessTarget] = useState<OrganizationUser | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [editTarget, setEditTarget] = useState<OrganizationUser | null>(null);
   const [invite, setInvite] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -46,7 +48,7 @@ export function UsersPage() {
       setUsers(records);
       setInvitations(details.invitations.filter((item) => item.status === "PENDING" || item.status === "EXPIRED"));
       setAllFacilities(access.allFacilities);
-      setFacilities(locations.filter((item) => item.status === "ACTIVE"));
+      setFacilities(locations);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Users could not be loaded."); }
     finally { setLoading(false); }
   }, [currentUser.organizationId]);
@@ -73,7 +75,7 @@ export function UsersPage() {
     { id: "facilities", header: "Facility access", cell: ({ row }) => row.original.facilities?.length ? row.original.facilities.map((item) => item.name).join(", ") : row.original.facilities ? "All facilities" : "Unavailable" },
     { id: "status", header: "Status", cell: ({ row }) => <Badge variant="outline" className={row.original.active && row.original.status === "ACTIVE" ? "border-success/20 bg-success/10 text-success" : "bg-muted text-muted-foreground"}>{row.original.status === "SUSPENDED" ? "Account suspended" : row.original.status === "DEACTIVATED" ? "Account deactivated" : row.original.status === "INVITED" ? "Invitation pending" : row.original.active ? "Enabled" : "Disabled"}</Badge> },
   ];
-  if (canManage) columns.push({ id: "actions", header: "Actions", cell: ({ row }) => row.original.userId === currentUser.userId ? <span className="text-xs text-muted-foreground">Your account</span> : row.original.status !== "ACTIVE" ? <span className="text-xs text-muted-foreground">Contact NIQ support</span> : <TooltipTrigger><Button size="icon" variant={row.original.active ? "destructive-outline" : "outline"} aria-label={`${row.original.active ? "Disable" : "Enable"} ${row.original.displayName}`} onPress={() => { setActionError(""); setAccessTarget(row.original); }}><Power aria-hidden="true" /></Button><Tooltip>{row.original.active ? "Disable user" : "Enable user"}</Tooltip></TooltipTrigger> });
+  if (canManage) columns.push({ id: "actions", header: "Actions", cell: ({ row }) => <div className="flex items-center gap-2"><TooltipTrigger><Button variant="outline" size="icon" aria-label={`Edit ${row.original.displayName}`} isDisabled={!canEditOrganizationUser(row.original, facilities, allFacilities)} onPress={() => setEditTarget(row.original)}><Pencil aria-hidden="true" /></Button><Tooltip>{canEditOrganizationUser(row.original, facilities, allFacilities) ? "Edit user" : "Outside your facility access"}</Tooltip></TooltipTrigger>{row.original.userId === currentUser.userId ? <span className="text-xs text-muted-foreground">Your account</span> : row.original.status !== "ACTIVE" ? <span className="text-xs text-muted-foreground">Contact NIQ support</span> : <TooltipTrigger><Button size="icon" variant={row.original.active ? "destructive-outline" : "outline"} aria-label={`${row.original.active ? "Disable" : "Enable"} ${row.original.displayName}`} onPress={() => { setActionError(""); setAccessTarget(row.original); }}><Power aria-hidden="true" /></Button><Tooltip>{row.original.active ? "Disable user" : "Enable user"}</Tooltip></TooltipTrigger>}</div> });
   const invitationColumns: DataTableColumn<Invitation>[] = [
     { accessorKey: "email", header: "Invitee" },
     { id: "role", header: "Role", cell: ({ row }) => userRoleLabels[row.original.role] },
@@ -104,6 +106,7 @@ export function UsersPage() {
     </TabsContent></Tabs>
     {invitationTarget && <TenantInvitationActionDialog organizationId={currentUser.organizationId} target={invitationTarget} onClose={() => setInvitationTarget(null)} onUpdated={() => void load()} />}
     {accessTarget && <Dialog ariaLabel={accessTarget.active ? "Disable user?" : "Enable user?"} isOpen isDismissable={!busy} showCloseButton={!busy} onOpenChange={(open) => { if (!open && !busy) setAccessTarget(null); }} className="sm:max-w-md"><DialogHeader><DialogTitle>{accessTarget.active ? "Disable user?" : "Enable user?"}</DialogTitle></DialogHeader><p className="text-muted-foreground">{accessTarget.active ? `Are you sure you want to disable ${accessTarget.displayName}? They will lose access to this organization.` : `Enable access for ${accessTarget.displayName}?`}</p>{actionError && <p role="alert" className="text-destructive">{actionError}</p>}<div className="flex justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => setAccessTarget(null)}>Go back</Button><Button variant={accessTarget.active ? "destructive" : "default"} isDisabled={busy} onPress={changeAccess}>{busy ? "Saving…" : accessTarget.active ? "Disable user" : "Enable user"}</Button></div></Dialog>}
-    {invite && <UserInvitationDialog user={currentUser} facilities={facilities} allFacilities={allFacilities} onClose={() => setInvite(false)} onCreated={() => { setTab("invitations"); setPage(1); setQuery(""); setRole("all"); setStatus("all"); void load(); }} />}
+    {editTarget && <UserEditDialog user={currentUser} target={editTarget} facilities={facilities} allFacilities={allFacilities} onClose={() => setEditTarget(null)} onSaved={() => { setEditTarget(null); void load(); }} />}
+    {invite && <UserInvitationDialog user={currentUser} facilities={facilities.filter(item => item.status === "ACTIVE")} allFacilities={allFacilities} onClose={() => setInvite(false)} onCreated={() => { setTab("invitations"); setPage(1); setQuery(""); setRole("all"); setStatus("all"); void load(); }} />}
   </>;
 }

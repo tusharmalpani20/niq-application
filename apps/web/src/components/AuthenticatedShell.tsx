@@ -40,6 +40,13 @@ export function AuthenticatedShell({ area }: { area: "platform" | "organization"
     return () => { active = false; };
   }, [resetBranding, updateBranding]);
 
+  useEffect(() => {
+    let active = true;
+    const refresh = () => { void getCurrentUser().then(current => { if (active) setUser(current); }).catch(() => {}); };
+    window.addEventListener("niq:user-profile-updated", refresh);
+    return () => { active = false; window.removeEventListener("niq:user-profile-updated", refresh); };
+  }, []);
+
   if (state === "unauthenticated") return <Navigate replace to="/sign-in" />;
   if (state === "unavailable") return <main className="auth-page"><Card className="w-full max-w-md"><CardHeader><CardTitle>Workspace unavailable</CardTitle><CardDescription>The application service could not be reached. Your data has not been changed.</CardDescription></CardHeader><CardContent><Button onPress={() => window.location.reload()}>Try again</Button></CardContent></Card></main>;
   if (state !== "authenticated" || !user) return <main className="auth-page"><div className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner />Opening your secure workspace…</div></main>;
