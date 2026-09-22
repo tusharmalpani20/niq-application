@@ -80,7 +80,7 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
       </fieldset>;
     }
     if (field.readOnly || field.kind === "calculated") return <div key={field.id} id={id} tabIndex={-1} className="space-y-1.5">
-      <p className="text-sm text-muted-foreground">{label}</p><p className="min-h-8 font-medium">{field.kind === "calculated" ? calculated(field, answers) : value === undefined || value === null || value === "" ? "Not provided" : String(value)}</p>{field.id === "contact" && onEditContact && !readOnly && <Button variant="link" className="px-0" onPress={onEditContact}>{value ? "Edit contact" : "Add contact"}</Button>}{errorMarkup}
+      <p className="text-sm text-muted-foreground">{label}</p><p className="min-h-8 font-medium">{field.kind === "calculated" ? calculated(field, answers) : value === undefined || value === null || value === "" ? "Not provided" : String(value)}</p>{field.id === "contact" && !value && onEditContact && !readOnly && <Button variant="link" className="px-0" onPress={onEditContact}>Add contact</Button>}{errorMarkup}
     </div>;
     const other = otherFields[field.id];
     return <div key={field.id} className={`min-w-0 space-y-2 ${field.kind === "select" && (field.options?.length || 0) <= 6 ? "col-[1/-1]" : ""}`}>

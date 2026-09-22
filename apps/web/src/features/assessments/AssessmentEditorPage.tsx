@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { AssessmentFields } from "./AssessmentFields";
 import { AssessmentSectionNavigation } from "./AssessmentSectionNavigation";
 import { AssessmentReview } from "./AssessmentReview";
-import { AssessmentResult } from "./AssessmentResult";
+import { AssessmentResult, assessmentResultView, sectionScoreLabel } from "./AssessmentResult";
 import { AssessmentReports } from "./AssessmentReports";
 import { AssessmentFaceScan } from "./AssessmentFaceScan";
 import { useDraftNavigationGuard } from "./useDraftNavigationGuard";
@@ -122,6 +122,8 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
   }
   if (loading) return <p role="status">Loading assessment…</p>;
   if (!record) return <div className="grid gap-4"><h1 className="text-2xl font-semibold">Assessment unavailable</h1><p role="alert">{error || "This assessment could not be found."}</p><Button onPress={() => { setError(""); void reload().catch(handleError); }}>Retry</Button><Link to="/assessments">Back to assessments</Link></div>;
+  const scored = assessmentResultView(record);
+  const sectionScores = Object.fromEntries((scored?.sections ?? []).flatMap(section => { const label = sectionScoreLabel(section); return label ? [[section.id, label]] : []; }));
   const progress = getAssessmentCompletion(record.manifest, answers);
   const coverage = getAssessmentAnswerCoverage(record.manifest, answers);
   const tabs = record.manifest.sections.flatMap(section => [{ id: section.id, title: section.title }, ...(section.id === "personal_details" ? [{ id: "face_scan", title: "Face scan" }] : [])]).concat([{ id: "reports", title: "Reports" }, { id: "review", title: "Review & score" }]);
@@ -144,8 +146,8 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
     })}</ul>}</div>}
     {!editable && !record.result && <div className="mb-5 rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "Administrator review needed" : record.status === "SCORING_PENDING" ? "Scoring result pending" : "Scoring needs attention"}</h2><p className="my-2 text-sm text-muted-foreground">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "The scoring service has not confirmed this request. An organisation administrator must check it. Your submitted answers and reports remain preserved." : "The submitted assessment is preserved. Retry checks the same scoring request."}</p>{record.submission?.status === "RECONCILIATION_REQUIRED" ? isAdmin && <Button variant="outline" isDisabled={busy} onPress={() => { void retry(true); }}>Check original scoring request</Button> : <Button variant="outline" isDisabled={busy} onPress={() => { void retry(); }}>Retry scoring</Button>}</div>}
     {record.result !== null && <div className="mb-5"><AssessmentResult record={record} onSection={id => { void selectSection(id); }} /></div>}
-    <div className="grid min-w-0 border-x border-border bg-card @min-[48rem]:grid-cols-[190px_minmax(0,1fr)]">
-      <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} disabled={locked} onSelect={id => { void selectSection(id); }} />
+    <div className={`grid min-w-0 border-x border-border bg-card @min-[48rem]:grid-cols-[190px_minmax(0,1fr)] ${record.result !== null ? "rounded-t-xl border-t" : ""}`}>
+      <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} scores={sectionScores} disabled={locked} onSelect={id => { void selectSection(id); }} />
       <div className="min-w-0 p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 id="assessment-section-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>{sectionCoverage && <span className="text-xs text-muted-foreground">{sectionCoverage.answered}/{sectionCoverage.total} answered · {sectionCoverage.percent ?? 0}%</span>}</div>
         {sectionId === "personal_details" && record.heightSource && <p className="mb-4 text-sm text-muted-foreground">Height from assessment on {new Date(record.heightSource.recordedAt).toLocaleDateString()}. Check and edit if needed.</p>}
         <AssessmentFaceScan organizationId={organizationId} record={record} active={sectionId === "face_scan"} disabled={busy || reportBusy || conflict} beforeStart={persist} onBusyChange={setScanBusy} onStatusChange={setScanStatus}/>

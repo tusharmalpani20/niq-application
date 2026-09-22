@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AssessmentResult, assessmentResultView } from "./AssessmentResult";
+import { AssessmentResult, assessmentResultView, sectionScoreLabel } from "./AssessmentResult";
 import type { AssessmentWorkflow } from "@niq/application-contracts";
 const record = {
   reference: "ASM-000001",
@@ -16,10 +16,14 @@ test("shows optional-answer subtotal separately from complete required questionn
   expect(view.sections[1]).toMatchObject({ points: 0, label: "Answered subtotal", unanswered: 1 });
   expect(view.sections[0]).toMatchObject({ points: null, label: "Not scored" });
   const html = renderToStaticMarkup(<AssessmentResult record={record} onSection={() => {}}/>);
-  expect(html).toContain("100%");
-  expect(html).toContain("Answered subtotal: 0 points");
+  expect(html).toContain("Required answers");
+  expect(html).not.toContain("100%");
+  expect(html).toContain("0 pts (partial)");
   expect(html).toContain("1 unanswered");
   expect(html).not.toContain("Score percentage");
+  expect(html).not.toContain("Technical details");
+  expect(html).not.toContain("Rule checksum");
+  expect(html).not.toContain("Result reference");
 });
 test("rejects inconsistent persisted results instead of showing fabricated totals", () => {
   const value = record.result as Record<string, unknown>;
@@ -34,4 +38,11 @@ test("unresolved component includes the server reason rather than implying proce
   const html = renderToStaticMarkup(<AssessmentResult record={pending} onSection={() => {}}/>);
   expect(html).toContain("B: Enter both weights to calculate weight loss.");
   expect(html).not.toContain("Processing");
+});
+
+test("section badges preserve zero scores and distinguish partial totals from unscored sections", () => {
+  expect(sectionScoreLabel({points: 0, unanswered: 0, unresolved: 0})).toBe("0 pts");
+  expect(sectionScoreLabel({points: 8, unanswered: 1, unresolved: 0})).toBe("8 pts (partial)");
+  expect(sectionScoreLabel({points: 8, unanswered: 0, unresolved: 1})).toBe("8 pts (partial)");
+  expect(sectionScoreLabel({points: null, unanswered: 2, unresolved: 0})).toBeNull();
 });

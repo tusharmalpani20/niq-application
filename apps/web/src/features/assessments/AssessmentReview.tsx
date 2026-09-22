@@ -1,17 +1,20 @@
 import { assessmentFieldError, getAssessmentAnswerCoverage, isAssessmentFieldApplicable, type AssessmentWorkflow, type FormAnswers } from "@niq/application-contracts";
+import { assessmentResultView, sectionScoreLabel } from "./AssessmentResult";
 import { Button } from "@/components/ui/button";
 
 export function AssessmentReview({ record, answers, onSection }: { record: AssessmentWorkflow; answers: FormAnswers; onSection: (id: string, fieldId?: string) => void }) {
+  const scored = assessmentResultView(record);
   const completion = getAssessmentAnswerCoverage(record.manifest, answers);
   const missing = record.manifest.sections.flatMap(section => section.fields.filter(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers) && assessmentFieldError(field, answers[field.id])).map(field => ({ sectionId: section.id, field, error: assessmentFieldError(field, answers[field.id]) })));
   return <div className="grid min-w-0 gap-4">
-    <section className="rounded-xl border border-border bg-card p-4"><h3 className="font-semibold">Submission readiness</h3>
+    {!scored && <section className="rounded-xl border border-border bg-card p-4"><h3 className="font-semibold">Submission readiness</h3>
       {missing.length > 0 ? <><p className="mt-2 text-sm text-muted-foreground">Check these answers before submitting.</p><ul className="mt-3 grid gap-1">{missing.map(({ sectionId, field, error }) => <li key={field.id}><Button className="h-auto min-h-11 whitespace-normal text-left" variant="link" onPress={() => onSection(sectionId, field.id)}>{field.label}: {error === "Required" ? "Not answered" : error}</Button></li>)}</ul></> : <p className="mt-2 text-sm text-muted-foreground">Required answers are complete.</p>}
-    </section>
+    </section>}
     <div className="overflow-hidden rounded-xl border border-border bg-card">{record.manifest.sections.map(section => {
       const progress = completion.sections.find(item => item.id === section.id)!;
+      const score = scored?.sections.find(item => item.id === section.id);
       return <details key={section.id} open={missing.some(item => item.sectionId === section.id)} className="min-w-0 border-b border-border px-4 last:border-0">
-        <summary className="min-h-14 cursor-pointer rounded-md py-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"><span className="font-semibold">{section.title}</span><span className="ml-2 inline-block text-sm text-muted-foreground">{`${progress.percent}% answered · ${progress.answered}/${progress.total} questions`}</span></summary>
+        <summary className="min-h-14 cursor-pointer rounded-md py-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"><span className="font-semibold">{section.title}</span><span className="ml-2 inline-block text-sm text-muted-foreground">{score && sectionScoreLabel(score) ? `${sectionScoreLabel(score)} · ` : ""}{`${progress.answered}/${progress.total} answered`}</span></summary>
         <div className="mb-4 mt-2 flex justify-end"><Button className="min-h-11" variant="outline" onPress={() => onSection(section.id)} aria-label={`${record.status === "DRAFT" ? "Edit" : "View"} ${section.title}`}>{record.status === "DRAFT" ? "Edit answers" : "View answers"}</Button></div>
         <dl className="mb-4 grid min-w-0 gap-3">{section.fields.filter(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers)).map(field => {
           const value = answers[field.id];
