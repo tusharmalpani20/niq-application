@@ -234,6 +234,10 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   expect(calls).toBe(callsWhileClosed);
   // Restore the synthetic fixture to exercise still-open draft recovery separately.
   // No application action permits reopening a completed assessment.
+  await db.update(tables.assessments).set({status:"SCORING_PENDING"}).where(eq(tables.assessments.id,scanAssessment));
+  await db.update(tables.assessmentFaceScans).set({nextAttemptAt:null,leaseExpiresAt:null}).where(eq(tables.assessmentFaceScans.id,first.id));
+  await scans.recoverPending();
+  expect((await scans.row(org,scanAssessment,first.id)).state).toBe("COMPLETED");
   await db.update(tables.assessments).set({status:"DRAFT"}).where(eq(tables.assessments.id,scanAssessment));
   expect((await scans.get(actor,org,scanAssessment,first.id)).result?.wellnessScore).toBe(60);
   const originalResult=structuredClone(remote.result),originalCompletion=remote.completedAt;
