@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { requestAssessmentScoringCalculate, requestAssessmentScoringStart, type AssessmentScoringStart } from "./assessment-scoring";
+import { requestReviewedClassification, requestAssessmentScoringCalculate, requestAssessmentScoringStart, type AssessmentScoringStart } from "./assessment-scoring";
 const binding: AssessmentScoringStart = {
   assessmentReference: "opaque-reference", bindingId: "binding", ruleVersionId: "rule", checksum: "a".repeat(64), version: "FINAL-1",
   questionnaire: { formatVersion: 2, profile: "NIQ_FINAL_ASSESSMENT", sections: [{ id: "section", title: "Section", description: "", fields: Array.from({ length: 19 }, (_, n) => ({ id: `field_${n}`, label: `Field ${n}`, type: "select", help: "", unit: "", options: [{ id: "yes", label: "Yes", help: "" }], dependencies: [] })) }], supportingInputs: [] },
@@ -54,4 +54,36 @@ test("never transmits identity, unknown fields or non-finite numbers", async () 
     await expect(requestAssessmentScoringCalculate({ ...transport, binding, idempotencyKey: "request-key", answers, fetcher: async () => { called = true; return Response.json(success()); } })).rejects.toMatchObject({ kind: "rejected", code: "INVALID_LOCAL_ANSWERS" });
   }
   expect(called).toBe(false);
+});
+
+
+describe("reviewed risk transport", () => {
+ const response = () => ({result:{assessmentReference:binding.assessmentReference,bindingId:binding.bindingId,ruleVersionId:binding.ruleVersionId,checksum:binding.checksum,version:binding.version,resultReference:"risk-result",score:68,classification:{id:"high",label:"High",interpretation:"Review required"},calculatedAt:"2026-09-23T00:00:00.000Z"},idempotencyKey:"risk-request"});
+ const classify = (body:unknown,status=200) => requestReviewedClassification({...transport,binding,score:68,idempotencyKey:"risk-request",fetcher:async()=>Response.json(body,{status})});
+ test("sends only the bound reference, reviewed total and retry key",async()=>{
+  const risk=await requestReviewedClassification({...transport,binding,score:68,idempotencyKey:"risk-request",fetcher:async(url,init)=>{
+   expect(String(url)).toBe("https://scoring.example.test/v1/assessments/classify-reviewed");
+   expect(JSON.parse(String(init?.body))).toEqual({assessmentReference:binding.assessmentReference,score:68,idempotencyKey:"risk-request"});
+   expect(init?.redirect).toBe("error");
+   return Response.json(response());
+  }});
+  expect(risk.classification.label).toBe("High");
+ });
+ test("rejects a different total, binding, request key or malformed category",async()=>{
+  const valid=response();
+  for(const body of [{...valid,idempotencyKey:"wrong"},...[
+   {score:67},{assessmentReference:"other"},{bindingId:"other"},{ruleVersionId:"other"},{version:"other"},{checksum:"b".repeat(64)},{classification:null}
+  ].map(patch=>({...valid,result:{...valid.result,...patch}}))])
+   await expect(classify(body)).rejects.toMatchObject({code:"INVALID_RESPONSE"});
+ });
+ test("preserves unmatched classification and uncertain retry failures",async()=>{
+  await expect(classify({error:"UNMATCHED_CLASSIFICATION"},422)).rejects.toMatchObject({kind:"rejected",code:"UNMATCHED_CLASSIFICATION"});
+  await expect(classify({error:"SCORING_UNAVAILABLE",reason:"REQUEST_IN_PROGRESS"},409)).rejects.toMatchObject({kind:"uncertain",code:"REQUEST_IN_PROGRESS"});
+ });
+ test("invalid reviewed totals never leave the application",async()=>{
+  let calls=0;
+  for(const score of [NaN,Infinity,-1,Number.MAX_SAFE_INTEGER+1])
+   await expect(requestReviewedClassification({...transport,binding,score,idempotencyKey:"risk-request",fetcher:async()=>{calls++;return Response.json(response());}})).rejects.toBeDefined();
+  expect(calls).toBe(0);
+ });
 });
