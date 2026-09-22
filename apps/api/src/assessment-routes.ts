@@ -1,3 +1,5 @@
+import { ClinicalReviewService } from "./services/clinical-review";
+import { clinicalReviewActionSchema } from "../../../packages/contracts/src/clinical-review";
 import { AssessmentScoreReviewService } from "./services/assessment-score-reviews";
 import { scoreReviewInputSchema } from "../../../packages/contracts/src/assessment-score-reviews";
 import type { Hono } from "hono";
@@ -10,6 +12,7 @@ const id=z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{const result=schema.safeParse(value);if(!result.success)throw new ServiceError("VALIDATION_ERROR","The request is invalid.");return result.data;};
 /** Register after session and origin/CSRF middleware; all response data is private. */
 export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowService) {
+  const clinicalReviews = new ClinicalReviewService(service);
   const scoreReviews = new AssessmentScoreReviewService(service);
   const base="/v1/organizations/:organizationId";
   const parts=(c:any)=>({actor:c.get("principal"),org:parse(id,c.req.param("organizationId")),assessment:parse(id,c.req.param("assessmentId")),context:{requestId:c.get("requestId")}});
@@ -22,11 +25,15 @@ export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowSe
   app.get(`${base}/assessments/:assessmentId`,async c=>{return c.json(await service.read(c.get("principal"),parse(id,c.req.param("organizationId")),parse(z.union([id,z.string().regex(/^ASM-[0-9]{6,10}$/)]),c.req.param("assessmentId"))));});
   app.get(`${base}/assessments/:assessmentId/score-reviews`,async c=>{const p=parts(c);return c.json(await scoreReviews.read(p.actor,p.org,p.assessment));});
   app.post(`${base}/assessments/:assessmentId/score-reviews`,async c=>{const p=parts(c);return c.json(await scoreReviews.add(p.actor,p.org,p.assessment,parse(scoreReviewInputSchema,await json(c)),p.context));});
+  app.get(`${base}/clinical-reviews`,async c=>{c.header("Cache-Control","private, no-store");return c.json(await clinicalReviews.queue(c.get("principal"),parse(id,c.req.param("organizationId")),parse(z.object({page:z.coerce.number().int().min(1).default(1),pageSize:z.coerce.number().int().min(1).max(100).default(25),search:z.string().max(200).optional(),mine:z.enum(["true","false"]).transform(v=>v==="true").optional(),state:z.enum(["QUEUED","IN_REVIEW","RETURNED","AWAITING_RESUBMISSION","COMPLETED"]).optional()}),c.req.query())));});
+  app.get(`${base}/assessments/:assessmentId/clinical-review`,async c=>{const p=parts(c);return c.json(await clinicalReviews.read(p.actor,p.org,p.assessment));});
+  app.get(`${base}/assessments/:assessmentId/clinical-review/eligible-reviewers`,async c=>{const p=parts(c);return c.json(await clinicalReviews.eligible(p.actor,p.org,p.assessment));});
+  app.post(`${base}/assessments/:assessmentId/clinical-review`,async c=>{const p=parts(c);return c.json(await clinicalReviews.command(p.actor,p.org,p.assessment,parse(clinicalReviewActionSchema,await json(c)),p.context));});
   app.patch(`${base}/assessments/:assessmentId`,async c=>{const p=parts(c);return c.json(await service.save(p.actor,p.org,p.assessment,parse(saveAssessmentSchema,await json(c)),p.context));});
   app.post(`${base}/assessments/:assessmentId/submit`,async c=>{const p=parts(c);return c.json(await service.submit(p.actor,p.org,p.assessment,parse(assessmentRevisionSchema,await json(c)).revision,p.context));});
   app.post(`${base}/assessments/:assessmentId/submission/retry`,async c=>{const p=parts(c);return c.json(await service.retrySubmission(p.actor,p.org,p.assessment,p.context));});
   app.post(`${base}/assessments/:assessmentId/submission/reconcile`,async c=>{const p=parts(c);return c.json(await service.retrySubmission(p.actor,p.org,p.assessment,p.context,true));});
-  app.patch(`${base}/patients/:patientId/contact`,async c=>{const input=parse(z.object({phone:z.string().trim().min(3).max(32).regex(/^[+\d ()-]+$/)}).strict(),await json(c));return c.json(await service.updateContact(c.get("principal"),parse(id,c.req.param("organizationId")),parse(id,c.req.param("patientId")),input.phone,{requestId:c.get("requestId")}) as any);});
+  app.patch(`${base}/patients/:patientId/contact`,async c=>{const input=parse(z.object({phone:z.string().trim().min(3).max(32).regex(/^[+\d ()-]+$/),assessmentId:id.optional(),revision:z.number().int().nonnegative().optional()}).refine(v=>(v.assessmentId===undefined)===(v.revision===undefined)).strict(),await json(c));return c.json(await service.updateContact(c.get("principal"),parse(id,c.req.param("organizationId")),parse(id,c.req.param("patientId")),input.phone,{requestId:c.get("requestId")},input.assessmentId?{assessmentId:input.assessmentId,revision:input.revision!}:undefined) as any);});
   const reports=`${base}/assessments/:assessmentId/reports`;
   app.post(reports,async c=>{const p=parts(c);return c.json(await service.reports.edit(p.actor,p.org,p.assessment,parse(reportInputSchema,await json(c)),p.context));});
   app.patch(`${reports}/:reportId`,async c=>{const p=parts(c);return c.json(await service.reports.edit(p.actor,p.org,p.assessment,parse(reportInputSchema,await json(c)),p.context,parse(id,c.req.param("reportId"))));});
