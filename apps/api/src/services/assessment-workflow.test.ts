@@ -1,3 +1,6 @@
+import { ClinicalReviewService } from "./clinical-review";
+import { AssessmentScoreReviewService } from "./assessment-score-reviews";
+import type { ClinicalReviewAction } from "../../../../packages/contracts/src/clinical-review";
 import { AssessmentFaceScanService } from "./assessment-face-scan";
 import {afterAll,beforeAll,describe,expect,test} from "bun:test";
 import {mkdtemp,rm} from "node:fs/promises";import {tmpdir} from "node:os";import {join} from "node:path";import {createHash} from "node:crypto";
@@ -277,6 +280,46 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   expect((await scans.row(org,assessment,uncertain.id)).active).toBe(true);
   expect((await scans.get(actor,org,assessment,uncertain.id)).state).toBe("RECONCILIATION_REQUIRED");
   expect((await scans.row(org,assessment,uncertain.id)).active).toBe(true);
+ });
+
+ test("real correction saves and rescoring preserve binding, history and explicit clinical resubmission across cycles",async()=>{
+  behavior="success";
+  const assessment=(await service.initialize(actor,org,{patientId:patient,requestKey:"clinical-full-correction-12345"},context)).assessmentId!;
+  const clinical=new ClinicalReviewService(service),scores=new AssessmentScoreReviewService(service);
+  const act=async(action:ClinicalReviewAction["action"],extra:object={})=>{
+   const state=await clinical.read(actor,org,assessment);
+   return clinical.command(actor,org,assessment,{action,expectedRevision:state.revision,expectedScoreRevision:state.scoreRevision,requestKey:createEntityId(),...extra} as ClinicalReviewAction,context);
+  };
+  let draft=await service.read(actor,org,assessment);
+  draft=await service.save(actor,org,assessment,{revision:draft.revision,answers:{...draft.answers,height_cm:170,current_weight_kg:65}},context);
+  let scored=await service.submit(actor,org,assessment,draft.revision,context);expect(scored.status).toBe("SCORED");
+  const [original]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,assessment));
+  const originalPointer=original!.currentSubmissionId;
+  const [originalSubmission]=await db.select().from(tables.assessmentSubmissions).where(eq(tables.assessmentSubmissions.id,originalPointer!));
+  const originalSnapshot=structuredClone(originalSubmission!.snapshot),originalResult=structuredClone(originalSubmission!.result);
+  const binding=service.unseal<any>(originalSnapshot).binding;
+  await act("SEND");await act("CLAIM");
+  const seenKeys=[originalSubmission!.idempotencyKey];
+  for(let cycle=1;cycle<=2;cycle++){
+   const returned=await act("RETURN_TO_DRAFT",{assigneeId:actor.membershipId,reason:`Correction ${cycle}`});expect(returned.cycle).toBe(cycle);
+   draft=await service.read(actor,org,assessment);expect(draft.status).toBe("DRAFT");expect(draft.result).toBeNull();expect(draft.canEditDraft).toBe(true);
+   draft=await service.save(actor,org,assessment,{revision:draft.revision,answers:{...draft.answers,current_weight_kg:65+cycle}},context);
+   scored=await service.submit(actor,org,assessment,draft.revision,context);expect(scored.status).toBe("SCORED");
+   const [row]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,assessment));
+   const [submission]=await db.select().from(tables.assessmentSubmissions).where(eq(tables.assessmentSubmissions.id,row!.currentSubmissionId!));
+   expect(seenKeys).not.toContain(submission!.idempotencyKey);seenKeys.push(submission!.idempotencyKey);
+   expect(service.unseal<any>(submission!.snapshot).binding).toEqual(binding);expect(service.unseal<any>(submission!.snapshot).answers.current_weight_kg).toBe(65+cycle);
+   expect((await scores.read(actor,org,assessment)).revision).toBe(0);
+   expect((await clinical.read(actor,org,assessment)).state).toBe("AWAITING_RESUBMISSION");
+   const requests=keys.length;await service.retrySubmission(actor,org,assessment,context);expect(keys.length).toBe(requests);
+   const resent=await act("RESEND");expect(resent.state).toBe("IN_REVIEW");expect(resent.assignee?.membershipId).toBe(actor.membershipId);
+  }
+  const [unchanged]=await db.select().from(tables.assessmentSubmissions).where(eq(tables.assessmentSubmissions.id,originalPointer!));expect(unchanged!.snapshot).toEqual(originalSnapshot);expect(unchanged!.result).toEqual(originalResult);
+  const completed=await act("COMPLETE",{remark:"Reviewed both correction cycles"});expect(completed.state).toBe("COMPLETED");
+  await expect(service.save(actor,org,assessment,{revision:scored.revision,answers:scored.answers},context)).rejects.toMatchObject({code:"CONFLICT"});
+  const history=await db.select().from(tables.assessmentHistory).where(eq(tables.assessmentHistory.assessmentId,assessment));
+  expect(history.filter(h=>h.kind==="SCORING_SUBMITTED")).toHaveLength(3);expect(history.filter(h=>h.kind==="DRAFT_SAVED")).toHaveLength(3);
+  expect(history.filter(h=>h.kind==="RETURN_TO_DRAFT")).toHaveLength(2);
  });
 
 });
