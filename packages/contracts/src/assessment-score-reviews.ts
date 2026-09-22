@@ -2,23 +2,23 @@ import { z } from "zod";
 import type { AssessmentScoreResult } from "./assessment-workflow";
 export const scoreReviewInputSchema = z.object({
   expectedRevision: z.number().int().nonnegative(), requestKey: z.string().min(16).max(128),
-  targetType: z.enum(["item", "section", "overall"]), targetId: z.string().min(1).max(100).nullable(),
+  targetType: z.enum(["item", "section", "overall", "scan"]), targetId: z.string().min(1).max(100).nullable(),
   points: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
   reason: z.string().trim().min(1, "Enter a reason for this score change.").max(1000),
 }).strict().refine(v => v.targetType === "overall" ? v.targetId === null : v.targetId !== null, { message: "Choose a valid score target." });
 export type ScoreReviewInput = z.infer<typeof scoreReviewInputSchema>;
 export type ScoreReviewEntry = {
-  id: string; revision: number; targetType: "item" | "section" | "overall"; targetId: string | null;
+  id: string; revision: number; targetType: "item" | "section" | "overall" | "scan"; targetId: string | null;
   previousPoints: number | null; points: number | null; reason: string | null;
   actorId: string; actorName: string; createdAt: string; resultReference: string;
 };
 export type ReviewedScore = { niqPoints: number | null; reviewedPoints: number | null; overridden: boolean };
 export type AssessmentScoreReviews = {
-  revision: number; canAdjust: boolean; entries: ScoreReviewEntry[]; overall: ReviewedScore;
+  scan?: ReviewedScore & { id: string }; revision: number; canAdjust: boolean; entries: ScoreReviewEntry[]; overall: ReviewedScore;
   sections: Array<ReviewedScore & { id: string; items: Array<ReviewedScore & { id: string }> }>;
 };
 /** Explicit parent overrides persist until reset, even when an underlying item changes. */
-export function projectScoreReviews(result: AssessmentScoreResult, entries: ScoreReviewEntry[]): AssessmentScoreReviews {
+export function projectScoreReviews(result: AssessmentScoreResult, entries: ScoreReviewEntry[], scan?: { id: string; points: number | null }): AssessmentScoreReviews {
   const overrides = new Map<string, number>();
   for (const entry of entries) {
     const key = `${entry.targetType}:${entry.targetId ?? ""}`;
@@ -31,5 +31,5 @@ export function projectScoreReviews(result: AssessmentScoreResult, entries: Scor
     return { id, items, ...value(`section:${id}`, sum("niqPoints"), sum("reviewedPoints")) };
   });
   const total = sections.reduce((sum, section) => sum + (section.reviewedPoints ?? 0), 0);
-  return { revision: entries.at(-1)?.revision ?? 0, canAdjust: true, entries, sections, overall: value("overall:", result.score, total) };
+  return { ...(scan ? { scan: { id: scan.id, ...value(`scan:${scan.id}`, scan.points, scan.points) } } : {}), revision: entries.at(-1)?.revision ?? 0, canAdjust: true, entries, sections, overall: value("overall:", result.score, total) };
 }

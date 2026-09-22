@@ -26,3 +26,14 @@ test("restoring scores also requires a reason",()=>{
  expect(scoreReviewInputSchema.safeParse(input).success).toBe(false);
  expect(scoreReviewInputSchema.parse({...input,reason:"  Restore calculated total  "}).reason).toBe("Restore calculated total");
 });
+
+test("scan overrides are tied to their scan and excluded from questionnaire totals", () => {
+ const entries=[event(1,"scan","scan-1",0)];
+ const reviewed=projectScoreReviews(result,entries,{id:"scan-1",points:8});
+ expect(reviewed.scan?.reviewedPoints).toBe(0);
+ expect(reviewed.overall.reviewedPoints).toBe(10);
+ const next=projectScoreReviews(result,entries,{id:"scan-2",points:5});
+ expect(next.scan?.reviewedPoints).toBe(5);
+ expect(next.scan?.overridden).toBe(false);
+ expect(next.entries).toHaveLength(1);
+});
