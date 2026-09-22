@@ -12,13 +12,13 @@ export const membershipRoleLabels: Record<MembershipRole, string> = {
 };
 
 export const permissions = [
-  "patients.read", "patients.create", "assessments.list", "assessments.read",
+  "patients.read", "patients.create", "patients.edit", "assessments.list", "assessments.read",
   "assessments.edit", "assessments.submit", "assessments.reconcile",
   "scans.perform", "reports.manage", "scores.review", "facilities.read",
   "facilities.manage", "users.manage", "organization.manage", "scoring.manage",
 ] as const;
 export type Permission = typeof permissions[number];
-const supportPermissions: readonly Permission[] = ["patients.read", "patients.create", "assessments.list", "facilities.read"];
+const supportPermissions: readonly Permission[] = ["patients.read", "patients.create", "patients.edit", "assessments.list", "facilities.read"];
 const clinicalPermissions: readonly Permission[] = [
   ...supportPermissions, "assessments.read", "assessments.edit", "assessments.submit",
   "scans.perform", "reports.manage", "scores.review",

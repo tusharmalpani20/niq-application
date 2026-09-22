@@ -13,6 +13,8 @@ import type {
   ResendMfaRequest,
   SignInRequest,
   UpdateFacility,
+  UpdatePatient,
+  UpdateOrganizationUser,
   UpdateOrganization,
   VerifyMfaRequest,
 } from "@niq/application-contracts";
@@ -80,6 +82,8 @@ export interface ApplicationService {
   createFacility(actor: Principal, organizationId: string, input: CreateFacility, context: RequestContext): Promise<unknown>;
   listFacilities(actor: Principal, organizationId: string): Promise<unknown[]>;
   updateFacility(actor: Principal, organizationId: string, facilityId: string, input: UpdateFacility, context: RequestContext): Promise<unknown>;
+  updatePatient(actor: Principal, organizationId: string, patientLocator: string, input: UpdatePatient, context: RequestContext): Promise<unknown>;
+  updateOrganizationUser(actor: Principal, organizationId: string, membershipId: string, input: UpdateOrganizationUser, context: RequestContext): Promise<unknown>;
   createPatient(actor: Principal, organizationId: string, input: RegisterPatient, context: RequestContext): Promise<unknown>;
   listPatients(actor: Principal, organizationId: string): Promise<unknown[]>;
   getPatient(actor: Principal, organizationId: string, patientLocator: string): Promise<unknown>;

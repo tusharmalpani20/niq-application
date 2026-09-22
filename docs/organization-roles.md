@@ -4,7 +4,7 @@ Each membership and invitation stores one distinct role. Doctor, Nutritionist, a
 
 | Capability | Organization admin | Doctor / Nutritionist / Other Medical Personnel | Support |
 | --- | --- | --- | --- |
-| View/register patients and list assessments | Yes | Yes | Yes |
+| View/register/edit patients and list assessments | Yes | Yes | Yes |
 | Open/edit/submit assessments | Yes | Yes | No |
 | Face scans, reports, score review | Yes | Yes | No |
 | View facilities | Yes | Yes | Yes |
@@ -20,3 +20,7 @@ The business requirements identify Doctors, Nutritionists, and Other Medical Per
 Migration 0022 renames the existing PostgreSQL MEDICAL enum value to OTHER_MEDICAL in place and adds DOCTOR and NUTRITIONIST. Existing memberships, pending invitations, defaults, and facility assignments are preserved. Existing Medical accounts cannot reliably be classified as doctors or nutritionists from the old role alone, so they become Other Medical Personnel.
 
 Deploy the migration together with the updated API and frontend; old builds expecting MEDICAL are not compatible after the rename. Run `bun run db:migrate` with the deployment's DATABASE_URL before serving the updated application. Permissions are maintained centrally in code; this change does not introduce a permission-editor screen or change existing users' roles to a guessed profession.
+
+## Editing profiles
+
+Patient registration roles can correct patient demographics, MRN, contact details, and home facility within their assigned facilities. Historical assessment snapshots are unchanged. Organization administrators can edit user names, roles, and facility assignments within their scope. Email remains a read-only sign-in identifier. Administrators cannot change their own role/facility access or remove the last active administrator; role/access changes revoke the affected membership's sessions so changed privileges and required MFA apply on the next sign-in.

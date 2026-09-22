@@ -217,6 +217,13 @@ export const createInvitationSchema = z.object({
   facilityIds: z.array(idSchema).max(100).default([]),
 });
 
+export const updateOrganizationUserSchema = z.object({
+  displayName: z.string().trim().min(1).max(120),
+  role: membershipRoleSchema,
+  facilityIds: z.array(idSchema).max(100).refine(ids => new Set(ids).size === ids.length, "Facilities must be unique."),
+}).strict();
+export type UpdateOrganizationUser = z.infer<typeof updateOrganizationUserSchema>;
+
 export const updateUserStatusSchema = z.object({
   active: z.boolean(),
 });
@@ -315,6 +322,12 @@ export const registerPatientSchema = z.object({
   phone: z.string().trim().max(40).optional(),
   email: z.email().max(320).optional(),
 }).strict();
+
+export const updatePatientSchema = registerPatientSchema.extend({
+  phone: z.string().trim().max(40).nullish().transform(value => value || undefined),
+  email: z.union([z.email().max(320), z.literal("")]).nullish().transform(value => value || undefined),
+});
+export type UpdatePatient = z.infer<typeof updatePatientSchema>;
 
 export const patientSchema = z.object({
   id: idSchema,

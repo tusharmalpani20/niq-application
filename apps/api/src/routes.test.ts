@@ -27,6 +27,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     disconnectScoring: async () => {},
     getScoringOrganizationInfo: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], updateFacility: async () => ({}),
+    updatePatient: async () => ({}), updateOrganizationUser: async () => ({}),
     createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [],
     invitationAccess: async () => ({ allFacilities: true }), manageUserInvitation: async () => ({ invitation: {}, token: "replacement-token" }),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
@@ -35,6 +36,29 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
 }
 
 describe("local authentication routes", () => {
+  test("patient and user profile edits validate input and require authentication", async () => {
+    let patientCalls = 0, userCalls = 0;
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService({
+      updatePatient: async (actor, organizationId, locator, input) => {
+        expect(actor).toEqual(principal); expect(organizationId).toBe(principal.organizationId); expect(locator).toBe("PAT-2"); expect(input.email).toBeUndefined(); patientCalls++; return {};
+      },
+      updateOrganizationUser: async (_actor, organizationId, membershipId, input) => {
+        expect(organizationId).toBe(principal.organizationId); expect(membershipId).toBe(principal.membershipId); expect(input.role).toBe("DOCTOR"); userCalls++; return {};
+      },
+    }) });
+    const request = (path: string, method: string, input: unknown, cookie = "niq_session=valid-session") => app.request(`/v1/organizations/${principal.organizationId}/${path}`, { method, headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(input) });
+    const patient = { medicalRecordNumber: "TEST", name: "Patient", homeFacilityId: principal.organizationId, dateOfBirth: "2000-01-01", gender: "UNKNOWN", email: "" };
+    expect((await request("patients/PAT-2", "PATCH", patient)).status).toBe(200);
+    expect((await request("patients/PAT-2", "PATCH", patient, "")).status).toBe(401);
+    expect((await request("patients/PAT-2", "PATCH", { ...patient, dateOfBirth: "01/01/2000" })).status).toBe(400);
+    const user = { displayName: "Colleague", role: "DOCTOR", facilityIds: [] };
+    const path = `users/${principal.membershipId}/profile`;
+    expect((await request(path, "PUT", user)).status).toBe(200);
+    expect((await request(path, "PUT", user, "")).status).toBe(401);
+    expect((await request(path, "PUT", { ...user, email: "new@example.com" })).status).toBe(400);
+    expect(patientCalls).toBe(1); expect(userCalls).toBe(1);
+  });
+
   test("passes logo replacement through authenticated organization updates and rejects SVG", async () => {
     const logo = { mimeType: "image/png" as const, contentBase64: "iVBORw0KGgo=" };
     let updates = 0;
@@ -139,7 +163,8 @@ describe("local authentication routes", () => {
       authMode: "local",
       checkDatabase: async () => true,
       service: fakeService({
-        createPatient: async (_actor, organizationId, input) => {
+        updatePatient: async () => ({}), updateOrganizationUser: async () => ({}),
+    createPatient: async (_actor, organizationId, input) => {
           observedOrganization = organizationId;
           observedMedicalRecordNumber = input.medicalRecordNumber;
           return patient;
