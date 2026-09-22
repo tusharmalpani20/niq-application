@@ -1,5 +1,10 @@
 import type { FaceScanSignal } from "@niq/application-contracts";
 
+// Provider-supplied browser mapping: Apple user agents use IOS, all others ANDROID.
+export function carePlixDevice(userAgent: string): NonNullable<FaceScanSignal["device"]> {
+  return /iPhone|iPad|iPod|Macintosh|Mac/i.test(userAgent) ? "RPPG_CAREPLIX_FACE_IOS" : "RPPG_CAREPLIX_FACE_ANDROID";
+}
+
 type Frame = { message: string; progress: number; type: string; isLiteMode: boolean; isThrottling: boolean };
 export interface CaptureSDK {
   facescan: {
@@ -58,7 +63,7 @@ export function createCaptureController(load: () => Promise<CaptureSDK> = () => 
       sdk.facescan.onError((_error, code) => fail(code));
       sdk.facescan.onScanFinish(signal => {
         if (!active()) return;
-        settled = true; stopCamera(); callbacks.finish({ ...signal, schemaVersion: 1 });
+        settled = true; stopCamera(); callbacks.finish({ ...signal, schemaVersion: 1, device: carePlixDevice(navigator.userAgent) });
       });
       // Local watchdog only cancels capture; it does not assert provider failure or billability.
       watchdog = setTimeout(() => fail("FCSCN01"), 180_000);

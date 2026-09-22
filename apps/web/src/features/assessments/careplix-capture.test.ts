@@ -63,3 +63,11 @@ test("SDK focus loss explains how to resume and never submits partial signal", a
   expect(f.counts().tracks).toBe(1);
   controller.cancel();
 });
+
+test("vendor device mapping uses IOS for Apple browsers and ANDROID otherwise", async () => {
+  const { carePlixDevice } = await import("./careplix-capture");
+  for (const ua of ["iPhone", "iPad", "iPod", "Macintosh", "Mac OS X", "macintosh"])
+    expect(carePlixDevice(ua)).toBe("RPPG_CAREPLIX_FACE_IOS");
+  for (const ua of ["Android", "Windows NT 10.0", "X11; Linux x86_64", ""])
+    expect(carePlixDevice(ua)).toBe("RPPG_CAREPLIX_FACE_ANDROID");
+});

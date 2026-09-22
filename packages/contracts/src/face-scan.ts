@@ -23,6 +23,7 @@ export const faceScanSignalSchema = z.object({
   }).strict()).min(1).max(12000),
   ppg_time: z.array(z.number().finite().nonnegative()).min(1).max(12000),
   average_fps: z.number().finite().positive().max(240),
+  device: z.enum(["RPPG_CAREPLIX_FACE_IOS", "RPPG_CAREPLIX_FACE_ANDROID"]).optional(),
   deviceModel: z.string().min(1).max(200).optional()
 }).strict().superRefine((v, c) => {
   if (v.raw_intensity.length !== v.ppg_time.length || v.ppg_time.some((t, i) => i > 0 && t <= v.ppg_time[i - 1]!))
