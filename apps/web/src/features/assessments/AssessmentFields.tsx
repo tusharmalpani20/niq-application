@@ -9,7 +9,7 @@ import { Button } from "../../components/ui/button";
 
 export type AssessmentFieldsProps = {
   section: AssessmentFormManifest["sections"][number]; answers: FormAnswers;
-  onChange: (id: string, value: FormAnswer) => void; errors: Record<string, string>; readOnly: boolean; onEditContact?: () => void;
+  onChange: (id: string, value: FormAnswer) => void; errors: Record<string, string>; readOnly: boolean; heightSourceDate?: string; onEditContact?: () => void;
 };
 /** Invalid and intermediate number text stays in draft state; empty input never becomes zero. */
 export function assessmentNumericInput(raw: string): FormAnswer {
@@ -50,7 +50,7 @@ export function assessmentFieldGroups(fields: FormField[], answers: FormAnswers)
   for (const field of visible) { const id = root(field); groups.set(id, [...(groups.get(id) ?? []), field]); }
   return [...groups.values()].map(group => group[0]?.id === "weight_loss" ? [...group.filter(field => field.id !== "weight_loss"), ...group.filter(field => field.id === "weight_loss")] : group);
 }
-export function AssessmentFields({ section, answers, onChange, errors, readOnly, onEditContact }: AssessmentFieldsProps) {
+export function AssessmentFields({ section, answers, onChange, errors, readOnly, heightSourceDate, onEditContact }: AssessmentFieldsProps) {
   const renderField = (field: FormField) => {
     const id = `assessment-field-${field.id}`; const errorId = `${id}-error`; const error = errors[field.id];
     const value = answers[field.id]; const label = `${field.label}${field.unit && field.unit !== "surgeries" ? ` (${field.unit})` : ""}`;
@@ -90,6 +90,7 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
         if (field.kind === "number" && typeof next === "number" && field.min !== undefined && next < field.min) return;
         onChange(field.id, next);
       }} />}
+      {field.id === "height_cm" && heightSourceDate && <p className="text-xs text-muted-foreground">Height from assessment on {new Date(heightSourceDate).toLocaleDateString()}</p>}
       {errorMarkup}
     </div>;
   };
