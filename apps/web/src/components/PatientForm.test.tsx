@@ -135,3 +135,12 @@ for (const [variant, selector, subject] of [["invite", "#user-invite-email", "us
     expect(closeCount()).toBe(1);
   }, variant));
 }
+
+test("invitation requires an explicit role and starts clean", async () => withDialog(async ({ click, closeCount }) => {
+  expect(document.body.textContent).toContain("Select role");
+  expect(document.body.textContent).not.toContain("Works with patients and assessments.");
+  const submit = [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Create invitation")!;
+  expect(submit.disabled).toBe(true);
+  await click("Cancel");
+  expect(closeCount()).toBe(1);
+}, "invite"));
