@@ -49,3 +49,15 @@ Migration 0017 assigns existing assessments serials in creation-time/ID order wi
 Read links accept either `ASM-000001` in the authenticated organization or the existing opaque ID. New UI links use the reference; mutations, private file paths and NIQ Scoring references continue using immutable internal IDs. An identical display reference in another organization never grants access. UI report titles use the same assessment reference; supporting upload labels and filenames remain unchanged. There is currently no generated PDF export endpoint; the intended filename for a future export is `ASM-000001-report.pdf`.
 
 Verification for this change: workspace check/build pass; ordinary suite: 225 passes / 24 environment-dependent skips. Separate disposable PostgreSQL targeted run: 43 passes / 175 assertions verifies concurrent allocation, independent organizations, cross-branch sequencing, rollback, immutable serials and authorized reference resolution. Populated-database backfill check found zero ordering mismatches. Local migration applied and API health returned 200; disposable database stopped. No live assessment answers were changed.
+
+## Reviewed points
+
+A scored assessment opens in a compact, expandable summary. Staff with existing clinical assessment access may adjust scored items, section totals or the overall total. Patient answers and the original NIQ result are never rewritten. Unanswered or unresolved items cannot receive reviewed points.
+
+Before the first adjustment, reviewed values and score history are hidden. After any adjustment, NIQ and reviewed values are distinct and history remains available even after restoring original values. Item changes recalculate the section and total unless those levels have explicit overrides. Overrides persist until explicitly restored. The NIQ classification describes the original score only; reviewed points do not claim a new risk classification.
+
+The application stores encrypted append-only events with actor identity/name, before value, new override (or reset), optional reason, timestamp, original result reference and revision. An audit event is committed in the same transaction. Database triggers reject updates/deletes of review rows. Resets create new entries. Revision checks reject concurrent stale edits, and request keys make identical retries idempotent. A stale editor reloads after cancellation. Reasons and point values are excluded from general audit logs and retained in encrypted review events.
+
+GET/POST `/v1/organizations/:organizationId/assessments/:assessmentId/score-reviews` use existing session, origin and assessment/facility authorization. Deploy the additive score-review migration before enabling this UI. No NIQ Scoring service change is needed for manual reviews.
+
+The editor is inline within the assessment form at all screen sizes. It uses organization colour tokens and existing controls. The application sidebar and shared modal styles are unchanged. Verified with API/web TypeScript checks, 19 focused UI/contract/service/route tests and mobile/tablet/laptop browser inspection. Actual patient scores were not modified during UI verification.
