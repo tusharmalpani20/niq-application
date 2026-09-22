@@ -63,10 +63,11 @@ export function ClinicalReviewCommandDialog({ action, review, organizationId, as
     getClinicalReviewers(organizationId, assessmentId, controller.signal).then(items => {
       if (controller.signal.aborted) return;
       const current = action === "REASSIGN_CORRECTION" ? review.correctionPerson?.membershipId : action === "TRANSFER" ? review.assignee?.membershipId : undefined;
-      setRecipients(items.filter(item => item.membershipId !== current)); setError("");
-      if (action === "RETURN_TO_DRAFT" && items.some(item => item.membershipId === review.defaultCorrectionPersonId)) {
-        initialRecipient.current = review.defaultCorrectionPersonId; setRecipient(value => value ?? review.defaultCorrectionPersonId);
-      }
+      const eligible = items.filter(item => item.membershipId !== current);
+      setRecipients(eligible); setError("");
+      const defaultRecipient = action === "RETURN_TO_DRAFT" && eligible.some(item => item.membershipId === review.defaultCorrectionPersonId) ? review.defaultCorrectionPersonId : null;
+      initialRecipient.current = defaultRecipient;
+      setRecipient(value => eligible.some(item => item.membershipId === value) ? value : defaultRecipient);
     }).catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load eligible people."); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [organizationId, assessmentId, action, needsRecipient, review.defaultCorrectionPersonId, review.correctionPerson?.membershipId, review.assignee?.membershipId, retry]);
@@ -95,7 +96,7 @@ export function ClinicalReviewCommandDialog({ action, review, organizationId, as
         <p className="text-sm text-muted-foreground">{action === "COMPLETE" ? "Complete this clinical review with a final remark. Completion is permanent; the assessment cannot be reopened or edited." : action === "RETURN_TO_DRAFT" ? "Return this assessment for corrections and a new score. Existing submitted answers, results and adjustments stay in history." : action === "RELEASE" ? "Release ownership so another eligible clinician can claim the review. Saved work stays in history." : action === "RESEND" ? "Resend to the previous reviewer if they remain eligible, otherwise to the unclaimed queue." : action === "SEND" ? "Send this scored assessment to the clinical review queue." : action === "CLAIM" ? "You will become responsible for this clinical review." : "The selected person will become responsible immediately. This change is recorded in review history."}</p>
         {needsRecipient && <div className="grid gap-2"><label htmlFor="clinical-review-recipient">{action === "TRANSFER" ? "Reviewer" : "Correction person"} *</label><SearchCombobox id="clinical-review-recipient" label={action === "TRANSFER" ? "Reviewer" : "Correction person"} value={recipient} onChange={setRecipient} options={recipients.map(item => ({ id: item.membershipId, label: `${item.displayName} · ${membershipRoleLabels[item.role]}` }))} required disabled={busy || loading || conflict} placeholder="Search or select a person…" />{loading ? <p role="status" className="text-sm">Loading eligible people…</p> : !recipients.length && <p className="text-sm">No eligible people are available. An administrator needs to check clinical roles and facility access.</p>}</div>}
         {needsNote && <label className="grid gap-2">{action === "COMPLETE" ? "Final remark" : "Reason"} *<Textarea value={note} onChange={event => setNote(event.target.value)} required maxLength={4000} disabled={busy || conflict} /></label>}
-        {error && <div role="alert" className="text-sm text-destructive">{error}{conflict ? <Button variant="link" isDisabled={busy} onPress={async () => { const fresh = await onRefresh(); if (fresh) { setConflict(false); setError(""); } }}>Reload review</Button> : needsRecipient && !recipients.length && <Button variant="link" onPress={() => setRetry(value => value + 1)}>Retry loading people</Button>}</div>}
+        {error && <div role="alert" className="text-sm text-destructive">{error}{conflict ? <Button variant="link" isDisabled={busy} onPress={async () => { const fresh = await onRefresh(); if (fresh) { setConflict(false); setError(""); setRetry(value => value + 1); } }}>Reload review</Button> : needsRecipient && !recipients.length && <Button variant="link" onPress={() => setRetry(value => value + 1)}>Retry loading people</Button>}</div>}
       </div>
       <footer className="form-footer"><Button variant="outline" isDisabled={busy} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={busy || blocked || loading || conflict || !review.allowedActions.includes(action) || (needsNote && !note.trim()) || (needsRecipient && !recipient)}>{busy ? "Saving…" : actionLabel(action, review)}</Button></footer>
     </form>

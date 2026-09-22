@@ -2,16 +2,16 @@ import { expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import type { ClinicalReview } from "@niq/application-contracts";
+import type { ClinicalReview, ClinicalReviewer } from "@niq/application-contracts";
 import { ClinicalReviewPanel } from "./ClinicalReviewPanel";
 
 const review: ClinicalReview = { assessmentId: "assessment", revision: 4, scoreRevision: 2, cycle: 1, state: "IN_REVIEW", assignee: { membershipId: "reviewer", displayName: "Reviewer", role: "DOCTOR" }, correctionPerson: null, previousReviewer: null, defaultCorrectionPersonId: null, returnReason: null, finalRemark: null, submittedAt: null, completedAt: null, history: [], allowedActions: ["COMPLETE", "TRANSFER", "RELEASE", "RETURN_TO_DRAFT"], canAdjustScores: true, canEditDraft: false };
-async function harness(run: (ctx: { click: (label: string) => Promise<void>; type: (value: string) => Promise<void>; posts: unknown[]; changed: () => number }) => Promise<void>, options: { review?: ClinicalReview; blocked?: boolean; conflict?: boolean } = {}) {
+async function harness(run: (ctx: { click: (label: string) => Promise<void>; type: (value: string) => Promise<void>; posts: unknown[]; changed: () => number }) => Promise<void>, options: { review?: ClinicalReview; blocked?: boolean; conflict?: boolean; recipients?: () => ClinicalReviewer[] } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", {url:"http://localhost", pretendToBeVisual:true});
   const values: Record<string,unknown> = { window:dom.window, document:dom.window.document, navigator:dom.window.navigator, IS_REACT_ACT_ENVIRONMENT:true, requestAnimationFrame:(fn:()=>void)=>setTimeout(fn,0), cancelAnimationFrame:clearTimeout, getComputedStyle:dom.window.getComputedStyle };
   for (const key of ["FocusEvent","HTMLElement","SVGElement","Element","Node","NodeFilter","DocumentFragment","HTMLButtonElement","HTMLInputElement","HTMLTextAreaElement","HTMLSelectElement","MutationObserver","CustomEvent","Event"]) values[key]=(dom.window as any)[key];
   const posts: unknown[] = []; let changes = 0;
-  values.fetch = async (_url: string, init?: RequestInit) => { if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return options.conflict ? Response.json({error:{message:"Changed"}},{status:409}) : Response.json(options.review ?? review); } return Response.json([]); };
+  values.fetch = async (_url: string, init?: RequestInit) => { if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return options.conflict ? Response.json({error:{message:"Changed"}},{status:409}) : Response.json(options.review ?? review); } return Response.json(options.recipients?.() ?? []); };
   const previous = Object.fromEntries(Object.keys(values).map(key => [key,Object.getOwnPropertyDescriptor(globalThis,key)]));
   for (const [key,value] of Object.entries(values)) Object.defineProperty(globalThis,key,{value,configurable:true});
   Object.assign(dom.window.HTMLElement.prototype,{attachEvent(){},detachEvent(){}});
@@ -48,3 +48,21 @@ test("a stale transition preserves the note and requires an explicit reload",asy
 test("cancel after adding a remark offers keep editing instead of silently dismissing",async()=>harness(async({click,type})=>{
  await click("Complete review");await type("Unsaved remark");await click("Cancel");expect(document.body.textContent).toContain("Discard review changes?");await click("Keep editing");expect(document.querySelector("textarea")?.value).toBe("Unsaved remark");
 }));
+
+test("reload after a recipient conflict removes people who are no longer eligible", async () => {
+  let eligible = true;
+  await harness(async ({ click, type, posts }) => {
+    await click("Return to draft");
+    expect(document.querySelector<HTMLInputElement>('input[role="combobox"]')?.value).toContain("Original creator");
+    await type("Please correct these answers");
+    await click("Return to draft");
+    expect(posts).toHaveLength(1);
+    eligible = false;
+    await click("Reload review");
+    expect(document.querySelector<HTMLInputElement>('input[role="combobox"]')?.value).toBe("");
+    expect(document.body.textContent).toContain("No eligible people");
+    expect(document.querySelector("textarea")?.value).toBe("Please correct these answers");
+    await click("Return to draft");
+    expect(posts).toHaveLength(1);
+  }, { conflict: true, review: { ...review, defaultCorrectionPersonId: "creator" }, recipients: () => eligible ? [{ membershipId: "creator", displayName: "Original creator", role: "DOCTOR" }] : [] });
+});
