@@ -1,10 +1,11 @@
 import { hasPermission } from "@niq/application-contracts";
+import { facilityAccessCondition } from "./facility-access";
 import { canAdjustClinicalScore, reviewState } from "./clinical-review-state";
 import { and, desc, eq } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
 import { assessmentScoreResultSchema } from "../../../../packages/contracts/src/assessment-workflow";
 import { projectScoreReviews, scoreReviewInputSchema, type ScoreReviewInput, type ScoreReviewEntry } from "../../../../packages/contracts/src/assessment-score-reviews";
-import { assessmentScoreReviews as reviews, assessmentSubmissions, assessmentFaceScans } from "../db/schema";
+import { assessmentScoreReviews as reviews, assessmentSubmissions, assessmentFaceScans, organizationMemberships, users, patients } from "../db/schema";
 import type { FaceScanSession } from "../../../../packages/contracts/src/face-scan";
 import { ServiceError, type Principal, type RequestContext } from "./application";
 import type { AssessmentWorkflowService, WorkflowExecutor, WorkflowRow } from "./assessment-workflow";
@@ -43,6 +44,13 @@ export class AssessmentScoreReviewService {
     const input = parsed.data;
     return this.service.db.transaction(async tx => {
       const assessment = await this.service.authorize(actor, organizationId, assessmentId, tx, true);
+      // Hold membership and patient scope stable while the adjustment is committed.
+      const [member]=await tx.select({role:organizationMemberships.role}).from(organizationMemberships).innerJoin(users,eq(users.id,organizationMemberships.userId)).where(and(eq(organizationMemberships.id,actor.membershipId),eq(organizationMemberships.organizationId,organizationId),eq(organizationMemberships.userId,actor.userId),eq(organizationMemberships.isActive,true),eq(users.status,"ACTIVE"),eq(users.platformRole,"USER"))).for("share");
+      if(!member || !hasPermission(member.role,"scores.review"))throw new ServiceError("FORBIDDEN","Your clinical review access has changed.");
+      const [patient]=await tx.select({id:patients.id}).from(patients).where(and(eq(patients.organizationId,organizationId),eq(patients.id,assessment.patientId),facilityAccessCondition(actor,organizationId,patients.homeFacilityId))).for("share");
+      if(!patient)throw new ServiceError("NOT_FOUND","Patient not found.");
+
+
       if (assessment.currentSubmissionId === null) throw new ServiceError("CONFLICT","This assessment has no current calculated result.");
       if (!canAdjustClinicalScore(this.service,assessment,actor)) throw new ServiceError("FORBIDDEN", "Only the responsible clinician can adjust the current score.");
       const { submission, result, rows, projection, scan } = await this.load(tx, organizationId, assessmentId,assessment.currentSubmissionId);
