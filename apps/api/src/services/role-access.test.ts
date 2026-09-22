@@ -46,7 +46,10 @@ for (const role of ["DOCTOR", "NUTRITIONIST", "OTHER_MEDICAL", "SUPPORT"] as con
 test("clinical gate rejects support, cross-tenant and platform actors for every clinical operation", () => {
   const check = AssessmentWorkflowService.prototype.clinicalActor;
   for (const permission of ["assessments.read", "assessments.edit", "assessments.submit", "scans.perform", "reports.manage", "scores.review"] as const) {
-    for (const role of ["DOCTOR", "NUTRITIONIST", "OTHER_MEDICAL", "ORGANIZATION_ADMIN"] as const) expect(() => check({ ...actor, role }, "org", permission)).not.toThrow();
+    for (const role of ["DOCTOR", "NUTRITIONIST", "OTHER_MEDICAL"] as const) expect(() => check({ ...actor, role }, "org", permission)).not.toThrow();
+    const adminCheck = () => check({ ...actor, role: "ORGANIZATION_ADMIN" }, "org", permission);
+    if (permission === "scores.review") expect(adminCheck).toThrow();
+    else expect(adminCheck).not.toThrow();
     expect(() => check({ ...actor, role: "SUPPORT" }, "org", permission)).toThrow();
     expect(() => check(actor, "other-org", permission)).toThrow();
     expect(() => check({ ...actor, platformRole: "NIQ_ADMIN" }, "org", permission)).toThrow();
