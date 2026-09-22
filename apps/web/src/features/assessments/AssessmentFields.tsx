@@ -56,12 +56,12 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
     const value = answers[field.id]; const label = `${field.label}${field.unit && field.unit !== "surgeries" ? ` (${field.unit})` : ""}`;
     const required = field.required ? <><span aria-hidden="true" className="ml-1 text-destructive">*</span><span className="sr-only"> (required)</span></> : null;
     const errorMarkup = error ? <p id={errorId} className="text-sm text-destructive" role="alert">{error}</p> : null;
-    const reset = value !== undefined && value !== null && !readOnly ? <TooltipTrigger><Button variant="ghost" size="icon" className="size-8" aria-label={`Reset ${field.label}`} onPress={() => onChange(field.id, null)}><X className="size-3.5" /></Button><Tooltip>Reset {field.label.toLowerCase()}</Tooltip></TooltipTrigger> : null;
+    const reset = value !== undefined && value !== null && value !== "" && !readOnly && !field.readOnly && field.kind !== "calculated" ? <TooltipTrigger><Button variant="ghost" size="icon" className="size-8" aria-label={`Clear ${field.label}`} onPress={() => onChange(field.id, null)}><X className="size-3.5" /></Button><Tooltip>Clear {field.label.toLowerCase()}</Tooltip></TooltipTrigger> : null;
     if (field.kind === "multi_select") {
       const selected = Array.isArray(value) ? value : [];
       const allOptions = [...(field.options ?? []), ...(explicitNoneFields.has(field.id) ? [{ id: "__none__", label: "None" }] : [])];
       if (allOptions.length <= 6) return <fieldset id={id} key={field.id} tabIndex={-1} aria-describedby={error ? errorId : undefined} aria-invalid={Boolean(error)} className="col-[1/-1] min-w-0 space-y-3">
-        <legend className="mb-2 text-sm font-medium">{label}{required}</legend>
+        <legend className="mb-2 w-full text-sm font-medium"><span className="flex min-h-8 items-center justify-between gap-2"><span>{label}{required}</span>{reset}</span></legend>
         <MultipleChoiceGroup label={label} options={allOptions} value={Array.isArray(value) && !selected.length && explicitNoneFields.has(field.id) ? ["__none__"] : selected} disabled={readOnly} onChange={next => {
           if (next.includes("__none__") && !selected.includes("__none__") && selected.length) onChange(field.id, []);
           else { const choices = next.filter(id => id !== "__none__"); onChange(field.id, choices.length ? choices : next.includes("__none__") ? [] : null); }
@@ -70,7 +70,7 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
       const options = (field.options || []).filter(option => !selected.includes(option.id));
       if (explicitNoneFields.has(field.id)) options.push({ id: "__none__", label: "None" });
       return <fieldset id={id} key={field.id} tabIndex={-1} disabled={readOnly} aria-describedby={error ? errorId : undefined} aria-invalid={Boolean(error)} className="col-[1/-1] min-w-0 space-y-3">
-        <legend className="mb-2 text-sm font-medium">{label}{required}</legend>
+        <legend className="mb-2 w-full text-sm font-medium"><span className="flex min-h-8 items-center justify-between gap-2"><span>{label}{required}</span>{reset}</span></legend>
         {Array.isArray(value) && <div className="flex flex-wrap items-center gap-2">{selected.length ? selected.map(item => <span key={item} className="inline-flex max-w-full items-center rounded-full border border-primary/20 bg-primary/5 pl-3 text-sm">
           <span className="break-words">{field.options?.find(option => option.id === item)?.label || item}</span>
           <Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove ${field.options?.find(option => option.id === item)?.label || item}`} onPress={() => onChange(field.id, selected.length === 1 ? null : selected.filter(choice => choice !== item))}><X className="size-3.5" /></Button>
@@ -84,7 +84,7 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
     </div>;
     const other = otherFields[field.id];
     return <div key={field.id} className={`min-w-0 space-y-2 ${field.kind === "select" && (field.options?.length || 0) <= 6 ? "col-[1/-1]" : ""}`}>
-      <div className="flex min-h-8 items-center justify-between gap-2"><label htmlFor={id} className="block text-sm font-medium">{label}{required}</label>{field.kind === "select" && reset}</div>
+      <div className="flex min-h-8 items-center justify-between gap-2"><label htmlFor={id} className="block text-sm font-medium">{label}{required}</label>{reset}</div>
       {field.kind === "select" ? (field.options?.length || 0) <= 6 ? <ChoiceGroup id={id} label={label} options={field.options || []} value={typeof value === "string" ? value : ""} onChange={choice => onChange(field.id, choice)} disabled={readOnly} required={field.required} invalid={Boolean(error)} describedBy={error ? errorId : undefined} /> : <SearchCombobox id={id} label={label} options={field.options || []} value={typeof value === "string" ? value : null} onChange={choice => onChange(field.id, choice)} disabled={readOnly} required={field.required} invalid={Boolean(error)} describedBy={error ? errorId : undefined} onCreate={other ? text => { onChange(field.id, other.option); onChange(other.detail, text); } : undefined} /> : <Input id={id} className="min-h-11 bg-background" disabled={readOnly} type={field.kind === "date" ? "date" : field.kind === "number" ? "number" : "text"} min={field.kind === "number" ? field.min : undefined} step={field.kind === "number" ? field.integer ? 1 : "any" : undefined} inputMode={field.kind === "number" ? "decimal" : undefined} maxLength={ASSESSMENT_ANSWER_TEXT_LIMIT} aria-required={field.required} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} value={typeof value === "string" || typeof value === "number" ? value : ""} onChange={event => {
         const next = field.kind === "number" ? assessmentNumericInput(event.target.value) : event.target.value || null;
         if (field.kind === "number" && typeof next === "number" && field.min !== undefined && next < field.min) return;

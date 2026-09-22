@@ -54,3 +54,13 @@ test("short multi-selects expose checkboxes and short Other lists expose radios"
   const other = render([{ ...field, id: "metastasis_site", kind: "select", options: [{ id: "brain", label: "Brain" }, { id: "others", label: "Others" }] }]);
   expect(other).toContain('role="radiogroup"');
 });
+
+
+test("all editable answered field kinds offer clearing, including zero and explicit None", () => {
+  for (const [kind, value] of [["multi_select", ["nausea"]], ["select", "nausea"], ["number", 0], ["text", "Details"], ["date", "2026-09-22"]] as const) {
+    expect(render([{ ...field, kind, options: [{ id: "nausea", label: "Nausea" }] }], { choices: Array.isArray(value) ? [...value] : value })).toContain('aria-label="Clear Symptoms"');
+  }
+  expect(render([{ ...field, id: "co_morbidities" }], { co_morbidities: [] })).toContain('aria-label="Clear Symptoms"');
+  for (const value of [undefined, null, ""]) expect(render([field], { choices: value })).not.toContain('aria-label="Clear Symptoms"');
+  expect(render([{ ...field, kind: "number", readOnly: true }], { choices: 1 })).not.toContain('aria-label="Clear Symptoms"');
+});
