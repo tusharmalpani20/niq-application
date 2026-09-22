@@ -2,6 +2,7 @@
 
 Status: planning only; implementation is paused pending a separate instruction to proceed.
 Date: 23 September 2026.
+Plan audit: revised 23 September 2026; see section 16 and the companion plan audit.
 Application repository: `/home/tm/Desktop/work/NIQ/application/niq-application`.
 Primary documentation directory: `/home/tm/Desktop/work/NIQ/application/docs`.
 Version-controlled copy of this plan: `niq-application/docs/clinical-review-workflow.md`.
@@ -69,7 +70,7 @@ Distinguish “Awaiting reviewer,” “In review,” “Returned for correction
 
 | Action | Authorized actor |
 |---|---|
-| Initial send for clinical review | Original creator who is currently an eligible clinician with access |
+| Initial send for clinical review | Original creator with current assessment-submission permission and access (including an admin creator) |
 | Claim unassigned review | Eligible clinician, including original creator |
 | Adjust scores during assigned review | Current reviewer only |
 | Transfer/release assigned review | Current reviewer or organization admin |
@@ -80,6 +81,8 @@ Distinguish “Awaiting reviewer,” “In review,” “Returned for correction
 | Resend corrected assessment for clinical review | Assigned correction person |
 | Complete review | Current reviewer, with required completion remark |
 | Reopen completed assessment | Nobody |
+
+Sending to the queue is an administrative handoff, not performing a clinical review. An admin who originally created the assessment may send it, but cannot claim it, adjust clinical scores or complete it. No other admin receives a creator-ownership bypass.
 
 Preserve existing initial-draft collaboration behavior unless required to enforce the new returned-draft ownership. Admin management must not accidentally grant clinical-review capability through the current “all permissions” pattern. Inspect and narrow score-adjustment authorization accordingly; document changes to existing admin capabilities.
 
@@ -132,12 +135,14 @@ If the creator cannot perform an initial clinical submission, do not silently gi
 - Use a new scoring idempotency key for a new corrected submission. Retry/recovery within the same submission reuses its existing key.
 - Keep historical results available for audit, but never present an old result as the current corrected result.
 - Current score adjustments start clean against the new result; previous adjustment history remains linked to the previous submission/cycle.
+- Correction ownership lasts until explicit clinical resubmission, including while the corrected result is SCORED. Only the correction person may adjust that result before resending; a generic pre-review permission check must not bypass this ownership. Admin correction reassignment is allowed in returned DRAFT or correction SCORED, but not during an in-flight/uncertain scoring request.
+- While the correction is pending, preserve previous reviewer separately from correction person. The previous reviewer has no clinical mutation rights until ownership returns on resend.
 
 ### Resend and complete
 
 - Only the correction person explicitly resends that cycle after successful scoring.
 - Return ownership to the previous reviewer if still eligible and not explicitly replaced. Otherwise enqueue unassigned; show what happened.
-- Preserve the last reviewer through multiple correction cycles without confusing them with the correction person.
+- Preserve the last reviewer through multiple correction cycles without confusing them with the correction person. If returned before any reviewer claimed it, previous reviewer is null and resend goes to the unclaimed queue. A release clears current ownership: do not resurrect a historical released reviewer when a later admin returns unassigned work to draft.
 - Completion requires current reviewer ownership, a current score, no outstanding correction/scoring operations, and a nonblank final remark.
 - Snapshot the final reviewed score and its revisions/references at completion.
 - Set completion timestamp here. Audit the current use of `completedAt` on scoring success and separate “scored at” from actual clinical completion.
@@ -257,7 +262,7 @@ Update implementation log alongside each slice. Record migration order and any t
 
 ### Permissions
 
-- Initial creator can send; noncreator clinician/admin/support cannot bypass initial submission ownership.
+- Initial creator with submission permission can send, including an admin creator; noncreator clinician/admin/support cannot bypass initial submission ownership.
 - All three clinical roles can claim, including self-review; admin/support cannot claim, adjust clinical scores or complete.
 - Assigned reviewer alone can adjust during review; former owner is rejected after transfer/release.
 - Admin can assign/reassign/release/return without being given clinical ownership.
@@ -270,7 +275,7 @@ Update implementation log alongside each slice. Record migration order and any t
 - Send does not occur automatically after scoring.
 - Reasons are required for transfer/release/return/reassignment; whitespace-only text is rejected.
 - Return seeds editable answers without mutating old snapshots.
-- Only correction person edits/rescores/resends returned cycle; eligible replacement can be assigned if necessary.
+- Only correction person edits/rescores/resends returned cycle, including current-cycle score adjustments before resend; eligible replacement can be assigned if necessary.
 - Resend returns to eligible previous reviewer or unclaimed queue if ineligible; explicit transfer/release history is respected.
 - Completion requires assignee, current result and final remark; completed work cannot reopen or mutate through any API.
 
@@ -322,3 +327,73 @@ Resolve technical choices within these agreed rules. If implementation reveals a
 - Relevant tests and build pass; browser results and any limitations are documented.
 - All documentation listed in section 11 exists and reflects actual delivered behavior in the requested directory and repository copies.
 - Work is delivered as small logical commits with a clean accounting of unrelated/unfinished changes; nothing is pushed without instruction.
+
+
+## 16. Audit corrections and additional implementation invariants
+
+These clarifications close implementation gaps without adding Organization rules, reopening or new clinical fields.
+
+### 16.1 Ownership and administrative boundaries
+
+- Initial creator identity alone is insufficient: current active membership, submission permission and scope are still required. Admin creators can send as an administrative handoff, but cannot perform clinical score adjustments or reviews.
+- An admin creator is not automatically an eligible correction person. The Return dialog must require an eligible clinical replacement when its usual default is ineligible.
+- If no eligible correction recipient exists, reject return with clear guidance; do not create an ownerless correction draft. Admin assignment management is still limited to recipients within the record's required facility scope.
+- Initial-draft collaboration remains unchanged. Correction-cycle ownership must cover field saves, report create/edit/remove/upload, scan start/upload and any inline patient-contact mutation through the assessment, as well as scoring and score adjustment endpoints. Global patient profile edits remain governed by their existing permissions and must not silently rewrite frozen evidence.
+- A clinician taking a scored correction back to DRAFT before resend must still satisfy correction ownership; do not interpret the generic “eligible clinician before review” rule as permission to take another person's correction cycle.
+- All transfer/assignment actions reject the already-current assignee as a no-op. Release of already-unassigned work is rejected, except replay of the same accepted request.
+
+### 16.2 Scoring versions, snapshots and clinical evidence
+
+- Preserve the assessment reference and original creation timestamp across cycles. Record separate cycle-opened, scoring-submitted, scored, review-submitted and completed timestamps.
+- Pin the existing scoring deployment/rule binding for corrections where supported by the current scoring contract. Verify upstream support for multiple scoring submissions against one assessment binding before implementing this design. If upstream requires a new binding, create a linked, auditable correction binding; never silently overwrite an earlier binding or switch scoring rules.
+- Verify how age, patient demographics and reused height are derived on correction: retain original assessment-time semantics unless explicitly refreshed through existing supported behavior. Snapshot the actual patient inputs used for every scoring submission and record differences. Do not change assessment age merely because correction happens later.
+- Add an explicit current submission/cycle pointer. Do not use “latest by createdAt” as the sole authority: timestamps can tie and old requests can finish late.
+- Route score-review reads and writes by current submission. Query historical adjustments separately; the current service's “all rows belong to latest submission” check must be replaced, not removed without a scope guard.
+- Lock a completed review's final projection to exact questionnaire result, score-review revision and scan-result revision. Subsequent patient-profile changes or background recovery must not change the completed clinical summary.
+- For old assessments lacking immutable draft history, retain a baseline snapshot and the date history recording began. Do not describe pre-baseline edits as fully reconstructable.
+
+### 16.3 Reports and scans across correction cycles
+
+- Snapshot report labels, dates, purpose, file identity and integrity metadata for each frozen submission. A correction can update current metadata or detach a report without altering old manifests.
+- Retain file content while any retained submission references it; cleanup must inspect all cycles. Historical authorized retrieval must not depend solely on the current file being marked READY, because a later correction may remove it from the current view.
+- Reuse immutable evidence references rather than physically copying files on every cycle. Enforce upload limits on the intended working set and document retained-history storage implications.
+- Active scan capture/upload/processing or uncertain scan recovery must be resolved or explicitly cancelled through existing supported flows before sending/returning/completing a review. Do not freeze a changing scan projection as final evidence.
+- A terminal failed/unavailable optional scan does not by itself require an invented mandatory rescan. Persist the exact available/unavailable state and apply the existing scoring completeness rules.
+- If changed correction inputs affect a prior scan's validity, do not silently relabel that scan as newly measured or recalculate it locally. Verify the existing provider/scoring contract, preserve its original input snapshot, and clearly distinguish retained historical evidence from any new scan.
+- Late recovery may append a provider result to historical scan records for reconciliation, but cannot mutate a closed cycle's reviewed or completed projection. Serialize these decisions against workflow transitions.
+
+### 16.4 Commands, races and failure recovery
+
+- Define command replay precedence: authenticate and authorize record access, locate an existing matching actor/request key, verify payload identity, and return the accepted outcome/current projection without repeating the transition. Do not reject a legitimate replay solely because the first request changed the status or owner. A revoked actor still cannot read protected results.
+- Check both workflow and score-review revisions for transitions that freeze or hand over clinical work. A completion based on a stale score must conflict even if ownership is unchanged.
+- Establish one documented lock order for assessment, cycle/submission, review entries and membership/access changes to prevent deadlocks. Remote scoring/scan calls run outside database locks, with conditional write-back tied to the originating cycle and lease.
+- UI busy flags are not concurrency enforcement. A second tab or another client must encounter the same server-side state and revision rules.
+- Admin correction reassignment, recipient deactivation and facility changes require tests alongside review reassignment. Stale UI must never resurrect revoked ownership.
+
+### 16.5 Migration and rollout
+
+- Inventory existing UNDER_REVIEW/COMPLETED records, assignment values and actual submission results before backfill. Do not infer completed clinical approval merely from a scored record's populated completedAt.
+- Backfill scored-at from authoritative result/submission timestamps. Preserve ambiguous legacy timestamps/history rather than destroying them. Legacy COMPLETED records remain locked; flag missing completion provenance rather than manufacturing an actor or remark.
+- Document how unsupported/inconsistent legacy states appear and how support diagnoses them; do not silently convert them to editable drafts.
+- Test migration on a disposable copy, including rerun behavior, existing score adjustments and retained file references. Generate migration metadata using the project's normal tooling.
+- Do not expose new UI transitions until migration and backend enforcement are installed. Avoid concurrent old/new API versions that can bypass ownership on shared mutation routes; use a coordinated rollout or explicit compatibility guard.
+- Prefer additive schema changes. Document rollback restrictions once correction cycles exist; an old application version must not be restarted against new workflow data without a compatibility assessment.
+
+### 16.6 Additional acceptance cases
+
+- Admin creator can initially send but cannot claim, adjust points or complete; noncreator admin cannot initially send.
+- Returned cycle's previous reviewer cannot edit during correction, and another clinician cannot take over correction SCORED through a generic return/adjust endpoint.
+- Returning a never-assigned or released review and resending it produces unclaimed work, not an invented previous owner.
+- Missing/ineligible original creator requires explicit correction replacement; no recipient leaves state unchanged.
+- Concurrent score adjustment versus completion/return/transfer produces a single consistent score revision and ownership outcome.
+- Accepted command response loss retries do not append duplicate notes/history, while changed-payload key reuse fails.
+- Late scoring and scan completions cannot change current-cycle pointers or completed projections.
+- Removed current files remain retrievable as authorized historical evidence while retained; cleanup cannot remove referenced content.
+- Initial record and multiple correction cycles preserve distinct bindings, answer snapshots and results, including equal-timestamp and delayed-result cases.
+- Migration of existing SCORED versus legacy COMPLETED does not create false clinical completion history.
+
+## 17. Plan audit outcome
+
+Audited against confirmed conversation decisions and existing workflow, score-adjustment, report, scan and facility-access code on 23 September 2026. Corrected administrative submission eligibility, post-rescoring correction ownership, previous-reviewer routing, evidence finalization, replay ordering, historical retrieval and rollout requirements.
+
+No application behavior was changed during this audit. Implementation remains paused. External scoring/scan protocol capabilities and migration data inventory are explicit implementation verification gates, not assumed working features. Record their findings in the required implementation log before enabling correction transitions.
