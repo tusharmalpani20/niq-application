@@ -705,3 +705,18 @@ export const assessmentFaceScans = pgTable("assessment_face_scans", {
   index("assessment_face_scans_recovery_idx").on(t.active,t.nextAttemptAt),
   foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),
 ]);
+
+/** Append-only encrypted review events. The original scoring result is never updated. */
+export const assessmentScoreReviews = pgTable("assessment_score_reviews", {
+  id: entityId("id").primaryKey(), organizationId: entityId("organization_id").notNull(),
+  assessmentId: entityId("assessment_id").notNull(), submissionId: entityId("submission_id").notNull().references(() => assessmentSubmissions.id),
+  actorId: entityId("actor_id").notNull(), revision: integer("revision").notNull(),
+  requestKey: text("request_key").notNull(), event: jsonb("event").notNull(),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("assessment_score_reviews_revision_uidx").on(t.assessmentId,t.revision),
+  uniqueIndex("assessment_score_reviews_request_uidx").on(t.assessmentId,t.actorId,t.requestKey),
+  foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),
+  foreignKey({columns:[t.organizationId,t.actorId],foreignColumns:[organizationMemberships.organizationId,organizationMemberships.id]}),
+  check("assessment_score_reviews_revision_ck",sql`${t.revision} > 0`),
+]);

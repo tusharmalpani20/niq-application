@@ -148,6 +148,13 @@
       "when": 1789929622931,
       "tag": "0020_light_slapstick",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790075151688,
+      "tag": "0021_sudden_enchantress",
+      "breakpoints": true
     }
   ]
 }
