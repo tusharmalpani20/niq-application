@@ -9,7 +9,7 @@ function fixture(startScan: CaptureSDK["facescan"]["startScan"] = async () => {}
   const sdk: CaptureSDK = { facescan: { onFrame: fn => { frame = fn; }, onScanFinish: fn => { finish = fn; }, onError: fn => { error = fn; }, startScan, stopScan: () => { stops++; } } };
   const video = { srcObject: { getTracks: () => [{ stop: () => { tracks++; } }] } } as unknown as HTMLVideoElement;
   const elements = { video, canvas: {} as HTMLCanvasElement };
-  return { sdk, elements, frame: (progress: number) => frame({ progress, message: "Still", type: "scan", isLiteMode: false, isThrottling: false }), finish: () => finish({ raw_intensity: [{ r: 1, g: 2, b: 3 }], ppg_time: [0], average_fps: 30 }), error: () => error(new Error("private upstream detail"), "CMUSR01"), counts: () => ({ stops, tracks }) };
+  return { sdk, elements, frame: (progress: number) => frame({ progress, message: "Still", type: "scan", isLiteMode: false, isThrottling: false }), finish: () => finish({ raw_intensity: [{ r: 1, g: 2, b: 3 }], ppg_time: [0], average_fps: 30 }), error: (code = "CMUSR01") => error(new Error("private upstream detail"), code), counts: () => ({ stops, tracks }) };
 }
 test("finishes once, releases camera and ignores duplicate/error frames after finish", async () => {
   const f = fixture(), controller = createCaptureController(async () => f.sdk);
@@ -49,4 +49,17 @@ test("SDK errors are user-safe and stop capture", async () => {
   let message = "";
   await controller.start(f.elements, { frame: () => {}, finish: () => {}, error: value => { message = value; } });
   f.error(); expect(message).toContain("Camera access"); expect(message).not.toContain("private"); expect(f.counts().tracks).toBe(1); controller.cancel();
+});
+
+test("SDK focus loss explains how to resume and never submits partial signal", async () => {
+  const f = fixture(), controller = createCaptureController(async () => f.sdk);
+  let message = "", results = 0;
+  await controller.start(f.elements, { frame: () => {}, finish: () => { results++; }, error: value => { message = value; } });
+  f.error("CMUSR02"); f.finish();
+  expect(message).toContain("lost focus");
+  expect(message).toContain("chat panel");
+  expect(message).toContain("Resume capture");
+  expect(results).toBe(0);
+  expect(f.counts().tracks).toBe(1);
+  controller.cancel();
 });

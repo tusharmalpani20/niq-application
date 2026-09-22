@@ -37,14 +37,14 @@ const remoteSchema = z.object({
 export function frozenFaceScanContext(patient: {
   dateOfBirth: string | null;
   gender: string;
-}, answers: Record<string, unknown>, employeeId: string): FaceScanContext {
+}, answers: Record<string, unknown>, employeeId: string, posture: FaceScanContext["posture"] = "resting"): FaceScanContext {
   const value = faceScanContextSchema.safeParse({
     dob: patient.dateOfBirth,
     gender: patient.gender === "MALE" ? "male" : patient.gender === "FEMALE" ? "female" : null,
     heightCm: answers.height_cm,
     weightKg: answers.current_weight_kg,
     employeeId,
-    posture: "resting"
+    posture
   });
   if (!value.success)
     throw new ServiceError("VALIDATION_ERROR", "Face scan requires a saved date of birth, supported gender, height and current weight.");
@@ -114,7 +114,7 @@ export class AssessmentFaceScanService {
   async start(actor: Principal, org: string, assessment: string, input: {
     revision: number;
     requestKey: string;
-    posture: "resting";
+    posture: FaceScanContext["posture"];
   }, context: RequestContext) {
     const saved = await this.db.transaction(async (tx) => {
       const assessmentRow = await this.workflow.authorize(actor, org, assessment, tx, true);
@@ -134,7 +134,7 @@ export class AssessmentFaceScanService {
       const patient = await this.workflow.applicationService.getPatient(actor, org, assessmentRow.patientId) as AssessmentPatient;
       const state = this.workflow.unseal<StoredWorkflow>(assessmentRow.workflow);
       const employeeId = this.workflow.config.FACE_SCAN_EMPLOYEE_ID_OVERRIDE ?? `${connection.identity.deploymentId}:${actor.membershipId}`;
-      const snapshot = frozenFaceScanContext(patient, state.answers, employeeId);
+      const snapshot = frozenFaceScanContext(patient, state.answers, employeeId, input.posture);
       const id = createEntityId();
       // Selection changes only for an explicit new attempt, never for delayed evidence.
       await tx.update(assessmentFaceScans).set({ isCurrent: false }).where(and(

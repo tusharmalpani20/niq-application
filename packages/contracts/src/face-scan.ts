@@ -6,13 +6,13 @@ export const faceScanContextSchema = z.object({
   gender: z.enum(["male", "female"]),
   heightCm: z.number().finite().positive().max(300),
   weightKg: z.number().finite().positive().max(700),
-  posture: z.literal("resting"),
+  posture: z.enum(["resting", "standing", "walking", "exercising"]),
   employeeId: z.string().min(1).max(128)
 }).strict();
 export const startFaceScanSchema = z.object({
   revision: z.number().int().nonnegative(),
   requestKey: z.string().min(16).max(128),
-  posture: z.literal("resting")
+  posture: z.enum(["resting", "standing", "walking", "exercising"])
 }).strict();
 export const faceScanSignalSchema = z.object({
   schemaVersion: z.literal(1).default(1),

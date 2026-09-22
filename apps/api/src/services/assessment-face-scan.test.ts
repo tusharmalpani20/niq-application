@@ -58,3 +58,11 @@ test("start freezes the configured staging employee and replay ignores later ove
   expect(replay.context.employeeId).toBe(first.context.employeeId);
  }
 });
+
+test("freezes each documented posture and rejects unsupported values", () => {
+  for (const posture of ["resting", "standing", "walking", "exercising"] as const) {
+    expect(startFaceScanSchema.safeParse({revision: 0, requestKey: "posture-request-key", posture}).success).toBe(true);
+    expect(frozenFaceScanContext({dateOfBirth: "1990-05-01", gender: "FEMALE"}, {height_cm:170,current_weight_kg:65}, "operator", posture).posture).toBe(posture);
+  }
+  expect(startFaceScanSchema.safeParse({revision:0,requestKey:"posture-request-key",posture:"unknown"}).success).toBe(false);
+});

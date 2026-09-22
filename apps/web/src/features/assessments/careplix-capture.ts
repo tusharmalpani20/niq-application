@@ -14,7 +14,7 @@ const errorMessages: Record<string, string> = {
   FCINT01: "Scan files could not load. Check your internet connection and try again.",
   FCSCN01: "A face could not be detected. Check the lighting and position, then try again.",
   CMUSR01: "Camera access is unavailable. Allow camera access and check that another app is not using it.",
-  CMUSR02: "Capture was interrupted. Keep this page visible during the scan.",
+  CMUSR02: "Capture stopped because the scan window lost focus. Click Resume capture and keep this page focused. Do not click the chat panel, another tab or another app until capture finishes.",
   CMSCN01: "The camera signal could not be captured. Please try again.",
 };
 

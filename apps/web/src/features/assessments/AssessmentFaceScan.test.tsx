@@ -39,7 +39,7 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; cons
       setCurrent: async value => { current = value; await act(async () => { document.dispatchEvent(new dom.window.Event("visibilitychange")); await flush(); }); },
       requests, starts: () => starts, saved: () => saves, busy: () => busy,
       click: async text => { const button = [...document.querySelectorAll("button")].find(b => b.textContent?.trim() === text); if (!button) throw new Error(`Missing ${text}`); await act(async () => { button.click(); await flush(); }); },
-      consent: async () => { await act(async () => { document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(); }); },
+      consent: async () => { await act(async () => { document.querySelector<HTMLInputElement>('input[type="radio"][value="standing"]:not(:disabled)')?.click(); document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(); }); },
       finish: async () => { await act(async () => { finish({ raw_intensity: [{ r: 1, g: 2, b: 3 }, { r: 2, g: 3, b: 4 }], ppg_time: [0, 33], average_fps: 30 }); await flush(); }); },
     });
   } finally { await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key]; } }
@@ -52,26 +52,26 @@ test("saves draft before capture and unlocks navigation only after upload accept
   await consent(); await click("Start face scan");
   expect(saved()).toBe(1); expect(starts()).toBe(1); expect(busy()).toBe(true);
   const start = requests.find(r => r.body?.revision); expect(start?.body.revision).toBe(4); expect(start?.body.requestKey.length).toBeGreaterThan(16);
-  await finish(); expect(busy()).toBe(false); expect(document.body.textContent).toContain("Your scan has been uploaded");
+  await finish(); expect(busy()).toBe(false); expect(document.body.textContent).toContain("Your capture is saved");
 }));
 test("lost upload response reconciles accepted scan without another capture", async () => harness(async ({ consent, click, finish, starts, requests }) => {
   await consent(); await click("Start face scan"); await finish();
   expect(starts()).toBe(1); expect(requests.filter(r => r.path.endsWith("/signal")).length).toBe(1);
-  expect(document.body.textContent).toContain("Your scan has been uploaded");
+  expect(document.body.textContent).toContain("Your capture is saved");
 }, { lostUpload: true }));
 test("reopens processing session without requesting camera", async () => harness(async ({ starts }) => {
-  expect(document.body.textContent).toContain("Scan processing"); expect(starts()).toBe(0);
+  expect(document.body.textContent).toContain("Getting scan results"); expect(starts()).toBe(0);
 }, { existing: { ...session, state: "PROCESSING" } }));
 
 test("late pre-upload status cannot overwrite accepted upload", async () => harness(async ({ consent, click, finish, releaseStatus }) => {
   await consent(); await click("Start face scan"); await finish(); await releaseStatus();
-  expect(document.body.textContent).toContain("Your scan has been uploaded");
+  expect(document.body.textContent).toContain("Your capture is saved");
   expect(document.body.textContent).not.toContain("Resume capture");
 }, { delayedStatus: true }));
 test("queued cancellation targets the current attempt after a previous capture", async () => harness(async ({ consent, click, finish, setCurrent, requests }) => {
   await consent(); await click("Start face scan"); await finish();
   await setCurrent({ ...session, id: "another-attempt", state: "UPLOAD_ACCEPTED" });
-  await click("Cancel queued scan");
+  await click("Cancel scan");
   expect(requests.find(r => r.path.endsWith("/cancel"))?.path).toContain("/another-attempt/cancel");
 }));
 test("backgrounding during preparation never starts a camera", async () => harness(async ({ consent, click, starts, busy }) => {
@@ -88,3 +88,44 @@ test("lost start response restores the accepted attempt before camera retry", as
   expect(starts()).toBe(1);
   expect(requests.filter(r => r.body?.requestKey)).toHaveLength(1);
 }, { lostStart: true }));
+
+test("requires posture and sends the selected activity with scan creation", async () => harness(async ({ consent, click, requests }) => {
+  expect([...document.querySelectorAll<HTMLInputElement>('input[type="radio"]')].map(input => input.value)).toEqual(["resting", "standing"]);
+  const start = [...document.querySelectorAll("button")].find(b => b.textContent?.trim() === "Start face scan")!;
+  expect(start.disabled).toBe(true);
+  await consent(); await click("Start face scan");
+  expect(requests.find(r => r.body?.requestKey)?.body.posture).toBe("standing");
+}));
+
+test("uncertain provider outcome offers neither cancellation nor a duplicate scan", async () => harness(async ({ starts }) => {
+  expect(document.body.textContent).toContain("Scan result unavailable");
+  expect(document.body.textContent).toContain("contact support before trying another scan");
+  expect([...document.querySelectorAll("button")].some(b => /Cancel scan|Start another scan|Resume capture/.test(b.textContent ?? ""))).toBe(false);
+  expect(starts()).toBe(0);
+}, {existing: {...session, state: "RECONCILIATION_REQUIRED"}}));
+
+test("failed pre-submission attempt offers explicit retry without automatic capture", async () => harness(async ({consent, click, starts, requests}) => {
+  expect(starts()).toBe(0);
+  expect(requests.every(r => r.body === null)).toBe(true);
+  expect([...document.querySelectorAll("button")].some(b => b.textContent === "Try again")).toBe(true);
+  await consent(); await click("Try again");
+  expect(starts()).toBe(1);
+  expect(requests.filter(r => r.body?.requestKey).length).toBe(1);
+}, {existing: {...session, state:"FAILED", failureCode:"SCAN_NOT_SUBMITTED"}}));
+
+test("explicit service rejection shows failed status without permitting another submission", async () => harness(async ({starts}) => {
+  expect(document.body.textContent).toContain("Scan failed");
+  expect(document.body.textContent).toContain("The scan could not be processed");
+  expect(document.body.textContent).not.toContain("Scan result unavailable");
+  expect([...document.querySelectorAll("button")].some(b => /Try again|Start another scan/.test(b.textContent ?? ""))).toBe(false);
+  expect(starts()).toBe(0);
+}, {existing: {...session,state:"RECONCILIATION_REQUIRED",failureCode:"PROVIDER_REJECTED"}}));
+
+test("confirmed device rejection offers explicit retry without automatic capture", async () => harness(async ({consent, click, starts, requests}) => {
+  expect(starts()).toBe(0);
+  expect(requests.every(r => r.body === null)).toBe(true);
+  expect([...document.querySelectorAll("button")].some(b => b.textContent === "Try again")).toBe(true);
+  await consent(); await click("Try again");
+  expect(starts()).toBe(1);
+  expect(requests.filter(r => r.body?.requestKey).length).toBe(1);
+}, {existing: {...session, state:"FAILED", failureCode:"DEVICE_NOT_SUPPORTED"}}));
