@@ -61,7 +61,7 @@ function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onS
     </SidebarMenu></SidebarGroupContent></SidebarGroup></SidebarContent>
     <SidebarFooter className="border-t border-sidebar-border p-3 group-data-[collapsible=icon]:p-1">
       <div className="flex items-center gap-2 overflow-hidden group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
-        <Avatar className="size-9 shrink-0"><AvatarFallback>{initials}</AvatarFallback></Avatar>
+        <Avatar className="size-7 shrink-0"><AvatarFallback className="text-xs">{initials}</AvatarFallback></Avatar>
         <div className="grid min-w-0 flex-1 group-data-[collapsible=icon]:hidden"><strong className="truncate text-xs">{user.displayName}</strong><span className="truncate text-[.68rem] text-muted-foreground">{user.role === "ORGANIZATION_ADMIN" ? "Organization admin" : user.role === "MEDICAL" ? "Medical user" : "Support user"}</span></div>
         <Button variant="ghost" size="icon-sm" aria-label="Sign out" onPress={onSignOut}><LogOut /></Button>
       </div>
