@@ -1,3 +1,5 @@
+import { AssessmentScoreReviewService } from "./services/assessment-score-reviews";
+import { scoreReviewInputSchema } from "../../../packages/contracts/src/assessment-score-reviews";
 import type { Hono } from "hono";
 import { z } from "zod";
 import { initializeAssessmentSchema, saveAssessmentSchema, assessmentRevisionSchema, reportInputSchema } from "../../../packages/contracts/src/assessment-workflow";
@@ -8,6 +10,7 @@ const id=z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{const result=schema.safeParse(value);if(!result.success)throw new ServiceError("VALIDATION_ERROR","The request is invalid.");return result.data;};
 /** Register after session and origin/CSRF middleware; all response data is private. */
 export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowService) {
+  const scoreReviews = new AssessmentScoreReviewService(service);
   const base="/v1/organizations/:organizationId";
   const parts=(c:any)=>({actor:c.get("principal"),org:parse(id,c.req.param("organizationId")),assessment:parse(id,c.req.param("assessmentId")),context:{requestId:c.get("requestId")}});
   app.use(`${base}/assessment-initializations*`,async(c,next)=>{c.header("Cache-Control","private, no-store");await next();});
@@ -17,6 +20,8 @@ export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowSe
   app.get(`${base}/assessment-initializations/:initializationId`,async c=>{const row=await service.getInitialization(c.get("principal"),parse(id,c.req.param("organizationId")),parse(id,c.req.param("initializationId")));return c.json(await service.initializationDto(row));});
   app.post(`${base}/assessment-initializations/:initializationId/retry`,async c=>c.json(await service.retryInitialization(c.get("principal"),parse(id,c.req.param("organizationId")),parse(id,c.req.param("initializationId")),{requestId:c.get("requestId")})));
   app.get(`${base}/assessments/:assessmentId`,async c=>{return c.json(await service.read(c.get("principal"),parse(id,c.req.param("organizationId")),parse(z.union([id,z.string().regex(/^ASM-[0-9]{6,10}$/)]),c.req.param("assessmentId"))));});
+  app.get(`${base}/assessments/:assessmentId/score-reviews`,async c=>{const p=parts(c);return c.json(await scoreReviews.read(p.actor,p.org,p.assessment));});
+  app.post(`${base}/assessments/:assessmentId/score-reviews`,async c=>{const p=parts(c);return c.json(await scoreReviews.add(p.actor,p.org,p.assessment,parse(scoreReviewInputSchema,await json(c)),p.context));});
   app.patch(`${base}/assessments/:assessmentId`,async c=>{const p=parts(c);return c.json(await service.save(p.actor,p.org,p.assessment,parse(saveAssessmentSchema,await json(c)),p.context));});
   app.post(`${base}/assessments/:assessmentId/submit`,async c=>{const p=parts(c);return c.json(await service.submit(p.actor,p.org,p.assessment,parse(assessmentRevisionSchema,await json(c)).revision,p.context));});
   app.post(`${base}/assessments/:assessmentId/submission/retry`,async c=>{const p=parts(c);return c.json(await service.retrySubmission(p.actor,p.org,p.assessment,p.context));});
