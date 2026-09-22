@@ -132,3 +132,15 @@ test("risk retry is hidden after review access is lost", async()=>harness(async(
  expect(document.body.textContent).toContain("Risk assessment unavailable");
  expect([...document.querySelectorAll("button")].some(b=>b.textContent==="Retry risk assessment")).toBe(false);
 },[entry],false,{status:"UNAVAILABLE",classification:null,resultReference:null,failureCode:"TIMEOUT",canRetry:true}));
+
+test("pending classification never displays a previous reviewed risk", async()=>harness(async()=>{
+ expect(document.body.textContent).toContain("Risk assessment pending");
+ expect(document.body.textContent).toContain("Clinical review can be completed once its risk is confirmed");
+ expect(document.body.textContent).not.toContain("Old category · NIQ");
+},[entry],false,{status:"PENDING",classification:{id:"old",label:"Old category",interpretation:""},resultReference:null,failureCode:null,canRetry:false}));
+
+test("restored questionnaire uses original risk and has no retry", async()=>harness(async()=>{
+ expect(document.body.textContent).toContain("Low · NIQ (original restored)");
+ expect(document.body.textContent).not.toContain("Risk assessment pending");
+ expect([...document.querySelectorAll("button")].some(b=>b.textContent==="Retry risk assessment")).toBe(false);
+},[entry,{...entry,id:"restore",revision:2,points:null}],false,{status:"ORIGINAL",classification:result.classification,resultReference:result.resultReference,failureCode:null,canRetry:false}));
