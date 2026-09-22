@@ -1,6 +1,6 @@
 import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility, Patient } from "@niq/application-contracts";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { Pencil, Search } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -52,6 +52,7 @@ export function PatientsPage() {
   const [gender, setGender] = useState("all");
   const [page, setPage] = useState(1);
   const [showRegistration, setShowRegistration] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
   const [assessmentState, setAssessmentState] = useState<"loading" | "ready" | "error">("loading");
   const [reload, setReload] = useState(0);
@@ -85,11 +86,12 @@ export function PatientsPage() {
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const visiblePatients = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const editAction = (patient: PatientRow) => hasPermission(user.role, "patients.edit") && <TooltipTrigger><Button variant="ghost" size="icon-sm" aria-label={`Edit ${patient.reference}`} onPress={() => setEditingPatient(patients.find(item => item.id === patient.id) ?? null)}><Pencil className="size-4" /></Button><Tooltip>Edit patient</Tooltip></TooltipTrigger>;
   const columns: Array<DataTableColumn<PatientRow>> = [
     { id: "patient", header: "Patient", cell: ({ row }) => <Link className="grid gap-1 text-foreground hover:underline" to={`/patients/${row.original.reference}`}><span className="font-normal">{row.original.displayName}</span><span className="text-xs text-muted-foreground">{row.original.reference}</span></Link> },
     { id: "ageGender", header: "Age / gender", cell: ({ row }) => `${row.original.age ?? "—"} · ${row.original.gender}` },
     { accessorKey: "facility", header: "Facility" }, { id: "lastAssessment", header: "Last assessment", cell: ({ row }) => assessmentState === "error" ? "Unavailable" : assessmentState === "loading" ? "Loading…" : row.original.lastAssessment ? <DateDisplay value={row.original.lastAssessment} /> : "No assessments" },
-    { id: "open", header: () => <span className="sr-only">Open</span>, cell: ({ row }) => <RouterButtonLink variant="ghost" size="icon-sm" to={`/patients/${row.original.reference}`} aria-label={`Open ${row.original.reference}`}><Icon name="chevron" size={18}/></RouterButtonLink> },
+    { id: "actions", header: () => <span className="sr-only">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-1">{editAction(row.original)}<RouterButtonLink variant="ghost" size="icon-sm" to={`/patients/${row.original.reference}`} aria-label={`Open ${row.original.reference}`}><Icon name="chevron" size={18}/></RouterButtonLink></div> },
   ];
   const hasFilters = query.trim() || facility !== "all" || gender !== "all" || registeredThisMonth;
   const emptyContent = <div className="table-empty-content">
@@ -111,10 +113,11 @@ export function PatientsPage() {
       <Select aria-label="Filter by gender" selectedKey={gender} onSelectionChange={(key) => { setGender(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All genders</SelectItem><SelectItem id="Female">Female</SelectItem><SelectItem id="Male">Male</SelectItem><SelectItem id="Other">Other</SelectItem><SelectItem id="Unknown">Unknown</SelectItem></SelectContent></Select>
     </div>
     {assessmentState === "error" && <Alert><AlertDescription>Assessment history could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button></AlertDescription></Alert>}
-    <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><Link className="mobile-data-card" to={`/patients/${patient.reference}`} key={patient.id}><div><div className="font-normal">{patient.displayName}</div><span>{patient.reference} · {patient.age} · {patient.gender}</span></div><span>{patient.facility}</span></Link>) : emptyContent}</div>
+    <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><div className="mobile-data-card" key={patient.id}><Link className="min-w-0 flex-1" to={`/patients/${patient.reference}`}><div><div className="font-normal">{patient.displayName}</div><span>{patient.reference} · {patient.age} · {patient.gender}</span></div><span>{patient.facility}</span></Link>{editAction(patient)}</div>) : emptyContent}</div>
       <div className="desktop-table p-5">{visiblePatients.length ? <DataTable columns={columns} data={visiblePatients} label="Patients" /> : emptyContent}</div>
     </section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Patients pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
+    {editingPatient && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={editingPatient} onClose={() => setEditingPatient(null)} onSaved={updated => { setPatients(current => current.map(item => item.id === updated.id ? updated : item)); setEditingPatient(null); }} />}
     {showRegistration && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions.filter(item => item.status === "ACTIVE")} onClose={() => setShowRegistration(false)} onSaved={(patient) => { setPatients((current) => [patient, ...current]); setShowRegistration(false); }} />}
   </>;
 }
@@ -138,25 +141,10 @@ export function PatientDetailPage() {
 
 function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; patientLocator: string }) {
   const navigate = useNavigate();
-  const mounted = useRef(false);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [failed, setFailed] = useState(false);
   const [reload, setReload] = useState(0);
   const [history, setHistory] = useState<AssessmentSummary[]>([]);
-  const [editing, setEditing] = useState(false);
-  const [editFacilities, setEditFacilities] = useState<Facility[]>([]);
-  const [editLoad, setEditLoad] = useState<"idle" | "loading" | "error">("idle");
-  async function openEdit() {
-    setEditLoad("loading");
-    try {
-      const facilities = await listFacilities(user.organizationId);
-      if (!mounted.current) return;
-      setEditFacilities(facilities);
-      setEditLoad("idle");
-      setEditing(true);
-    } catch { if (mounted.current) setEditLoad("error"); }
-  }
   const [patientTab, setPatientTab] = useState("details");
   const [historyState, setHistoryState] = useState<"loading" | "ready" | "error">("loading");
   useEffect(() => {
@@ -176,9 +164,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
   if (!patient) return <p className="muted">Loading patient…</p>;
   const age = patientAgeLabel(patient.dateOfBirth);
   return <>
-    <PatientHeader patient={patient} action={<div className="flex gap-2">{hasPermission(user.role, "patients.edit") && <Button variant="outline" isDisabled={editLoad === "loading"} onPress={() => void openEdit()}><Pencil className="size-4" />{editLoad === "loading" ? "Loading…" : "Edit patient"}</Button>}{patientTab === "assessments" && hasPermission(user.role, "assessments.edit") && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>} />
-    {editLoad === "error" && <Alert variant="destructive"><AlertDescription>Facilities could not be loaded. <Button variant="link" onPress={() => void openEdit()}>Retry</Button></AlertDescription></Alert>}
-    {editing && <PatientFormDialog organizationId={user.organizationId} facilities={editFacilities} patient={patient} onClose={() => setEditing(false)} onSaved={updated => { setPatient(updated); setEditing(false); }} />}
+    <PatientHeader patient={patient} action={<div className="flex gap-2">{patientTab === "assessments" && hasPermission(user.role, "assessments.edit") && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>} />
     <Tabs selectedKey={patientTab} onSelectionChange={(key) => setPatientTab(String(key))} className="organization-detail-tabs gap-5">
       <TabsList variant="line" aria-label="Patient record" className="w-full justify-start gap-5 border-b p-0">
         <TabsTrigger id="details" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Details</TabsTrigger>
