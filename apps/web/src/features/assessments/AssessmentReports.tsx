@@ -1,3 +1,5 @@
+import { AssessmentDateInput } from "./AssessmentDateInput";
+import { MonthPicker } from "../../components/ui/month-picker";
 import { useEffect, useRef, useState } from "react";
 import { REPORT_LIMITS, reportInputSchema, type AssessmentReport, type AssessmentReportLimits } from "@niq/application-contracts";
 import { Button } from "@/components/ui/button";
@@ -45,6 +47,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
   async function saveReport(event: React.FormEvent) {
     event.preventDefault();
     if (!editor || busy) return;
+    if (editor.date && !(editor.datePrecision === "DAY" ? /^\d{4}-\d{2}-\d{2}$/ : /^\d{4}-\d{2}$/).test(editor.date)) { setMessage("Enter a complete report date in dd/mm/yyyy format."); return; }
     const [year, month, day] = editor.date.split("-").map(Number);
     const input: ReportInput = { revision, label: editor.label, purpose: editor.purpose, datePrecision: editor.datePrecision, year: year || null, month: month || null, day: editor.datePrecision === "DAY" ? day || null : null };
     const parsed = reportInputSchema.safeParse(input);
@@ -102,7 +105,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
         <Field><FieldLabel htmlFor="report-label">Report label</FieldLabel><Input id="report-label" value={editor.label} maxLength={120} disabled={busy} autoFocus onChange={event => { setEditor({ ...editor, label: event.target.value }); setDirty(true); }}/></Field>
         <Field><FieldLabel htmlFor="report-purpose">Report for</FieldLabel><Input id="report-purpose" value={editor.purpose} maxLength={300} disabled={busy} onChange={event => { setEditor({ ...editor, purpose: event.target.value }); setDirty(true); }}/></Field>
         <Field><FieldLabel htmlFor="report-date-precision">Date precision</FieldLabel><Select aria-label="Date precision" className="w-full" value={editor.datePrecision} isDisabled={busy} onChange={value => { const datePrecision = value as "DAY" | "MONTH"; setEditor({ ...editor, datePrecision, date: datePrecision === "MONTH" ? editor.date.slice(0, 7) : "" }); setDirty(true); }}><SelectTrigger id="report-date-precision" className="w-full"><SelectValue/></SelectTrigger><SelectContent><SelectItem id="DAY">Exact date</SelectItem><SelectItem id="MONTH">Month and year</SelectItem></SelectContent></Select></Field>
-        <Field><FieldLabel htmlFor="report-date">Report date</FieldLabel><Input id="report-date" type={editor.datePrecision === "DAY" ? "date" : "month"} value={editor.date} min={editor.datePrecision === "DAY" ? "1900-01-01" : "1900-01"} max={editor.datePrecision === "DAY" ? "9999-12-31" : "9999-12"} disabled={busy} onChange={event => { setEditor({ ...editor, date: event.target.value }); setDirty(true); }}/></Field>
+        <Field><FieldLabel htmlFor="report-date">Report date</FieldLabel>{editor.datePrecision === "MONTH" ? <MonthPicker id="report-date" value={editor.date} disabled={busy} onChange={date => { setEditor({ ...editor, date }); setDirty(true); }} /> : <AssessmentDateInput id="report-date" label="Report date" value={editor.date} disabled={busy} invalid={false} onChange={date => { setEditor({ ...editor, date: date ?? "" }); setDirty(true); }} />}</Field>
         
         <div className="col-span-full flex flex-wrap justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => { setEditor(null); setDirty(false); }}>Cancel</Button><Button type="submit" isDisabled={busy}>{busy ? "Saving…" : "Save report"}</Button></div>
       </div></form>
