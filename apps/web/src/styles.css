@@ -419,3 +419,16 @@ button, a { -webkit-tap-highlight-color: transparent; }
 @media (forced-colors: active) {
   * { scrollbar-color: auto; }
 }
+
+/* Selected assessment controls use the organisation colour with restrained depth. */
+.assessment-workflow .assessment-choice[data-selected] {
+  background: linear-gradient(120deg, color-mix(in srgb, var(--primary) 12%, var(--card)), color-mix(in srgb, var(--primary) 3%, var(--card)));
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--primary) 9%, transparent);
+}
+.assessment-active-step {
+  background: linear-gradient(115deg, color-mix(in srgb, var(--primary) 18%, var(--card)), color-mix(in srgb, var(--primary) 7%, var(--card)));
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+.assessment-progress-fill {
+  background: linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 65%, var(--card)));
+}
