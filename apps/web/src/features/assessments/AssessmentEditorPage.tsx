@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { AssessmentFields } from "./AssessmentFields";
 import { AssessmentSectionNavigation } from "./AssessmentSectionNavigation";
 import { AssessmentReview } from "./AssessmentReview";
-import { AssessmentResult, assessmentResultView, sectionScoreLabel } from "./AssessmentResult";
+import { assessmentResultView, sectionScoreLabel } from "./AssessmentResult";
+import { AssessmentScoreReview } from "./AssessmentScoreReview";
 import { AssessmentReports } from "./AssessmentReports";
 import { AssessmentFaceScan } from "./AssessmentFaceScan";
 import { useDraftNavigationGuard } from "./useDraftNavigationGuard";
@@ -33,6 +34,8 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
   const [reportBusy, setReportBusy] = useState(false);
   const [scanBusy, setScanBusy] = useState(false);
   const [scanStatus, setScanStatus] = useState("Face scan unavailable");
+  const [scoreDirty, setScoreDirty] = useState(false);
+  const [showScoredAnswers, setShowScoredAnswers] = useState(false);
   const [reportDirty, setReportDirty] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [phone, setPhone] = useState("");
@@ -41,7 +44,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
   const [notice, setNotice] = useState("");
   const dirty = !!record && JSON.stringify(answers) !== JSON.stringify(record.answers);
   const editable = record?.status === "DRAFT";
-  const navigationDialog = useDraftNavigationGuard(dirty || reportDirty || reportBusy || scanBusy || contactOpen && !!phone, scanBusy ? "Camera capture or upload is unfinished. Leaving may discard the local capture. Accepted uploads continue processing." : undefined);
+  const navigationDialog = useDraftNavigationGuard(dirty || scoreDirty || reportDirty || reportBusy || scanBusy || contactOpen && !!phone, scanBusy ? "Camera capture or upload is unfinished. Leaving may discard the local capture. Accepted uploads continue processing." : undefined);
   const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers); setConflict(false); }, []);
   const handleError = useCallback((cause: unknown) => {
     if (cause instanceof AssessmentRequestError && cause.status === 401) {
@@ -86,7 +89,8 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
     finally { operation.current = false; setBusy(false); }
   }
   async function selectSection(id: string, save = false, fieldId?: string) {
-    if (busy || reportBusy || scanBusy) return;
+    if (busy || reportBusy || scanBusy || scoreDirty) return;
+    setShowScoredAnswers(true);
     if (save && editable && dirty && !await persist()) return;
     setSectionId(id); setError("");
     requestAnimationFrame(() => (document.getElementById(fieldId ? `assessment-field-${fieldId}` : "assessment-section-heading") ?? document.getElementById("assessment-section-heading"))?.focus());
@@ -130,10 +134,10 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
   const sectionCoverage = coverage.sections.find(item => item.id === sectionId);
   const section = record.manifest.sections.find(item => item.id === sectionId);
   const index = tabs.findIndex(tab => tab.id === sectionId);
-  const locked = busy || reportBusy || scanBusy || conflict;
+  const locked = busy || reportBusy || scanBusy || scoreDirty || conflict;
   return <div className="assessment-workflow @container">
     <PatientHeader patient={record.patient} assessmentLabel={`${record.reference} · ${record.status === "DRAFT" ? "Draft" : record.status.replaceAll("_", " ").toLowerCase()} assessment`} action={<span className="text-xs text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span>} />
-    <div className="sticky top-0 z-20 rounded-t-xl border border-border bg-card px-4 py-3 sm:px-5">
+    <div className={`sticky top-0 z-20 border border-border bg-card px-4 py-3 sm:px-5 ${record.result !== null && !showScoredAnswers ? "rounded-xl" : "rounded-t-xl"}`}>
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2"><div className="min-w-0 basis-full @min-[36rem]:flex-1 @min-[36rem]:basis-auto"><div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm"><span>Questionnaire <strong>{coverage.percent ?? "—"}% complete</strong></span><span className="text-xs text-muted-foreground">{coverage.answered}/{coverage.total} answered</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Overall questionnaire completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverage.percent ?? 0}><div className="h-full bg-primary transition-all" style={{ width: `${coverage.percent ?? 0}%` }} /></div></div><Button variant="ghost" className="h-9 gap-2 text-xs text-muted-foreground" isDisabled={locked} onPress={() => { void selectSection("face_scan"); }}><ScanFace className="size-4" aria-hidden="true"/>{scanStatus}</Button></div>
       <p className="mt-2 truncate text-xs text-muted-foreground">{record.patient.displayName} · {record.patient.reference} <span className="mx-1">·</span> {progress.answered}/{progress.required} required answers complete</p>
     </div>
@@ -145,7 +149,9 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
       return owner && field ? <li key={issue.fieldId}><Button variant="link" className="h-auto min-h-11 whitespace-normal text-left" onPress={() => { void selectSection(owner.id, false, field.id); }}>{field.label}: {issue.message}</Button></li> : null;
     })}</ul>}</div>}
     {!editable && !record.result && <div className="mb-5 rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "Administrator review needed" : record.status === "SCORING_PENDING" ? "Scoring result pending" : "Scoring needs attention"}</h2><p className="my-2 text-sm text-muted-foreground">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "The scoring service has not confirmed this request. An organisation administrator must check it. Your submitted answers and reports remain preserved." : "The submitted assessment is preserved. Retry checks the same scoring request."}</p>{record.submission?.status === "RECONCILIATION_REQUIRED" ? isAdmin && <Button variant="outline" isDisabled={busy} onPress={() => { void retry(true); }}>Check original scoring request</Button> : <Button variant="outline" isDisabled={busy} onPress={() => { void retry(); }}>Retry scoring</Button>}</div>}
-    {record.result !== null && <div className="mb-5"><AssessmentResult record={record} onSection={id => { void selectSection(id); }} /></div>}
+    {record.result !== null && !showScoredAnswers && <AssessmentScoreReview record={record} organizationId={organizationId} onDirtyChange={setScoreDirty} onSection={id => { void selectSection(id); }} />}
+    {record.result !== null && showScoredAnswers && <Button className="my-4" variant="outline" onPress={() => setShowScoredAnswers(false)}><ArrowLeft aria-hidden="true"/>Back to summary</Button>}
+    <div hidden={record.result !== null && !showScoredAnswers}>
     <div className={`grid min-w-0 border-x border-border bg-card @min-[48rem]:grid-cols-[190px_minmax(0,1fr)] ${record.result !== null ? "rounded-t-xl border-t" : ""}`}>
       <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} scores={sectionScores} disabled={locked} onSelect={id => { void selectSection(id); }} />
       <div className="min-w-0 p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 id="assessment-section-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>{sectionCoverage && <span className="text-xs text-muted-foreground">{sectionCoverage.answered}/{sectionCoverage.total} answered · {sectionCoverage.percent ?? 0}%</span>}</div>
@@ -160,6 +166,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
       <Button variant="outline" className="h-10" isDisabled={index <= 0 || locked} onPress={() => { void selectSection(tabs[index - 1]!.id); }}><ArrowLeft aria-hidden="true"/>Back</Button>
       <div className="flex flex-wrap gap-2">{editable && <Button variant="outline" className="h-10" isDisabled={locked || !dirty} onPress={() => { void persist(); }}>{busy ? "Saving…" : "Save draft"}</Button>}{index < tabs.length - 1 ? <Button className="h-10" isDisabled={locked} onPress={() => { void selectSection(tabs[index + 1]!.id, true); }}>Continue<ArrowRight aria-hidden="true"/></Button> : editable && <Button className="h-10" isDisabled={locked || reportDirty || progress.percent !== 100} onPress={submit}>Submit and request score<ArrowRight aria-hidden="true"/></Button>}</div>
     </footer>
+    </div>
     {contactOpen && <Dialog isOpen isDismissable={!busy} showCloseButton={!busy} ariaLabel="Update patient contact" onOpenChange={open => { if (!busy) setContactOpen(open); }}><DialogTitle>Patient contact</DialogTitle><p className="text-sm text-muted-foreground">This number is saved to the patient's profile.</p><form className="mt-4 grid gap-4" onSubmit={event => { event.preventDefault(); void updateContact(); }}><label className="grid gap-2 text-sm font-medium">Phone number<Input autoFocus type="tel" value={phone} onChange={event => setPhone(event.target.value)} disabled={busy}/></label>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<div className="flex justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => setContactOpen(false)}>Cancel</Button><Button type="submit" isDisabled={busy || !phone.trim()}>Save contact</Button></div></form></Dialog>}
     {navigationDialog}
     {discardOpen && <Dialog isOpen ariaLabel="Load saved assessment" onOpenChange={setDiscardOpen}><DialogTitle>Load saved assessment?</DialogTitle><p className="text-sm text-muted-foreground">Your local changes will be replaced with the saved answers.</p><div className="flex justify-end gap-2"><Button variant="outline" onPress={() => setDiscardOpen(false)}>Keep editing</Button><Button variant="destructive" onPress={() => { setDiscardOpen(false); setError(""); void reload().catch(handleError); }}>Load saved answers</Button></div></Dialog>}
