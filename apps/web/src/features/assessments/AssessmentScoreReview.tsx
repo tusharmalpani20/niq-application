@@ -40,6 +40,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   useEffect(() => { onDirtyChange(!!target); return () => onDirtyChange(false); }, [target, onDirtyChange]);
   function edit(next: Target) {
     if (target || saving) return;
+    if (next.targetType === "section") setExpanded(next.targetId);
     setTarget(next); setValue(String(next.reviewedPoints)); setReason(""); setError(""); setNotice(""); setConflict(false); request.current = null;
   }
   function cancel() { if (saving) return; setTarget(null); setError(""); if (conflict) { setData(null); setLoadKey(key => key + 1); } setConflict(false); }
@@ -101,11 +102,9 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
         <div className={`flex flex-wrap items-center gap-2 p-3 ${open ? "bg-muted/40" : ""}`}>
           <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start whitespace-normal text-left" isDisabled={!!target} aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}{section.title}</Button>
           <div className="text-right text-sm"><p className="text-xs text-muted-foreground">{completion?.answered ?? 0}/{completion?.total ?? 0} answered</p><p>{revised ? "NIQ " : ""}{points(section.points)}</p>{revised && effective?.reviewedPoints !== null && effective?.reviewedPoints !== undefined && <p className="text-brand-ink">Reviewed {points(effective.reviewedPoints)}{effective.overridden ? " · Override" : ""}</p>}</div>
+            {effective && section.points !== null && effective.reviewedPoints !== null && adjust({targetType:"section",targetId:section.id,label:section.title,niqPoints:section.points,reviewedPoints:effective.reviewedPoints,overridden:effective.overridden},"")}
         </div>
         <div id={`score-section-${section.id}`} hidden={!open} className="border-t border-border px-4 pb-4">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><span className="text-sm text-muted-foreground">{[section.unanswered ? `${section.unanswered} unanswered` : "", section.unresolved ? `${section.unresolved} need attention` : ""].filter(Boolean).join(" · ")}</span>
-            {effective && section.points !== null && effective.reviewedPoints !== null && adjust({targetType:"section",targetId:section.id,label:section.title,niqPoints:section.points,reviewedPoints:effective.reviewedPoints,overridden:effective.overridden},"")}
-          </div>
           {target?.targetType === "section" && target.targetId === section.id && adjustmentForm}
           <div className="divide-y divide-border">{section.fields.filter(field => isAssessmentFieldApplicable(field, record.answers)).map(field => {
             const item = result.components.find(item => item.id === field.id);
