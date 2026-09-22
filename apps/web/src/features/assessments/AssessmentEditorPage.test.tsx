@@ -214,5 +214,7 @@ for (const role of ["DOCTOR", "NUTRITIONIST"] as const) {
 test("returned draft assigned to another clinician is read only",async()=>harness(async({requests})=>{
  expect([...document.querySelectorAll("button")].some(button=>button.textContent?.trim()==="Save draft")).toBe(false);
  expect([...document.querySelectorAll("input")].filter(input=>!input.disabled&&!input.readOnly)).toHaveLength(0);
+ expect(document.body.textContent).not.toContain("Scoring needs attention");
+ expect(document.body.textContent).not.toContain("Retry scoring");
  expect(requests.some(request=>request.method==="PATCH")).toBe(false);
 },{canEditDraft:false}));

@@ -65,10 +65,9 @@ export function AssessmentsPage() {
   return <>
     <h1 className="patient-page-title">Assessments</h1>
     <Tabs selectedKey={tab} onSelectionChange={key => setTab(String(key))}>
-    <TabsList variant="line" aria-label="Assessment lists"><TabsTrigger id="assessments">Assessments</TabsTrigger>{canOpen && <TabsTrigger id="clinical-reviews">Clinical reviews</TabsTrigger>}</TabsList>
+    <TabsList variant="line" aria-label="Assessment lists"><TabsTrigger id="assessments">Assessments <span className="ml-2 text-xs">{records.length}</span></TabsTrigger>{canOpen && <TabsTrigger id="clinical-reviews">Clinical reviews</TabsTrigger>}</TabsList>
     <TabsContent id="assessments">
     <div className="patient-list-header">
-      <div className="patient-list-heading"><span className="patient-list-label">Assessments</span><span>{records.length}</span></div>
       <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search by assessment ID, patient name or patient ID" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search assessments or patients…" /></InputGroup>{canCreate && <TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="New assessment" onPress={() => navigate("/assessments/new")}><Icon name="plus" size={20}/></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>
     </div>
     <div className="patient-filter-bar assessment-filter-bar">
