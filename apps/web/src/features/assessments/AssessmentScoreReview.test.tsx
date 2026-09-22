@@ -34,7 +34,7 @@ test("expanded sections show unscored answers, counts and scan/report links dire
   expect(document.body.textContent).toContain("1/1 answered");
   expect(document.body.textContent).toContain("Face scan unavailable");
   const reports=[...document.querySelectorAll("button")].find(b=>b.textContent?.trim()==="Reports")!;
-  expect(reports.parentElement?.lastElementChild?.textContent).toBe("0 reports");
+  expect(reports.nextElementSibling?.textContent).toBe("0 reports");
   await click("Disease status");
   const sectionButton=document.querySelector('button[aria-label="Adjust Disease status"]');
   expect(sectionButton?.textContent).toBe("");
@@ -63,7 +63,7 @@ test("scan matches form order, displays points and opens an audited edit inside 
  const labels=[...document.querySelectorAll("button[aria-expanded]")].map(button=>button.textContent?.trim());
  expect(labels.slice(0,3)).toEqual(["Personal details","Face scan","Disease status"]);
  const edit=document.querySelector('button[aria-label="Adjust face scan score"]')!;
- expect(edit.parentElement?.textContent).toContain("8 pts");
+ expect(edit.parentElement?.parentElement?.textContent).toContain("8 pts");
  await click("Adjust face scan score");
  const section=document.getElementById("score-section-face_scan")!;
  expect(section.hidden).toBe(false);

@@ -68,7 +68,6 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
         { label: "Weight at scan", value: session.context.weightKg, unit: "kg" },
         { label: "Posture", value: scanPostureLabels[session.context.posture], unit: "" },
       ]}/>
-      <p className="mt-2 text-xs text-muted-foreground">Scan inputs stay unchanged when the form is edited. Face-scan points are separate from the questionnaire score.</p>
     </ResultGroup>
   </section>;
 }

@@ -63,7 +63,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
       } else setError(cause instanceof Error ? cause.message : "Could not save. Your change is still here. Try saving again.");
     } finally { inFlight.current = false; setSaving(false); }
   }
-  const adjust = (next: Target, label: string) => data?.canAdjust && <Button variant="ghost" className="min-h-11 gap-1 text-brand-ink" isDisabled={!!target || saving} aria-label={`Adjust ${next.label}`} onPress={() => edit(next)}><Pencil className="size-3.5" aria-hidden="true"/>{label}</Button>;
+  const adjust = (next: Target, label: string) => data?.canAdjust && <Button variant="ghost" className="size-11 shrink-0 p-0 text-brand-ink" isDisabled={!!target || saving} aria-label={`Adjust ${next.label}`} onPress={() => edit(next)}><Pencil className="size-3.5" aria-hidden="true"/>{label}</Button>;
   if (!view) return <p role="alert">The saved score could not be verified.</p>;
   const { result, sections } = view;
   const overall = data?.overall;
@@ -88,7 +88,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
     <div className={`flex flex-wrap items-center gap-2 p-3 ${expanded === "face_scan" ? "bg-muted/40" : ""}`}>
       <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start text-left" isDisabled={!!target} aria-expanded={expanded === "face_scan"} aria-controls="score-section-face_scan" onPress={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>{expanded === "face_scan" ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}Face scan</Button>
       <div className="text-right text-sm"><p className="text-xs text-muted-foreground">{scanStatus}</p><p>{scan?.overridden ? "NIQ " : ""}{points(scan?.niqPoints ?? null)}</p>{scan?.overridden && <p className="text-brand-ink">Reviewed {points(scan.reviewedPoints)}</p>}</div>
-      {scan && scan.niqPoints !== null && scan.reviewedPoints !== null && adjust({ targetType: "scan", targetId: scan.id, label: "face scan score", niqPoints: scan.niqPoints, reviewedPoints: scan.reviewedPoints, overridden: scan.overridden }, "")}
+      <div className="w-11 shrink-0">{scan && scan.niqPoints !== null && scan.reviewedPoints !== null && adjust({ targetType: "scan", targetId: scan.id, label: "face scan score", niqPoints: scan.niqPoints, reviewedPoints: scan.reviewedPoints, overridden: scan.overridden }, "")}</div>
     </div>
     <div id="score-section-face_scan" hidden={expanded !== "face_scan"} className="border-t border-border p-4">
       {target?.targetType === "scan" && adjustmentForm}
@@ -117,7 +117,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
         <div className={`flex flex-wrap items-center gap-2 p-3 ${open ? "bg-muted/40" : ""}`}>
           <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start whitespace-normal text-left" isDisabled={!!target} aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}{section.title}</Button>
           <div className="text-right text-sm"><p className="text-xs text-muted-foreground">{completion?.answered ?? 0}/{completion?.total ?? 0} answered</p><p>{revised ? "NIQ " : ""}{points(section.points)}</p>{revised && effective?.reviewedPoints !== null && effective?.reviewedPoints !== undefined && <p className="text-brand-ink">Reviewed {points(effective.reviewedPoints)}{effective.overridden ? " · Override" : ""}</p>}</div>
-            {effective && section.points !== null && effective.reviewedPoints !== null && adjust({targetType:"section",targetId:section.id,label:section.title,niqPoints:section.points,reviewedPoints:effective.reviewedPoints,overridden:effective.overridden},"")}
+      <div className="w-11 shrink-0">{effective && section.points !== null && effective.reviewedPoints !== null && adjust({targetType:"section",targetId:section.id,label:section.title,niqPoints:section.points,reviewedPoints:effective.reviewedPoints,overridden:effective.overridden},"")}</div>
         </div>
         <div id={`score-section-${section.id}`} hidden={!open} className="border-t border-border px-4 pb-4">
           {target?.targetType === "section" && target.targetId === section.id && adjustmentForm}
@@ -149,7 +149,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
       return <div key={section.id} className="mt-3 overflow-hidden rounded-xl border border-border">
         <div className={`flex flex-wrap items-center gap-2 p-3 ${open ? "bg-muted/40" : ""}`}>
           <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start text-left" isDisabled={!!target} aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}{section.title}</Button>
-          <span className="text-sm text-muted-foreground">{section.status}</span>
+          <span className="text-sm text-muted-foreground">{section.status}</span><div className="w-11 shrink-0" aria-hidden="true" />
         </div>
         <div id={`score-section-${section.id}`} hidden={!open} className="border-t border-border p-4">{record.reports.length ? reportsContent : <p className="text-sm text-muted-foreground">No reports attached.</p>}</div>
       </div>;
