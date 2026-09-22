@@ -44,3 +44,7 @@ Small logical commits (no push):
 - 29e4eef: admin score-review permission regression expectation.
 
 Migrations are applied locally. Documentation is maintained in the requested application/docs directory and mirrored in the application repository. See the verification record for passed checks and the pre-existing legacy facility test fixture failures; see history/operations for migration, retries, evidence retention and deferred scope.
+
+## Follow-up implementation audit
+
+Audited and fixed stale scoring-result identity, membership/facility authorization race, contact revision/history, pending-scoring scan recovery and recipient refresh. Repaired legacy verification fixtures. All 197 API and 140 web tests pass. See clinical-review-implementation-audit-2026-09-23.md for detailed evidence and commits.

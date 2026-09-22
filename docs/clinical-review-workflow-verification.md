@@ -14,8 +14,12 @@
 
 Counts from focused suites overlap the full suites and should not be added together.
 
-## Remaining verification limitation
+## Original verification limitation (resolved by follow-up audit)
 
 The separately enabled legacy `facility-access.test.ts` suite has 6 failures and 1 pass: its temporary patient table lacks `encrypted_external_reference`, and its old encrypted-profile fixture also predates the current representation. These fixtures were not changed by this feature. A temporary diagnostic schema adjustment exposed the second fixture mismatch and was reverted. New clinical-review tests independently exercise organization/facility eligibility and reject out-of-scope recipients, but this older fixture suite remains failing.
 
 Browser verification was a read-only smoke check, not a live clinician handover exercise. Stateful clinical behavior was verified with API integration tests and rendered UI tests. Intervention fields and a full history comparison screen remain intentionally deferred.
+
+## Follow-up audit
+
+The legacy fixture failures above were repaired. Final verification: 197 API tests and 140 web tests passed; workspace checks/build passed. See [implementation audit](clinical-review-implementation-audit-2026-09-23.md) for findings, fixes and scope.
