@@ -139,6 +139,28 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  record=await service.submit(actor,org,id,record.revision,context);expect(record.status).toBe("SCORED");expect(new Set(keys).size).toBe(2);
  });
 
+ test("saved versions and scoring evidence are encrypted and completion remains clinical",async()=>{
+  const [stored]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,id));
+  expect(stored!.currentSubmissionId).toBeTruthy();expect(stored!.scoredAt).toBeInstanceOf(Date);expect(stored!.completedAt).toBeNull();
+  const history=await db.select().from(tables.assessmentHistory).where(eq(tables.assessmentHistory.assessmentId,id));
+  expect(history.some(event=>event.kind==="CREATED")).toBe(true);
+  const saves=history.filter(event=>event.kind==="DRAFT_SAVED");expect(saves.length).toBeGreaterThan(0);
+  expect(JSON.stringify(saves)).not.toContain("Fixture Patient");
+  const saved=service.unseal<{before:{answers:Record<string,unknown>};after:{answers:Record<string,unknown>}}>(saves.sort((a,b)=>a.revision-b.revision).at(-1)!.payload);
+  expect(saved.before.answers).toBeDefined();expect(saved.after.answers.height_cm).toBe(180);
+  expect(history.some(event=>event.kind==="SCORED")).toBe(true);
+ });
+
+ test("cleared current submission never exposes a previous cycle result",async()=>{
+  const initialized=await service.initialize(actor,org,{patientId:patient,requestKey:"current-pointer-isolation-test"},context);
+  const copyId=initialized.assessmentId!;let record=await service.read(actor,org,copyId);
+  record=await service.save(actor,org,copyId,{revision:record.revision,answers:{height_cm:175,current_weight_kg:70}},context);
+  behavior="success";record=await service.submit(actor,org,copyId,record.revision,context);expect(record.result).not.toBeNull();
+  await db.update(tables.assessments).set({status:"DRAFT",cycle:1,currentSubmissionId:null}).where(eq(tables.assessments.id,copyId));
+  const returned=await service.read(actor,org,copyId);expect(returned.result).toBeNull();expect(returned.submission).toBeNull();
+  expect(await db.select().from(tables.assessmentSubmissions).where(eq(tables.assessmentSubmissions.assessmentId,copyId))).toHaveLength(1);
+ });
+
  test("expired scoring lease fences a late worker from duplicating results",async()=>{
  const initialized=await service.initialize(actor,org,{patientId:patient,requestKey:"lease-fencing-test-1234"},context);const otherId=initialized.assessmentId!;
  let record=await service.read(actor,org,otherId);record=await service.save(actor,org,otherId,{revision:record.revision,answers:{height_cm:175,current_weight_kg:70}},context);
@@ -204,6 +226,12 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   remote={...remote,state:"COMPLETED",updatedAt:new Date().toISOString(),completedAt:new Date().toISOString(),result:null};
   expect((await scans.get(actor,org,scanAssessment,first.id)).state).toBe("RECONCILIATION_REQUIRED");
   remote={...remote,state:"COMPLETED",updatedAt:new Date().toISOString(),completedAt:new Date().toISOString(),failureCode:"SCORE_MAPPING_UNAVAILABLE",result:{schemaVersion:1,providerScanId:"provider-scan",wellnessScore:60,healthRiskScore:null,vitals:{heartRate:70,oxygenSaturation:null,respiratoryRate:null,systolic:null,diastolic:null},physiologicalScore:null,mentalWellbeingScore:null}};
+  const callsWhileClosed=calls;
+  expect((await scans.get(actor,org,scanAssessment,first.id)).result).toBeNull();
+  expect(calls).toBe(callsWhileClosed);
+  // Restore the synthetic fixture to exercise still-open draft recovery separately.
+  // No application action permits reopening a completed assessment.
+  await db.update(tables.assessments).set({status:"DRAFT"}).where(eq(tables.assessments.id,scanAssessment));
   expect((await scans.get(actor,org,scanAssessment,first.id)).result?.wellnessScore).toBe(60);
   const originalResult=structuredClone(remote.result),originalCompletion=remote.completedAt;
   expect((await scans.get(actor,org,scanAssessment,first.id)).failureCode).toBe("SCORE_MAPPING_UNAVAILABLE");

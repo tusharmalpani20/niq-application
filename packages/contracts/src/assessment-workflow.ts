@@ -27,7 +27,7 @@ export type AssessmentReportFile = { id: string; reportId: string; originalFilen
 export type AssessmentReport = { id: string; label: string; purpose: string; datePrecision: "DAY" | "MONTH"; year: number | null; month: number | null; day: number | null; files: AssessmentReportFile[] };
 export type AssessmentInitialization = { id: string; status: string; assessmentId: string | null; assessmentReference?: string | null; failureCode: string | null };
 export type AssessmentWorkflow = {
-  id: string; reference: string; serialNumber: number; organizationId: string; patientId: string; facilityId: string | null; status: string; revision: number;
+  id: string; reference: string; serialNumber: number; organizationId: string; patientId: string; facilityId: string | null; status: string; revision: number; canEditDraft?: boolean;
   patient: AssessmentPatient; answers: FormAnswers; manifest: AssessmentFormManifest;
   progress: ReturnType<typeof getAssessmentCompletion>; reports: AssessmentReport[]; reportLimits?: AssessmentReportLimits;
   binding: { version: string; checksum: string }; result: unknown | null;
