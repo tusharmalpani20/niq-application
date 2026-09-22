@@ -26,6 +26,9 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
  const org=createEntityId(),facility=createEntityId(),otherFacility=createEntityId(),definition=createEntityId();let patient:string;
  function person(role:Principal["role"],name:string):Principal {return {userId:createEntityId(),membershipId:createEntityId(),organizationId:org,email:`${createEntityId()}@test.example`,displayName:name,role,platformRole:"USER"};}
  const creator=person("DOCTOR","Creator"),colleague=person("NUTRITIONIST","Colleague"),nurse=person("OTHER_MEDICAL","Nurse"),admin=person("ORGANIZATION_ADMIN","Admin"),support=person("SUPPORT","Support");
+ let classificationFailure=false;let classificationWait:Promise<void>|null=null;let onClassification:(()=>void)|null=null;const classificationCalls: Array<{idempotencyKey:string;score:number}>=[];
+ const binding={assessmentReference:"assessment-risk",bindingId:"binding-risk",ruleVersionId:"rule-risk",checksum:"a".repeat(64),version:"v1"};
+ workflow.transport=async()=>({identity:{origin:"http://scoring.test",deploymentId:"deployment",scoringOrganizationId:"scoring-org"},baseUrl:"http://scoring.test",credential:"test",requestId:"test",timeoutMs:1000,fetcher:async(_url,init)=>{const request=JSON.parse(String(init?.body));classificationCalls.push(request);onClassification?.();await classificationWait;if(classificationFailure)return new Response(JSON.stringify({error:"UNMATCHED_CLASSIFICATION"}),{status:422});return Response.json({result:{...binding,score:request.score,classification:{id:"reviewed",label:"Reviewed risk",interpretation:"Reviewed interpretation"},resultReference:`risk-${request.idempotencyKey}`,calculatedAt:new Date().toISOString()},idempotencyKey:request.idempotencyKey});}});
  const result={formatVersion:2,profile:"NIQ_FINAL_ASSESSMENT",complete:true,score:3,classification:{id:"low",label:"Low",interpretation:""},components:[{id:"item",sectionId:"section",label:"Item",points:3,status:"answered"}],version:"v1",checksum:"a".repeat(64),resultReference:"result-1",calculatedAt:new Date().toISOString(),clinicalUsePermitted:true};
  beforeAll(async()=>{
   await db.insert(t.organizations).values({id:org,legalName:"Clinical test",displayName:"Clinical test",slug:`clinical-${org.toLowerCase()}`});
@@ -35,7 +38,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   await db.insert(t.questionnaireDefinitions).values({id:definition,organizationId:org,scopeKey:org,key:"clinical-test",version:"1",schema:{},checksum:"test"});
  });
  afterAll(async()=>{await client.end();});
- async function assessment(owner=creator){const id=createEntityId(),submission=createEntityId(),snapshot=workflow.seal({answers:{item:"original"},patient:{id:patient},binding:{version:"v1"}});await db.insert(t.assessments).values({id,organizationId:org,patientId:patient,facilityId:facility,questionnaireDefinitionId:definition,questionnaireScopeKey:org,createdByMembershipId:owner.membershipId,status:"SCORED",workflow:snapshot});await db.insert(t.assessmentSubmissions).values({id:submission,organizationId:org,assessmentId:id,revision:0,snapshot,idempotencyKey:submission,status:"SUCCEEDED",result:workflow.seal(result)});await db.update(t.assessments).set({currentSubmissionId:submission}).where(eq(t.assessments.id,id));return id;}
+ async function assessment(owner=creator){const id=createEntityId(),submission=createEntityId(),snapshot=workflow.seal({answers:{item:"original"},patient:{id:patient},binding,connection:{origin:"http://scoring.test",deploymentId:"deployment",scoringOrganizationId:"scoring-org"}});await db.insert(t.assessments).values({id,organizationId:org,patientId:patient,facilityId:facility,questionnaireDefinitionId:definition,questionnaireScopeKey:org,createdByMembershipId:owner.membershipId,status:"SCORED",workflow:snapshot});await db.insert(t.assessmentSubmissions).values({id:submission,organizationId:org,assessmentId:id,revision:0,snapshot,idempotencyKey:submission,status:"SUCCEEDED",result:workflow.seal(result)});await db.update(t.assessments).set({currentSubmissionId:submission}).where(eq(t.assessments.id,id));return id;}
  async function command(actor:Principal,id:string,action:ClinicalReviewAction["action"],extra:object={}){const state=await reviews.read(actor,org,id);return reviews.command(actor,org,id,{action,expectedRevision:state.revision,expectedScoreRevision:state.scoreRevision,requestKey:createEntityId(),...extra} as ClinicalReviewAction,context);}
  test("creator sends, concurrent claims have one winner, transfer revokes ownership and completion freezes score",async()=>{
   const id=await assessment();await expect(command(admin,id,"SEND")).rejects.toMatchObject({code:"FORBIDDEN"});
@@ -93,6 +96,54 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   ]);
   expect(result.filter(r=>r.status==="fulfilled")).toHaveLength(1);
   const latest=await reviews.read(nurse,org,id);if(latest.state==="COMPLETED")expect((await scores.read(nurse,org,id)).overall.reviewedPoints).toBe(3);else expect(latest.scoreRevision).toBe(1);
+ });
+ test("reviewed risk confirms changed totals, preserves original risk and blocks completion until retry succeeds",async()=>{
+  const id=await assessment();await command(creator,id,"SEND");await command(nurse,id,"CLAIM");
+  classificationFailure=true;const start=classificationCalls.length;
+  const updated=await scores.add(nurse,org,id,{expectedResultReference:"result-1",expectedRevision:0,requestKey:createEntityId(),targetType:"item",targetId:"item",points:7,reason:"Reviewed points"},context);
+  expect(updated.risk?.status).toBe("UNAVAILABLE");expect(updated.risk?.failureCode).toBe("UNMATCHED_CLASSIFICATION");expect(updated.risk?.classification).toBeNull();
+  await expect(command(nurse,id,"COMPLETE",{remark:"Finish"})).rejects.toMatchObject({code:"CONFLICT"});
+  await expect(scores.retryRisk(admin,org,id,{expectedResultReference:"result-1",expectedRevision:1},context)).rejects.toMatchObject({code:"FORBIDDEN"});
+  classificationFailure=false;
+  const retried=await scores.retryRisk(nurse,org,id,{expectedResultReference:"result-1",expectedRevision:1},context);
+  expect(retried.risk?.status).toBe("CONFIRMED");expect(retried.risk?.classification?.label).toBe("Reviewed risk");expect(classificationCalls[start]?.idempotencyKey).toBe(classificationCalls[start+1]!.idempotencyKey);
+  const [original]=await db.select().from(t.assessmentSubmissions).where(eq(t.assessmentSubmissions.assessmentId,id));expect(workflow.unseal<any>(original!.result).classification.id).toBe("low");
+  const complete=await command(nurse,id,"COMPLETE",{remark:"Confirmed risk"});expect(complete.state).toBe("COMPLETED");expect((await scores.read(nurse,org,id)).risk?.status).toBe("CONFIRMED");
+ });
+ test("restoring questionnaire overrides uses original risk without a further classification request",async()=>{
+  const id=await assessment();const base={expectedResultReference:"result-1",targetType:"item" as const,targetId:"item",reason:"Review",requestKey:createEntityId(),expectedRevision:0};
+  await scores.add(creator,org,id,{...base,points:8},context);const calls=classificationCalls.length;
+  const restored=await scores.add(creator,org,id,{...base,requestKey:createEntityId(),expectedRevision:1,points:null},context);
+  expect(restored.risk?.status).toBe("ORIGINAL");expect(restored.risk?.classification?.id).toBe("low");expect(classificationCalls.length).toBe(calls);
+ });
+ test("a late reviewed-risk response cannot replace a newer adjustment classification",async()=>{
+  const id=await assessment();let release!:()=>void;
+  classificationWait=new Promise<void>(resolve=>{release=resolve;});
+  const entered=new Promise<void>(resolve=>{onClassification=resolve;});
+  const base={expectedResultReference:"result-1",targetType:"item" as const,targetId:"item",reason:"Review",requestKey:createEntityId(),expectedRevision:0};
+  const old=scores.add(creator,org,id,{...base,points:7},context);await entered;
+  try{
+   expect((await scores.read(creator,org,id)).risk?.status).toBe("PENDING");
+   classificationWait=null;onClassification=null;
+   const current=await scores.add(creator,org,id,{...base,requestKey:createEntityId(),expectedRevision:1,points:9},context);
+   expect(current.risk?.status).toBe("CONFIRMED");const currentReference=current.risk!.resultReference;
+   release();await old;
+   expect((await scores.read(creator,org,id)).risk?.resultReference).toBe(currentReference);
+   const tasks=await db.select().from(t.assessmentReviewedRisks).where(eq(t.assessmentReviewedRisks.assessmentId,id));
+   expect(tasks).toHaveLength(2);expect(tasks.every(task=>task.status==="SUCCEEDED")).toBe(true);
+  }finally{classificationWait=null;onClassification=null;release();await old;}
+ });
+ test("scan-only overrides preserve questionnaire classification and reuse an already confirmed reviewed total",async()=>{
+  const id=await assessment(),scan=createEntityId();
+  await db.insert(t.assessmentFaceScans).values({id:scan,organizationId:org,assessmentId:id,revision:0,requestKey:createEntityId(),connection:{},snapshot:{},state:"COMPLETED",active:false,isCurrent:true,projection:workflow.seal({score:{status:"SCORED",points:8}})});
+  const base={expectedResultReference:"result-1",reason:"Review",requestKey:createEntityId(),expectedRevision:0};
+  const start=classificationCalls.length;
+  const scanOnly=await scores.add(creator,org,id,{...base,targetType:"scan",targetId:scan,points:6},context);
+  expect(scanOnly.risk?.status).toBe("ORIGINAL");expect(classificationCalls.length).toBe(start);
+  const questionnaire=await scores.add(creator,org,id,{...base,requestKey:createEntityId(),expectedRevision:1,targetType:"item",targetId:"item",points:7},context);
+  expect(questionnaire.risk?.status).toBe("CONFIRMED");
+  const changedScan=await scores.add(creator,org,id,{...base,requestKey:createEntityId(),expectedRevision:2,targetType:"scan",targetId:scan,points:5},context);
+  expect(changedScan.risk?.resultReference).toBe(questionnaire.risk!.resultReference);expect(classificationCalls.length).toBe(start+1);
  });
  test("membership scope changes between initial authorization and its lock reject review mutations",async()=>{
   for(const kind of ["command","adjustment"] as const){
