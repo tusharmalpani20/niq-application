@@ -2,17 +2,17 @@ import { test, expect } from "bun:test";
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { projectScoreReviews, type AssessmentWorkflow, type AssessmentScoreResult, type ScoreReviewEntry } from "@niq/application-contracts";
+import { projectScoreReviews, type AssessmentWorkflow, type AssessmentScoreResult, type ScoreReviewEntry, type AssessmentScoreReviews } from "@niq/application-contracts";
 import { AssessmentScoreReview } from "./AssessmentScoreReview";
 const result: AssessmentScoreResult = {formatVersion:2,profile:"NIQ_FINAL_ASSESSMENT",complete:true,score:8,classification:{id:"low",label:"Low",interpretation:""},components:[{id:"stage",sectionId:"disease",label:"Stage",points:8,status:"answered"}],version:"V1",checksum:"a".repeat(64),resultReference:"result",calculatedAt:"2026-09-22T00:00:00.000Z",clinicalUsePermitted:true};
 const record = {id:"assessment",reference:"ASM-000002",result,binding:{version:"V1",checksum:"a".repeat(64)},answers:{stage:"metastatic",patient_name:"Example Patient"},manifest:{sections:[{id:"personal_details",title:"Personal details",fields:[{id:"patient_name",label:"Patient name",kind:"text",owner:"application"}]},{id:"disease",title:"Disease status",fields:[{id:"stage",label:"Stage",owner:"scoring",options:[{id:"metastatic",label:"Metastatic"}]}]}]},progress:{answered:1,required:1,sections:[]},reports:[]} as unknown as AssessmentWorkflow;
 const entry: ScoreReviewEntry = {id:"entry",revision:1,targetType:"item",targetId:"stage",previousPoints:8,points:10,reason:null,actorId:"actor",actorName:"Reviewer One",createdAt:"2026-09-22T00:00:00.000Z",resultReference:"result"};
-async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[]; rerender:(next:AssessmentWorkflow,canReview?:boolean,scanStatus?:string)=>Promise<void>})=>Promise<void>, entries:ScoreReviewEntry[] = [], conflict=false) {
+async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[]; rerender:(next:AssessmentWorkflow,canReview?:boolean,scanStatus?:string)=>Promise<void>})=>Promise<void>, entries:ScoreReviewEntry[] = [], conflict=false, risk?: AssessmentScoreReviews["risk"]) {
  const dom = new JSDOM("<html><body><div id='root'></div></body></html>",{url:"http://localhost",pretendToBeVisual:true});
  const values:Record<string,unknown>={window:dom.window,document:dom.window.document,navigator:dom.window.navigator,IS_REACT_ACT_ENVIRONMENT:true,requestAnimationFrame:(fn:()=>void)=>setTimeout(fn,0),cancelAnimationFrame:clearTimeout,getComputedStyle:dom.window.getComputedStyle};
  for(const key of ["FocusEvent","HTMLElement","SVGElement","Element","Node","NodeFilter","DocumentFragment","HTMLButtonElement","HTMLInputElement","HTMLTextAreaElement","HTMLSelectElement","MutationObserver"]) values[key]=(dom.window as any)[key];
  const posts:any[]=[];
- values.fetch=async (_url:string,init?:RequestInit)=>{if(init?.method==="POST"){posts.push(JSON.parse(String(init.body)));if(conflict)return Response.json({error:{message:"Changed",code:"CONFLICT"}},{status:409}); return Response.json(projectScoreReviews(result,[...entries,{...entry,id:"new",revision:entries.length+1,targetType:"overall",targetId:null,previousPoints:10,points:null}]));}return Response.json(projectScoreReviews(result,entries,{id:"local-scan-id",points:8}));};
+ values.fetch=async (_url:string,init?:RequestInit)=>{if(init?.method==="POST"){posts.push(JSON.parse(String(init.body)));if(conflict)return Response.json({error:{message:"Changed",code:"CONFLICT"}},{status:409}); if(_url.endsWith("/classification/retry"))return Response.json({...projectScoreReviews(result,entries),risk:{status:"CONFIRMED",classification:{id:"reviewed",label:"Reviewed category",interpretation:""},resultReference:"classified",failureCode:null,canRetry:false}}); return Response.json(projectScoreReviews(result,[...entries,{...entry,id:"new",revision:entries.length+1,targetType:"overall",targetId:null,previousPoints:10,points:null}]));}return Response.json({...projectScoreReviews(result,entries,{id:"local-scan-id",points:8}),...(risk?{risk}:{})});};
  const previous=Object.fromEntries(Object.keys(values).map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
  for(const [key,value] of Object.entries(values))Object.defineProperty(globalThis,key,{value,configurable:true});
  Object.assign(dom.window.HTMLElement.prototype,{attachEvent(){},detachEvent(){}});
@@ -110,3 +110,25 @@ test("background score refresh does not advance the revision of an open edit", a
     expect(posts[0]).toMatchObject({ expectedRevision: 1, expectedResultReference: "result" });
   }, entries);
 });
+
+
+test("confirmed reviewed risk displays separately from original NIQ risk", async()=>harness(async()=>{
+ expect(document.body.textContent).toContain("Reviewed category · NIQ");
+ expect(document.body.textContent).toContain("Low · NIQ");
+ expect(document.body.textContent).not.toContain("Risk assessment pending");
+},[entry],false,{status:"CONFIRMED",classification:{id:"reviewed",label:"Reviewed category",interpretation:""},resultReference:"classification",failureCode:null,canRetry:false}));
+
+test("failed risk keeps scores visible and retry fences the current result and revision", async()=>harness(async({click,posts})=>{
+ expect(document.body.textContent).toContain("Risk assessment unavailable");
+ expect(document.body.textContent).toContain("Your score changes are saved");
+ await click("Retry risk assessment");
+ expect(posts).toEqual([{expectedResultReference:"result",expectedRevision:1}]);
+ expect(document.body.textContent).toContain("Reviewed category · NIQ");
+ expect(document.body.textContent).not.toContain("Risk assessment unavailable");
+},[entry],false,{status:"UNAVAILABLE",classification:null,resultReference:null,failureCode:"TIMEOUT",canRetry:true}));
+
+test("risk retry is hidden after review access is lost", async()=>harness(async({rerender})=>{
+ await rerender(record,false);
+ expect(document.body.textContent).toContain("Risk assessment unavailable");
+ expect([...document.querySelectorAll("button")].some(b=>b.textContent==="Retry risk assessment")).toBe(false);
+},[entry],false,{status:"UNAVAILABLE",classification:null,resultReference:null,failureCode:"TIMEOUT",canRetry:true}));

@@ -21,9 +21,11 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   const [value, setValue] = useState("");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+  const [retryingRisk, setRetryingRisk] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [loadKey, setLoadKey] = useState(0);
   const inFlight = useRef(false);
+  const priorRiskStatus = useRef<string | undefined>(undefined);
   const editContext = useRef<{ revision: number; resultReference: string } | null>(null);
   // Retain this key for an identical retry after a lost response.
   const request = useRef<{ fingerprint: string; key: string } | null>(null);
@@ -38,9 +40,32 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
       .catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load score history."); });
     return () => controller.abort();
   }, [organizationId, path, loadKey, scanStatus, view?.result.resultReference]);
+  // Pending work can finish in another request/tab; refresh without resubmitting it.
+  useEffect(() => {
+    if (data?.risk?.status !== "PENDING" || target || saving || retryingRisk) return;
+    const timer = window.setTimeout(() => setLoadKey(key => key + 1), 3000);
+    return () => window.clearTimeout(timer);
+  }, [data, target, saving, retryingRisk]);
+  useEffect(() => {
+    const status = data?.risk?.status;
+    if (priorRiskStatus.current === "PENDING" && (status === "CONFIRMED" || status === "ORIGINAL")) void onSaved?.();
+    priorRiskStatus.current = status;
+  }, [data?.risk?.status, onSaved]);
+  async function retryRisk() {
+    if (!data?.risk?.canRetry || !view || target || inFlight.current || !canReview) return;
+    inFlight.current = true; setRetryingRisk(true); setError("");
+    try {
+      setData(await assessmentRequest<AssessmentScoreReviews>(organizationId, `${path}/classification/retry`, "POST", {
+        expectedResultReference: view.result.resultReference, expectedRevision: data.revision,
+      }));
+      await onSaved?.();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Risk assessment could not be refreshed. Retry the saved request.");
+    } finally { inFlight.current = false; setRetryingRisk(false); }
+  }
   useEffect(() => { onDirtyChange(!!target); return () => onDirtyChange(false); }, [target, onDirtyChange]);
   function edit(next: Target) {
-    if (!canReview || !data?.canAdjust || !view || target || saving) return;
+    if (!canReview || !data?.canAdjust || !view || target || saving || retryingRisk) return;
     // Keep the result and revision the reviewer actually saw, even if a refresh finishes while editing.
     editContext.current = { revision: data.revision, resultReference: view.result.resultReference };
     if (next.targetType === "section") setExpanded(next.targetId);
@@ -68,7 +93,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   }
   const editStale = !!target && editContext.current?.resultReference !== view?.result.resultReference;
   const editBlocked = conflict || editStale || !canReview || !data?.canAdjust;
-  const adjust = (next: Target, label: string) => canReview && data?.canAdjust && <Button variant="ghost" className="size-11 shrink-0 p-0 text-brand-ink" isDisabled={!!target || saving} aria-label={`Adjust ${next.label}`} onPress={() => edit(next)}><Pencil className="size-3.5" aria-hidden="true"/>{label}</Button>;
+  const adjust = (next: Target, label: string) => canReview && data?.canAdjust && <Button variant="ghost" className="size-11 shrink-0 p-0 text-brand-ink" isDisabled={!!target || saving || retryingRisk} aria-label={`Adjust ${next.label}`} onPress={() => edit(next)}><Pencil className="size-3.5" aria-hidden="true"/>{label}</Button>;
   if (!view) return <p role="alert">The saved score could not be verified.</p>;
   const { result, sections } = view;
   const overall = data?.overall;
@@ -106,10 +131,18 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="assessment-summary-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">Assessment summary</h2><span className="text-sm text-muted-foreground">{record.progress.answered}/{record.progress.required} required answers complete</span></div>
     <div className="my-5 flex flex-wrap items-center gap-x-8 gap-y-3">
       <div><p className="text-sm text-muted-foreground">NIQ score</p><p className="mt-1 text-2xl font-semibold">{points(result.score)}</p><p className="text-sm text-muted-foreground">{result.classification.label} · NIQ</p></div>
-      {revised && overall && <div><p className="text-sm text-muted-foreground">Reviewed score</p><p className="mt-1 text-2xl font-semibold text-brand-ink">{points(overall.reviewedPoints)}</p><p className="text-xs text-muted-foreground">{overall.overridden ? "Total override" : "From section scores"}</p></div>}
+      {revised && overall && <div><p className="text-sm text-muted-foreground">Reviewed score</p><p className="mt-1 text-2xl font-semibold text-brand-ink">{points(overall.reviewedPoints)}</p><p className="text-xs text-muted-foreground">{overall.overridden ? "Total override" : "From section scores"}</p>
+        <p className="mt-1 text-sm" role="status">{data?.risk?.classification && ["ORIGINAL", "CONFIRMED"].includes(data.risk.status)
+          ? `${data.risk.classification.label} · NIQ${data.risk.status === "ORIGINAL" ? " (original restored)" : ""}`
+          : data?.risk?.status === "UNAVAILABLE" ? "Risk assessment unavailable" : "Risk assessment pending"}</p>
+      </div>}
       {overall && overall.reviewedPoints !== null && adjust({targetType:"overall",targetId:null,label:"total score",niqPoints:result.score,reviewedPoints:overall.reviewedPoints,overridden:overall.overridden}, "")}
     </div>
     <p className="mb-5 text-sm text-muted-foreground">Answers and original NIQ scores stay unchanged.</p>
+    {revised && !["ORIGINAL", "CONFIRMED"].includes(data?.risk?.status ?? "") && <div className="mb-4 rounded-lg border border-border p-3 text-sm">
+      <p>{data?.risk?.failureCode === "UNMATCHED_CLASSIFICATION" ? "No NIQ risk category matches this reviewed total. Check the score before continuing." : data?.risk?.status === "UNAVAILABLE" ? "Your score changes are saved. NIQ has not confirmed the risk for this total." : "NIQ is assessing the latest reviewed total."} Clinical review can be completed once its risk is confirmed.</p>
+      {data?.risk?.canRetry && canReview && <Button variant="outline" className="mt-2" isDisabled={retryingRisk || saving || !!target} onPress={() => { void retryRisk(); }}>{retryingRisk ? "Checking risk…" : "Retry risk assessment"}</Button>}
+    </div>}
     {!result.clinicalUsePermitted && <p className="mb-4 text-sm" role="note">This NIQ result is not approved for clinical use.</p>}
     {notice && <p role="status" className="mb-4 text-sm">{notice}</p>}
     {error && <div className="mb-4 text-sm text-destructive" role="alert">{error}{!target && <Button variant="link" onPress={() => setLoadKey(key => key + 1)}>Reload scores</Button>}</div>}
