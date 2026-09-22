@@ -48,7 +48,7 @@ function sameEvidence(actual: AssessmentScoringBinding, expected: AssessmentScor
   return (["assessmentReference", "bindingId", "ruleVersionId", "checksum", "version"] as const).every(k => actual[k] === expected[k]);
 }
 const blockedCodes = new Set(["UNAUTHORIZED", "PLATFORM_DISABLED", "CLIENT_DISABLED", "DEPLOYMENT_DISABLED", "CLIENT_NOT_ALLOWED", "CAPABILITY_DISABLED", "VERSION_UNAVAILABLE", "ASSESSMENT_NOT_FOUND", "MONTHLY_LIMIT_REACHED"]);
-async function post(input: AssessmentScoringTransport, action: "start" | "calculate", body: unknown) {
+async function post(input: AssessmentScoringTransport, action: "start" | "calculate" | "classify-reviewed", body: unknown) {
   try {
     const response = await (input.fetcher ?? fetch)(new URL(`/v1/assessments/${action}`, input.baseUrl), {
       method: "POST", redirect: "error", headers: { authorization: `Bearer ${input.credential}`, "content-type": "application/json", "x-request-id": input.requestId },
@@ -100,4 +100,21 @@ export async function requestAssessmentScoringCalculate(input: AssessmentScoring
   const sum = result.components.reduce((total, c) => total + (c.points ?? 0), 0);
   if (!Number.isFinite(sum) || Math.abs(sum - result.score) > Number.EPSILON * Math.max(1, sum, result.score) * expected.length) throw invalid();
   return parsed.data;
+}
+
+const reviewedClassificationSchema = z.object({
+  result: evidenceSchema.extend({resultReference:id,score:z.number().finite().nonnegative(),classification:z.object({id,label:z.string(),interpretation:z.string()}).strict(),calculatedAt:z.iso.datetime()}).strict(),
+  idempotencyKey:id,
+}).strict();
+export type ReviewedClassification = z.infer<typeof reviewedClassificationSchema>["result"];
+export async function requestReviewedClassification(input:AssessmentScoringTransport & {binding:AssessmentScoringBinding;idempotencyKey:string;score:number}):Promise<ReviewedClassification>{
+ if(!Number.isFinite(input.score)||input.score<0||input.score>Number.MAX_SAFE_INTEGER)throw new AssessmentScoringRequestError("rejected","INVALID_REVIEWED_SCORE");
+ const reply=await post(input,"classify-reviewed",{assessmentReference:input.binding.assessmentReference,idempotencyKey:input.idempotencyKey,score:input.score});
+ if(!reply.response.ok){
+  if(reply.response.status===422 && z.object({error:z.literal("UNMATCHED_CLASSIFICATION")}).safeParse(reply.body).success)throw new AssessmentScoringRequestError("rejected","UNMATCHED_CLASSIFICATION");
+  upstreamFailure(reply.response.status,reply.body);
+ }
+ const parsed=reviewedClassificationSchema.safeParse(reply.body);
+ if(!parsed.success||parsed.data.idempotencyKey!==input.idempotencyKey||!sameEvidence(parsed.data.result,input.binding)||parsed.data.result.score!==input.score)throw invalid();
+ return parsed.data.result;
 }

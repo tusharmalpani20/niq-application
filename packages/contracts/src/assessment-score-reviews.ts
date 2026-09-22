@@ -14,7 +14,14 @@ export type ScoreReviewEntry = {
   actorId: string; actorName: string; createdAt: string; resultReference: string;
 };
 export type ReviewedScore = { niqPoints: number | null; reviewedPoints: number | null; overridden: boolean };
+export type ReviewedRisk = {
+  status: "ORIGINAL" | "PENDING" | "CONFIRMED" | "UNAVAILABLE";
+  classification: { id: string; label: string; interpretation: string } | null;
+  resultReference: string | null; failureCode: string | null; canRetry: boolean;
+};
+export const retryReviewedRiskSchema = z.object({ expectedResultReference: z.string().min(1).max(200), expectedRevision: z.number().int().nonnegative() }).strict();
 export type AssessmentScoreReviews = {
+  risk?: ReviewedRisk;
   scan?: ReviewedScore & { id: string }; revision: number; canAdjust: boolean; entries: ScoreReviewEntry[]; overall: ReviewedScore;
   sections: Array<ReviewedScore & { id: string; items: Array<ReviewedScore & { id: string }> }>;
 };

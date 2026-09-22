@@ -741,3 +741,16 @@ export const assessmentHistory = pgTable("assessment_history", {
  uniqueIndex("assessment_history_request_uidx").on(t.assessmentId,t.actorId,t.requestKey),
  index("assessment_history_cycle_idx").on(t.organizationId,t.assessmentId,t.cycle),
 ]);
+
+/** Durable encrypted risk requests, tied to the exact score-review revision. */
+export const assessmentReviewedRisks = pgTable("assessment_reviewed_risks", {
+ id:entityId("id").primaryKey(), organizationId:entityId("organization_id").notNull(), assessmentId:entityId("assessment_id").notNull(),
+ submissionId:entityId("submission_id").notNull(), revision:integer("revision").notNull(),
+ requestKey:text("request_key").notNull(), request:jsonb("request").notNull(), result:jsonb("result"),
+ status:text("status").notNull(), failureCode:text("failure_code"), leaseToken:text("lease_token"), leaseExpiresAt:timestamp("lease_expires_at",{withTimezone:true}),
+ createdAt:timestamp("created_at",{withTimezone:true}).notNull().defaultNow(), updatedAt:timestamp("updated_at",{withTimezone:true}).notNull().defaultNow(),
+},t=>[
+ uniqueIndex("assessment_reviewed_risks_revision_uidx").on(t.submissionId,t.revision),
+ foreignKey({columns:[t.organizationId,t.assessmentId,t.submissionId],foreignColumns:[assessmentSubmissions.organizationId,assessmentSubmissions.assessmentId,assessmentSubmissions.id]}),
+ check("assessment_reviewed_risks_status_ck",sql`${t.status} in ('PENDING','SUCCEEDED','UNAVAILABLE')`),
+]);
