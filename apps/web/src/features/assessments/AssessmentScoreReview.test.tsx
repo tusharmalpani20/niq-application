@@ -12,7 +12,7 @@ async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[]}
  const values:Record<string,unknown>={window:dom.window,document:dom.window.document,navigator:dom.window.navigator,IS_REACT_ACT_ENVIRONMENT:true,requestAnimationFrame:(fn:()=>void)=>setTimeout(fn,0),cancelAnimationFrame:clearTimeout,getComputedStyle:dom.window.getComputedStyle};
  for(const key of ["FocusEvent","HTMLElement","SVGElement","Element","Node","NodeFilter","DocumentFragment","HTMLButtonElement","HTMLInputElement","HTMLTextAreaElement","HTMLSelectElement","MutationObserver"]) values[key]=(dom.window as any)[key];
  const posts:any[]=[];
- values.fetch=async (_url:string,init?:RequestInit)=>{if(init?.method==="POST"){posts.push(JSON.parse(String(init.body)));if(conflict)return Response.json({error:{message:"Changed",code:"CONFLICT"}},{status:409}); return Response.json(projectScoreReviews(result,[...entries,{...entry,id:"new",revision:entries.length+1,targetType:"overall",targetId:null,previousPoints:10,points:null}]));}return Response.json(projectScoreReviews(result,entries));};
+ values.fetch=async (_url:string,init?:RequestInit)=>{if(init?.method==="POST"){posts.push(JSON.parse(String(init.body)));if(conflict)return Response.json({error:{message:"Changed",code:"CONFLICT"}},{status:409}); return Response.json(projectScoreReviews(result,[...entries,{...entry,id:"new",revision:entries.length+1,targetType:"overall",targetId:null,previousPoints:10,points:null}]));}return Response.json(projectScoreReviews(result,entries,{id:"local-scan-id",points:8}));};
  const previous=Object.fromEntries(Object.keys(values).map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
  for(const [key,value] of Object.entries(values))Object.defineProperty(globalThis,key,{value,configurable:true});
  Object.assign(dom.window.HTMLElement.prototype,{attachEvent(){},detachEvent(){}});
@@ -57,4 +57,19 @@ test("scan and reports expand inline and score edits stay inside their section",
   expect(form.className).not.toContain("bg-primary");
   expect(document.querySelector('button[aria-label="Adjust total score"]')?.textContent).toBe("");
   expect(document.querySelector('button[aria-label="Adjust Stage"]')?.textContent).toBe("");
+}));
+
+test("scan matches form order, displays points and opens an audited edit inside its section",async()=>harness(async({click,posts})=>{
+ const labels=[...document.querySelectorAll("button[aria-expanded]")].map(button=>button.textContent?.trim());
+ expect(labels.slice(0,3)).toEqual(["Personal details","Face scan","Disease status"]);
+ const edit=document.querySelector('button[aria-label="Adjust face scan score"]')!;
+ expect(edit.parentElement?.textContent).toContain("8 pts");
+ await click("Adjust face scan score");
+ const section=document.getElementById("score-section-face_scan")!;
+ expect(section.hidden).toBe(false);
+ expect(section.contains(document.querySelector("form"))).toBe(true);
+ expect(document.querySelector("textarea")?.required).toBe(true);
+ expect(document.querySelector("form")?.textContent).toContain("Original score: 8 pts");
+ expect(document.body.textContent).not.toContain("Reviewed score");
+ expect(posts).toHaveLength(0);
 }));
