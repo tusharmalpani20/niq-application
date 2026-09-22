@@ -17,9 +17,9 @@ function recordFixture(): AssessmentWorkflow {
 }
 async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{url: string; method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}, locator = "assessment-a", submittedResult?: AssessmentScoreResult, role: MembershipRole = "OTHER_MEDICAL") {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
-  const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
+  const keys = ["FocusEvent", "window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  const values = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, NodeFilter: dom.window.NodeFilter, DocumentFragment: dom.window.DocumentFragment, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true };
+  const values = { FocusEvent: dom.window.FocusEvent, window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, NodeFilter: dom.window.NodeFilter, DocumentFragment: dom.window.DocumentFragment, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true };
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable: true });
   // React is imported before JSDOM; provide its legacy input-focus event hooks.
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {} });
@@ -32,6 +32,11 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
     if (String(_url).endsWith("/clinical-review")) return Response.json({ assessmentId:record.id, revision:0, scoreRevision:0, cycle:0, state:"NOT_SUBMITTED", allowedActions:[], history:[], canAdjustScores:role !== "ORGANIZATION_ADMIN", canEditDraft:record.canEditDraft ?? true });
     if (String(_url).endsWith("/score-reviews") && record.result) return Response.json(projectScoreReviews(record.result, []));
     if (method === "POST" && String(_url).endsWith("/submit") && submittedResult) record = { ...record, status: "SCORED", result: submittedResult };
+    if (method === "PATCH" && String(_url).endsWith("/contact")) {
+      if (body.revision !== record.revision) return Response.json({ error: { message: "Saved version changed" } }, { status: 409 });
+      record = { ...record, answers: { ...record.answers, contact: body.phone }, revision: record.revision + 1 };
+      return Response.json(record);
+    }
     if (method === "PATCH") {
       if (rejectSave) return Response.json({ error: { message: "Saved version changed", code: "CONFLICT" } }, { status: 409 });
       record = { ...record, answers: body.answers, revision: record.revision + 1 };
@@ -218,3 +223,23 @@ test("returned draft assigned to another clinician is read only",async()=>harnes
  expect(document.body.textContent).not.toContain("Retry scoring");
  expect(requests.some(request=>request.method==="PATCH")).toBe(false);
 },{canEditDraft:false}));
+
+test("adding contact after dirty answers uses the newly saved assessment revision", async () => harness(async ({ requests, click, dom }) => {
+  await click("Disease status");
+  await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
+  await click("Personal details");
+  await click("Add contact");
+  await act(async () => {
+    const input = document.querySelector<HTMLInputElement>('input[type="tel"]')!;
+    input.focus();
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!.call(input, "9876543210");
+    input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    input.dispatchEvent(new dom.window.KeyboardEvent("keyup", { bubbles: true, key: "0" }));
+  });
+  await click("Save contact");
+  const writes = requests.filter(request => request.method === "PATCH");
+  expect(writes).toHaveLength(2);
+  expect(writes[0]!.body.revision).toBe(3);
+  expect(writes[1]!.body).toMatchObject({ phone: "9876543210", assessmentId: "assessment-a", revision: 4 });
+  expect(document.body.textContent).toContain("Patient contact updated");
+}, { answers: { ...recordFixture().answers, contact: "" } }));

@@ -126,9 +126,10 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   }
   async function updateContact() {
     if (!record || !phone.trim() || operation.current) return;
-    if (dirty && !await persist()) return;
+    const saved = dirty ? await persist() : record;
+    if (!saved) return;
     setBusy(true); operation.current = true; setError("");
-    try { await assessmentRequest(organizationId, `/patients/${record.patientId}/contact`, "PATCH", { phone: phone.trim(), assessmentId: internalId, revision: record.revision }); await reload(); setPhone(""); setContactOpen(false); setNotice("Patient contact updated"); }
+    try { await assessmentRequest(organizationId, `/patients/${record.patientId}/contact`, "PATCH", { phone: phone.trim(), assessmentId: internalId, revision: saved.revision }); await reload(); setPhone(""); setContactOpen(false); setNotice("Patient contact updated"); }
     catch (cause) { handleError(cause); }
     finally { operation.current = false; setBusy(false); }
   }
