@@ -1,7 +1,8 @@
+import { hasChangedInputs, useUnsavedFormClose } from "../components/useUnsavedFormClose";
 import { hasPermission } from "@niq/application-contracts";
 import type { AuthenticatedUser, Facility } from "@niq/application-contracts";
 import { Search, Pencil, Power } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -101,9 +102,11 @@ export function FacilitiesPage() {
   </>;
 }
 
-function FacilityDialog({ organizationId, facility, onClose, onSaved }: { organizationId: string; facility: Facility | null; onClose: () => void; onSaved: (facility: Facility) => void }) {
+export function FacilityDialog({ organizationId, facility, onClose, onSaved }: { organizationId: string; facility: Facility | null; onClose: () => void; onSaved: (facility: Facility) => void }) {
   const timezone = facility?.timezone ?? "Asia/Kolkata";
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const { requestClose, confirmation } = useUnsavedFormClose({ subject: "facility", onClose, isBusy: () => isSubmitting, isDirty: () => hasChangedInputs(formRef.current) });
   const [message, setMessage] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -121,8 +124,8 @@ function FacilityDialog({ organizationId, facility, onClose, onSaved }: { organi
     }
   }
 
-  return <Dialog ariaLabel={facility ? "Edit facility" : "Add facility"} className="facility-dialog" isOpen isDismissable={!isSubmitting} showCloseButton={!isSubmitting} onOpenChange={(open) => { if (!open && !isSubmitting) onClose(); }}>
+  return <><Dialog ariaLabel={facility ? "Edit facility" : "Add facility"} className="facility-dialog" isOpen isDismissable={!isSubmitting} isKeyboardDismissDisabled={isSubmitting} showCloseButton={!isSubmitting} onOpenChange={(open) => { if (!open) requestClose(); }}>
     <DialogHeader><DialogTitle>{facility ? "Edit facility" : "Add facility"}</DialogTitle></DialogHeader>
-    <form className="clinical-form" onSubmit={submit}><fieldset disabled={isSubmitting} className="form-fields facility-dialog-fields m-0 min-w-0 border-0"><Field><FieldLabel htmlFor="facility-name" className="required-field-label">Facility name <span aria-hidden="true">*</span></FieldLabel><Input id="facility-name" defaultValue={facility?.name} name="name" placeholder="e.g. Delhi Central" required autoFocus/></Field><Field><FieldLabel htmlFor="facility-code" className="required-field-label">Facility code <span aria-hidden="true">*</span></FieldLabel><Input id="facility-code" defaultValue={facility?.code} name="code" placeholder="DEL" required/></Field><Field><FieldLabel>Timezone</FieldLabel><p className="text-sm text-muted-foreground">{timezone === "Asia/Kolkata" ? "India Standard Time (Asia/Kolkata)" : timezone}</p></Field>{message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}</fieldset><div className="form-footer"><Button type="button" variant="outline" isDisabled={isSubmitting} onPress={onClose}>Cancel</Button><Button type="submit" isDisabled={isSubmitting}>{isSubmitting ? "Saving…" : facility ? "Save changes" : "Add facility"}</Button></div></form>
-  </Dialog>;
+    <form ref={formRef} className="clinical-form" onSubmit={submit}><fieldset disabled={isSubmitting} className="form-fields facility-dialog-fields m-0 min-w-0 border-0"><Field><FieldLabel htmlFor="facility-name" className="required-field-label">Facility name <span aria-hidden="true">*</span></FieldLabel><Input id="facility-name" defaultValue={facility?.name} name="name" placeholder="e.g. Delhi Central" required autoFocus/></Field><Field><FieldLabel htmlFor="facility-code" className="required-field-label">Facility code <span aria-hidden="true">*</span></FieldLabel><Input id="facility-code" defaultValue={facility?.code} name="code" placeholder="DEL" required/></Field><Field><FieldLabel>Timezone</FieldLabel><p className="text-sm text-muted-foreground">{timezone === "Asia/Kolkata" ? "India Standard Time (Asia/Kolkata)" : timezone}</p></Field>{message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}</fieldset><div className="form-footer"><Button type="button" variant="outline" isDisabled={isSubmitting} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={isSubmitting}>{isSubmitting ? "Saving…" : facility ? "Save changes" : "Add facility"}</Button></div></form>
+  </Dialog>{confirmation}</>;
 }

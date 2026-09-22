@@ -1,3 +1,7 @@
+import { UserInvitationDialog } from "./UserInvitationDialog";
+import { UserEditDialog } from "./UserEditDialog";
+import { FacilityDialog } from "../pages/FacilitiesPage";
+import type { AuthenticatedUser, OrganizationUser } from "@niq/application-contracts";
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PatientForm, PatientFormDialog } from "./PatientForm";
@@ -23,7 +27,7 @@ import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 
-async function withDialog(callback: (ctx: { closeCount: () => number; click: (label: string) => Promise<void> }) => Promise<void>) {
+async function withDialog(callback: (ctx: { closeCount: () => number; click: (label: string) => Promise<void> }) => Promise<void>, variant = "patient") {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const values = { Event: dom.window.Event, window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, NodeFilter: dom.window.NodeFilter, DocumentFragment: dom.window.DocumentFragment, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} } };
   const previous = Object.fromEntries([...Object.keys(values), "fetch"].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -38,7 +42,13 @@ async function withDialog(callback: (ctx: { closeCount: () => number; click: (la
     await act(async () => { button.click(); await new Promise(r => setTimeout(r, 0)); });
   }
   try {
-    await act(async () => { root.render(<PatientFormDialog organizationId={facility.organizationId} facilities={[{ ...facility, status: "ACTIVE" }]} onClose={() => { closed++; }} onSaved={() => {}} />); await new Promise(r => setTimeout(r, 0)); });
+    await act(async () => { const onClose = () => { closed++; };
+      const user = { userId: "admin", organizationId: facility.organizationId, role: "ORGANIZATION_ADMIN" } as AuthenticatedUser;
+      const target = { userId: "other", membershipId: "member", displayName: "Original", email: "user@example.com", role: "DOCTOR", facilities: [] } as unknown as OrganizationUser;
+      root.render(variant === "invite" ? <UserInvitationDialog user={user} facilities={[facility]} allFacilities onClose={onClose} onCreated={() => {}} /> :
+        variant === "user" ? <UserEditDialog user={user} target={target} facilities={[facility]} allFacilities onClose={onClose} onSaved={() => {}} /> :
+        variant.startsWith("facility") ? <FacilityDialog organizationId={facility.organizationId} facility={variant === "facility-edit" ? facility : null} onClose={onClose} onSaved={() => {}} /> :
+        <PatientFormDialog organizationId={facility.organizationId} facilities={[{ ...facility, status: "ACTIVE" }]} onClose={onClose} onSaved={() => {}} />); await new Promise(r => setTimeout(r, 0)); });
     await callback({ closeCount: () => closed, click });
   } finally {
     await act(async () => root.unmount()); dom.window.close();
@@ -97,4 +107,31 @@ for (const action of ["outside click", "Escape"]) {
     await click("Keep editing");
     expect(document.querySelector<HTMLInputElement>("#patient-mrn")!.value).toBe("MRN-123");
   }));
+}
+
+for (const [variant, selector, subject] of [["invite", "#user-invite-email", "user"], ["user", "#edit-user-name", "user"], ["facility-add", "#facility-name", "facility"], ["facility-edit", "#facility-code", "facility"]]) {
+  test(`${variant} guards changed details and allows reverting`, async () => withDialog(async ({ click, closeCount }) => {
+    const input = document.querySelector<HTMLInputElement>(selector!)!;
+    const original = input.value;
+    async function setValue(value: string) {
+      await act(async () => {
+        input.focus();
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, value);
+        input.dispatchEvent(new window.Event("input", { bubbles: true }));
+        input.dispatchEvent(new window.KeyboardEvent("keyup", { key: "d", bubbles: true }));
+      });
+    }
+    await setValue("Changed");
+    await click("Cancel");
+    expect(closeCount()).toBe(0);
+    expect(document.body.textContent).toContain(`Discard ${subject} changes?`);
+    await click("Keep editing");
+    expect(input.value).toBe("Changed");
+    await click("Close");
+    expect(closeCount()).toBe(0);
+    await click("Keep editing");
+    await setValue(original);
+    await click("Cancel");
+    expect(closeCount()).toBe(1);
+  }, variant));
 }

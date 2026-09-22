@@ -1,3 +1,4 @@
+import { useUnsavedFormClose } from "./useUnsavedFormClose";
 import { hasPermission, membershipRoleLabels, type AuthenticatedUser, type Facility, type MembershipRole, type OrganizationUser } from "@niq/application-contracts";
 import { useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,10 @@ export function UserEditDialog({ user, target, facilities, allFacilities, onClos
   const allowed = hasPermission(user.role, "users.manage") && canEditOrganizationUser(target, facilities, allFacilities);
   // Include inactive assignments so a name/role edit never silently drops access.
   const options = [...facilities, ...(target.facilities ?? []).filter(item => !facilities.some(facility => facility.id === item.id))];
+  const nameRef = useRef<HTMLInputElement>(null);
+  const { requestClose, confirmation } = useUnsavedFormClose({ subject: "user", onClose, isBusy: () => inFlight.current,
+    isDirty: () => (nameRef.current?.value ?? displayName) !== target.displayName || role !== target.role || unrestricted !== (target.facilities?.length === 0) ||
+      (!unrestricted && JSON.stringify([...ids].sort()) !== JSON.stringify((target.facilities?.map(item => item.id) ?? []).sort())) });
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!allowed || inFlight.current || !displayName.trim() || !unrestricted && !ids.length) return;
@@ -40,11 +45,11 @@ export function UserEditDialog({ user, target, facilities, allFacilities, onClos
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The user could not be updated."); }
     finally { inFlight.current = false; setBusy(false); }
   }
-  return <Dialog ariaLabel="Edit user" className="facility-dialog" isOpen isDismissable={!busy} showCloseButton={!busy} onOpenChange={open => { if (!open && !busy) onClose(); }}>
+  return <><Dialog ariaLabel="Edit user" className="facility-dialog" isOpen isDismissable={!busy} isKeyboardDismissDisabled={busy} showCloseButton={!busy} onOpenChange={open => { if (!open) requestClose(); }}>
     <DialogHeader><DialogTitle>Edit user</DialogTitle></DialogHeader>
     <form className="clinical-form" onSubmit={submit}>
       <fieldset disabled={busy || !allowed} className="form-fields facility-dialog-fields m-0 min-w-0 border-0">
-        <Field><FieldLabel htmlFor="edit-user-name" className="required-field-label">Name <span aria-hidden="true">*</span></FieldLabel><Input id="edit-user-name" value={displayName} onChange={event => setDisplayName(event.target.value)} required maxLength={120} autoFocus /></Field>
+        <Field><FieldLabel htmlFor="edit-user-name" className="required-field-label">Name <span aria-hidden="true">*</span></FieldLabel><Input ref={nameRef} id="edit-user-name" value={displayName} onChange={event => setDisplayName(event.target.value)} required maxLength={120} autoFocus /></Field>
         <Field><FieldLabel htmlFor="edit-user-email">Email</FieldLabel><Input id="edit-user-email" value={target.email} readOnly /></Field>
         <Field><FieldLabel className="required-field-label">Role <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Role" selectedKey={role} isDisabled={busy || self || !allowed} onSelectionChange={key => setRole(String(key) as MembershipRole)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(membershipRoleLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select></Field>
         <Field><FieldLabel className="required-field-label">Facility access <span aria-hidden="true">*</span></FieldLabel>
@@ -56,7 +61,7 @@ export function UserEditDialog({ user, target, facilities, allFacilities, onClos
         {!allowed && <p role="alert" className="text-destructive">This user’s facility access is outside your assigned facilities.</p>}
         {error && <p role="alert" className="text-destructive">{error}</p>}
       </fieldset>
-      <div className="form-footer"><Button variant="outline" isDisabled={busy} onPress={onClose}>Cancel</Button><Button type="submit" isDisabled={busy || !allowed || !displayName.trim() || !unrestricted && !ids.length}>{busy ? "Saving…" : "Save changes"}</Button></div>
+      <div className="form-footer"><Button variant="outline" isDisabled={busy} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={busy || !allowed || !displayName.trim() || !unrestricted && !ids.length}>{busy ? "Saving…" : "Save changes"}</Button></div>
     </form>
-  </Dialog>;
+  </Dialog>{confirmation}</>;
 }
