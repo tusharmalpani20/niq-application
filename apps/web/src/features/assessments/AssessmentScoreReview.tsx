@@ -8,7 +8,7 @@ import { assessmentResultView } from "./AssessmentResult";
 import { assessmentRequest, AssessmentRequestError } from "./workflow-api";
 
 type Target = { targetType: "item" | "section" | "overall" | "scan"; targetId: string | null; label: string; niqPoints: number; reviewedPoints: number; overridden: boolean };
-const points = (value: number | null) => value === null ? "—" : `${value} pts`;
+const points = (value: number | null) => value === null ? "—" : `${value} ${value === 1 ? "pt" : "pts"}`;
 
 export function AssessmentScoreReview({ record, organizationId, renderScan, reportsContent, onDirtyChange, onSaved, canReview = true, scanStatus = "Face scan unavailable" }: {
   onSaved?: () => Promise<unknown>; canReview?: boolean; scanStatus?: string; record: AssessmentWorkflow; organizationId: string; renderScan: (active: boolean) => ReactNode; reportsContent: ReactNode; onDirtyChange: (dirty: boolean) => void;
@@ -118,7 +118,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   const scanSection = <div className="overflow-hidden rounded-xl border border-border">
     <div className={`flex flex-wrap items-center gap-2 p-3 ${expanded === "face_scan" ? "bg-muted/40" : ""}`}>
       <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start text-left" isDisabled={!!target} aria-expanded={expanded === "face_scan"} aria-controls="score-section-face_scan" onPress={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>{expanded === "face_scan" ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}Face scan</Button>
-      <div className="text-right text-sm"><p className="text-xs text-muted-foreground">{scanStatus}</p><p>{scan?.overridden ? "NIQ " : ""}{points(scan?.niqPoints ?? null)}</p>{scan?.overridden && <p className="text-brand-ink">Reviewed {points(scan.reviewedPoints)}</p>}</div>
+      <div className="text-right text-sm"><p className="text-xs text-muted-foreground">{scanStatus}</p>{scan?.niqPoints !== null && scan?.niqPoints !== undefined && <p>NIQ {points(scan.niqPoints)}</p>}{scan?.overridden && <p className="text-brand-ink">Reviewed {points(scan.reviewedPoints)}</p>}</div>
       <div className="w-11 shrink-0">{scan && scan.niqPoints !== null && scan.reviewedPoints !== null && adjust({ targetType: "scan", targetId: scan.id, label: "face scan score", niqPoints: scan.niqPoints, reviewedPoints: scan.reviewedPoints, overridden: scan.overridden }, "")}</div>
     </div>
     <div id="score-section-face_scan" hidden={expanded !== "face_scan"} className="border-t border-border p-4">
