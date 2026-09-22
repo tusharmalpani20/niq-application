@@ -4,10 +4,11 @@ import type { AssessmentPatient } from "../../../../packages/contracts/src/asses
 import { and, desc, eq, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
 import { faceScanContextSchema, faceScanSessionSchema, type FaceScanContext, type FaceScanSession, type FaceScanSignal } from "../../../../packages/contracts/src/face-scan";
-import { assessmentFaceScans, scoringConnections } from "../db/schema";
+import { assessmentFaceScans, assessments, scoringConnections } from "../db/schema";
 import { decryptCredential } from "../security/credential-encryption";
 import { ServiceError, type Principal, type RequestContext } from "./application";
 import { AssessmentWorkflowService, type StoredWorkflow, type WorkflowExecutor } from "./assessment-workflow";
+import { appendAssessmentHistory } from "./clinical-review-state";
 type Row = typeof assessmentFaceScans.$inferSelect;
 type Identity = {
   origin: string;
@@ -99,7 +100,7 @@ export class AssessmentFaceScanService {
     return row;
   }
   async list(actor: Principal, org: string, assessment: string) {
-    await this.workflow.authorize(actor, org, assessment);
+    const assessmentRow=await this.workflow.authorize(actor, org, assessment);
     const rows = await this.db.select().from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId, org), eq(assessmentFaceScans.assessmentId, assessment))).orderBy(desc(assessmentFaceScans.createdAt), desc(assessmentFaceScans.id));
     const enabled = this.workflow.config.FACE_SCAN_ENABLED;
     return {
@@ -108,7 +109,7 @@ export class AssessmentFaceScanService {
         reason: "Face scan is not enabled for this deployment."
       } : {}),
       sessions: rows.map(row => this.dto(row)),
-      currentSessionId: rows.find(row => row.isCurrent)?.id ?? null
+      currentSessionId: rows.find(row => row.isCurrent && row.cycle===assessmentRow.cycle)?.id ?? null
     };
   }
   async start(actor: Principal, org: string, assessment: string, input: {
@@ -125,7 +126,7 @@ export class AssessmentFaceScanService {
           throw new ServiceError("CONFLICT", "This scan request belongs to another saved draft.");
         return replay;
       }
-      this.workflow.editable(assessmentRow, input.revision);
+      this.workflow.editable(assessmentRow, input.revision, actor);
       const [existing] = await tx.select().from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId, org), eq(assessmentFaceScans.assessmentId, assessment), eq(assessmentFaceScans.active, true)));
       if (existing)
         throw new ServiceError("CONFLICT", "A face scan attempt already exists. Restore it before starting another.", { currentSessionId: existing.id });
@@ -148,12 +149,14 @@ export class AssessmentFaceScanService {
         organizationId: org,
         assessmentId: assessment,
         revision: assessmentRow.revision,
+        cycle: assessmentRow.cycle,
         isCurrent: true,
         requestKey: input.requestKey,
         remoteRequestKey: `face-scan:${org}:${id}`,
         connection: connection.identity,
         snapshot: this.workflow.seal(snapshot)
       }).returning();
+      await appendAssessmentHistory(this.workflow,tx,assessmentRow,actor,"FACE_SCAN_REQUESTED",{sessionId:id,context:snapshot});
       await this.workflow.audit(tx, actor, context, assessment, "FACE_SCAN_REQUESTED", {
         sessionId: id
       });
@@ -211,6 +214,9 @@ export class AssessmentFaceScanService {
   }
   private async project(row: Row, remote: FaceScanSession, token?: string, executor?: WorkflowExecutor) {
     const save = async (tx: WorkflowExecutor) => {
+      // Match workflow lock order: assessment before evidence. Closed cycles stay frozen.
+      const [assessment] = await tx.select().from(assessments).where(eq(assessments.id, row.assessmentId)).for("update");
+      if (!canProjectScan(assessment, row)) return;
       const [current] = await tx.select().from(assessmentFaceScans).where(eq(assessmentFaceScans.id, row.id)).for("update");
       if (!current || token && current.leaseToken !== token || current.state === "CANCELLED" || !current.remoteId && current.state === "FAILED")
         return;
@@ -227,6 +233,7 @@ export class AssessmentFaceScanService {
         const repaired = remote.score !== null && remote.failureCode === null;
         if (repaired && (!["SCORED", "UNAVAILABLE"].includes(remote.score!.status) || typeof remote.score!.ruleVersionId !== "string"))
           throw new ServiceError("CONFLICT", "Scoring returned incomplete mapping evidence.");
+        if (repaired) await appendAssessmentHistory(this.workflow,tx,assessment!,null,"FACE_SCAN_MAPPING_RECOVERED",{sessionId:row.id,before:prior,after:remote});
         await tx.update(assessmentFaceScans).set({
           ...(repaired ? {
             projection: this.workflow.seal({...prior, score: remote.score, failureCode: null, updatedAt: remote.updatedAt}),
@@ -239,6 +246,8 @@ export class AssessmentFaceScanService {
         }).where(eq(assessmentFaceScans.id, current.id));
         return;
       }
+      const before=current.projection?this.workflow.unseal(current.projection):null;
+      if(!isDeepStrictEqual(before,remote)) await appendAssessmentHistory(this.workflow,tx,assessment!,null,"FACE_SCAN_PROJECTED",{sessionId:row.id,before,after:remote});
       // Never update assessment answers, measurements or frozen questionnaire submissions.
       await tx.update(assessmentFaceScans).set({
         remoteId: remote.id,
@@ -261,11 +270,16 @@ export class AssessmentFaceScanService {
     if (!recoverable(row))
       return;
     const token = crypto.randomUUID(), now = new Date();
-    const [claimed] = await this.db.update(assessmentFaceScans).set({
+    const claimed = await this.db.transaction(async tx => {
+      const [assessment] = await tx.select().from(assessments).where(eq(assessments.id,row.assessmentId)).for("update");
+      if (!canProjectScan(assessment,row)) return undefined;
+      const [claimed] = await tx.update(assessmentFaceScans).set({
       reconciliationAttempts: sql`${assessmentFaceScans.reconciliationAttempts}+1`,
       leaseToken: token,
       leaseExpiresAt: new Date(Date.now() + 90000)
     }).where(and(eq(assessmentFaceScans.id, row.id), recoveryCondition, sql `(${assessmentFaceScans.leaseExpiresAt} is null or ${assessmentFaceScans.leaseExpiresAt}<${now.toISOString()})`)).returning();
+      return claimed;
+    });
     if (!claimed)
       return;
     try {
@@ -275,7 +289,10 @@ export class AssessmentFaceScanService {
       // A rejection can release the active slot only when no earlier create outcome was uncertain.
       // After response loss or a crashed lease, even revoked credentials cannot prove no remote work exists.
       const rejected = error instanceof FaceScanRejection && !claimed.remoteId && claimed.reconciliationAttempts === 1;
-      await this.db.update(assessmentFaceScans).set({
+      await this.db.transaction(async tx => {
+        const [assessment] = await tx.select().from(assessments).where(eq(assessments.id,row.assessmentId)).for("update");
+        if (!canProjectScan(assessment,row)) return;
+        await tx.update(assessmentFaceScans).set({
         ...(rejected ? {
           state: "FAILED",
           active: false
@@ -286,26 +303,45 @@ export class AssessmentFaceScanService {
         nextAttemptAt: rejected ? null : new Date(Date.now() + 60000),
         updatedAt: new Date()
       }).where(and(eq(assessmentFaceScans.id, row.id), eq(assessmentFaceScans.leaseToken, token)));
+      });
     }
   }
   async mutate(actor: Principal, org: string, assessment: string, id: string, action: "signal" | "cancel", signal?: FaceScanSignal) {
     this.workflow.clinicalActor(actor, org, "scans.perform");
-    // Keep the assessment lock across the bounded remote call: submission cannot lock it mid-upload.
-    await this.db.transaction(async (tx) => {
-      const assessmentRow = await this.workflow.authorize(actor, org, assessment, tx, true);
-      this.workflow.editable(assessmentRow, assessmentRow.revision);
-      const row = await this.row(org, assessment, id, tx);
-      if (action === "signal" && !this.workflow.config.FACE_SCAN_ENABLED)
-        throw new ServiceError("SCORING_UNAVAILABLE", "New scan uploads are disabled.");
-      if (!row.remoteId)
-        throw new ServiceError("CONFLICT", "Scan setup is still being recovered.");
-      const remote = await this.request(row, action, signal, tx);
-      await this.project(row, remote, undefined, tx);
+    // Reserve a lease under the assessment lock; provider I/O never holds database locks.
+    const token=crypto.randomUUID();
+    const row=await this.db.transaction(async tx => {
+      const assessmentRow=await this.workflow.authorize(actor,org,assessment,tx,true);
+      this.workflow.editable(assessmentRow,assessmentRow.revision,actor);
+      const row=await this.row(org,assessment,id,tx);
+      if(["COMPLETED","CANCELLED"].includes(row.state)) throw new ServiceError("CONFLICT","This scan is already finished.");
+      if(row.cycle!==assessmentRow.cycle) throw new ServiceError("CONFLICT","This scan belongs to an earlier assessment cycle.");
+      if(action==="signal"&&!this.workflow.config.FACE_SCAN_ENABLED) throw new ServiceError("SCORING_UNAVAILABLE","New scan uploads are disabled.");
+      if(!row.remoteId) throw new ServiceError("CONFLICT","Scan setup is still being recovered.");
+      if(row.leaseExpiresAt && row.leaseExpiresAt.getTime()>Date.now()) throw new ServiceError("CONFLICT","This scan is still processing. Try again shortly.");
+      await tx.update(assessmentFaceScans).set({leaseToken:token,leaseExpiresAt:new Date(Date.now()+90000)}).where(eq(assessmentFaceScans.id,row.id));
+      return row;
     });
+    try {
+      const remote=await this.request(row,action,signal);
+      await this.db.transaction(async tx => {
+        const assessmentRow=await this.workflow.authorize(actor,org,assessment,tx,true);
+        this.workflow.editable(assessmentRow,assessmentRow.revision,actor);
+        await this.project(row,remote,token,tx);
+      });
+    } catch(error) {
+      // Outcome may be uncertain. Recovery resolves it before workflow freezing is allowed.
+      await this.db.transaction(async tx => {
+        const [assessmentRow]=await tx.select().from(assessments).where(eq(assessments.id,assessment)).for("update");
+        if(!canProjectScan(assessmentRow,row)) return;
+        await tx.update(assessmentFaceScans).set({leaseToken:null,leaseExpiresAt:null,failureCode:"RECONCILIATION_REQUIRED",nextAttemptAt:new Date(Date.now()+60000)}).where(and(eq(assessmentFaceScans.id,row.id),eq(assessmentFaceScans.leaseToken,token)));
+      });
+      throw error;
+    }
     return this.dto(await this.row(org, assessment, id));
   }
   async recoverPending() {
-    const rows = await this.db.select().from(assessmentFaceScans).where(and(recoveryCondition, sql`(${assessmentFaceScans.leaseExpiresAt} is null or ${assessmentFaceScans.leaseExpiresAt}<now())`, sql `(${assessmentFaceScans.nextAttemptAt} is null or ${assessmentFaceScans.nextAttemptAt}<=now())`)).orderBy(assessmentFaceScans.updatedAt).limit(10);
+    const rows = await this.db.select().from(assessmentFaceScans).where(and(sql`exists (select 1 from assessments a where a.id=${assessmentFaceScans.assessmentId} and a.cycle=${assessmentFaceScans.cycle} and a.status in ('DRAFT','SCORED','PENDING_SCORING','SCORING_UNAVAILABLE'))`, recoveryCondition, sql`(${assessmentFaceScans.leaseExpiresAt} is null or ${assessmentFaceScans.leaseExpiresAt}<now())`, sql `(${assessmentFaceScans.nextAttemptAt} is null or ${assessmentFaceScans.nextAttemptAt}<=now())`)).orderBy(assessmentFaceScans.updatedAt).limit(10);
     for (const row of rows)
       await this.reconcile(row);
   }
@@ -331,4 +367,9 @@ async function boundedResponse(response: Response, max: number) {
   finally {
     await reader.cancel();
   }
+}
+
+/** A delayed provider result cannot rewrite a submitted review or an earlier correction cycle. */
+export function canProjectScan(assessment: {status: string; cycle: number} | undefined, scan: {cycle: number}): boolean {
+  return Boolean(assessment && assessment.cycle === scan.cycle && ["DRAFT", "SCORED", "PENDING_SCORING", "SCORING_UNAVAILABLE"].includes(assessment.status));
 }

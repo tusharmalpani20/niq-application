@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { loadApplicationConfig } from "@niq/application-config";
-import { frozenFaceScanContext } from "./assessment-face-scan";
+import { frozenFaceScanContext, canProjectScan } from "./assessment-face-scan";
+import { assessmentFaceScans } from "../db/schema";
 import { faceScanSignalSchema, startFaceScanSchema, faceScanResultSchema } from "../../../../packages/contracts/src/face-scan";
 test("new capture is unavailable by default",()=>expect(loadApplicationConfig({DATABASE_URL:"postgres://test",SESSION_SECRET:"test-secret-that-is-at-least-32-characters"}).FACE_SCAN_ENABLED).toBe(false));
 test("snapshot derives real patient demographics and saved measurements",()=>{
@@ -34,14 +35,14 @@ test("start freezes the configured staging employee and replay ignores later ove
   const tx={
    select:()=>({from:()=>({where:async()=>stored?[stored]:[]})}),
    update:()=>({set:()=>({where:async()=>{}})}),
-   insert:()=>({values:(value:any)=>({returning:async()=>{
+   insert:(table:any)=>({values:(value:any)=> table!==assessmentFaceScans?Promise.resolve():({returning:async()=>{
     stored={...value,state:"REQUESTED",active:true,projection:null,failureCode:null,createdAt:new Date(),updatedAt:new Date()};return [stored];
    }})}),
   };
   const db={transaction:async(work:any)=>work(tx)};
   // Exercise the real snapshot encryption with an in-memory persistence boundary; no database or provider call.
   const workflow=new AssessmentWorkflowService({db:db as any,config,applicationService:{getPatient:async()=>({dateOfBirth:"1990-05-01",gender:"FEMALE"})} as any});
-  workflow.authorize=async()=>({revision:0,status:"DRAFT",patientId:"patient",workflow:workflow.seal({answers:{height_cm:170,current_weight_kg:65}})}) as any;
+  workflow.authorize=async()=>({revision:0,cycle:0,status:"DRAFT",patientId:"patient",workflow:workflow.seal({answers:{height_cm:170,current_weight_kg:65}})}) as any;
   workflow.audit=async()=>{};
   const scans=new AssessmentFaceScanService(workflow);
   scans.transport=async()=>({identity:{origin:"https://scoring.invalid",deploymentId:"deployment",scoringOrganizationId:"client"},credential:"unused"});
@@ -65,4 +66,25 @@ test("freezes each documented posture and rejects unsupported values", () => {
     expect(frozenFaceScanContext({dateOfBirth: "1990-05-01", gender: "FEMALE"}, {height_cm:170,current_weight_kg:65}, "operator", posture).posture).toBe(posture);
   }
   expect(startFaceScanSchema.safeParse({revision:0,requestKey:"posture-request-key",posture:"unknown"}).success).toBe(false);
+});
+
+test("scan recovery cannot rewrite reviewed, completed or previous-cycle evidence", () => {
+ for(const status of ["DRAFT","SCORED","PENDING_SCORING","SCORING_UNAVAILABLE"]) {
+  expect(canProjectScan({status,cycle:1},{cycle:1})).toBe(true);
+  expect(canProjectScan({status,cycle:1},{cycle:0})).toBe(false);
+ }
+ for(const status of ["UNDER_REVIEW","COMPLETED","VOIDED","READY_FOR_SCORING"])
+  expect(canProjectScan({status,cycle:1},{cycle:1})).toBe(false);
+ expect(canProjectScan(undefined,{cycle:1})).toBe(false);
+});
+
+test("late provider completion makes no evidence write after review freezes the cycle", async () => {
+ const { AssessmentFaceScanService }=await import("./assessment-face-scan");
+ for(const assessment of [{status:"UNDER_REVIEW",cycle:0},{status:"COMPLETED",cycle:0},{status:"DRAFT",cycle:1}]) {
+  let writes=0;
+  const tx={select:()=>({from:()=>({where:()=>({for:async()=>[assessment]})})}),update:()=>{writes++;throw new Error("Frozen evidence was changed");}};
+  const service=new AssessmentFaceScanService({db:{transaction:async(work:any)=>work(tx)}} as any);
+  await (service as any).project({id:"scan",assessmentId:"assessment",cycle:0},{state:"COMPLETED"});
+  expect(writes).toBe(0);
+ }
 });
