@@ -50,7 +50,7 @@ export class AssessmentWorkflowService {
   async audit(executor:WorkflowExecutor,actor:Principal,context:RequestContext,assessmentId:string,action:string,metadata:Record<string,unknown>={}) {
     await executor.insert(auditEvents).values({id:createEntityId(),organizationId:actor.organizationId,actorMembershipId:actor.membershipId,assessmentId,actorType:"USER",action,resourceType:"ASSESSMENT",resourceId:assessmentId,requestId:context.requestId,metadata});
   }
-  private async transport(organizationId:string,context:RequestContext,pinned?:ConnectionIdentity) {
+  async transport(organizationId:string,context:RequestContext,pinned?:ConnectionIdentity) {
     const [connection]=await this.db.select().from(scoringConnections).where(eq(scoringConnections.organizationId,organizationId));
     if(!connection||!this.config.SCORING_API_URL||!this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY) throw new ServiceError("SCORING_NOT_CONFIGURED","Connect NIQ Scoring before starting an assessment.");
     const identity={origin:new URL(this.config.SCORING_API_URL).origin,deploymentId:connection.deploymentId,scoringOrganizationId:connection.scoringOrganizationId};

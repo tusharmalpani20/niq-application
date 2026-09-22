@@ -22,6 +22,7 @@ export type ClinicalReview = {
  assignee:ClinicalReviewer|null;correctionPerson:ClinicalReviewer|null;previousReviewer:ClinicalReviewer|null;
  defaultCorrectionPersonId:string|null;returnReason:string|null;finalRemark:string|null;
  submittedAt:string|null;completedAt:string|null;history:ClinicalReviewEvent[];
+ riskClassificationPending?:boolean;
  allowedActions:ClinicalReviewAction["action"][];canAdjustScores:boolean;canEditDraft:boolean;
 };
 export type ClinicalReviewQueueItem = {assessmentId:string;reference:string;patient:{id:string;reference:string;displayName:string};facility:{id:string;name:string}|null;review:ClinicalReview};
