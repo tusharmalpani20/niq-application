@@ -1,9 +1,10 @@
+import { useUnsavedFormClose } from "./useUnsavedFormClose";
 import { registerPatientSchema, updatePatientSchema, type Facility, type Patient } from "@niq/application-contracts";
 import { useImperativeHandle, useRef, useState, type FormEvent, type Ref } from "react";
 import { Alert, AlertDescription } from "./ui/alert";
 import { Button } from "./ui/button";
 import { DateInput, displayDate } from "./ui/date-input";
-import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Field, FieldLabel } from "./ui/field";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -28,11 +29,9 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
   const [gender, setGender] = useState<Patient["gender"] | null>(patient?.gender ?? null);
   const [birth, setBirth] = useState(patient?.dateOfBirth ?? "");
   const formRef = useRef<HTMLFormElement>(null);
-  const [confirmClose, setConfirmClose] = useState(false);
   const submitting = useRef(false);
 
-  function requestClose() {
-    if (submitting.current) return;
+  function isDirty() {
     // Read actual input values at dismissal so browser autofill is protected too.
     const form = formRef.current;
     const changedText = ["name", "mrn", "phone", "email"].some(name => {
@@ -41,9 +40,9 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
     });
     const changedBirth = form?.querySelector<HTMLInputElement>("#patient-birth")?.value !== displayDate(patient?.dateOfBirth ?? "");
     const dirty = changedText || changedBirth || facilityId !== (patient?.homeFacility?.id ?? null) || gender !== (patient?.gender ?? null);
-    if (dirty) setConfirmClose(true);
-    else onCancel();
+    return !!dirty;
   }
+  const { requestClose, confirmation } = useUnsavedFormClose({ subject: "patient", onClose: onCancel, isBusy: () => submitting.current, isDirty });
   useImperativeHandle(ref, () => ({ requestClose }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -107,10 +106,7 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
     </fieldset>
     <div className="form-footer"><Button type="button" variant="outline" isDisabled={isSubmitting} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={isSubmitting || (!options.length && !missingCurrent)}>{isSubmitting ? "Saving…" : patient ? "Save changes" : "Register patient"}</Button></div>
   </form>
-    <Dialog isOpen={confirmClose} onOpenChange={setConfirmClose} ariaLabel="Discard patient changes?">
-      <DialogHeader><DialogTitle>Discard patient changes?</DialogTitle><DialogDescription>The details you entered have not been saved. Leaving will discard your changes.</DialogDescription></DialogHeader>
-      <DialogFooter><Button variant="outline" autoFocus onPress={() => setConfirmClose(false)}>Keep editing</Button><Button variant="destructive" onPress={() => { setConfirmClose(false); onCancel(); }}>Discard changes</Button></DialogFooter>
-    </Dialog>
+    {confirmation}
   </>;
 }
 
