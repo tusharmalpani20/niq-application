@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import { projectScoreReviews, type AssessmentWorkflow, type AssessmentScoreResult, type ScoreReviewEntry } from "@niq/application-contracts";
 import { AssessmentScoreReview } from "./AssessmentScoreReview";
 const result: AssessmentScoreResult = {formatVersion:2,profile:"NIQ_FINAL_ASSESSMENT",complete:true,score:8,classification:{id:"low",label:"Low",interpretation:""},components:[{id:"stage",sectionId:"disease",label:"Stage",points:8,status:"answered"}],version:"V1",checksum:"a".repeat(64),resultReference:"result",calculatedAt:"2026-09-22T00:00:00.000Z",clinicalUsePermitted:true};
-const record = {id:"assessment",reference:"ASM-000002",result,binding:{version:"V1",checksum:"a".repeat(64)},answers:{stage:"metastatic"},manifest:{sections:[{id:"disease",title:"Disease status",fields:[{id:"stage",label:"Stage",owner:"scoring",options:[{id:"metastatic",label:"Metastatic"}]}]}]},progress:{answered:1,required:1,sections:[]},reports:[]} as unknown as AssessmentWorkflow;
+const record = {id:"assessment",reference:"ASM-000002",result,binding:{version:"V1",checksum:"a".repeat(64)},answers:{stage:"metastatic",patient_name:"Example Patient"},manifest:{sections:[{id:"personal_details",title:"Personal details",fields:[{id:"patient_name",label:"Patient name",kind:"text",owner:"application"}]},{id:"disease",title:"Disease status",fields:[{id:"stage",label:"Stage",owner:"scoring",options:[{id:"metastatic",label:"Metastatic"}]}]}]},progress:{answered:1,required:1,sections:[]},reports:[]} as unknown as AssessmentWorkflow;
 const entry: ScoreReviewEntry = {id:"entry",revision:1,targetType:"item",targetId:"stage",previousPoints:8,points:10,reason:null,actorId:"actor",actorName:"Reviewer One",createdAt:"2026-09-22T00:00:00.000Z",resultReference:"result"};
 async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[]})=>Promise<void>, entries:ScoreReviewEntry[] = [], conflict=false) {
  const dom = new JSDOM("<html><body><div id='root'></div></body></html>",{url:"http://localhost",pretendToBeVisual:true});
@@ -23,3 +23,24 @@ test("unreviewed assessment hides reviewed score and history and keeps patient a
 test("review history displays all actors and preserves original NIQ points",async()=>harness(async()=>{expect(document.body.textContent).toContain("Reviewed score");expect(document.body.textContent).toContain("Reviewer One");expect(document.body.textContent).toContain("Reviewer Two");expect(document.body.textContent).toContain("Reason not provided");expect(record.answers.stage).toBe("metastatic");expect(result.score).toBe(8);},[entry,{...entry,id:"entry2",revision:2,actorId:"actor2",actorName:"Reviewer Two",previousPoints:10,points:11}]));
 test("reset appends an explicit review request rather than modifying answers",async()=>harness(async({click,posts})=>{await click("Adjust total score");await click("Restore calculated score");expect(posts).toHaveLength(1);expect(posts[0]).toMatchObject({expectedRevision:1,targetType:"overall",targetId:null,points:null});expect(posts[0]).not.toHaveProperty("answers");expect(document.body.textContent).toContain("Score change saved.");},[{...entry,targetType:"overall",targetId:null}]));
 test("concurrent edits preserve the form and block blind resubmission",async()=>harness(async({click,posts})=>{await click("Adjust total score");await click("Restore calculated score");expect(document.body.textContent).toContain("Someone updated the scores");expect(document.querySelector("form")).not.toBeNull();expect(posts).toHaveLength(1);await click("Cancel");expect(document.querySelector("form")).toBeNull();},[{...entry,targetType:"overall",targetId:null}],true));
+
+
+test("expanded sections show unscored answers, counts and scan/report links directly",async()=>harness(async({click})=>{
+  await click("Personal details");
+  expect(document.body.textContent).toContain("Patient name");
+  expect(document.body.textContent).toContain("Example Patient");
+  expect(document.body.textContent).not.toContain("View all answers");
+  expect(document.body.textContent).not.toContain("Partial");
+  expect(document.body.textContent).toContain("1/1 answered");
+  expect(document.body.textContent).toContain("Face scan unavailable");
+  const reports=[...document.querySelectorAll("button")].find(b=>b.textContent?.includes("View reports"))!;
+  expect(reports.parentElement?.lastElementChild?.textContent).toBe("0 reports");
+  await click("Disease status");
+  const sectionButton=document.querySelector('button[aria-label="Adjust Disease status"]');
+  expect(sectionButton?.textContent).toBe("");
+}));
+
+test("item edits explain when a section override preserves its total",async()=>harness(async({click})=>{
+  await click("Disease status"); await click("Adjust Stage");
+  expect(document.body.textContent).toContain("Changing these points will not change its total");
+},[{...entry,targetType:"section",targetId:"disease"}]));

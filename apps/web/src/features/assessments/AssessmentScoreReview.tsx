@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AssessmentWorkflow, AssessmentScoreReviews, ScoreReviewInput } from "@niq/application-contracts";
+import { getAssessmentAnswerCoverage, isAssessmentFieldApplicable, calculateAssessmentBmi, calculateAssessmentWeightChange, type AssessmentWorkflow, type AssessmentScoreReviews, type ScoreReviewInput } from "@niq/application-contracts";
 import { ChevronDown, ChevronRight, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,8 @@ import { assessmentRequest, AssessmentRequestError } from "./workflow-api";
 type Target = { targetType: "item" | "section" | "overall"; targetId: string | null; label: string; niqPoints: number; reviewedPoints: number; overridden: boolean };
 const points = (value: number | null) => value === null ? "—" : `${value} pts`;
 
-export function AssessmentScoreReview({ record, organizationId, onSection, onDirtyChange }: {
-  record: AssessmentWorkflow; organizationId: string; onSection: (id: string) => void; onDirtyChange: (dirty: boolean) => void;
+export function AssessmentScoreReview({ record, organizationId, onSection, onDirtyChange, scanStatus = "Face scan unavailable" }: {
+  scanStatus?: string; record: AssessmentWorkflow; organizationId: string; onSection: (id: string) => void; onDirtyChange: (dirty: boolean) => void;
 }) {
   const [data, setData] = useState<AssessmentScoreReviews | null>(null);
   const [error, setError] = useState("");
@@ -28,6 +28,7 @@ export function AssessmentScoreReview({ record, organizationId, onSection, onDir
   const request = useRef<{ fingerprint: string; key: string } | null>(null);
   const path = `/assessments/${record.id}/score-reviews`;
   const view = assessmentResultView(record);
+  const coverage = getAssessmentAnswerCoverage(record.manifest, record.answers);
   const revised = !!data?.entries.length;
   useEffect(() => {
     const controller = new AbortController();
@@ -79,6 +80,7 @@ export function AssessmentScoreReview({ record, organizationId, onSection, onDir
       <h3 className="font-semibold">Adjust {target.label}</h3>
       <p className="mt-1 text-sm text-muted-foreground">NIQ: {points(target.niqPoints)}{revised ? ` · Current reviewed: ${points(target.reviewedPoints)}` : ""}</p>
       {target.targetType !== "item" && <p className="mt-2 text-sm text-muted-foreground">This overrides the calculated {target.targetType === "overall" ? "total" : "section score"} until you restore it.</p>}
+      {target.targetType === "item" && data?.sections.some(section => section.overridden && section.items.some(item => item.id === target.targetId)) && <p className="mt-2 text-sm text-muted-foreground">This section has an override. Changing these points will not change its total until the section score is restored.</p>}
       <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(8rem,12rem)_1fr]">
         <label className="grid content-start gap-2 text-sm font-medium">New reviewed points<Input autoFocus type="number" min={0} max={Number.MAX_SAFE_INTEGER} step="any" required value={value} disabled={saving || conflict} onChange={event => setValue(event.target.value)} className="min-h-11"/></label>
         <label className="grid gap-2 text-sm font-medium">Reason (optional)<Textarea value={reason} maxLength={1000} disabled={saving || conflict} onChange={event => setReason(event.target.value)} placeholder="Add a reason"/></label>
@@ -93,34 +95,40 @@ export function AssessmentScoreReview({ record, organizationId, onSection, onDir
     <div className="divide-y divide-border border-y border-border">{sections.map(section => {
       const effective = data?.sections.find(item => item.id === section.id);
       const open = expanded === section.id;
-      const components = result.components.filter(item => item.sectionId === section.id);
+      const completion = coverage.sections.find(item => item.id === section.id);
       return <div key={section.id}>
         <div className="flex flex-wrap items-center gap-2 py-3">
           <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start whitespace-normal text-left" aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}{section.title}</Button>
-          <div className="text-right text-sm"><p>{revised ? "NIQ " : ""}{points(section.points)}{section.points !== null && (section.unanswered > 0 || section.unresolved > 0) ? " · Partial" : ""}</p>{revised && effective?.reviewedPoints !== null && effective?.reviewedPoints !== undefined && <p className="text-brand-ink">Reviewed {points(effective.reviewedPoints)}{effective.overridden ? " · Override" : ""}</p>}</div>
+          <div className="text-right text-sm"><p className="text-xs text-muted-foreground">{completion?.answered ?? 0}/{completion?.total ?? 0} answered</p><p>{revised ? "NIQ " : ""}{points(section.points)}</p>{revised && effective?.reviewedPoints !== null && effective?.reviewedPoints !== undefined && <p className="text-brand-ink">Reviewed {points(effective.reviewedPoints)}{effective.overridden ? " · Override" : ""}</p>}</div>
         </div>
         <div id={`score-section-${section.id}`} hidden={!open} className="pb-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><span className="text-sm text-muted-foreground">{[section.unanswered ? `${section.unanswered} unanswered` : "", section.unresolved ? `${section.unresolved} need attention` : ""].filter(Boolean).join(" · ")}</span>
-            {effective && section.points !== null && effective.reviewedPoints !== null && adjust({targetType:"section",targetId:section.id,label:section.title,niqPoints:section.points,reviewedPoints:effective.reviewedPoints,overridden:effective.overridden},"Adjust section")}
+            {effective && section.points !== null && effective.reviewedPoints !== null && adjust({targetType:"section",targetId:section.id,label:section.title,niqPoints:section.points,reviewedPoints:effective.reviewedPoints,overridden:effective.overridden},"")}
           </div>
-          <div className="divide-y divide-border">{components.map(item => {
-            const field = section.fields.find(field => field.id === item.id);
-            const raw = record.answers[item.id];
+          <div className="divide-y divide-border">{section.fields.filter(field => isAssessmentFieldApplicable(field, record.answers)).map(field => {
+            const item = result.components.find(item => item.id === field.id);
+            const raw = record.answers[field.id];
             const label = (value: string | number) => field?.options?.find(option => option.id === value)?.label ?? String(value);
-            const answer = raw === undefined || raw === null || raw === "" ? "Not answered" : Array.isArray(raw) ? raw.length ? raw.map(label).join(", ") : "None" : label(raw);
-            const reviewed = effective?.items.find(row => row.id === item.id);
-            return <div key={item.id} className="grid min-w-0 gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-              <div><p className="text-sm font-medium">{item.label}</p><p className="break-words text-sm text-muted-foreground">{answer}</p>{item.status === "pending" && <p className="mt-1 text-xs text-muted-foreground">{item.reason || "More information needed"}</p>}</div>
-              <div className="flex flex-wrap items-center gap-3 text-sm"><span>{revised ? "NIQ " : ""}{points(item.points)}</span>{revised && reviewed?.reviewedPoints !== null && reviewed?.reviewedPoints !== undefined && <span className="text-brand-ink">Reviewed {points(reviewed.reviewedPoints)}{reviewed.overridden ? " · Adjusted" : ""}</span>}
+            let answer = raw === undefined || raw === null || raw === "" ? "Not answered" : Array.isArray(raw) ? raw.length ? raw.map(label).join(", ") : "None" : label(raw);
+            if (field.kind === "calculated") {
+              const a = record.answers;
+              if (field.id === "bmi") { const n = typeof a.height_cm === "number" && typeof a.current_weight_kg === "number" ? calculateAssessmentBmi(a.height_cm, a.current_weight_kg) : null; answer = n === null ? "Not available" : n.toFixed(1); }
+              else if (field.id === "weight_loss") { const n = typeof a.previous_weight_kg === "number" && typeof a.current_weight_kg === "number" ? calculateAssessmentWeightChange(a.previous_weight_kg, a.current_weight_kg) : null; answer = n === null ? "Not available" : n === 0 ? "No change" : `${Math.abs(n).toFixed(1)}% ${n > 0 ? "loss" : "gain"}`; }
+              else answer = item?.status === "answered" ? "Calculated from assessment answers" : "Not available";
+            } else if (field.unit && answer !== "Not answered") answer += ` ${field.unit}`;
+            const reviewed = effective?.items.find(row => row.id === field.id);
+            return <div key={field.id} className="grid min-w-0 gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <div><p className="text-sm font-medium">{field.label}</p><p className="break-words text-sm text-muted-foreground">{answer}</p>{item?.status === "pending" && <p className="mt-1 text-xs text-muted-foreground">{item.reason || "More information needed"}</p>}</div>
+              {item && <div className="flex flex-wrap items-center gap-3 text-sm"><span>{revised ? "NIQ " : ""}{points(item.points)}</span>{revised && reviewed?.reviewedPoints !== null && reviewed?.reviewedPoints !== undefined && <span className="text-brand-ink">Reviewed {points(reviewed.reviewedPoints)}{reviewed.overridden ? " · Adjusted" : ""}</span>}
                 {item.status === "answered" && item.points !== null && reviewed?.reviewedPoints !== null && reviewed?.reviewedPoints !== undefined && adjust({targetType:"item",targetId:item.id,label:item.label,niqPoints:item.points,reviewedPoints:reviewed.reviewedPoints,overridden:reviewed.overridden},"Adjust")}
-              </div>
+              </div>}
             </div>;
           })}</div>
-          <Button variant="link" isDisabled={!!target} onPress={() => onSection(section.id)}>View all answers</Button>
         </div>
       </div>;
     })}</div>
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-muted-foreground">{record.reports.length} reports</p><Button variant="ghost" isDisabled={!!target} onPress={() => onSection("reports")}>View reports<ChevronRight aria-hidden="true"/></Button></div>
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border py-3"><Button variant="ghost" isDisabled={!!target} onPress={() => onSection("face_scan")}>Face scan<ChevronRight aria-hidden="true"/></Button><span className="text-sm text-muted-foreground">{scanStatus}</span></div>
+    <div className="mt-2 flex flex-wrap items-center justify-between gap-2"><Button variant="ghost" isDisabled={!!target} onPress={() => onSection("reports")}>View reports<ChevronRight aria-hidden="true"/></Button><p className="text-sm text-muted-foreground">{record.reports.length} reports</p></div>
     {revised && data && <details className="mt-4 border-t border-border pt-4"><summary className="min-h-11 cursor-pointer font-medium">Score history</summary><ol className="divide-y divide-border">{[...data.entries].reverse().map(entry => <li key={entry.id} className="py-3 text-sm"><p className="font-medium">{entry.targetType === "overall" ? "Overall score" : entry.targetType === "section" ? sections.find(section => section.id === entry.targetId)?.title : result.components.find(item => item.id === entry.targetId)?.label} · {points(entry.previousPoints)} → {entry.points === null ? "Restored" : points(entry.points)}</p><p>{entry.actorName} · {new Date(entry.createdAt).toLocaleString()}</p><p className="whitespace-pre-wrap break-words text-muted-foreground">{entry.reason || "Reason not provided"}</p></li>)}</ol></details>}
   </section>;
 }
