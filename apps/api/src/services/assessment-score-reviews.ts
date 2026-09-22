@@ -1,4 +1,5 @@
 import { hasPermission } from "@niq/application-contracts";
+import { canAdjustClinicalScore, reviewState } from "./clinical-review-state";
 import { and, desc, eq } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
 import { assessmentScoreResultSchema } from "../../../../packages/contracts/src/assessment-workflow";
@@ -6,16 +7,16 @@ import { projectScoreReviews, scoreReviewInputSchema, type ScoreReviewInput, typ
 import { assessmentScoreReviews as reviews, assessmentSubmissions, assessmentFaceScans } from "../db/schema";
 import type { FaceScanSession } from "../../../../packages/contracts/src/face-scan";
 import { ServiceError, type Principal, type RequestContext } from "./application";
-import type { AssessmentWorkflowService, WorkflowExecutor } from "./assessment-workflow";
+import type { AssessmentWorkflowService, WorkflowExecutor, WorkflowRow } from "./assessment-workflow";
 
 export class AssessmentScoreReviewService {
   constructor(private service: AssessmentWorkflowService) {}
-  private async load(executor: WorkflowExecutor, organizationId: string, assessmentId: string) {
-    const [submission] = await executor.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId, organizationId), eq(assessmentSubmissions.assessmentId, assessmentId))).orderBy(desc(assessmentSubmissions.createdAt)).limit(1);
+  private async load(executor: WorkflowExecutor, organizationId: string, assessmentId: string, currentSubmissionId?:string|null) {
+    const [submission] = await executor.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId, organizationId), eq(assessmentSubmissions.assessmentId, assessmentId), currentSubmissionId ? eq(assessmentSubmissions.id,currentSubmissionId) : undefined)).orderBy(desc(assessmentSubmissions.createdAt)).limit(1);
     if (submission?.status !== "SUCCEEDED" || !submission.result) throw new ServiceError("CONFLICT", "A completed NIQ score is required before reviewing points.");
     const parsed = assessmentScoreResultSchema.safeParse(this.service.unseal(submission.result));
     if (!parsed.success) throw new ServiceError("CONFLICT", "The NIQ result could not be read.");
-    const rows = await executor.select().from(reviews).where(and(eq(reviews.organizationId, organizationId), eq(reviews.assessmentId, assessmentId))).orderBy(reviews.revision);
+    const rows = await executor.select().from(reviews).where(and(eq(reviews.organizationId, organizationId), eq(reviews.assessmentId, assessmentId),eq(reviews.submissionId,submission.id))).orderBy(reviews.revision);
     if (rows.some(row => row.submissionId !== submission.id)) throw new ServiceError("CONFLICT", "The NIQ result has changed. Contact support to review its history.");
     const entries = rows.map(row => this.service.unseal<ScoreReviewEntry>(row.event));
     const scanRows = await executor.select().from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId, organizationId), eq(assessmentFaceScans.assessmentId, assessmentId), eq(assessmentFaceScans.isCurrent, true))).orderBy(desc(assessmentFaceScans.createdAt));
@@ -24,10 +25,16 @@ export class AssessmentScoreReviewService {
     const scan = current && session ? { id: current.id, points: session.score?.status === "SCORED" ? session.score.points ?? null : null } : undefined;
     return { submission, result: parsed.data, rows, scan, projection: projectScoreReviews(parsed.data, entries, scan) };
   }
+  async readProjection(actor:Principal,row:WorkflowRow,executor:WorkflowExecutor=this.service.db) {
+    const state=reviewState(this.service,row);
+    if(row.status==="COMPLETED" && state.finalSnapshot) return {...(state.finalSnapshot as {score:object}).score,canAdjust:false} as Awaited<ReturnType<typeof this.load>>["projection"];
+    if(!row.currentSubmissionId) throw new ServiceError("CONFLICT","This assessment has no current calculated result.");
+    const {projection}=await this.load(executor,row.organizationId,row.id,row.currentSubmissionId);
+    return {...projection,canAdjust:projection.canAdjust&&canAdjustClinicalScore(this.service,row,actor)};
+  }
   async read(actor: Principal, organizationId: string, assessmentId: string) {
-    await this.service.authorize(actor, organizationId, assessmentId);
-    const { projection } = await this.load(this.service.db, organizationId, assessmentId);
-    return { ...projection, canAdjust: projection.canAdjust && hasPermission(actor.role, "scores.review") };
+    const row=await this.service.authorize(actor,organizationId,assessmentId);
+    return this.readProjection(actor,row);
   }
   async add(actor: Principal, organizationId: string, assessmentId: string, raw: ScoreReviewInput, context: RequestContext) {
     this.service.clinicalActor(actor, organizationId, "scores.review");
@@ -36,8 +43,9 @@ export class AssessmentScoreReviewService {
     const input = parsed.data;
     return this.service.db.transaction(async tx => {
       const assessment = await this.service.authorize(actor, organizationId, assessmentId, tx, true);
-      if (assessment.status !== "SCORED") throw new ServiceError("CONFLICT", "A completed NIQ score is required before reviewing points.");
-      const { submission, result, rows, projection, scan } = await this.load(tx, organizationId, assessmentId);
+      if (assessment.currentSubmissionId === null) throw new ServiceError("CONFLICT","This assessment has no current calculated result.");
+      if (!canAdjustClinicalScore(this.service,assessment,actor)) throw new ServiceError("FORBIDDEN", "Only the responsible clinician can adjust the current score.");
+      const { submission, result, rows, projection, scan } = await this.load(tx, organizationId, assessmentId,assessment.currentSubmissionId);
       const replay = rows.find(row => row.actorId === actor.membershipId && row.requestKey === input.requestKey);
       if (replay) {
         const entry = this.service.unseal<ScoreReviewEntry>(replay.event);

@@ -73,7 +73,7 @@ test("scan edits reject unavailable, previous, unknown and unscored sessions", a
  expect(f.rows).toHaveLength(0);
 });
 
-for (const role of ["DOCTOR", "NUTRITIONIST", "OTHER_MEDICAL", "ORGANIZATION_ADMIN"] as const) test(`${role} can review clinical scores`, async () => {
+for (const role of ["DOCTOR", "NUTRITIONIST", "OTHER_MEDICAL"] as const) test(`${role} can review clinical scores`, async () => {
  const f=fixture(); await f.service.add({...actor,role},"org","assessment",input,{requestId:"role"}); expect(f.rows).toHaveLength(1);
 });
 test("support and cross-tenant actors cannot change scores", async () => {
@@ -82,3 +82,5 @@ test("support and cross-tenant actors cannot change scores", async () => {
  await expect(f.service.add(actor,"other-org","assessment",input,{requestId:"role"})).rejects.toMatchObject({code:"FORBIDDEN"});
  expect(f.rows).toHaveLength(0);
 });
+
+test("organization admins cannot perform clinical score adjustments",async()=>{const f=fixture();await expect(f.service.add({...actor,role:"ORGANIZATION_ADMIN"},"org","assessment",input,{requestId:"admin"})).rejects.toMatchObject({code:"FORBIDDEN"});});
