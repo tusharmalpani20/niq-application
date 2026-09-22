@@ -3,7 +3,7 @@ import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
-import { buildAssessmentForm, getAssessmentCompletion, type AssessmentWorkflow } from "@niq/application-contracts";
+import { buildAssessmentForm, getAssessmentCompletion, projectScoreReviews, type AssessmentScoreResult, type AssessmentWorkflow } from "@niq/application-contracts";
 import { assessmentQuestionnaireFixture } from "./test-fixture";
 import { AssessmentEditorPage } from "./AssessmentEditorPage";
 
@@ -15,7 +15,7 @@ function recordFixture(): AssessmentWorkflow {
     patient: { id: "patient-a", reference: "PAT-1", displayName: "Test patient", dateOfBirth: "2006-01-01", gender: "FEMALE", phone: "1234567890", homeFacility: { id: "facility-a", name: "Chennai" } },
     createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 }
-async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{url: string; method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}, locator = "assessment-a") {
+async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{url: string; method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}, locator = "assessment-a", submittedResult?: AssessmentScoreResult) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -29,6 +29,8 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
   globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
     const method = init?.method ?? "GET"; const body = init?.body ? JSON.parse(String(init.body)) : null;
     requests.push({ url: String(_url), method, body });
+    if (String(_url).endsWith("/score-reviews") && record.result) return Response.json(projectScoreReviews(record.result, []));
+    if (method === "POST" && String(_url).endsWith("/submit") && submittedResult) record = { ...record, status: "SCORED", result: submittedResult };
     if (method === "PATCH") {
       if (rejectSave) return Response.json({ error: { message: "Saved version changed", code: "CONFLICT" } }, { status: 409 });
       record = { ...record, answers: body.answers, revision: record.revision + 1 };
@@ -169,4 +171,28 @@ test("changing stage clears hidden site and details even after saving", async ()
   await choose("stage_metastatic");
   expect(document.querySelector<HTMLInputElement>('input[type="radio"][value="others"]')?.checked).toBe(false);
   expect(document.querySelector('#assessment-field-metastasis_other')).toBeNull();
+}, { answers: { ...recordFixture().answers, stage: "stage_metastatic", metastasis_site: "others", metastasis_other: "Old detail" } }));
+
+
+test("submission opens summary immediately without refreshing", async () => {
+  const result: AssessmentScoreResult = { formatVersion: 2, profile: "NIQ_FINAL_ASSESSMENT", complete: true, score: 3, classification: { id: "low", label: "Low", interpretation: "" }, components: recordFixture().manifest.sections.flatMap(section => section.fields.filter(field => field.owner === "scoring").map(field => ({ id: field.id, sectionId: section.id, label: field.label, points: field.id === "stage" ? 3 : null, status: field.id === "stage" ? "answered" as const : "unanswered" as const }))), version: "version-a", checksum: "a".repeat(64), resultReference: "result-a", calculatedAt: "2026-09-22T00:00:00Z", clinicalUsePermitted: true };
+  await harness(async ({ click, requests }) => {
+    await click("Review & score");
+    await click("Submit and request score");
+    expect(requests.some(request => request.method === "POST" && request.url.endsWith("/submit"))).toBe(true);
+    expect(document.querySelector('[aria-label="Assessment score review"]')).not.toBeNull();
+    expect(document.body.textContent).toContain("Assessment summary");
+    expect(document.body.textContent).not.toContain("Back to summary");
+  }, { binding: { version: "version-a", checksum: "a".repeat(64) } }, "assessment-a", result);
+});
+
+test("clearing a controlling answer clears dependent answers in the saved draft", async () => harness(async ({ click, requests }) => {
+  await click("Disease status");
+  await click("Clear Stage");
+  expect(document.querySelector('#assessment-field-metastasis_other')).toBeNull();
+  await click("Save draft");
+  const saved = requests.find(request => request.method === "PATCH")!.body.answers;
+  expect(saved.stage).toBeNull();
+  expect(saved.metastasis_site).toBeUndefined();
+  expect(saved.metastasis_other).toBeUndefined();
 }, { answers: { ...recordFixture().answers, stage: "stage_metastatic", metastasis_site: "others", metastasis_other: "Old detail" } }));

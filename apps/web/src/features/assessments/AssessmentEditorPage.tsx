@@ -45,7 +45,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
   const dirty = !!record && JSON.stringify(answers) !== JSON.stringify(record.answers);
   const editable = record?.status === "DRAFT";
   const navigationDialog = useDraftNavigationGuard(dirty || scoreDirty || reportDirty || reportBusy || scanBusy || contactOpen && !!phone, scanBusy ? "Camera capture or upload is unfinished. Leaving may discard the local capture. Accepted uploads continue processing." : undefined);
-  const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers); setConflict(false); }, []);
+  const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers); setConflict(false); if (value.result) { setShowScoredAnswers(false); requestAnimationFrame(() => document.getElementById("assessment-summary-heading")?.focus()); } }, []);
   const handleError = useCallback((cause: unknown) => {
     if (cause instanceof AssessmentRequestError && cause.status === 401) {
       setAnswers({}); setRecord(null); window.location.assign("/sign-in"); return;
