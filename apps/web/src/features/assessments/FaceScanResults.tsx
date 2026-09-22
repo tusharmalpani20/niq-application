@@ -55,9 +55,9 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
   ];
   const unavailable = groups.flatMap(group => group.metrics).filter(item => item.value === null);
   return <section aria-label="Face scan results" className="@container space-y-4">
-    <div><h3 className="text-lg font-semibold">Face scan results</h3><p className="mt-1 text-xs text-muted-foreground">Scan complete{session.completedAt ? ` · ${new Date(session.completedAt).toLocaleString()}` : ""}</p></div>
-    <dl className="grid grid-cols-2 divide-x divide-border rounded-xl border border-border bg-card py-4">
-      {[{ label: "Wellness score", value: r.wellnessScore }, { label: "Health risk score", value: r.healthRiskScore }].map(item => <div key={item.label} className="min-w-0 px-4"><dt className="text-sm text-muted-foreground">{item.label}</dt><dd className="mt-1 text-2xl font-semibold tabular-nums">{item.value ?? "—"}{item.value !== null && <span className="ml-1 text-base font-normal text-muted-foreground">/100</span>}</dd></div>)}
+    <p role="status" className="text-xs text-muted-foreground">Completed{session.completedAt ? ` · ${new Date(session.completedAt).toLocaleString()}` : ""}</p>
+    <dl className="grid gap-4 rounded-xl border border-border bg-card py-4 @min-[30rem]:grid-cols-3">
+      {[{ label: "NIQ scan score", value: session.score?.status === "SCORED" ? session.score.points : null, unit: "pts" }, { label: "Wellness score", value: r.wellnessScore, unit: "/100" }, { label: "Health risk score", value: r.healthRiskScore, unit: "/100" }].map(item => <div key={item.label} className="min-w-0 px-4"><dt className="text-sm text-muted-foreground">{item.label}</dt><dd className="mt-1 text-2xl font-semibold tabular-nums">{item.value ?? "—"}{item.value != null && <span className="ml-1 text-base font-normal text-muted-foreground">{item.unit}</span>}</dd></div>)}
     </dl>
     <dl className="grid grid-cols-2 gap-3 @min-[44rem]:grid-cols-4">{vitals.map(item => <div key={item.label} className="min-w-0 rounded-xl border border-border bg-card p-3"><dt className="text-xs text-muted-foreground">{item.label}</dt><dd className="mt-2 flex flex-wrap items-baseline gap-x-1 font-semibold tabular-nums"><span className="text-xl">{item.value ?? "—"}</span>{item.value !== null && <span className="text-sm font-normal">{item.unit}</span>}</dd></div>)}</dl>
     {groups.map(group => {
@@ -73,7 +73,6 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
         { label: "Height at scan", value: session.context.heightCm, unit: "cm" },
         { label: "Weight at scan", value: session.context.weightKg, unit: "kg" },
         { label: "Posture", value: scanPostureLabels[session.context.posture], unit: "" },
-        { label: "NIQ face-scan points", value: session.score?.status === "SCORED" ? session.score.points ?? null : null, unit: "" },
       ]}/>
       <p className="mt-2 text-xs text-muted-foreground">Scan inputs stay unchanged when the form is edited. Face-scan points are separate from the questionnaire score.</p>
     </ResultGroup>
