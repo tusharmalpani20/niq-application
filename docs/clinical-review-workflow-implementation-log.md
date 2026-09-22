@@ -48,3 +48,7 @@ Migrations are applied locally. Documentation is maintained in the requested app
 ## Follow-up implementation audit
 
 Audited and fixed stale scoring-result identity, membership/facility authorization race, contact revision/history, pending-scoring scan recovery and recipient refresh. Repaired legacy verification fixtures. All 197 API and 140 web tests pass. See clinical-review-implementation-audit-2026-09-23.md for detailed evidence and commits.
+
+## Reviewed-risk classification extension
+
+Reviewed totals now receive NIQ classification under the pinned rule version, with durable retries, encrypted history and a completion gate. See [reviewed-score-risk-classification.md](reviewed-score-risk-classification.md) for usage semantics, migration and verification. Original NIQ results remain unchanged.
