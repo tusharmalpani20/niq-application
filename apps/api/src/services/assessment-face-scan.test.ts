@@ -24,3 +24,37 @@ test("normalized scoring result preserves provider completion evidence",()=>{
  expect(faceScanResultSchema.parse(result).providerCompletedAt).toBe(result.providerCompletedAt);
  expect(faceScanResultSchema.safeParse({...result,providerCompletedAt:"invalid"}).success).toBe(false);
 });
+
+test("start freezes the configured staging employee and replay ignores later override changes", async () => {
+ const { AssessmentFaceScanService } = await import("./assessment-face-scan");
+ const { AssessmentWorkflowService } = await import("./assessment-workflow");
+ for (const override of [undefined, "spoke-operator-001"]) {
+  const config=loadApplicationConfig({DATABASE_URL:"postgres://unused",SESSION_SECRET:"test-secret-that-is-at-least-32-characters",FACE_SCAN_ENABLED:"true",FACE_SCAN_EMPLOYEE_ID_OVERRIDE:override});
+  let stored:any;
+  const tx={
+   select:()=>({from:()=>({where:async()=>stored?[stored]:[]})}),
+   update:()=>({set:()=>({where:async()=>{}})}),
+   insert:()=>({values:(value:any)=>({returning:async()=>{
+    stored={...value,state:"REQUESTED",active:true,projection:null,failureCode:null,createdAt:new Date(),updatedAt:new Date()};return [stored];
+   }})}),
+  };
+  const db={transaction:async(work:any)=>work(tx)};
+  // Exercise the real snapshot encryption with an in-memory persistence boundary; no database or provider call.
+  const workflow=new AssessmentWorkflowService({db:db as any,config,applicationService:{getPatient:async()=>({dateOfBirth:"1990-05-01",gender:"FEMALE"})} as any});
+  workflow.authorize=async()=>({revision:0,status:"DRAFT",patientId:"patient",workflow:workflow.seal({answers:{height_cm:170,current_weight_kg:65}})}) as any;
+  workflow.audit=async()=>{};
+  const scans=new AssessmentFaceScanService(workflow);
+  scans.transport=async()=>({identity:{origin:"https://scoring.invalid",deploymentId:"deployment",scoringOrganizationId:"client"},credential:"unused"});
+  scans.reconcile=async()=>{};
+  scans.row=async()=>stored;
+  const actor={membershipId:"operator"} as any;
+  const input={revision:0,requestKey:"test-staging-start-key",posture:"resting" as const};
+  const first=await scans.start(actor,"organization","assessment",input,{requestId:"test"});
+  expect(first.context.employeeId).toBe(override??"deployment:operator");
+  expect(JSON.stringify(stored.snapshot)).not.toContain(first.context.employeeId);
+  config.FACE_SCAN_EMPLOYEE_ID_OVERRIDE="changed-staging-operator";
+  const replay=await scans.start(actor,"organization","assessment",input,{requestId:"test"});
+  expect(replay.id).toBe(first.id);
+  expect(replay.context.employeeId).toBe(first.context.employeeId);
+ }
+});

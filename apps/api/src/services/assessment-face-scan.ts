@@ -133,7 +133,8 @@ export class AssessmentFaceScanService {
       const connection = await this.transport(org, undefined, tx);
       const patient = await this.workflow.applicationService.getPatient(actor, org, assessmentRow.patientId) as AssessmentPatient;
       const state = this.workflow.unseal<StoredWorkflow>(assessmentRow.workflow);
-      const snapshot = frozenFaceScanContext(patient, state.answers, `${connection.identity.deploymentId}:${actor.membershipId}`);
+      const employeeId = this.workflow.config.FACE_SCAN_EMPLOYEE_ID_OVERRIDE ?? `${connection.identity.deploymentId}:${actor.membershipId}`;
+      const snapshot = frozenFaceScanContext(patient, state.answers, employeeId);
       const id = createEntityId();
       // Selection changes only for an explicit new attempt, never for delayed evidence.
       await tx.update(assessmentFaceScans).set({ isCurrent: false }).where(and(

@@ -28,6 +28,10 @@ export const applicationConfigSchema = z.object({
   DATABASE_SSL: booleanFromString,
   SCORING_API_URL: optionalUrl,
   FACE_SCAN_ENABLED: booleanFromString,
+  FACE_SCAN_EMPLOYEE_ID_OVERRIDE: z.preprocess(
+    value => typeof value === "string" && !value.trim() ? undefined : value,
+    z.string().trim().min(1).max(128).optional(),
+  ),
   FACE_SCAN_RECONCILE_INTERVAL_MS: z.coerce.number().int().min(5000).max(300000).default(30000),
   SCORING_TIMEOUT_MS: z.coerce.number().int().positive().max(60_000).default(10_000),
   SCORING_CREDENTIAL_ENCRYPTION_KEY: optionalEncryptionKey,
@@ -54,6 +58,9 @@ export const applicationConfigSchema = z.object({
   REPORT_MAX_ASSESSMENT_BYTES: z.coerce.number().int().positive().default(100 * 1024 * 1024),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 }).superRefine((value, context) => {
+  if (value.NODE_ENV !== "development" && value.FACE_SCAN_EMPLOYEE_ID_OVERRIDE) {
+    context.addIssue({ code: "custom", path: ["FACE_SCAN_EMPLOYEE_ID_OVERRIDE"], message: "Face scan employee override is allowed only in development" });
+  }
   if (value.NODE_ENV === "production" && value.DEV_OTP_DELIVERY) {
     context.addIssue({ code: "custom", path: ["DEV_OTP_DELIVERY"], message: "Development OTP delivery is forbidden in production" });
   }

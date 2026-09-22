@@ -46,3 +46,14 @@ describe("configuration", () => {
     expect(loadApplicationConfig({ ...production, PATIENT_DATA_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64") }).PATIENT_DATA_KEY_VERSION).toBe("local-v1");
   });
 });
+
+
+test("employee override is optional, bounded and development-only", () => {
+  const base = { DATABASE_URL: "postgres://localhost/niq", SESSION_SECRET: "a-development-secret-with-32-chars" };
+  expect(loadApplicationConfig(base).FACE_SCAN_EMPLOYEE_ID_OVERRIDE).toBeUndefined();
+  expect(loadApplicationConfig({ ...base, FACE_SCAN_EMPLOYEE_ID_OVERRIDE: " " }).FACE_SCAN_EMPLOYEE_ID_OVERRIDE).toBeUndefined();
+  expect(loadApplicationConfig({ ...base, FACE_SCAN_EMPLOYEE_ID_OVERRIDE: " spoke-operator-001 " }).FACE_SCAN_EMPLOYEE_ID_OVERRIDE).toBe("spoke-operator-001");
+  expect(() => loadApplicationConfig({ ...base, FACE_SCAN_EMPLOYEE_ID_OVERRIDE: "x".repeat(129) })).toThrow();
+  for (const NODE_ENV of ["production", "test"])
+    expect(() => loadApplicationConfig({ ...base, NODE_ENV, PATIENT_DATA_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"), FACE_SCAN_EMPLOYEE_ID_OVERRIDE: "spoke-operator-001" })).toThrow("allowed only in development");
+});
