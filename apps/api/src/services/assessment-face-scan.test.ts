@@ -69,7 +69,7 @@ test("freezes each documented posture and rejects unsupported values", () => {
 });
 
 test("scan recovery cannot rewrite reviewed, completed or previous-cycle evidence", () => {
- for(const status of ["DRAFT","SCORED","PENDING_SCORING","SCORING_UNAVAILABLE"]) {
+ for(const status of ["DRAFT","SCORED","SCORING_PENDING","SCORING_UNAVAILABLE"]) {
   expect(canProjectScan({status,cycle:1},{cycle:1})).toBe(true);
   expect(canProjectScan({status,cycle:1},{cycle:0})).toBe(false);
  }

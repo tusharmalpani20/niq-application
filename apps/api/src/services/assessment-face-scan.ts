@@ -9,6 +9,7 @@ import { decryptCredential } from "../security/credential-encryption";
 import { ServiceError, type Principal, type RequestContext } from "./application";
 import { AssessmentWorkflowService, type StoredWorkflow, type WorkflowExecutor } from "./assessment-workflow";
 import { appendAssessmentHistory } from "./clinical-review-state";
+const recoverableAssessmentStatuses: Array<typeof assessments.$inferSelect.status> = ["DRAFT", "SCORED", "SCORING_PENDING", "SCORING_UNAVAILABLE"];
 type Row = typeof assessmentFaceScans.$inferSelect;
 type Identity = {
   origin: string;
@@ -341,7 +342,7 @@ export class AssessmentFaceScanService {
     return this.dto(await this.row(org, assessment, id));
   }
   async recoverPending() {
-    const rows = await this.db.select().from(assessmentFaceScans).where(and(sql`exists (select 1 from assessments a where a.id=${assessmentFaceScans.assessmentId} and a.cycle=${assessmentFaceScans.cycle} and a.status in ('DRAFT','SCORED','PENDING_SCORING','SCORING_UNAVAILABLE'))`, recoveryCondition, sql`(${assessmentFaceScans.leaseExpiresAt} is null or ${assessmentFaceScans.leaseExpiresAt}<now())`, sql `(${assessmentFaceScans.nextAttemptAt} is null or ${assessmentFaceScans.nextAttemptAt}<=now())`)).orderBy(assessmentFaceScans.updatedAt).limit(10);
+    const rows = await this.db.select().from(assessmentFaceScans).where(and(sql`exists (select 1 from assessments a where a.id=${assessmentFaceScans.assessmentId} and a.cycle=${assessmentFaceScans.cycle} and a.status in (${sql.join(recoverableAssessmentStatuses.map(status => sql`${status}`), sql`, `)}))`, recoveryCondition, sql`(${assessmentFaceScans.leaseExpiresAt} is null or ${assessmentFaceScans.leaseExpiresAt}<now())`, sql `(${assessmentFaceScans.nextAttemptAt} is null or ${assessmentFaceScans.nextAttemptAt}<=now())`)).orderBy(assessmentFaceScans.updatedAt).limit(10);
     for (const row of rows)
       await this.reconcile(row);
   }
@@ -371,5 +372,5 @@ async function boundedResponse(response: Response, max: number) {
 
 /** A delayed provider result cannot rewrite a submitted review or an earlier correction cycle. */
 export function canProjectScan(assessment: {status: string; cycle: number} | undefined, scan: {cycle: number}): boolean {
-  return Boolean(assessment && assessment.cycle === scan.cycle && ["DRAFT", "SCORED", "PENDING_SCORING", "SCORING_UNAVAILABLE"].includes(assessment.status));
+  return Boolean(assessment && assessment.cycle === scan.cycle && recoverableAssessmentStatuses.some(status => status === assessment.status));
 }
