@@ -24,7 +24,7 @@ export class AssessmentScoreReviewService {
   }
   async add(actor: Principal, organizationId: string, assessmentId: string, raw: ScoreReviewInput, context: RequestContext) {
     const parsed = scoreReviewInputSchema.safeParse(raw);
-    if (!parsed.success) throw new ServiceError("VALIDATION_ERROR", "Enter a valid score and optional reason.");
+    if (!parsed.success) throw new ServiceError("VALIDATION_ERROR", "Enter a valid score and a reason for the change.");
     const input = parsed.data;
     return this.service.db.transaction(async tx => {
       const assessment = await this.service.authorize(actor, organizationId, assessmentId, tx, true);

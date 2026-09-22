@@ -46,9 +46,10 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   function cancel() { if (saving) return; setTarget(null); setError(""); if (conflict) { setData(null); setLoadKey(key => key + 1); } setConflict(false); }
   async function save(reset = false) {
     if (!target || !data || inFlight.current || conflict) return;
+    if (!reason.trim()) { setError("Enter a reason for this score change."); return; }
     const number = reset ? null : Number(value);
     if (!reset && (!value.trim() || !Number.isFinite(number) || number! < 0 || number! > Number.MAX_SAFE_INTEGER)) { setError("Enter a valid, non-negative score."); return; }
-    const input: Omit<ScoreReviewInput, "requestKey"> = { expectedRevision: data.revision, targetType: target.targetType, targetId: target.targetId, points: number, reason: reason.trim() || undefined };
+    const input: Omit<ScoreReviewInput, "requestKey"> = { expectedRevision: data.revision, targetType: target.targetType, targetId: target.targetId, points: number, reason: reason.trim() };
     const fingerprint = JSON.stringify(input);
     if (request.current?.fingerprint !== fingerprint) request.current = { fingerprint, key: crypto.randomUUID() };
     inFlight.current = true; setSaving(true); setError("");
@@ -72,13 +73,13 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
       {target.targetType === "item" && data?.sections.some(section => section.overridden && section.items.some(item => item.id === target.targetId)) && <p className="mt-2 text-sm text-muted-foreground">This section has an override. Changing these points will not change its total until the section score is restored.</p>}
       <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(8rem,12rem)_1fr]">
         <label className="grid content-start gap-2 text-sm font-medium">Your score (points)<Input autoFocus type="number" min={0} max={Number.MAX_SAFE_INTEGER} step="any" required value={value} disabled={saving || conflict} onChange={event => setValue(event.target.value)} className="min-h-11"/></label>
-        <label className="grid gap-2 text-sm font-medium">Reason (optional)<Textarea value={reason} maxLength={1000} disabled={saving || conflict} onChange={event => setReason(event.target.value)} placeholder="Add a reason"/></label>
+        <label className="grid gap-2 text-sm font-medium">Reason *<Textarea required value={reason} maxLength={1000} disabled={saving || conflict} onChange={event => setReason(event.target.value)} placeholder="Explain why you are changing this score"/></label>
       </div>
       <p className="mt-3 text-xs text-muted-foreground">Saved with your name and time. Previous changes stay in history.</p>
       <div className="mt-4 flex flex-wrap justify-end gap-2">
-        {target.overridden && <Button variant="link" isDisabled={saving || conflict} onPress={() => { void save(true); }}>Restore {target.targetType === "item" ? "NIQ points" : "calculated score"}</Button>}
+        {target.overridden && <Button variant="link" isDisabled={saving || conflict || !reason.trim()} onPress={() => { void save(true); }}>Restore {target.targetType === "item" ? "NIQ points" : "calculated score"}</Button>}
         <Button variant="outline" isDisabled={saving} onPress={cancel}>Cancel</Button>
-        <Button type="submit" isDisabled={saving || conflict || !value.trim() || Number(value) === target.reviewedPoints}>{saving ? "Saving…" : "Save change"}</Button>
+        <Button type="submit" isDisabled={saving || conflict || !reason.trim() || !value.trim() || Number(value) === target.reviewedPoints}>{saving ? "Saving…" : "Save change"}</Button>
       </div>
     </form> : null;
   return <section className="my-5 min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6" aria-label="Assessment score review">

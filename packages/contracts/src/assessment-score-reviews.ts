@@ -4,7 +4,7 @@ export const scoreReviewInputSchema = z.object({
   expectedRevision: z.number().int().nonnegative(), requestKey: z.string().min(16).max(128),
   targetType: z.enum(["item", "section", "overall"]), targetId: z.string().min(1).max(100).nullable(),
   points: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
-  reason: z.string().trim().max(1000).optional(),
+  reason: z.string().trim().min(1, "Enter a reason for this score change.").max(1000),
 }).strict().refine(v => v.targetType === "overall" ? v.targetId === null : v.targetId !== null, { message: "Choose a valid score target." });
 export type ScoreReviewInput = z.infer<typeof scoreReviewInputSchema>;
 export type ScoreReviewEntry = {

@@ -4,7 +4,7 @@ import { assessmentScoreReviews, assessmentSubmissions } from "../db/schema";
 import type { AssessmentWorkflowService } from "./assessment-workflow";
 import type { Principal } from "./application";
 const actor={membershipId:"actor-1",displayName:"First reviewer"} as Principal;
-const input={expectedRevision:0,requestKey:"review-request-1234",targetType:"item" as const,targetId:"item",points:4};
+const input={reason:"Clinical review",expectedRevision:0,requestKey:"review-request-1234",targetType:"item" as const,targetId:"item",points:4};
 function fixture() {
  const result={formatVersion:2,profile:"NIQ_FINAL_ASSESSMENT",complete:true,score:3,classification:{id:"low",label:"Low",interpretation:""},components:[{id:"item",sectionId:"section",label:"Item",points:3,status:"answered"},{id:"missing",sectionId:"empty",label:"Missing",points:null,status:"unanswered"}],version:"v1",checksum:"a".repeat(64),resultReference:"result-1",calculatedAt:new Date().toISOString(),clinicalUsePermitted:true};
  const rows:any[]=[];const audits:any[]=[];
