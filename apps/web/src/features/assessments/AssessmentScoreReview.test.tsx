@@ -17,7 +17,7 @@ async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[]}
  for(const [key,value] of Object.entries(values))Object.defineProperty(globalThis,key,{value,configurable:true});
  Object.assign(dom.window.HTMLElement.prototype,{attachEvent(){},detachEvent(){}});
  const root=createRoot(document.getElementById("root")!); const flush=()=>new Promise(resolve=>setTimeout(resolve,0));
- try {await act(async()=>{root.render(<AssessmentScoreReview record={record} organizationId="org" onDirtyChange={()=>{}} onSection={()=>{}}/>);await flush();});await run({posts,click:async name=>{const button=[...document.querySelectorAll("button")].find(b=>(b.getAttribute("aria-label")??b.textContent?.trim())===name);if(!button)throw new Error(`Missing ${name}`);await act(async()=>{button.click();await flush();});}});}finally{await act(async()=>root.unmount());dom.window.close();for(const [key,value] of Object.entries(previous))if(value)Object.defineProperty(globalThis,key,value);else delete (globalThis as any)[key];}
+ try {await act(async()=>{root.render(<AssessmentScoreReview record={record} organizationId="org" onDirtyChange={()=>{}} renderScan={()=><p>Scan details</p>} reportsContent={<p>Report details</p>}/>);await flush();});await run({posts,click:async name=>{const button=[...document.querySelectorAll("button")].find(b=>(b.getAttribute("aria-label")??b.textContent?.trim())===name);if(!button)throw new Error(`Missing ${name}`);await act(async()=>{button.click();await flush();});}});}finally{await act(async()=>root.unmount());dom.window.close();for(const [key,value] of Object.entries(previous))if(value)Object.defineProperty(globalThis,key,value);else delete (globalThis as any)[key];}
 }
 test("unreviewed assessment hides reviewed score and history and keeps patient answers read-only",async()=>harness(async({click,posts})=>{expect(document.body.textContent).not.toContain("Reviewed score");expect(document.body.textContent).not.toContain("Score history");await click("Disease status");expect(document.body.textContent).toContain("Metastatic");expect(document.querySelectorAll("input").length).toBe(0);await click("Adjust Stage");expect(document.body.textContent).toContain("Reason (optional)");expect(posts).toHaveLength(0);await click("Cancel");expect(document.querySelector("form")).toBeNull();}));
 test("review history displays all actors and preserves original NIQ points",async()=>harness(async()=>{expect(document.body.textContent).toContain("Reviewed score");expect(document.body.textContent).toContain("Reviewer One");expect(document.body.textContent).toContain("Reviewer Two");expect(document.body.textContent).toContain("Reason not provided");expect(record.answers.stage).toBe("metastatic");expect(result.score).toBe(8);},[entry,{...entry,id:"entry2",revision:2,actorId:"actor2",actorName:"Reviewer Two",previousPoints:10,points:11}]));
@@ -33,7 +33,7 @@ test("expanded sections show unscored answers, counts and scan/report links dire
   expect(document.body.textContent).not.toContain("Partial");
   expect(document.body.textContent).toContain("1/1 answered");
   expect(document.body.textContent).toContain("Face scan unavailable");
-  const reports=[...document.querySelectorAll("button")].find(b=>b.textContent?.includes("View reports"))!;
+  const reports=[...document.querySelectorAll("button")].find(b=>b.textContent?.trim()==="Reports")!;
   expect(reports.parentElement?.lastElementChild?.textContent).toBe("0 reports");
   await click("Disease status");
   const sectionButton=document.querySelector('button[aria-label="Adjust Disease status"]');
@@ -44,3 +44,17 @@ test("item edits explain when a section override preserves its total",async()=>h
   await click("Disease status"); await click("Adjust Stage");
   expect(document.body.textContent).toContain("Changing these points will not change its total");
 },[{...entry,targetType:"section",targetId:"disease"}]));
+
+test("scan and reports expand inline and score edits stay inside their section",async()=>harness(async({click})=>{
+  await click("Face scan");
+  expect(document.getElementById("score-section-face_scan")?.hidden).toBe(false);
+  await click("Reports");
+  expect(document.getElementById("score-section-face_scan")?.hidden).toBe(true);
+  expect(document.getElementById("score-section-reports")?.hidden).toBe(false);
+  await click("Disease status"); await click("Adjust Stage");
+  const form=document.querySelector("form")!;
+  expect(document.getElementById("score-section-disease")?.contains(form)).toBe(true);
+  expect(form.className).not.toContain("bg-primary");
+  expect(document.querySelector('button[aria-label="Adjust total score"]')?.textContent).toBe("");
+  expect(document.querySelector('button[aria-label="Adjust Stage"]')?.textContent).toBe("");
+}));
