@@ -7,6 +7,7 @@ import type { Principal, RequestContext } from "./application";
 import { ServiceError } from "./application";
 import type { AssessmentWorkflowService, WorkflowExecutor, WorkflowRow } from "./assessment-workflow";
 import type { ReportMediaType, StagedReport } from "../storage/report-storage";
+import { appendAssessmentHistory } from "./clinical-review-state";
 export class AssessmentReportWorkflow {
   constructor(private readonly service:AssessmentWorkflowService) {}
   async list(organizationId:string,assessmentId:string):Promise<AssessmentReport[]> {
@@ -17,8 +18,9 @@ export class AssessmentReportWorkflow {
   async edit(actor:Principal,organizationId:string,assessmentId:string,input:z.infer<typeof reportInputSchema>,context:RequestContext,reportId?:string) {
     this.service.clinicalActor(actor,organizationId,"reports.manage");
     await this.service.db.transaction(async tx=>{
-      const row=await this.service.authorize(actor,organizationId,assessmentId,tx,true);this.service.editable(row,input.revision);
+      const row=await this.service.authorize(actor,organizationId,assessmentId,tx,true);this.service.editable(row,input.revision,actor);
       const {revision,...data}=input;
+      const prior=reportId?await tx.select().from(reports).where(eq(reports.id,reportId)):[];
       if(reportId) {
         const [updated]=await tx.update(reports).set({...data,updatedAt:new Date()}).where(and(eq(reports.id,reportId),eq(reports.organizationId,organizationId),eq(reports.assessmentId,assessmentId),isNull(reports.removedAt))).returning();
         if(!updated) throw new ServiceError("NOT_FOUND","Report not found.");
@@ -28,6 +30,7 @@ export class AssessmentReportWorkflow {
         reportId=createEntityId();
         await tx.insert(reports).values({id:reportId,organizationId,assessmentId,creatorId:actor.membershipId,...data});
       }
+      await appendAssessmentHistory(this.service,tx,row,actor,"REPORT_SAVED",{reportId,before:prior[0]??null,after:data});
       await this.bump(tx,row);await this.service.audit(tx,actor,context,assessmentId,"ASSESSMENT_REPORT_SAVED",{reportId});
     });
     return this.service.read(actor,organizationId,assessmentId);
@@ -36,12 +39,13 @@ export class AssessmentReportWorkflow {
   async remove(actor:Principal,organizationId:string,assessmentId:string,reportId:string,revision:number,context:RequestContext,fileId?:string) {
     this.service.clinicalActor(actor,organizationId,"reports.manage");
     const removed=await this.service.db.transaction(async tx=>{
-      const row=await this.service.authorize(actor,organizationId,assessmentId,tx,true);this.service.editable(row,revision);
+      const row=await this.service.authorize(actor,organizationId,assessmentId,tx,true);this.service.editable(row,revision,actor);
       const [group]=await tx.select().from(reports).where(and(eq(reports.id,reportId),eq(reports.organizationId,organizationId),eq(reports.assessmentId,assessmentId),isNull(reports.removedAt)));
       if(!group) throw new ServiceError("NOT_FOUND","Report not found.");
       const candidates=await tx.update(files).set({status:"REMOVED",leaseToken:null,leaseExpiresAt:null,updatedAt:new Date()}).where(and(eq(files.organizationId,organizationId),eq(files.assessmentId,assessmentId),eq(files.reportId,reportId),fileId?eq(files.id,fileId):undefined,sql`${files.status} in ('READY','PENDING','FAILED')`)).returning();
       if(fileId&&!candidates.length) throw new ServiceError("NOT_FOUND","File not found.");
       if(!fileId) await tx.update(reports).set({removedAt:new Date(),updatedAt:new Date()}).where(eq(reports.id,reportId));
+      await appendAssessmentHistory(this.service,tx,row,actor,"REPORT_REMOVED",{report:group,fileId:fileId??null,files:candidates});
       await this.bump(tx,row);await this.service.audit(tx,actor,context,assessmentId,"ASSESSMENT_REPORT_REMOVED",{reportId,...(fileId?{fileId}:{})});
       return candidates;
     });
@@ -51,7 +55,7 @@ export class AssessmentReportWorkflow {
   private async cleanFile(file:typeof files.$inferSelect) {
     if(!this.service.storage) return;
     const snapshots=await this.service.db.select({snapshot:assessmentSubmissions.snapshot}).from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,file.organizationId),eq(assessmentSubmissions.assessmentId,file.assessmentId)));
-    if(snapshots.some(s=>JSON.stringify(this.service.unseal(s.snapshot)).includes(`"${file.id}"`))) return;
+    if(snapshots.some(s=>submissionReferencesReportFile(this.service.unseal(s.snapshot),file.id))) return;
     const scope={organizationId:file.organizationId,patientId:file.patientId,assessmentId:file.assessmentId};
     if(file.objectKey) await this.service.storage.remove(scope,file.objectKey).catch(()=>{});
     if(file.stagingKey) await this.service.storage.discard({scope,stagingKey:file.stagingKey} as StagedReport).catch(()=>{});
@@ -69,7 +73,7 @@ export class AssessmentReportWorkflow {
         if(existing.status==="PENDING") throw new ServiceError("CONFLICT","This upload is still processing. Retry shortly.");
         if(existing.status==="REMOVED") throw new ServiceError("CONFLICT","This upload was removed. Choose the file again.");
       }
-      this.service.editable(row,input.revision);
+      this.service.editable(row,input.revision,actor);
       const [group]=await tx.select().from(reports).where(and(eq(reports.id,reportId),eq(reports.organizationId,organizationId),eq(reports.assessmentId,assessmentId),isNull(reports.removedAt)));
       if(!group) throw new ServiceError("NOT_FOUND","Report not found.");
       if(input.size<1||input.size>this.service.config.REPORT_MAX_FILE_BYTES) throw new ServiceError("VALIDATION_ERROR","The report file is too large or empty.");
@@ -91,11 +95,13 @@ export class AssessmentReportWorkflow {
       const receipt=staged;
       await this.service.db.transaction(async tx=>{
         const row=await this.service.authorize(actor,organizationId,assessmentId,tx,true);
+        this.service.editable(row,row.revision,actor);
         const [live]=await tx.select().from(files).where(eq(files.id,file.id)).for("update");
         if(row.status!=="DRAFT"||live?.status!=="PENDING"||live.leaseToken!==file.leaseToken||!live.leaseExpiresAt||live.leaseExpiresAt.getTime()<=Date.now()) throw new ServiceError("CONFLICT","This upload was cancelled or the assessment changed.");
         await tx.update(files).set({stagingKey:receipt.stagingKey,objectKey:receipt.objectKey,sha256:receipt.sha256}).where(eq(files.id,file.id));
         await storage.promote(receipt);
         await tx.update(files).set({status:"READY",stagingKey:null,leaseToken:null,leaseExpiresAt:null,updatedAt:new Date()}).where(eq(files.id,file.id));
+        await appendAssessmentHistory(this.service,tx,row,actor,"REPORT_FILE_READY",{file:{...file,status:"READY",objectKey:receipt.objectKey,sha256:receipt.sha256,leaseToken:null,leaseExpiresAt:null},reportId});
         await this.bump(tx,row);await this.service.audit(tx,actor,context,assessmentId,"ASSESSMENT_FILE_READY",{fileId:file.id,reportId});
       });
     } catch(error) {
@@ -103,7 +109,7 @@ export class AssessmentReportWorkflow {
       if(staged) {
         // Commit response loss is ambiguous: never delete an object now referenced as ready.
         const [current]=await this.service.db.select().from(files).where(eq(files.id,file.id));
-        if(current?.status!=="READY"||current.objectKey!==staged.objectKey) {await storage.discard(staged).catch(()=>{});await storage.remove(scope,staged.objectKey).catch(()=>{});}
+        if(current?.status!=="READY"||current.objectKey!==staged.objectKey) await this.cleanFile({...file,objectKey:staged.objectKey,stagingKey:staged.stagingKey});
       }
       throw error;
     } finally {clearTimeout(timer);input.signal?.removeEventListener("abort",abort);}
@@ -111,8 +117,12 @@ export class AssessmentReportWorkflow {
   }
   async download(actor:Principal,organizationId:string,assessmentId:string,reportId:string,fileId:string) {
     await this.service.authorize(actor,organizationId,assessmentId);
-    const [file]=await this.service.db.select().from(files).where(and(eq(files.id,fileId),eq(files.organizationId,organizationId),eq(files.assessmentId,assessmentId),eq(files.reportId,reportId),eq(files.status,"READY")));
+    const [file]=await this.service.db.select().from(files).where(and(eq(files.id,fileId),eq(files.organizationId,organizationId),eq(files.assessmentId,assessmentId),eq(files.reportId,reportId)));
     if(!file?.objectKey||!this.service.storage) throw new ServiceError("NOT_FOUND","Report file not found.");
+    if(file.status!=="READY") {
+      const snapshots=await this.service.db.select({snapshot:assessmentSubmissions.snapshot}).from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,organizationId),eq(assessmentSubmissions.assessmentId,assessmentId)));
+      if(!snapshots.some(s=>submissionReferencesReportFile(this.service.unseal(s.snapshot),file.id))) throw new ServiceError("NOT_FOUND","Report file not found.");
+    }
     const data=await this.service.storage.open({organizationId,patientId:file.patientId,assessmentId},file.objectKey);
     return {...data,filename:file.originalFilename,mediaType:file.mediaType};
   }
@@ -133,8 +143,8 @@ export class AssessmentReportWorkflow {
       // Holding the assessment lock fences publication while bounded deletion checks references.
       if(all.some(file=>file.status==="PENDING")) return [];
       const snapshots=await tx.select({snapshot:assessmentSubmissions.snapshot}).from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,organizationId),eq(assessmentSubmissions.assessmentId,assessmentId)));
-      const manifests=snapshots.map(s=>JSON.stringify(this.service.unseal(s.snapshot)));
-      const protectedKeys=new Set(all.filter(file=>file.status==="READY"||manifests.some(s=>s.includes(`"${file.id}"`))).flatMap(file=>[file.objectKey,file.stagingKey].filter((key):key is string=>!!key)));
+      const manifests=snapshots.map(s=>this.service.unseal(s.snapshot));
+      const protectedKeys=new Set(all.filter(file=>file.status==="READY"||manifests.some(s=>submissionReferencesReportFile(s,file.id))).flatMap(file=>[file.objectKey,file.stagingKey].filter((key):key is string=>!!key)));
       return this.service.storage!.cleanup({organizationId,patientId:row.patientId,assessmentId},{olderThan:new Date(Date.now()-24*60*60*1000),limit:200,isProtected:async key=>protectedKeys.has(key)});
     });
   }
@@ -146,4 +156,12 @@ export class AssessmentReportWorkflow {
     });
     for(const file of expired) await this.cleanFile(file);
   }
+}
+
+/** Only evidence manifests retain files; unrelated answer text must not act as a file reference. */
+export function submissionReferencesReportFile(snapshot: unknown, fileId: string): boolean {
+  if (!snapshot || typeof snapshot !== "object" || !("reports" in snapshot) || !Array.isArray(snapshot.reports)) return false;
+  return snapshot.reports.some(report => report && typeof report === "object" &&
+    Array.isArray(report.files) && report.files.some((file: unknown) =>
+      file !== null && typeof file === "object" && "id" in file && file.id === fileId));
 }
