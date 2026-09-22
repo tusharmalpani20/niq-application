@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "assessment_submissions_scope_uidx" ON "assessment_submissions" USING btree ("organization_id","assessment_id","id");--> statement-breakpoint
+ALTER TABLE "assessments" ADD CONSTRAINT "assessments_current_submission_scope_fk" FOREIGN KEY ("organization_id","id","current_submission_id") REFERENCES "public"."assessment_submissions"("organization_id","assessment_id","id") ON DELETE no action ON UPDATE no action;

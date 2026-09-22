@@ -1,4 +1,5 @@
 import {
+  type PgTableExtraConfigValue,
   boolean,
   check,
   date,
@@ -425,7 +426,8 @@ export const assessments = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }),
     ...timestamps,
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    foreignKey({name:"assessments_current_submission_scope_fk",columns:[table.organizationId,table.id,table.currentSubmissionId],foreignColumns:[assessmentSubmissions.organizationId,assessmentSubmissions.assessmentId,assessmentSubmissions.id]}),
     uniqueIndex("assessments_org_id_uidx").on(table.organizationId, table.id),
     uniqueIndex("assessments_org_serial_uidx").on(table.organizationId, table.serialNumber),
     check("assessments_serial_number_ck", sql`${table.serialNumber} > 0`),
@@ -663,7 +665,8 @@ export const assessmentSubmissions = pgTable("assessment_submissions", {
   failureCode: text("failure_code"), failureIssues: jsonb("failure_issues"), leaseToken: text("lease_token"), leaseExpiresAt: timestamp("lease_expires_at",{withTimezone:true}),
   result: jsonb("result"), attemptCount: integer("attempt_count").notNull().default(0),
   nextAttemptAt: timestamp("next_attempt_at",{withTimezone:true}), ...timestamps,
-}, t => [
+}, (t): PgTableExtraConfigValue[] => [
+  uniqueIndex("assessment_submissions_scope_uidx").on(t.organizationId,t.assessmentId,t.id),
   uniqueIndex("assessment_submissions_revision_uidx").on(t.assessmentId,t.revision),
   uniqueIndex("assessment_submissions_key_uidx").on(t.organizationId,t.idempotencyKey),
   foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),
