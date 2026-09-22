@@ -449,12 +449,18 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .clinical-form [data-slot="search-combobox"] input { border:0;background:transparent;box-shadow:none; }
 .facility-dialog.patient-registration-dialog { width:min(760px,calc(100vw - 2rem)); }
 
-/* Paint over the browser's autofill tint without disabling saved-field suggestions. */
-input[data-slot="input"]:is(:autofill, :-webkit-autofill) {
+/* Cover native and shared fields, including grouped password/search inputs.
+   Keep saved-field suggestions enabled; only replace the browser's autofill tint. */
+:is(input, textarea):is(:autofill, :-webkit-autofill) {
   -webkit-text-fill-color: var(--foreground);
   caret-color: var(--foreground);
   box-shadow: inset 0 0 0 1000px var(--card), var(--autofill-focus-shadow, var(--tw-ring-shadow, 0 0 #0000));
 }
-:is(.clinical-form, .inline-form, .branding-form, .auth-card, .toolbar) input[data-slot="input"]:is(:autofill, :-webkit-autofill):focus {
+:is(.clinical-form, .inline-form, .branding-form, .auth-card, .toolbar) input:not([data-slot="input-group-control"]):not([aria-invalid="true"]):is(:autofill, :-webkit-autofill):focus {
   --autofill-focus-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+/* These controls receive their focus/validation ring from the outer group. */
+[data-slot="input-group-control"]:is(:autofill, :-webkit-autofill),
+[data-slot="search-combobox"] input:is(:autofill, :-webkit-autofill) {
+  --autofill-focus-shadow: 0 0 #0000;
 }
