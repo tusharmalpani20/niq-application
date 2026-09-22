@@ -433,3 +433,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .assessment-progress-fill {
   background: linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 65%, var(--card)));
 }
+
+.assessment-workflow .assessment-selected-indicator {
+  box-shadow: 0 4px 8px color-mix(in srgb, var(--primary) 28%, transparent);
+}
