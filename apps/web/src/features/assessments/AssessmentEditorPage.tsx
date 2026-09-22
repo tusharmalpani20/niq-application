@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { PatientHeader } from "@/components/PatientHeader";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowRight, ScanFace } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { AssessmentFields } from "./AssessmentFields";
@@ -139,7 +139,7 @@ function AssessmentEditor({ organizationId, assessmentId, isAdmin }: { organizat
     <PatientHeader patient={record.patient} assessmentLabel={`${record.reference} · ${record.status === "DRAFT" ? "Draft" : record.status.replaceAll("_", " ").toLowerCase()} assessment`} action={<span className="text-xs text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span>} />
     <div className="sticky top-0 z-20 bg-background">
     <div className={`border border-border bg-card px-4 py-3 sm:px-5 ${record.result !== null && !showScoredAnswers ? "rounded-xl" : "rounded-t-xl"}`}>
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2"><div className="min-w-0 basis-full @min-[36rem]:flex-1 @min-[36rem]:basis-auto"><div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm"><span>Questionnaire <strong>{coverage.percent ?? "—"}% complete</strong></span><span className="text-xs text-muted-foreground">{coverage.answered}/{coverage.total} answered</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Overall questionnaire completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverage.percent ?? 0}><div className="h-full bg-primary transition-all" style={{ width: `${coverage.percent ?? 0}%` }} /></div></div><Button variant="ghost" className="h-9 gap-2 text-xs text-muted-foreground" isDisabled={locked} onPress={() => { void selectSection("face_scan"); }}><ScanFace className="size-4" aria-hidden="true"/>{scanStatus}</Button></div>
+      <div className="min-w-0"><div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm"><span>Questionnaire <strong>{coverage.percent ?? "—"}% complete</strong></span><span className="text-xs text-muted-foreground">{coverage.answered}/{coverage.total} answered</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Overall questionnaire completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverage.percent ?? 0}><div className="h-full bg-primary transition-all" style={{ width: `${coverage.percent ?? 0}%` }} /></div></div>
       <p className="mt-2 truncate text-xs text-muted-foreground">{record.patient.displayName} · {record.patient.reference} <span className="mx-1">·</span> {progress.answered}/{progress.required} required answers complete</p>
     </div>
     </div>
