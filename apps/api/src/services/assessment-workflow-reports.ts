@@ -15,7 +15,7 @@ export class AssessmentReportWorkflow {
     return groups.map(group=>({id:group.id,label:group.label,purpose:group.purpose,datePrecision:group.datePrecision as "DAY"|"MONTH",year:group.year,month:group.month,day:group.day,files:attachments.filter(file=>file.reportId===group.id).map(file=>({id:file.id,reportId:file.reportId,originalFilename:file.originalFilename,mediaType:file.mediaType,size:file.size,status:file.status,createdAt:file.createdAt.toISOString()}))}));
   }
   async edit(actor:Principal,organizationId:string,assessmentId:string,input:z.infer<typeof reportInputSchema>,context:RequestContext,reportId?:string) {
-    this.service.clinicalActor(actor,organizationId);
+    this.service.clinicalActor(actor,organizationId,"reports.manage");
     await this.service.db.transaction(async tx=>{
       const row=await this.service.authorize(actor,organizationId,assessmentId,tx,true);this.service.editable(row,input.revision);
       const {revision,...data}=input;
@@ -34,7 +34,7 @@ export class AssessmentReportWorkflow {
   }
   private async bump(tx:WorkflowExecutor,row:WorkflowRow) {await tx.update(assessments).set({revision:row.revision+1,updatedAt:new Date()}).where(eq(assessments.id,row.id));}
   async remove(actor:Principal,organizationId:string,assessmentId:string,reportId:string,revision:number,context:RequestContext,fileId?:string) {
-    this.service.clinicalActor(actor,organizationId);
+    this.service.clinicalActor(actor,organizationId,"reports.manage");
     const removed=await this.service.db.transaction(async tx=>{
       const row=await this.service.authorize(actor,organizationId,assessmentId,tx,true);this.service.editable(row,revision);
       const [group]=await tx.select().from(reports).where(and(eq(reports.id,reportId),eq(reports.organizationId,organizationId),eq(reports.assessmentId,assessmentId),isNull(reports.removedAt)));
@@ -57,7 +57,7 @@ export class AssessmentReportWorkflow {
     if(file.stagingKey) await this.service.storage.discard({scope,stagingKey:file.stagingKey} as StagedReport).catch(()=>{});
   }
   async upload(actor:Principal,organizationId:string,assessmentId:string,reportId:string,input:{revision:number;uploadKey:string;filename:string;mediaType:ReportMediaType;size:number;sha256:string;body:ReadableStream<Uint8Array>;signal?:AbortSignal},context:RequestContext) {
-    this.service.clinicalActor(actor,organizationId);
+    this.service.clinicalActor(actor,organizationId,"reports.manage");
     const storage=this.service.storage;if(!storage) throw new ServiceError("VALIDATION_ERROR","Report storage is not configured.");
     const reserved=await this.service.db.transaction(async tx=>{
       const row=await this.service.authorize(actor,organizationId,assessmentId,tx,true);
@@ -124,6 +124,7 @@ export class AssessmentReportWorkflow {
     return groups.map(group=>({...group,files:attachments.filter(x=>x.reportId===group.id).map(({id,objectKey,sha256,size,mediaType,originalFilename})=>({id,objectKey,sha256,size,mediaType,originalFilename}))}));
   }
   async cleanup(actor:Principal,organizationId:string,assessmentId:string) {
+    this.service.clinicalActor(actor,organizationId,"reports.manage");
     if(!this.service.storage) return [];
     await this.expire(actor,organizationId,assessmentId);
     return this.service.db.transaction(async tx=>{

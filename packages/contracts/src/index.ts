@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { membershipRoleSchema } from "./roles";
+export * from "./roles";
 export * from "./assessment-form";
 export * from "./assessment-form-validation";
 export * from "./assessment-answer-coverage";
@@ -68,7 +70,7 @@ export const authenticatedUserSchema = z.object({
   membershipId: idSchema,
   email: z.email(),
   displayName: z.string().min(1).max(120),
-  role: z.enum(["ORGANIZATION_ADMIN", "MEDICAL", "SUPPORT"]),
+  role: membershipRoleSchema,
   platformRole: z.enum(["USER", "NIQ_ADMIN"]),
 });
 
@@ -93,7 +95,6 @@ export const acceptInvitationSchema = z.object({
   password: z.string().min(8).max(256),
 });
 
-export const membershipRoleSchema = z.enum(["ORGANIZATION_ADMIN", "MEDICAL", "SUPPORT"]);
 export const organizationStatusSchema = z.enum(["ACTIVE", "SUSPENDED", "CLOSED"]);
 export const facilityStatusSchema = z.enum(["ACTIVE", "INACTIVE"]);
 export const organizationSlugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(80);
@@ -212,7 +213,7 @@ export const facilityListResponseSchema = z.object({ items: z.array(facilitySche
 
 export const createInvitationSchema = z.object({
   email: z.email().max(320),
-  role: membershipRoleSchema.default("MEDICAL"),
+  role: membershipRoleSchema.default("OTHER_MEDICAL"),
   facilityIds: z.array(idSchema).max(100).default([]),
 });
 

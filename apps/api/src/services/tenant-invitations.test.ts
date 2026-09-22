@@ -44,7 +44,7 @@ function fixture({ status = "PENDING", missing = false, conflict = false, assign
 describe("tenant invitation lifecycle", () => {
   test("rejects non-admin and cross-organization actors before database access", async () => {
     const f = fixture();
-    await expect(f.service.manageUserInvitation({ ...actor, role: "MEDICAL" }, "tenant", "invite", "regenerate", context)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(f.service.manageUserInvitation({ ...actor, role: "OTHER_MEDICAL" }, "tenant", "invite", "regenerate", context)).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(f.service.manageUserInvitation(actor, "other", "invite", "revoke", context)).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(f.transactions).toBe(0);
   });

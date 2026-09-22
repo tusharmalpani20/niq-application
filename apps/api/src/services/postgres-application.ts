@@ -1,4 +1,4 @@
-import { formatAssessmentReference } from "@niq/application-contracts";
+import { formatAssessmentReference, hasPermission, type Permission } from "@niq/application-contracts";
 import type { ApplicationConfig } from "@niq/application-config";
 import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
@@ -76,9 +76,9 @@ export class PostgresApplicationService implements ApplicationService {
     });
   }
 
-  private ensureOrganizationAccess(actor: Principal, organizationId: string, admin = false) {
+  private ensureOrganizationAccess(actor: Principal, organizationId: string, permission?: Permission) {
     if (actor.platformRole === "NIQ_ADMIN") return;
-    if (actor.organizationId !== organizationId || (admin && actor.role !== "ORGANIZATION_ADMIN")) {
+    if (actor.organizationId !== organizationId || (permission && !hasPermission(actor.role, permission))) {
       throw new ServiceError("FORBIDDEN", "You do not have access to this organization.");
     }
   }
@@ -593,7 +593,7 @@ export class PostgresApplicationService implements ApplicationService {
     return asset;
   }
   async getScoringOrganizationInfo(actor: Principal, organizationId: string, context: RequestContext) {
-    this.ensureOrganizationAccess(actor, organizationId, true);
+    this.ensureOrganizationAccess(actor, organizationId, "scoring.manage");
     if (!this.config.SCORING_API_URL || !this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY) {
       throw new ServiceError("SCORING_NOT_CONFIGURED", "NIQ Scoring is not configured for this application installation.");
     }
@@ -627,7 +627,7 @@ export class PostgresApplicationService implements ApplicationService {
     }
   }
   async activateScoring(actor: Principal, organizationId: string, input: ActivateScoring, context: RequestContext) {
-    this.ensureOrganizationAccess(actor, organizationId, true);
+    this.ensureOrganizationAccess(actor, organizationId, "scoring.manage");
     if (!this.config.SCORING_API_URL || !this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY) {
       throw new ServiceError("SCORING_NOT_CONFIGURED", "NIQ Scoring is not configured for this application installation.");
     }
@@ -664,7 +664,7 @@ export class PostgresApplicationService implements ApplicationService {
     return { connection };
   }
   async disconnectScoring(actor: Principal, organizationId: string, context: RequestContext) {
-    this.ensureOrganizationAccess(actor, organizationId, true);
+    this.ensureOrganizationAccess(actor, organizationId, "scoring.manage");
     await this.db.transaction(async (tx) => {
       const [connection] = await tx.select({ deploymentId: scoringConnections.deploymentId })
         .from(scoringConnections).where(eq(scoringConnections.organizationId, organizationId)).limit(1);
@@ -674,7 +674,7 @@ export class PostgresApplicationService implements ApplicationService {
     });
   }
   async updateOrganization(actor: Principal, organizationId: string, input: UpdateOrganization, context: RequestContext) {
-    this.ensureOrganizationAccess(actor, organizationId, true);
+    this.ensureOrganizationAccess(actor, organizationId, "organization.manage");
     const { logo: upload, ...settings } = input;
     let logo: ReturnType<typeof decodeOrganizationLogo>;
     try {
@@ -700,23 +700,23 @@ export class PostgresApplicationService implements ApplicationService {
     });
   }
   async createFacility(actor: Principal, organizationId: string, input: CreateFacility, context: RequestContext) {
-    this.ensureOrganizationAccess(actor, organizationId, true);
+    this.ensureOrganizationAccess(actor, organizationId, "facilities.manage");
     const [result] = await this.db.insert(facilities).values({ id: createEntityId(), organizationId, ...input, code: input.code.toUpperCase() }).returning();
     await this.audit(this.db, organizationId, context, "FACILITY_CREATED", "facility", result?.id, actor); return result;
   }
   async listFacilities(actor: Principal, organizationId: string) {
-    this.ensureOrganizationAccess(actor, organizationId);
+    this.ensureOrganizationAccess(actor, organizationId, "facilities.read");
     return this.db.select().from(facilities).where(and(eq(facilities.organizationId, organizationId), facilityAccessCondition(actor, organizationId, facilities.id))).orderBy(facilities.name);
   }
   async updateFacility(actor: Principal, organizationId: string, facilityId: string, input: UpdateFacility, context: RequestContext) {
-    this.ensureOrganizationAccess(actor, organizationId, true);
+    this.ensureOrganizationAccess(actor, organizationId, "facilities.manage");
     const values = { ...input, ...(input.code ? { code: input.code.toUpperCase() } : {}), updatedAt: new Date() };
     const [result] = await this.db.update(facilities).set(values).where(and(eq(facilities.organizationId, organizationId), eq(facilities.id, facilityId), facilityAccessCondition(actor, organizationId, facilities.id))).returning();
     if (!result) throw new ServiceError("NOT_FOUND", "Facility not found.");
     await this.audit(this.db, organizationId, context, "FACILITY_UPDATED", "facility", facilityId, actor, { fields: Object.keys(input) }); return result;
   }
   async createPatient(actor: Principal, organizationId: string, input: RegisterPatient, context: RequestContext) {
-    this.ensureOrganizationAccess(actor, organizationId);
+    this.ensureOrganizationAccess(actor, organizationId, "patients.create");
     const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
     const normalizedReference = input.medicalRecordNumber.trim().toUpperCase();
     const profile = JSON.stringify({
@@ -750,7 +750,7 @@ export class PostgresApplicationService implements ApplicationService {
     }
   }
   async listPatients(actor: Principal, organizationId: string) {
-    this.ensureOrganizationAccess(actor, organizationId);
+    this.ensureOrganizationAccess(actor, organizationId, "patients.read");
     const rows = await this.db.select({
       id: patients.id,
       organizationId: patients.organizationId,
@@ -769,7 +769,7 @@ export class PostgresApplicationService implements ApplicationService {
     return rows.map((row) => this.presentPatient(row));
   }
   async getPatient(actor: Principal, organizationId: string, patientLocator: string) {
-    this.ensureOrganizationAccess(actor, organizationId);
+    this.ensureOrganizationAccess(actor, organizationId, "patients.read");
     const reference = /^([A-Z][A-Z0-9]{1,11})-([1-9]\d{0,9})$/.exec(patientLocator);
     const patientMatch = reference
       ? and(eq(patients.referencePrefix, reference[1]!), eq(patients.serialNumber, Number(reference[2])))
@@ -793,7 +793,7 @@ export class PostgresApplicationService implements ApplicationService {
     return this.presentPatient(row);
   }
   async listAssessments(actor: Principal, organizationId: string) {
-    this.ensureOrganizationAccess(actor, organizationId);
+    this.ensureOrganizationAccess(actor, organizationId, "assessments.list");
     const rows = await this.db.select({
       id: assessments.id,
       serialNumber: assessments.serialNumber,
@@ -830,7 +830,7 @@ export class PostgresApplicationService implements ApplicationService {
     }));
   }
   async invitationAccess(actor: Principal, organizationId: string) {
-    this.ensureOrganizationAccess(actor, organizationId, true);
+    this.ensureOrganizationAccess(actor, organizationId, "users.manage");
     if (actor.platformRole === "NIQ_ADMIN") return { allFacilities: true };
     const assigned = await this.db.select({ id: facilityMemberships.facilityId }).from(facilityMemberships)
       .where(and(eq(facilityMemberships.organizationId, organizationId), eq(facilityMemberships.organizationMembershipId, actor.membershipId)));
@@ -838,7 +838,7 @@ export class PostgresApplicationService implements ApplicationService {
   }
 
   async manageUserInvitation(actor: Principal, organizationId: string, invitationId: string, action: "revoke" | "regenerate", context: RequestContext) {
-    this.ensureOrganizationAccess(actor, organizationId, true);
+    this.ensureOrganizationAccess(actor, organizationId, "users.manage");
     const token = action === "regenerate" ? randomToken() : undefined;
     try {
       const invitation = await this.db.transaction(async (tx) => {
@@ -878,7 +878,7 @@ export class PostgresApplicationService implements ApplicationService {
   }
 
   async inviteUser(actor: Principal, organizationId: string, input: CreateInvitation, context: RequestContext) {
-    this.ensureOrganizationAccess(actor, organizationId, true); const token = randomToken(); const invitationId = createEntityId();
+    this.ensureOrganizationAccess(actor, organizationId, "users.manage"); const token = randomToken(); const invitationId = createEntityId();
     if (actor.platformRole !== "NIQ_ADMIN") {
       const assigned = await this.db.select({ facilityId: facilityMemberships.facilityId }).from(facilityMemberships)
         .where(and(eq(facilityMemberships.organizationId, organizationId), eq(facilityMemberships.organizationMembershipId, actor.membershipId)));
@@ -906,14 +906,14 @@ export class PostgresApplicationService implements ApplicationService {
     }
   }
   async listUsers(actor: Principal, organizationId: string) {
-    this.ensureOrganizationAccess(actor, organizationId, true);
+    this.ensureOrganizationAccess(actor, organizationId, "users.manage");
     const records = await this.db.select({ membershipId: organizationMemberships.id, userId: users.id, email: users.email, displayName: users.displayName, status: users.status, role: organizationMemberships.role, active: organizationMemberships.isActive, createdAt: organizationMemberships.createdAt })
       .from(organizationMemberships).innerJoin(users, eq(users.id, organizationMemberships.userId)).where(eq(organizationMemberships.organizationId, organizationId)).orderBy(users.displayName);
     const assignments = await this.db.select({ membershipId: facilityMemberships.organizationMembershipId, id: facilities.id, name: facilities.name }).from(facilityMemberships).innerJoin(facilities, and(eq(facilities.id, facilityMemberships.facilityId), eq(facilities.organizationId, facilityMemberships.organizationId))).where(eq(facilityMemberships.organizationId, organizationId));
     return records.map((record) => ({ ...record, facilities: assignments.filter((item) => item.membershipId === record.membershipId).map(({ id, name }) => ({ id, name })) }));
   }
   async setUserActive(actor: Principal, organizationId: string, membershipId: string, active: boolean, context: RequestContext) {
-    this.ensureOrganizationAccess(actor, organizationId, true);
+    this.ensureOrganizationAccess(actor, organizationId, "users.manage");
     if (membershipId === actor.membershipId && !active) throw new ServiceError("CONFLICT", "You cannot deactivate your own membership.");
     try {
       return await this.db.transaction(async (tx) => {

@@ -36,7 +36,7 @@ export const organizationStatus = pgEnum("organization_status", ["ACTIVE", "SUSP
 export const facilityStatus = pgEnum("facility_status", ["ACTIVE", "INACTIVE"]);
 export const userStatus = pgEnum("user_status", ["INVITED", "ACTIVE", "SUSPENDED", "DEACTIVATED"]);
 export const platformRole = pgEnum("platform_role", ["USER", "NIQ_ADMIN"]);
-export const membershipRole = pgEnum("membership_role", ["ORGANIZATION_ADMIN", "MEDICAL", "SUPPORT"]);
+export const membershipRole = pgEnum("membership_role", ["ORGANIZATION_ADMIN", "DOCTOR", "NUTRITIONIST", "OTHER_MEDICAL", "SUPPORT"]);
 export const invitationStatus = pgEnum("invitation_status", ["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"]);
 export const patientGender = pgEnum("patient_gender", ["FEMALE", "MALE", "OTHER", "UNKNOWN"]);
 export const assessmentStatus = pgEnum("assessment_status", [
@@ -167,7 +167,7 @@ export const organizationMemberships = pgTable(
     id: entityId("id").primaryKey(),
     organizationId: entityId("organization_id").notNull().references(() => organizations.id),
     userId: entityId("user_id").notNull().references(() => users.id),
-    role: membershipRole("role").notNull().default("MEDICAL"),
+    role: membershipRole("role").notNull().default("OTHER_MEDICAL"),
     isActive: boolean("is_active").notNull().default(true),
     ...timestamps,
   },
@@ -211,7 +211,7 @@ export const invitations = pgTable(
     id: entityId("id").primaryKey(),
     organizationId: entityId("organization_id").notNull().references(() => organizations.id),
     email: text("email").notNull(),
-    role: membershipRole("role").notNull().default("MEDICAL"),
+    role: membershipRole("role").notNull().default("OTHER_MEDICAL"),
     platformRole: platformRole("platform_role").notNull().default("USER"),
     tokenHash: text("token_hash").notNull(),
     status: invitationStatus("status").notNull().default("PENDING"),

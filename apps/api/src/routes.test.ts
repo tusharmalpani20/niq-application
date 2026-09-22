@@ -356,7 +356,7 @@ describe("local authentication routes", () => {
     const response = await app.request(`/v1/organizations/${principal.organizationId}/invitations`, {
       method: "POST",
       headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
-      body: JSON.stringify({ email: "user@example.com", role: "MEDICAL", facilityIds: [] }),
+      body: JSON.stringify({ email: "user@example.com", role: "OTHER_MEDICAL", facilityIds: [] }),
     });
     expect(response.status).toBe(201);
     expect((await response.json()).activationToken).toBeUndefined();

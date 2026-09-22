@@ -116,6 +116,7 @@ export class AssessmentFaceScanService {
     requestKey: string;
     posture: FaceScanContext["posture"];
   }, context: RequestContext) {
+    this.workflow.clinicalActor(actor, org, "scans.perform");
     const saved = await this.db.transaction(async (tx) => {
       const assessmentRow = await this.workflow.authorize(actor, org, assessment, tx, true);
       const [replay] = await tx.select().from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId, org), eq(assessmentFaceScans.requestKey, input.requestKey)));
@@ -288,6 +289,7 @@ export class AssessmentFaceScanService {
     }
   }
   async mutate(actor: Principal, org: string, assessment: string, id: string, action: "signal" | "cancel", signal?: FaceScanSignal) {
+    this.workflow.clinicalActor(actor, org, "scans.perform");
     // Keep the assessment lock across the bounded remote call: submission cannot lock it mid-upload.
     await this.db.transaction(async (tx) => {
       const assessmentRow = await this.workflow.authorize(actor, org, assessment, tx, true);

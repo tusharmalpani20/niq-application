@@ -1,4 +1,5 @@
 import type {
+  MembershipRole,
   AcceptInvitation,
   ActivateScoring,
   BootstrapAdmin,
@@ -22,7 +23,7 @@ export type Principal = {
   membershipId: string;
   email: string;
   displayName: string;
-  role: "ORGANIZATION_ADMIN" | "MEDICAL" | "SUPPORT";
+  role: MembershipRole;
   platformRole: "USER" | "NIQ_ADMIN";
 };
 

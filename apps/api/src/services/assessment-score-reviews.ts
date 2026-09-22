@@ -1,3 +1,4 @@
+import { hasPermission } from "@niq/application-contracts";
 import { and, desc, eq } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
 import { assessmentScoreResultSchema } from "../../../../packages/contracts/src/assessment-workflow";
@@ -25,9 +26,11 @@ export class AssessmentScoreReviewService {
   }
   async read(actor: Principal, organizationId: string, assessmentId: string) {
     await this.service.authorize(actor, organizationId, assessmentId);
-    return (await this.load(this.service.db, organizationId, assessmentId)).projection;
+    const { projection } = await this.load(this.service.db, organizationId, assessmentId);
+    return { ...projection, canAdjust: projection.canAdjust && hasPermission(actor.role, "scores.review") };
   }
   async add(actor: Principal, organizationId: string, assessmentId: string, raw: ScoreReviewInput, context: RequestContext) {
+    this.service.clinicalActor(actor, organizationId, "scores.review");
     const parsed = scoreReviewInputSchema.safeParse(raw);
     if (!parsed.success) throw new ServiceError("VALIDATION_ERROR", "Enter a valid score and a reason for the change.");
     const input = parsed.data;

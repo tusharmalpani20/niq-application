@@ -47,7 +47,7 @@ test("start freezes the configured staging employee and replay ignores later ove
   scans.transport=async()=>({identity:{origin:"https://scoring.invalid",deploymentId:"deployment",scoringOrganizationId:"client"},credential:"unused"});
   scans.reconcile=async()=>{};
   scans.row=async()=>stored;
-  const actor={membershipId:"operator"} as any;
+  const actor={membershipId:"operator",role:"DOCTOR",platformRole:"USER",organizationId:"organization"} as any;
   const input={revision:0,requestKey:"test-staging-start-key",posture:"resting" as const};
   const first=await scans.start(actor,"organization","assessment",input,{requestId:"test"});
   expect(first.context.employeeId).toBe(override??"deployment:operator");

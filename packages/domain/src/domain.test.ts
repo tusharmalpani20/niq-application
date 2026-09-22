@@ -39,7 +39,7 @@ describe("identity policy", () => {
   test("normalizes email and requires MFA for privileged users", () => {
     expect(normalizeEmail(" Admin@Example.COM ")).toBe("admin@example.com");
     expect(requiresMfa("ORGANIZATION_ADMIN")).toBe(true);
-    expect(requiresMfa("MEDICAL")).toBe(false);
-    expect(requiresMfa("MEDICAL", true)).toBe(true);
+    expect(requiresMfa("OTHER_MEDICAL")).toBe(false);
+    expect(requiresMfa("OTHER_MEDICAL", true)).toBe(true);
   });
 });

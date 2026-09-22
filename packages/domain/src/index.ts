@@ -26,7 +26,7 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-export function requiresMfa(role: "ORGANIZATION_ADMIN" | "MEDICAL" | "SUPPORT", platformAdmin = false): boolean {
+export function requiresMfa(role: string, platformAdmin = false): boolean {
   return platformAdmin || role === "ORGANIZATION_ADMIN";
 }
 

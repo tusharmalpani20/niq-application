@@ -1,5 +1,5 @@
 import type { ApplicationConfig } from "@niq/application-config";
-import { formatAssessmentReference, clearInactiveAssessmentAnswers, buildAssessmentForm, getAssessmentCompletion, getScoringAssessmentAnswers, validateAssessmentAnswers, type FormAnswers, type AssessmentFormManifest } from "@niq/application-contracts";
+import { hasPermission, type Permission, formatAssessmentReference, clearInactiveAssessmentAnswers, buildAssessmentForm, getAssessmentCompletion, getScoringAssessmentAnswers, validateAssessmentAnswers, type FormAnswers, type AssessmentFormManifest } from "@niq/application-contracts";
 import type { AssessmentWorkflow, AssessmentPatient, AssessmentInitialization } from "../../../../packages/contracts/src/assessment-workflow";
 import { createEntityId, selectAssessmentHeight } from "@niq/application-domain";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
@@ -55,7 +55,7 @@ export class AssessmentWorkflowService {
     return {identity,baseUrl:this.config.SCORING_API_URL,credential:decryptCredential(connection.encryptedCredential,connection.credentialIv,this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY),requestId:context.requestId,timeoutMs:this.config.SCORING_TIMEOUT_MS,fetcher:this.fetcher};
   }
   async initialize(actor:Principal,organizationId:string,input:{patientId:string;requestKey:string},context:RequestContext):Promise<AssessmentInitialization> {
-    this.clinicalActor(actor,organizationId);
+    this.clinicalActor(actor,organizationId,"assessments.edit");
     const patient=await this.applicationService.getPatient(actor,organizationId,input.patientId) as AssessmentPatient;
     if(!patient.homeFacility) throw new ServiceError("VALIDATION_ERROR","The patient needs an active facility.");
     const [facility]=await this.db.select().from(facilities).where(and(eq(facilities.id,patient.homeFacility.id),eq(facilities.organizationId,organizationId),eq(facilities.status,"ACTIVE")));
@@ -69,8 +69,8 @@ export class AssessmentWorkflowService {
     if(!saved||saved.patientId!==patient.id) throw new ServiceError("CONFLICT","Initialization request conflict.");
     return this.retryInitialization(actor,organizationId,saved.id,context);
   }
-  clinicalActor(actor:Principal,organizationId:string) {
-    if(actor.platformRole!=="USER"||actor.organizationId!==organizationId||!['ORGANIZATION_ADMIN','MEDICAL'].includes(actor.role)) throw new ServiceError("FORBIDDEN","A clinical organization membership is required.");
+  clinicalActor(actor:Principal,organizationId:string,permission:Permission="assessments.read") {
+    if(actor.platformRole!=="USER"||actor.organizationId!==organizationId||!hasPermission(actor.role,permission)) throw new ServiceError("FORBIDDEN","A clinical organization membership is required.");
   }
   async getInitialization(actor:Principal,organizationId:string,id:string) {
     this.clinicalActor(actor,organizationId);
@@ -85,7 +85,7 @@ export class AssessmentWorkflowService {
     return {...initializationDto(row),assessmentReference:assessment?formatAssessmentReference(assessment.serialNumber):null};
   }
   async retryInitialization(actor:Principal,organizationId:string,id:string,context:RequestContext):Promise<AssessmentInitialization> {
-    this.clinicalActor(actor,organizationId);
+    this.clinicalActor(actor,organizationId,"assessments.edit");
     const row=await this.getInitialization(actor,organizationId,id);
     if(row.status==="READY") return this.initializationDto(row);
     const token=crypto.randomUUID();const now=new Date();
@@ -137,7 +137,7 @@ export class AssessmentWorkflowService {
     return {id:row.id,reference:formatAssessmentReference(row.serialNumber),serialNumber:row.serialNumber,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,patient,answers,manifest:state.manifest,progress:getAssessmentCompletion(state.manifest,answers),reports:await this.reports.list(organizationId,id),reportLimits:{fileBytes:this.config.REPORT_MAX_FILE_BYTES,filesPerReport:this.config.REPORT_MAX_FILES_PER_GROUP,reportsPerAssessment:this.config.REPORT_MAX_GROUPS,assessmentBytes:this.config.REPORT_MAX_ASSESSMENT_BYTES},binding:{version:state.binding.version,checksum:state.binding.checksum},result:submission?.result?this.unseal(submission.result):null,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode,nextRetryAt:submission.nextAttemptAt?.toISOString()??null,issues:submission.failureIssues?this.unseal(submission.failureIssues):[]}:null,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
   }
   async save(actor:Principal,organizationId:string,id:string,input:{revision:number;answers:FormAnswers},context:RequestContext) {
-    this.clinicalActor(actor,organizationId);
+    this.clinicalActor(actor,organizationId,"assessments.edit");
     await this.db.transaction(async tx=>{
       const row=await this.authorize(actor,organizationId,id,tx,true);this.editable(row,input.revision);
       const state=this.unseal<StoredWorkflow>(row.workflow);
@@ -153,7 +153,7 @@ export class AssessmentWorkflowService {
     return this.read(actor,organizationId,id);
   }
   async submit(actor:Principal,organizationId:string,id:string,revision:number,context:RequestContext) {
-    this.clinicalActor(actor,organizationId);
+    this.clinicalActor(actor,organizationId,"assessments.submit");
     await this.db.transaction(async tx=>{
       const row=await this.authorize(actor,organizationId,id,tx,true);
       if(row.status!=="DRAFT") return; // Response-loss replay uses the already frozen submission.
@@ -176,7 +176,7 @@ export class AssessmentWorkflowService {
     return this.retrySubmission(actor,organizationId,id,context);
   }
   async retrySubmission(actor:Principal,organizationId:string,id:string,context:RequestContext,operator=false) {
-    this.clinicalActor(actor,organizationId);if(operator&&actor.role!=="ORGANIZATION_ADMIN")throw new ServiceError("FORBIDDEN","An organization administrator must reconcile this request.");await this.authorize(actor,organizationId,id);
+    this.clinicalActor(actor,organizationId,"assessments.submit");if(operator&&!hasPermission(actor.role,"assessments.reconcile"))throw new ServiceError("FORBIDDEN","An organization administrator must reconcile this request.");await this.authorize(actor,organizationId,id);
     const token=crypto.randomUUID();const now=new Date();
     const [submission]=await this.db.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,organizationId),eq(assessmentSubmissions.assessmentId,id))).orderBy(desc(assessmentSubmissions.createdAt)).limit(1);
     if(!submission) throw new ServiceError("CONFLICT","Submit the assessment first.");
@@ -217,7 +217,7 @@ export class AssessmentWorkflowService {
   }
   /** Authorized recovery is bounded; remote calls always reuse persisted references and keys. */
   async recover(actor:Principal,organizationId:string,context:RequestContext) {
-    this.clinicalActor(actor,organizationId);
+    this.clinicalActor(actor,organizationId,"assessments.submit");
     await this.applicationService.getOrganization(actor,organizationId);
     const now=new Date().toISOString();
     const pending=await this.db.select().from(assessmentInitializations).where(and(
@@ -254,7 +254,7 @@ export class AssessmentWorkflowService {
     return {initializations,checkedAssessments:rows.length,skippedResources};
   }
   async updateContact(actor:Principal,organizationId:string,patientId:string,phone:string,context:RequestContext={requestId:"patient-contact-update"}) {
-    this.clinicalActor(actor,organizationId);await this.applicationService.getPatient(actor,organizationId,patientId);
+    this.clinicalActor(actor,organizationId,"assessments.edit");await this.applicationService.getPatient(actor,organizationId,patientId);
     await this.db.transaction(async tx=>{
       const [row]=await tx.select().from(patients).where(and(eq(patients.id,patientId),eq(patients.organizationId,organizationId),facilityAccessCondition(actor,organizationId,patients.homeFacilityId))).for("update");
       if(!row) throw new ServiceError("NOT_FOUND","Patient not found.");

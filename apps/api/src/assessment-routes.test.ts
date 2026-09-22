@@ -3,7 +3,7 @@ import { createApp } from "./app";
 import type { ApplicationService, Principal } from "./services/application";
 import type { AssessmentWorkflowService } from "./services/assessment-workflow";
 
-const actor: Principal = { userId: "01J00000000000000000000001", organizationId: "01J00000000000000000000002", membershipId: "01J00000000000000000000003", email: "qa@example.invalid", displayName: "QA", role: "MEDICAL", platformRole: "USER" };
+const actor: Principal = { userId: "01J00000000000000000000001", organizationId: "01J00000000000000000000002", membershipId: "01J00000000000000000000003", email: "qa@example.invalid", displayName: "QA", role: "OTHER_MEDICAL", platformRole: "USER" };
 const path = `/v1/organizations/${actor.organizationId}/assessments/01J00000000000000000000004`;
 function harness() {
   let saves = 0;

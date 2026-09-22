@@ -12,7 +12,7 @@ describe.skipIf(!process.env.FACILITY_TEST_SOCKET)("facility access against Post
   const client = postgres({ host: process.env.FACILITY_TEST_SOCKET, port: 55439, database: "postgres", max: 1, prepare: false });
   const config = { SESSION_SECRET: "facility-test-secret", PATIENT_DATA_KEY_VERSION: "v1" } as ApplicationConfig;
   const service = new PostgresApplicationService(drizzle(client), config, { deliver: async () => {} });
-  const actor: Principal = { userId: "user", membershipId: "restricted", organizationId: "org", email: "test@example.com", displayName: "Test", role: "MEDICAL", platformRole: "USER" };
+  const actor: Principal = { userId: "user", membershipId: "restricted", organizationId: "org", email: "test@example.com", displayName: "Test", role: "OTHER_MEDICAL", platformRole: "USER" };
   beforeAll(async () => {
     await client`create temporary table facility_memberships (organization_id text, organization_membership_id text, facility_id text)`;
     await client`create temporary table facilities (id text, organization_id text, name text, code text, timezone text default 'UTC', status text default 'ACTIVE', created_at timestamptz default now(), updated_at timestamptz default now())`;
@@ -68,6 +68,6 @@ describe.skipIf(!process.env.FACILITY_TEST_SOCKET)("facility access against Post
     expect((await service.listPatients(changing, "org")).map((row) => row.id)).toEqual(["patient-a"]);
     await client`update facility_memberships set facility_id = 'b' where organization_membership_id = 'changing'`;
     expect((await service.listPatients(changing, "org")).map((row) => row.id)).toEqual(["patient-b"]);
-    await expect(service.inviteUser({ ...actor, role: "ORGANIZATION_ADMIN" }, "org", { email: "fixture@example.com", role: "MEDICAL", facilityIds: [] }, { requestId: "test" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(service.inviteUser({ ...actor, role: "ORGANIZATION_ADMIN" }, "org", { email: "fixture@example.com", role: "OTHER_MEDICAL", facilityIds: [] }, { requestId: "test" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

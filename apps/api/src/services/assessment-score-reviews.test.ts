@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { AssessmentScoreReviewService } from "./assessment-score-reviews";
 import { assessmentScoreReviews, assessmentSubmissions, assessmentFaceScans } from "../db/schema";
-import type { AssessmentWorkflowService } from "./assessment-workflow";
+import { AssessmentWorkflowService } from "./assessment-workflow";
 import type { Principal } from "./application";
-const actor={membershipId:"actor-1",displayName:"First reviewer"} as Principal;
+const actor={role:"DOCTOR",platformRole:"USER",organizationId:"org",membershipId:"actor-1",displayName:"First reviewer"} as Principal;
 const input={reason:"Clinical review",expectedRevision:0,requestKey:"review-request-1234",targetType:"item" as const,targetId:"item",points:4};
 function fixture() {
  const scans:any[]=[];
@@ -11,7 +11,7 @@ function fixture() {
  const rows:any[]=[];const audits:any[]=[];
  const tx:any={select:()=>({from:(table:any)=>({where:()=>({orderBy:()=>table===assessmentSubmissions?{limit:async()=>[{id:"submission",status:"SUCCEEDED",result}]}:Promise.resolve(table===assessmentFaceScans ? [...scans] : [...rows])})})}),insert:(table:any)=>({values:async(value:any)=>{expect(table).toBe(assessmentScoreReviews);rows.push(value);}})};
  let denied=false, auditFailure=false;
- const workflow={db:{...tx,transaction:async(fn:any)=>{const length=rows.length;try{return await fn(tx);}catch(e){rows.splice(length);throw e;}}},authorize:async()=>{if(denied)throw new Error("denied");return {status:"SCORED"};},unseal:(value:any)=>structuredClone(value),seal:(value:any)=>structuredClone(value),audit:async(...args:any[])=>{if(auditFailure)throw new Error("audit failed");audits.push(args);}} as unknown as AssessmentWorkflowService;
+ const workflow={clinicalActor:AssessmentWorkflowService.prototype.clinicalActor,db:{...tx,transaction:async(fn:any)=>{const length=rows.length;try{return await fn(tx);}catch(e){rows.splice(length);throw e;}}},authorize:async()=>{if(denied)throw new Error("denied");return {status:"SCORED"};},unseal:(value:any)=>structuredClone(value),seal:(value:any)=>structuredClone(value),audit:async(...args:any[])=>{if(auditFailure)throw new Error("audit failed");audits.push(args);}} as unknown as AssessmentWorkflowService;
  return {service:new AssessmentScoreReviewService(workflow),scans,rows,audits,result,deny:()=>denied=true,failAudit:()=>auditFailure=true};
 }
 test("reviews preserve original result, replay idempotently and retain all reviewers",async()=>{
@@ -70,5 +70,15 @@ test("scan edits reject unavailable, previous, unknown and unscored sessions", a
   f.scans.splice(0,f.scans.length,scan);
   await expect(f.service.add(actor,"org","assessment",scanInput,{requestId:"invalid"})).rejects.toMatchObject({code:"VALIDATION_ERROR"});
  }
+ expect(f.rows).toHaveLength(0);
+});
+
+for (const role of ["DOCTOR", "NUTRITIONIST", "OTHER_MEDICAL", "ORGANIZATION_ADMIN"] as const) test(`${role} can review clinical scores`, async () => {
+ const f=fixture(); await f.service.add({...actor,role},"org","assessment",input,{requestId:"role"}); expect(f.rows).toHaveLength(1);
+});
+test("support and cross-tenant actors cannot change scores", async () => {
+ const f=fixture();
+ await expect(f.service.add({...actor,role:"SUPPORT"},"org","assessment",input,{requestId:"role"})).rejects.toMatchObject({code:"FORBIDDEN"});
+ await expect(f.service.add(actor,"other-org","assessment",input,{requestId:"role"})).rejects.toMatchObject({code:"FORBIDDEN"});
  expect(f.rows).toHaveLength(0);
 });
