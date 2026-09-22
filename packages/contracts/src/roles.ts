@@ -15,6 +15,7 @@ export const permissions = [
   "patients.read", "patients.create", "patients.edit", "assessments.list", "assessments.read",
   "assessments.edit", "assessments.submit", "assessments.reconcile",
   "scans.perform", "reports.manage", "scores.review", "facilities.read",
+  "reviews.submit", "reviews.claim", "reviews.transfer", "reviews.complete", "reviews.assign", "reviews.return",
   "facilities.manage", "users.manage", "organization.manage", "scoring.manage",
 ] as const;
 export type Permission = typeof permissions[number];
@@ -22,13 +23,14 @@ const supportPermissions: readonly Permission[] = ["patients.read", "patients.cr
 const clinicalPermissions: readonly Permission[] = [
   ...supportPermissions, "assessments.read", "assessments.edit", "assessments.submit",
   "scans.perform", "reports.manage", "scores.review",
+  "reviews.submit", "reviews.claim", "reviews.transfer", "reviews.complete", "reviews.return",
 ];
 
 /** Roles remain distinct even while their initial permission sets are identical.
  * Organisation, active membership and facility checks must still run on the server.
  */
 export const rolePermissions: Readonly<Record<MembershipRole, readonly Permission[]>> = {
-  ORGANIZATION_ADMIN: [...permissions],
+  ORGANIZATION_ADMIN: permissions.filter(permission => !["scores.review", "reviews.claim", "reviews.complete"].includes(permission)),
   DOCTOR: [...clinicalPermissions],
   NUTRITIONIST: [...clinicalPermissions],
   OTHER_MEDICAL: [...clinicalPermissions],

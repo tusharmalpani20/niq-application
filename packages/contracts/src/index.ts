@@ -438,3 +438,5 @@ export type ResendMfaRequest = z.infer<typeof resendMfaRequestSchema>;
 export * from "./face-scan";
 
 export * from "./assessment-score-reviews";
+
+export * from "./clinical-review";

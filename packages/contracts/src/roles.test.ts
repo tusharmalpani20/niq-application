@@ -12,9 +12,9 @@ describe("organisation roles", () => {
       for (const permission of ["users.manage", "facilities.manage", "organization.manage", "scoring.manage", "assessments.reconcile"] as const) expect(hasPermission(role, permission)).toBe(false);
     }
   });
-  test("admin has all permissions and support retains only registration and list access", () => {
+  test("admin has management permissions without clinical review and support retains only registration and list access", () => {
     for (const permission of permissions) {
-      expect(hasPermission("ORGANIZATION_ADMIN", permission)).toBe(true);
+      expect(hasPermission("ORGANIZATION_ADMIN", permission)).toBe(!["scores.review", "reviews.claim", "reviews.complete"].includes(permission));
       expect(hasPermission("SUPPORT", permission)).toBe(["patients.read", "patients.create", "patients.edit", "assessments.list", "facilities.read"].includes(permission));
       expect(hasPermission("MEDICAL", permission)).toBe(false);
       expect(hasPermission("toString", permission)).toBe(false);
