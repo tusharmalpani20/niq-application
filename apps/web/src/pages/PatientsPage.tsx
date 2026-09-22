@@ -87,7 +87,7 @@ export function PatientsPage() {
   const currentPage = Math.min(page, pageCount);
   const visiblePatients = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const columns: Array<DataTableColumn<PatientRow>> = [
-    { id: "patient", header: "Patient", cell: ({ row }) => <Link className="grid gap-1 text-foreground hover:underline" to={`/patients/${row.original.reference}`}><strong>{row.original.displayName}</strong><span className="text-xs text-muted-foreground">{row.original.reference}</span></Link> },
+    { id: "patient", header: "Patient", cell: ({ row }) => <Link className="grid gap-1 text-foreground hover:underline" to={`/patients/${row.original.reference}`}><span className="font-normal">{row.original.displayName}</span><span className="text-xs text-muted-foreground">{row.original.reference}</span></Link> },
     { id: "ageGender", header: "Age / gender", cell: ({ row }) => `${row.original.age ?? "—"} · ${row.original.gender}` },
     { accessorKey: "facility", header: "Facility" }, { id: "lastAssessment", header: "Last assessment", cell: ({ row }) => assessmentState === "error" ? "Unavailable" : assessmentState === "loading" ? "Loading…" : row.original.lastAssessment ? <DateDisplay value={row.original.lastAssessment} /> : "No assessments" },
     { id: "open", header: () => <span className="sr-only">Open</span>, cell: ({ row }) => <RouterButtonLink variant="ghost" size="icon-sm" to={`/patients/${row.original.reference}`} aria-label={`Open ${row.original.reference}`}><Icon name="chevron" size={18}/></RouterButtonLink> },
@@ -112,7 +112,7 @@ export function PatientsPage() {
       <Select aria-label="Filter by gender" selectedKey={gender} onSelectionChange={(key) => { setGender(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All genders</SelectItem><SelectItem id="Female">Female</SelectItem><SelectItem id="Male">Male</SelectItem><SelectItem id="Other">Other</SelectItem><SelectItem id="Unknown">Unknown</SelectItem></SelectContent></Select>
     </div>
     {assessmentState === "error" && <Alert><AlertDescription>Assessment history could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button></AlertDescription></Alert>}
-    <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><Link className="mobile-data-card" to={`/patients/${patient.reference}`} key={patient.id}><div><strong>{patient.displayName}</strong><span>{patient.reference} · {patient.age} · {patient.gender}</span></div><span>{patient.facility}</span></Link>) : emptyContent}</div>
+    <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><Link className="mobile-data-card" to={`/patients/${patient.reference}`} key={patient.id}><div><div className="font-normal">{patient.displayName}</div><span>{patient.reference} · {patient.age} · {patient.gender}</span></div><span>{patient.facility}</span></Link>) : emptyContent}</div>
       <div className="desktop-table p-5">{visiblePatients.length ? <DataTable columns={columns} data={visiblePatients} label="Patients" /> : emptyContent}</div>
     </section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Patients pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
@@ -236,7 +236,7 @@ export function PatientDetailPage() {
       <TabsContent id="assessments">
         <Card className="surface p-5">
           {historyState === "loading" ? <p>Loading assessments…</p> : historyState === "error" ? <div className="grid gap-3"><p>Assessment history could not be loaded.</p><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></div> : history.length ? <DataTable label="Patient assessments" data={history} columns={[
-            { id: "reference", header: "Assessment", cell: ({ row }) => <Link className="text-foreground hover:underline font-semibold" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> },
+            { id: "reference", header: "Assessment", cell: ({ row }) => <Link className="text-foreground hover:underline font-normal" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> },
             { id: "date", header: "Started", cell: ({ row }) => <Link className="text-foreground underline" to={`/assessments/${row.original.reference}`}><DateDisplay value={row.original.createdAt} /></Link> },
             { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "No facility" },
             { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
