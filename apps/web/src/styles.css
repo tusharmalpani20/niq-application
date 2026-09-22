@@ -422,7 +422,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 /* Selected assessment controls use the organisation colour with restrained depth. */
 .assessment-workflow .assessment-choice[data-selected] {
-  background: linear-gradient(120deg, color-mix(in srgb, var(--primary) 12%, var(--card)), color-mix(in srgb, var(--primary) 3%, var(--card)));
+  background-color: color-mix(in srgb, var(--primary) 7%, var(--card));
   box-shadow: 0 2px 5px color-mix(in srgb, var(--primary) 9%, transparent);
 }
 .assessment-active-step {
