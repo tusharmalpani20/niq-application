@@ -271,8 +271,9 @@ export class AssessmentWorkflowService {
   async updateContact(actor:Principal,organizationId:string,patientId:string,phone:string,context:RequestContext={requestId:"patient-contact-update"},assessmentContext?:{assessmentId:string;revision:number}) {
     this.clinicalActor(actor,organizationId,"assessments.edit");await this.applicationService.getPatient(actor,organizationId,patientId);
     await this.db.transaction(async tx=>{
+      let assessment: WorkflowRow | undefined;
       if(assessmentContext) {
-        const assessment = await this.authorize(actor,organizationId,assessmentContext.assessmentId,tx,true);
+        assessment = await this.authorize(actor,organizationId,assessmentContext.assessmentId,tx,true);
         if(assessment.patientId!==patientId) throw new ServiceError("NOT_FOUND","Patient not found for assessment.");
         this.editable(assessment,assessmentContext.revision,actor);
       }
@@ -281,6 +282,7 @@ export class AssessmentWorkflowService {
       const key=patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY,this.config.SESSION_SECRET);
       const profile=JSON.parse(decryptPatientData(row.encryptedProfile,key));
       await tx.update(patients).set({encryptedProfile:encryptPatientData(JSON.stringify({...profile,phone}),key),updatedAt:new Date()}).where(eq(patients.id,patientId));
+      if(assessment) await appendAssessmentHistory(this,tx,assessment,actor,"PATIENT_CONTACT_UPDATED",{patientId,before:{phone:profile.phone??null},after:{phone}});
       await tx.insert(auditEvents).values({id:createEntityId(),organizationId,actorMembershipId:actor.membershipId,actorType:"USER",action:"PATIENT_CONTACT_UPDATED",resourceType:"PATIENT",resourceId:patientId,requestId:context.requestId,metadata:{changedKeys:["phone"]}});
     });
     return this.applicationService.getPatient(actor,organizationId,patientId);

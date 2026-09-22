@@ -282,6 +282,18 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   expect((await scans.row(org,assessment,uncertain.id)).active).toBe(true);
  });
 
+ test("assessment contact corrections preserve encrypted before and after history",async()=>{
+  const assessment=(await service.initialize(actor,org,{patientId:patient,requestKey:"contact-history-audit-12345"},context)).assessmentId!;
+  const draft=await service.read(actor,org,assessment);
+  const before=await service.applicationService.getPatient(actor,org,patient) as {phone?:string};
+  await service.updateContact(actor,org,patient,"9876543210",context,{assessmentId:assessment,revision:draft.revision});
+  const events=await db.select().from(tables.assessmentHistory).where(eq(tables.assessmentHistory.assessmentId,assessment));
+  const event=events.find(e=>e.kind==="PATIENT_CONTACT_UPDATED")!;
+  expect(event).toBeDefined();
+  expect(service.unseal<any>(event.payload)).toMatchObject({patientId:patient,before:{phone:before.phone??null},after:{phone:"9876543210"},actor:{membershipId:actor.membershipId}});
+  expect(JSON.stringify(event.payload)).not.toContain("9876543210");
+ });
+
  test("real correction saves and rescoring preserve binding, history and explicit clinical resubmission across cycles",async()=>{
   behavior="success";
   const assessment=(await service.initialize(actor,org,{patientId:patient,requestKey:"clinical-full-correction-12345"},context)).assessmentId!;
