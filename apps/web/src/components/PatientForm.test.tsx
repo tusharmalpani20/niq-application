@@ -12,6 +12,8 @@ test("patient edit prefills demographics, keeps current inactive facility and us
   expect(html).toContain('value="20/03/1999"');
   expect(html).toContain('placeholder="dd/mm/yyyy"');
   expect(html).toContain('value="patient@example.com"');
+  expect(html).toContain('inputMode="numeric"');
+  expect(html).toContain('pattern="[0-9]*"');
   expect(html).toContain("Save changes");
   expect(html).not.toContain('type="date"');
   expect(html).not.toContain("Add an active facility");

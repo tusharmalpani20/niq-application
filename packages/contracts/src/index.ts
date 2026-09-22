@@ -310,6 +310,8 @@ export const bootstrapAdminSchema = createOrganizationSchema.extend({
 
 export const patientGenderSchema = z.enum(["FEMALE", "MALE", "OTHER", "UNKNOWN"]);
 
+export const patientPhoneSchema = z.string().trim().max(40).regex(/^\d*$/, "Mobile number must contain digits only.");
+
 export const registerPatientSchema = z.object({
   medicalRecordNumber: z.string().trim().min(1).max(120),
   homeFacilityId: idSchema,
@@ -319,12 +321,12 @@ export const registerPatientSchema = z.object({
   ),
   gender: patientGenderSchema,
   name: z.string().trim().min(1).max(200),
-  phone: z.string().trim().max(40).optional(),
+  phone: patientPhoneSchema.optional(),
   email: z.email().max(320).optional(),
 }).strict();
 
 export const updatePatientSchema = registerPatientSchema.extend({
-  phone: z.string().trim().max(40).nullish().transform(value => value || undefined),
+  phone: patientPhoneSchema.nullish().transform(value => value || undefined),
   email: z.union([z.email().max(320), z.literal("")]).nullish().transform(value => value || undefined),
 });
 export type UpdatePatient = z.infer<typeof updatePatientSchema>;

@@ -48,6 +48,7 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
       setBirthInvalid(parsed.error.issues.some(item => item.path[0] === "dateOfBirth"));
       setMessage(!facilityId || !gender ? "Select a facility and gender." : issue?.path[0] === "dateOfBirth"
         ? birth > todayDate() && /^\d{4}-\d{2}-\d{2}$/.test(birth) ? "Date of birth cannot be in the future." : "Enter a valid date of birth in dd/mm/yyyy format."
+        : issue?.path[0] === "phone" ? "Mobile number must contain digits only."
         : "Check the patient details and enter a valid name, medical record number and contact information.");
       return;
     }
@@ -78,7 +79,7 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
         </div>
       </div>
       <div className="border-t pt-4 grid gap-4"><h3 className="font-semibold">Contact details</h3><div className="grid gap-4 sm:grid-cols-2">
-        <Field><FieldLabel htmlFor="patient-phone">Mobile number (optional)</FieldLabel><Input id="patient-phone" name="phone" defaultValue={patient?.phone} type="tel" autoComplete="tel" maxLength={40} /></Field>
+        <Field><FieldLabel htmlFor="patient-phone">Mobile number (optional)</FieldLabel><Input id="patient-phone" name="phone" defaultValue={patient?.phone} type="tel" inputMode="numeric" pattern="[0-9]*" title="Use digits only" autoComplete="tel" maxLength={40} onInput={event => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g, ""); }} /></Field>
         <Field><FieldLabel htmlFor="patient-email">Email address (optional)</FieldLabel><Input id="patient-email" name="email" defaultValue={patient?.email} type="email" autoComplete="email" maxLength={320} /></Field>
       </div></div>
       {!options.length && !missingCurrent && <Alert><AlertDescription>Add an active facility before registering a patient.</AlertDescription></Alert>}
