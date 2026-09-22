@@ -1,3 +1,5 @@
+import { ClinicalReviewQueue } from "../features/assessments/ClinicalReviewQueue";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility } from "@niq/application-contracts";
 import { useEffect, useMemo, useState } from "react";
@@ -26,6 +28,7 @@ export function AssessmentsPage() {
   const navigate = useNavigate();
   const canOpen = hasPermission(user.role, "assessments.read");
   const canCreate = hasPermission(user.role, "assessments.edit");
+  const [tab, setTab] = useState("assessments");
   const [records, setRecords] = useState<AssessmentSummary[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [reload, setReload] = useState(0);
@@ -61,16 +64,20 @@ export function AssessmentsPage() {
   const emptyContent = <div className="table-empty-content">{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : <><strong>{canCreate ? "Create your first assessment" : "No assessments yet"}</strong>{canCreate && <RouterButtonLink to="/assessments/new"><Icon name="plus" size={18} />New assessment</RouterButtonLink>}</>}</div>;
   return <>
     <h1 className="patient-page-title">Assessments</h1>
+    <Tabs selectedKey={tab} onSelectionChange={key => setTab(String(key))}>
+    <TabsList variant="line" aria-label="Assessment lists"><TabsTrigger id="assessments">Assessments</TabsTrigger>{canOpen && <TabsTrigger id="clinical-reviews">Clinical reviews</TabsTrigger>}</TabsList>
+    <TabsContent id="assessments">
     <div className="patient-list-header">
       <div className="patient-list-heading"><span className="patient-list-label">Assessments</span><span>{records.length}</span></div>
       <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search by assessment ID, patient name or patient ID" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search assessments or patients…" /></InputGroup>{canCreate && <TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="New assessment" onPress={() => navigate("/assessments/new")}><Icon name="plus" size={20}/></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>
     </div>
     <div className="patient-filter-bar assessment-filter-bar">
       <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { setFacility(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
-      <Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem>{Object.entries(assessmentStatusLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>
+      <Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem>{Object.entries(assessmentStatusLabels).filter(([id]) => ["DRAFT", "SCORING_PENDING", "SCORING_UNAVAILABLE", "SCORED", "UNDER_REVIEW", "COMPLETED"].includes(id) || records.some(record => record.status === id)).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>
     </div>
     <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card" key={record.id}><div>{canOpen ? <Link className="font-normal text-foreground hover:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}<span>{record.patient.reference} · {record.patient.displayName}</span></div><StatusBadge status={assessmentStatusLabels[record.status]}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
+    </TabsContent>{canOpen && <TabsContent id="clinical-reviews"><ClinicalReviewQueue key={`${user.organizationId}:${user.membershipId}`} user={user} /></TabsContent>}</Tabs>
   </>;
 }
 
