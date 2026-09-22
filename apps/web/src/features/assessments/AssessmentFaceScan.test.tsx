@@ -129,3 +129,16 @@ test("confirmed device rejection offers explicit retry without automatic capture
   expect(starts()).toBe(1);
   expect(requests.filter(r => r.body?.requestKey).length).toBe(1);
 }, {existing: {...session, state:"FAILED", failureCode:"DEVICE_NOT_SUPPORTED"}}));
+
+
+test("completed scan keeps rescan setup closed until explicitly requested", async () => harness(async ({ click, starts, requests }) => {
+  expect(document.querySelector('input[type="checkbox"]')).toBeNull();
+  await click("Scan again");
+  expect(document.body.textContent).toContain("Previous results stay saved");
+  expect(document.querySelector('input[type="checkbox"]')).not.toBeNull();
+  expect(starts()).toBe(0);
+  expect(requests.every(request => request.body === null)).toBe(true);
+  await click("Keep current results");
+  expect(document.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(document.body.textContent).toContain("Scan again");
+}, { existing: { ...session, state: "COMPLETED" } }));
