@@ -4,6 +4,12 @@ import { Check, ChevronsUpDown } from "lucide-react";
 import { Input } from "./input";
 import { Button } from "./button";
 
+/** Ignore casing and optional separators when searching names and references. */
+export function matchesComboboxSearch(label: string, query: string): boolean {
+  const normalize = (value: string) => value.normalize("NFKC").toLocaleLowerCase().replace(/[\s\p{Dash_Punctuation}]+/gu, "");
+  return normalize(label).includes(normalize(query));
+}
+
 export type ComboboxOption = { id: string; label: string };
 export type SearchComboboxProps = {
   id?: string; label: string; options: ComboboxOption[]; value: string | null;
@@ -17,7 +23,7 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
   const [search, setSearch] = useState(selectedLabel);
   useEffect(() => setSearch(selectedLabel), [selectedLabel, value]);
   const query = search.trim();
-  const matches = options.filter(option => option.label.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+  const matches = options.filter(option => matchesComboboxSearch(option.label, query));
   const canCreate = Boolean(onCreate && query && !options.some(option => option.label.toLocaleLowerCase() === query.toLocaleLowerCase()) && query !== customValue);
   const items = [...(search === selectedLabel ? options : matches), ...(canCreate ? [{ id: "__custom__", label: `Use “${query}” as Other` }] : [])];
   return <ComboBox data-slot="search-combobox" aria-label={label} isDisabled={disabled} isRequired={required} isInvalid={invalid} allowsCustomValue allowsEmptyCollection menuTrigger="manual"

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { SearchCombobox } from "./combobox";
+import { SearchCombobox, matchesComboboxSearch } from "./combobox";
 
 test("searchable menu preserves approved and custom choices through mouse, keyboard and blur", async () => {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
@@ -69,4 +69,15 @@ test("searchable menu preserves approved and custom choices through mouse, keybo
     await act(async () => root.unmount()); dom.window.close();
     Object.entries(previous).forEach(([key, descriptor]) => descriptor ? Object.defineProperty(globalThis, key, descriptor) : delete (globalThis as any)[key]);
   }
+});
+
+
+test("search tolerates case, spaces and hyphens in patient references and names", () => {
+  const label = "Tushar Malpani · PAT-2 · MRN HOSP-102 · Hyderabad";
+  for (const query of ["pat2", "PAT2", "PAT-2", "pAt-2", " pat 2 ", "PAT–2", "tushar malpani", "TUSHARMALPANI", "hosp102"]) {
+    expect(matchesComboboxSearch(label, query)).toBe(true);
+  }
+  expect(matchesComboboxSearch(label, "pat3")).toBe(false);
+  expect(matchesComboboxSearch(label, "another patient")).toBe(false);
+  expect(matchesComboboxSearch(label, "")).toBe(true);
 });
