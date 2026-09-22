@@ -418,6 +418,10 @@ export const assessments = pgTable(
     createdByMembershipId: entityId("created_by_membership_id").notNull(),
     revision: integer("revision").notNull().default(0),
     workflow: jsonb("workflow"),
+    clinicalReview: jsonb("clinical_review"),
+    currentSubmissionId: entityId("current_submission_id"),
+    cycle: integer("cycle").notNull().default(0),
+    scoredAt: timestamp("scored_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     ...timestamps,
   },
@@ -695,6 +699,7 @@ export const assessmentFaceScans = pgTable("assessment_face_scans", {
   remoteRequestKey: text("remote_request_key"), reconciliationAttempts: integer("reconciliation_attempts").notNull().default(0),
   snapshot: jsonb("snapshot").notNull(), remoteId: text("remote_id"), state: text("state").notNull().default("REQUESTED"),
   isCurrent: boolean("is_current").notNull().default(false),
+  cycle: integer("cycle").notNull().default(0),
   active: boolean("active").notNull().default(true), projection: jsonb("projection"), failureCode: text("failure_code"),
   leaseToken: text("lease_token"), leaseExpiresAt: timestamp("lease_expires_at",{withTimezone:true}), nextAttemptAt: timestamp("next_attempt_at",{withTimezone:true}),
   ...timestamps,
@@ -714,9 +719,22 @@ export const assessmentScoreReviews = pgTable("assessment_score_reviews", {
   requestKey: text("request_key").notNull(), event: jsonb("event").notNull(),
   createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
 }, t => [
-  uniqueIndex("assessment_score_reviews_revision_uidx").on(t.assessmentId,t.revision),
+  uniqueIndex("assessment_score_reviews_revision_uidx").on(t.submissionId,t.revision),
   uniqueIndex("assessment_score_reviews_request_uidx").on(t.assessmentId,t.actorId,t.requestKey),
   foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),
   foreignKey({columns:[t.organizationId,t.actorId],foreignColumns:[organizationMemberships.organizationId,organizationMemberships.id]}),
   check("assessment_score_reviews_revision_ck",sql`${t.revision} > 0`),
+]);
+
+/** Immutable encrypted evidence and accepted workflow commands, appended under the assessment lock. */
+export const assessmentHistory = pgTable("assessment_history", {
+ id:entityId("id").primaryKey(), organizationId:entityId("organization_id").notNull(), assessmentId:entityId("assessment_id").notNull(),
+ actorId:entityId("actor_id"), cycle:integer("cycle").notNull(), revision:integer("revision").notNull(),
+ kind:text("kind").notNull(), requestKey:text("request_key"), payload:jsonb("payload").notNull(),
+ createdAt:timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
+}, t=>[
+ foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),
+ foreignKey({columns:[t.organizationId,t.actorId],foreignColumns:[organizationMemberships.organizationId,organizationMemberships.id]}),
+ uniqueIndex("assessment_history_request_uidx").on(t.assessmentId,t.actorId,t.requestKey),
+ index("assessment_history_cycle_idx").on(t.organizationId,t.assessmentId,t.cycle),
 ]);
