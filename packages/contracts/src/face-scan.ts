@@ -46,6 +46,7 @@ export const faceScanResultSchema = z.object({
     systolic: metric,
     diastolic: metric
   }),
+  additionalMetrics: z.record(z.string(), z.union([z.number().finite(), z.string(), z.null()])).optional(),
   physiologicalScore: metric,
   mentalWellbeingScore: metric
 });
