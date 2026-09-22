@@ -3,8 +3,10 @@ import type { AuthenticatedUser, Facility, Patient, AssessmentInitialization } f
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SearchCombobox } from "@/components/ui/combobox";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getPatient, listFacilities, listPatients } from "@/lib/api";
 import { assessmentRequest, initializeAssessment, retryInitialization } from "./workflow-api";
 
@@ -38,7 +40,6 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [selected, setSelected] = useState<Patient | null>(null);
   const [facility, setFacility] = useState("");
-  const [query, setQuery] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -66,7 +67,7 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
     Promise.all([load, recovery]).then(() => { if (active) setLoaded(true); }).catch(() => { if (active) setError("The patient or assessment request could not be loaded. Check your access and try again."); });
     return () => { active = false; };
   }, [user.organizationId, requestedPatient, recoveryId, loadKey, navigate]);
-  const filtered = useMemo(() => filterAssessmentPatients(patients, facility, query), [patients, facility, query]);
+  const filtered = useMemo(() => filterAssessmentPatients(patients, facility, ""), [patients, facility]);
   async function start() {
     if (!selected || inFlight.current) return;
     const activeLifecycle = lifecycle.current;
@@ -103,15 +104,17 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
       void start();
     }
   }, [requestedPatient, loaded, selected, recoveryId]);
-  const content = <>
+  const fields = <div className="form-fields facility-dialog-fields grid gap-5">
     {error && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-destructive">{error}</div>}
     {!loaded ? <div className="grid gap-3"><p>Loading patient information…</p>{error && <Button variant="outline" onPress={() => setLoadKey(key => key + 1)}>Retry</Button>}</div> : <>
-      {!requestedPatient && <><label className="grid gap-2">Facility<select className="h-10 rounded-lg border border-input bg-background px-3" value={facility} disabled={busy || !!initialization} onChange={event => { setFacility(event.target.value); setSelected(null); }}><option value="">All accessible facilities</option>{facilities.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="grid gap-2">Find patient<Input className="h-10" value={query} disabled={busy || !!initialization} onChange={event => setQuery(event.target.value)} placeholder="Name, patient reference or MRN" /></label>
-        <div className="max-h-64 overflow-y-auto rounded-lg border border-border" role="radiogroup" aria-label="Patient">{filtered.length ? filtered.map(patient => <label key={patient.id} className="flex cursor-pointer items-center gap-3 border-b border-border p-3 last:border-b-0 has-checked:bg-primary/10"><input type="radio" name="assessment-patient" checked={selected?.id === patient.id} disabled={busy || !!initialization} onChange={() => setSelected(patient)} className="accent-primary" /><span><strong className="block">{patient.displayName}</strong><span className="text-sm text-muted-foreground">{patient.reference}{patient.medicalRecordNumber ? ` · MRN ${patient.medicalRecordNumber}` : ""} · {patient.homeFacility?.name ?? "No facility"}</span></span></label>) : <p className="p-4 text-muted-foreground">No matching patients.</p>}</div></>}
-      {requestedPatient && selected && <div><h2 className="font-semibold">{selected.displayName}</h2><p className="text-muted-foreground">{selected.reference} · {selected.homeFacility?.name}</p></div>}
-      <div className="flex justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => navigate(requestedPatient && selected ? `/patients/${selected.reference}` : "/assessments", { replace: true })}>Cancel</Button><Button isDisabled={!selected || busy} onPress={start}>{busy ? "Preparing questionnaire…" : initialization ? "Retry preparation" : "Start assessment"}</Button></div>
+      {!requestedPatient && <>
+        <Field><FieldLabel>Facility</FieldLabel><Select aria-label="Facility" selectedKey={facility || "all"} isDisabled={busy || !!initialization} onSelectionChange={key => { setFacility(key === "all" ? "" : String(key)); setSelected(null); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All accessible facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field>
+        <Field><FieldLabel htmlFor="assessment-patient">Patient</FieldLabel><SearchCombobox id="assessment-patient" label="Patient" value={selected?.id ?? null} disabled={busy || !!initialization} placeholder="Search name, patient reference or MRN" options={filtered.map(patient => ({ id: patient.id, label: `${patient.displayName} · ${patient.reference}${patient.medicalRecordNumber ? ` · MRN ${patient.medicalRecordNumber}` : ""} · ${patient.homeFacility?.name ?? "No facility"}` }))} onChange={id => setSelected(filtered.find(patient => patient.id === id) ?? null)} /></Field>
+      </>}
+      {requestedPatient && selected && <div><h2 className="font-normal">{selected.displayName}</h2><p className="text-muted-foreground">{selected.reference} · {selected.homeFacility?.name}</p></div>}
     </>}
-  </>;
+  </div>;
+  const content = <div className="clinical-form">{fields}<div className="form-footer"><Button variant="outline" isDisabled={busy} onPress={() => navigate(requestedPatient && selected ? `/patients/${selected.reference}` : "/assessments", { replace: true })}>Cancel</Button>{loaded && <Button isDisabled={!selected || busy} onPress={start}>{busy ? "Preparing questionnaire…" : initialization ? "Retry preparation" : "Start assessment"}</Button>}</div></div>;
   if (requestedPatient) return <section className="mx-auto grid max-w-xl gap-5 rounded-xl border border-border bg-card p-6"><h1 className="text-2xl font-semibold">New assessment</h1>{content}</section>;
-  return <><h1 className="patient-page-title">New assessment</h1><Dialog isOpen isDismissable={!busy} onOpenChange={open => { if (!open && !busy) navigate("/assessments", { replace: true }); }} className="sm:max-w-xl max-h-[90dvh] overflow-y-auto" ariaLabel="Select patient"><DialogTitle>Select patient</DialogTitle>{content}</Dialog></>;
+  return <><h1 className="patient-page-title">New assessment</h1><Dialog isOpen isDismissable={!busy} onOpenChange={open => { if (!open && !busy) navigate("/assessments", { replace: true }); }} className="facility-dialog" ariaLabel="Select patient"><DialogHeader><DialogTitle>Select patient</DialogTitle></DialogHeader>{content}</Dialog></>;
 }

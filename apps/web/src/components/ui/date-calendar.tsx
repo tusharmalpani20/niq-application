@@ -4,10 +4,12 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./button";
 import { Input } from "./input";
 
-export function DateCalendar({ value, label, disabled, onChange }: { value: string; label: string; disabled: boolean; onChange: (value: string | null) => void }) {
+export function DateCalendar({ value, label, disabled, max, onChange }: { value: string; label: string; disabled: boolean; max?: string; onChange: (value: string | null) => void }) {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(new Date().getMonth());
   const [year, setYear] = useState(String(new Date().getFullYear()));
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const valid = /^\d{4}$/.test(year) && +year >= 1900 && +year <= 9999;
   const first = valid ? new Date(+year, month, 1).getDay() : 0;
   const count = valid ? new Date(+year, month + 1, 0).getDate() : 0;
@@ -27,9 +29,9 @@ export function DateCalendar({ value, label, disabled, onChange }: { value: stri
         <div className="grid grid-cols-7 gap-1 text-center">
           {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(day => <span key={day} className="py-2 text-xs text-muted-foreground">{day}</span>)}
           {Array.from({ length: first }, (_, index) => <span key={`blank-${index}`} />)}
-          {Array.from({ length: count }, (_, index) => { const day = index + 1; const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`; return <Button key={day} variant={value === date ? "default" : "ghost"} className="h-9 p-0" aria-label={`${String(day).padStart(2, "0")}/${String(month + 1).padStart(2, "0")}/${year}`} aria-pressed={value === date} onPress={() => select(date)}>{day}</Button>; })}
+          {Array.from({ length: count }, (_, index) => { const day = index + 1; const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`; return <Button key={day} variant={value === date ? "default" : "ghost"} className="h-9 p-0" aria-label={`${String(day).padStart(2, "0")}/${String(month + 1).padStart(2, "0")}/${year}`} aria-pressed={value === date} isDisabled={!!max && date > max} onPress={() => select(date)}>{day}</Button>; })}
         </div>
-        <div className="mt-3 flex justify-between border-t border-border pt-3"><Button variant="ghost" size="sm" isDisabled={!value} onPress={() => select(null)}>Clear</Button><Button variant="ghost" size="sm" onPress={() => { const now = new Date(); select(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`); }}>Today</Button></div>
+        <div className="mt-3 flex justify-between border-t border-border pt-3"><Button variant="ghost" size="sm" isDisabled={!value} onPress={() => select(null)}>Clear</Button><Button variant="ghost" size="sm" isDisabled={!!max && today > max} onPress={() => { const now = new Date(); select(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`); }}>Today</Button></div>
       </Dialog>
     </Popover>
   </DialogTrigger>;

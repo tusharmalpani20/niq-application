@@ -20,7 +20,7 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
   const matches = options.filter(option => option.label.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   const canCreate = Boolean(onCreate && query && !options.some(option => option.label.toLocaleLowerCase() === query.toLocaleLowerCase()) && query !== customValue);
   const items = [...(search === selectedLabel ? options : matches), ...(canCreate ? [{ id: "__custom__", label: `Use “${query}” as Other` }] : [])];
-  return <ComboBox aria-label={label} isDisabled={disabled} isRequired={required} isInvalid={invalid} allowsCustomValue allowsEmptyCollection menuTrigger="manual"
+  return <ComboBox data-slot="search-combobox" aria-label={label} isDisabled={disabled} isRequired={required} isInvalid={invalid} allowsCustomValue allowsEmptyCollection menuTrigger="manual"
     selectedKey={value} inputValue={search} onInputChange={setSearch} items={items}
     onSelectionChange={key => { if (key === null) return; if (key === "__custom__") { onCreate?.(query); setSearch(selectedLabel); } else { onChange(String(key)); setSearch(options.find(option => option.id === key)?.label || ""); } }}
     onBlur={() => setSearch(selectedLabel)} className="w-full min-w-0">

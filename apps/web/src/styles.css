@@ -437,3 +437,14 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .assessment-workflow .assessment-selected-indicator {
   box-shadow: 0 4px 8px color-mix(in srgb, var(--primary) 28%, transparent);
 }
+
+/* Dialogs share the facility form layout; only the body scrolls on short screens. */
+.facility-dialog { max-height:calc(100dvh - 2rem); }
+.facility-dialog [data-slot="dialog"] { display:flex;flex-direction:column;min-height:0;max-height:calc(100dvh - 2rem); }
+.facility-dialog [data-slot="dialog-header"], .facility-dialog .form-footer { flex-shrink:0; }
+.facility-dialog .clinical-form { display:flex;flex-direction:column;min-height:0;overflow:hidden; }
+.facility-dialog .form-fields { overflow-y:auto;overscroll-behavior:contain;min-height:0; }
+
+.clinical-form [data-slot="date-input"] input { padding-right:3rem; }
+.clinical-form [data-slot="search-combobox"] input { border:0;background:transparent;box-shadow:none; }
+.facility-dialog.patient-registration-dialog { width:min(760px,calc(100vw - 2rem)); }
