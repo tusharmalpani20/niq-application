@@ -67,7 +67,7 @@ export class ClinicalReviewService {
    const s=reviewState(this.service,row), now=new Date(), eligible=await this.eligible(actor,org,id,tx,row);
    const recipient="assigneeId"in input?eligible.find(r=>r.membershipId===input.assigneeId):null;
    if("assigneeId"in input&&!recipient)throw new ServiceError("VALIDATION_ERROR","Choose an active clinician with access to this assessment and patient.");
-   const scans=await tx.select().from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId,org),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true),eq(assessmentFaceScans.cycle,row.cycle)));
+   const scans=await tx.select().from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId,org),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true)));
    if(scans.some(scan=>scan.cycle===row.cycle&&(scan.active||(scan.leaseExpiresAt&&scan.leaseExpiresAt>now)||scan.state==="RECONCILIATION_REQUIRED"||scan.failureCode==="RECONCILIATION_REQUIRED")))throw new ServiceError("CONFLICT","Resolve the pending face scan before changing the review workflow.");
    let score:unknown=null;
    if(row.status==="SCORED"||row.status==="UNDER_REVIEW"){
@@ -85,7 +85,8 @@ export class ClinicalReviewService {
     case "RETURN_TO_DRAFT":{
      s.previousReviewer=row.status==="UNDER_REVIEW"?s.assignee:s.previousReviewer;
      s.assignee=null;s.correctionPerson=recipient!;s.returnReason=input.reason;status="DRAFT";cycle++;
-     await tx.update(assessmentFaceScans).set({isCurrent:false}).where(and(eq(assessmentFaceScans.organizationId,org),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true),eq(assessmentFaceScans.cycle,row.cycle)));
+     // Keep completed evidence selected across corrections without changing its capture cycle.
+     await tx.update(assessmentFaceScans).set({isCurrent:false}).where(and(eq(assessmentFaceScans.organizationId,org),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true),sql`(${assessmentFaceScans.state} <> 'COMPLETED' or ${assessmentFaceScans.projection} is null)`));
      const [submission]=await tx.select().from(assessmentSubmissions).where(eq(assessmentSubmissions.id,row.currentSubmissionId!));
      const frozen=this.service.unseal<StoredWorkflow>(submission!.snapshot);workflow=this.service.seal(frozen);currentSubmissionId=null;completedAt=null;break;
     }

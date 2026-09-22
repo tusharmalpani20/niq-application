@@ -101,7 +101,7 @@ export class AssessmentFaceScanService {
     return row;
   }
   async list(actor: Principal, org: string, assessment: string) {
-    const assessmentRow=await this.workflow.authorize(actor, org, assessment);
+    await this.workflow.authorize(actor, org, assessment);
     const rows = await this.db.select().from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId, org), eq(assessmentFaceScans.assessmentId, assessment))).orderBy(desc(assessmentFaceScans.createdAt), desc(assessmentFaceScans.id));
     const enabled = this.workflow.config.FACE_SCAN_ENABLED;
     return {
@@ -110,7 +110,7 @@ export class AssessmentFaceScanService {
         reason: "Face scan is not enabled for this deployment."
       } : {}),
       sessions: rows.map(row => this.dto(row)),
-      currentSessionId: rows.find(row => row.isCurrent && row.cycle===assessmentRow.cycle)?.id ?? null
+      currentSessionId: rows.find(row => row.isCurrent)?.id ?? null
     };
   }
   async start(actor: Principal, org: string, assessment: string, input: {

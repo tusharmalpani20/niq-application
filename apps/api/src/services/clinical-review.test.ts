@@ -8,6 +8,7 @@ import * as t from "../db/schema";
 import { PostgresApplicationService } from "./postgres-application";
 import { AssessmentWorkflowService } from "./assessment-workflow";
 import { AssessmentScoreReviewService } from "./assessment-score-reviews";
+import { AssessmentFaceScanService } from "./assessment-face-scan";
 import { ClinicalReviewService } from "./clinical-review";
 import { clinicalReviewActionSchema, type ClinicalReviewAction } from "../../../../packages/contracts/src/clinical-review";
 import type { Principal } from "./application";
@@ -64,6 +65,35 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   expect((await scores.read(colleague,org,id)).revision).toBe(0);expect((await reviews.read(colleague,org,id)).state).toBe("AWAITING_RESUBMISSION");await expect(command(creator,id,"RESEND")).rejects.toMatchObject({code:"FORBIDDEN"});
   const resent=await command(colleague,id,"RESEND");expect(resent.assignee?.membershipId).toBe(nurse.membershipId);expect(resent.correctionPerson).toBeNull();
   expect(await db.select().from(t.assessmentSubmissions).where(eq(t.assessmentSubmissions.assessmentId,id))).toHaveLength(2);
+ });
+ test("correction cycles retain completed scan evidence and freeze it into the completed review",async()=>{
+  const id=await assessment(),scanId=createEntityId();
+  const projection={id:scanId,state:"COMPLETED",context:{heightCm:170,weightKg:65},completedAt:"2026-09-20T00:00:00Z",score:{status:"SCORED",points:8}};
+  await db.insert(t.assessmentFaceScans).values({id:scanId,organizationId:org,assessmentId:id,revision:0,cycle:0,requestKey:createEntityId(),connection:{},snapshot:workflow.seal(projection.context),projection:workflow.seal(projection),state:"COMPLETED",isCurrent:true,active:false});
+  await command(creator,id,"RETURN_TO_DRAFT",{assigneeId:creator.membershipId,reason:"Correct unrelated answers"});
+  expect((await new AssessmentFaceScanService(workflow).list(creator,org,id)).currentSessionId).toBe(scanId);
+  const [scan]=await db.select().from(t.assessmentFaceScans).where(eq(t.assessmentFaceScans.id,scanId));
+  expect(scan!.cycle).toBe(0);expect(workflow.unseal<typeof projection>(scan!.projection)).toEqual(projection);
+  const [row]=await db.select().from(t.assessments).where(eq(t.assessments.id,id));
+  const submission=createEntityId();await db.insert(t.assessmentSubmissions).values({id:submission,organizationId:org,assessmentId:id,revision:row!.revision,snapshot:row!.workflow!,idempotencyKey:submission,status:"SUCCEEDED",result:workflow.seal({...result,resultReference:"corrected-scan-result"})});
+  await db.update(t.assessments).set({status:"SCORED",currentSubmissionId:submission}).where(eq(t.assessments.id,id));
+  expect((await scores.read(creator,org,id)).scan?.niqPoints).toBe(8);
+  await command(creator,id,"RESEND");await command(creator,id,"CLAIM");await command(creator,id,"COMPLETE",{remark:"Reviewed"});
+  const [completed]=await db.select().from(t.assessments).where(eq(t.assessments.id,id));
+  expect(workflow.unseal<any>(completed!.clinicalReview).finalSnapshot.scans.map((scan:any)=>scan.id)).toEqual([scanId]);
+ });
+ test("scan recovery restores only the latest completed prior-cycle attempt",async()=>{
+  const fixtures=[];
+  for(const scenario of ["completed","newer-failed","newer-current","same-cycle"]){
+   const id=await assessment(),scanId=createEntityId();
+   await db.update(t.assessments).set({status:"DRAFT",cycle:1,currentSubmissionId:null}).where(eq(t.assessments.id,id));
+   await db.insert(t.assessmentFaceScans).values({id:scanId,organizationId:org,assessmentId:id,revision:0,cycle:scenario==="same-cycle"?1:0,requestKey:createEntityId(),connection:{},snapshot:{},projection:{},state:"COMPLETED",isCurrent:false,active:false,createdAt:new Date("2026-01-01")});
+   if(scenario.startsWith("newer"))await db.insert(t.assessmentFaceScans).values({id:createEntityId(),organizationId:org,assessmentId:id,revision:1,cycle:1,requestKey:createEntityId(),connection:{},snapshot:{},state:"FAILED",isCurrent:scenario==="newer-current",active:false});
+   fixtures.push({scanId,scenario});
+  }
+  const migration=await Bun.file(new URL("../../drizzle/0026_retain_correction_face_scans.sql",import.meta.url)).text();
+  await client.unsafe(migration);
+  for(const {scanId,scenario} of fixtures){const [scan]=await db.select().from(t.assessmentFaceScans).where(eq(t.assessmentFaceScans.id,scanId));expect(scan!.isCurrent).toBe(scenario==="completed");}
  });
  test("an adjustment from an earlier result cannot modify a rescored correction even when revisions match",async()=>{
   const id=await assessment();
