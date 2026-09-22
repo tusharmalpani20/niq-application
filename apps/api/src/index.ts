@@ -8,7 +8,7 @@ import { AssessmentWorkflowService } from "./services/assessment-workflow";
 
 const config = loadApplicationConfig(process.env);
 const { db, sql } = createDatabase(config);
-const otpDelivery = config.DEV_OTP_DELIVERY ? new DevelopmentOtpDelivery() : new UnconfiguredOtpDelivery();
+const otpDelivery = (config.DEV_OTP_DELIVERY || config.DEV_FIXED_OTP) ? new DevelopmentOtpDelivery() : new UnconfiguredOtpDelivery();
 const service = new PostgresApplicationService(db, config, otpDelivery);
 
 const workflow = new AssessmentWorkflowService({ db, applicationService: service, config });

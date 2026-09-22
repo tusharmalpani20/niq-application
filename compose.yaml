@@ -31,6 +31,7 @@ services:
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
       DATABASE_URL: postgres://niq:${POSTGRES_PASSWORD:-change-me-locally}@postgres:5432/niq_application
       DATABASE_SSL: "false"
+      DEV_FIXED_OTP: ${DEV_FIXED_OTP:-false}
       AUTH_MODE: ${AUTH_MODE:-disabled}
       SESSION_SECRET: ${SESSION_SECRET:-replace-this-development-only-secret}
       PATIENT_DATA_ENCRYPTION_KEY: ${PATIENT_DATA_ENCRYPTION_KEY:-}

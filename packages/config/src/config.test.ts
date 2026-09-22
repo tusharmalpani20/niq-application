@@ -57,3 +57,11 @@ test("employee override is optional, bounded and development-only", () => {
   for (const NODE_ENV of ["production", "test"])
     expect(() => loadApplicationConfig({ ...base, NODE_ENV, PATIENT_DATA_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"), FACE_SCAN_EMPLOYEE_ID_OVERRIDE: "spoke-operator-001" })).toThrow("allowed only in development");
 });
+
+test("fixed OTP defaults off and is rejected outside development", () => {
+  const base = { DATABASE_URL: "postgres://localhost/niq", SESSION_SECRET: "a-development-secret-with-32-chars", PATIENT_DATA_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64") };
+  expect(loadApplicationConfig(base).DEV_FIXED_OTP).toBe(false);
+  expect(loadApplicationConfig({ ...base, DEV_FIXED_OTP: "true" }).DEV_FIXED_OTP).toBe(true);
+  for (const NODE_ENV of ["production", "test"])
+    expect(() => loadApplicationConfig({ ...base, NODE_ENV, DEV_FIXED_OTP: "true" })).toThrow("Fixed OTP is allowed only in development");
+});

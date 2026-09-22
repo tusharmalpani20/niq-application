@@ -51,6 +51,7 @@ export const applicationConfigSchema = z.object({
   INVITATION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(72),
   BOOTSTRAP_TOKEN: z.string().min(32).optional(),
   DEV_OTP_DELIVERY: booleanFromString,
+  DEV_FIXED_OTP: booleanFromString,
   REPORT_UPLOAD_ROOT: z.preprocess(value => value === "" ? undefined : value, z.string().startsWith("/").optional()),
   REPORT_MAX_FILE_BYTES: z.coerce.number().int().positive().max(100 * 1024 * 1024).default(10 * 1024 * 1024),
   REPORT_MAX_FILES_PER_GROUP: z.coerce.number().int().positive().default(10),
@@ -58,6 +59,9 @@ export const applicationConfigSchema = z.object({
   REPORT_MAX_ASSESSMENT_BYTES: z.coerce.number().int().positive().default(100 * 1024 * 1024),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 }).superRefine((value, context) => {
+  if (value.DEV_FIXED_OTP && value.NODE_ENV !== "development") {
+    context.addIssue({ code: "custom", path: ["DEV_FIXED_OTP"], message: "Fixed OTP is allowed only in development" });
+  }
   if (value.NODE_ENV !== "development" && value.FACE_SCAN_EMPLOYEE_ID_OVERRIDE) {
     context.addIssue({ code: "custom", path: ["FACE_SCAN_EMPLOYEE_ID_OVERRIDE"], message: "Face scan employee override is allowed only in development" });
   }

@@ -8,6 +8,8 @@ NIQ administrators create customer organizations. Organization administrators cr
 
 Set `DEV_OTP_DELIVERY=true` only on a developer workstation. The OTP is emitted to the API console. Production configuration rejects this setting. A production notification adapter must be connected before local authentication is enabled there.
 
+For local testing, set `NODE_ENV=development` and `DEV_FIXED_OTP=true`, then restart the API. New sign-ins and resends use `000000` for every account that requires MFA. Passwords, account checks, expiry, attempt limits and single-use challenges still apply. Existing challenges retain their previous code until resend. This flag enables development delivery and is rejected outside development. Keep it off for production and use the real delivery adapter. In fixed-code mode, a resend rotates the challenge token but retains `000000`.
+
 ## Session model
 
 - The browser receives an opaque `HttpOnly`, `SameSite=Strict` cookie.

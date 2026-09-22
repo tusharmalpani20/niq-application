@@ -26,7 +26,8 @@ import {
 import { decryptCredential, encryptCredential } from "../security/credential-encryption";
 import { decodeOrganizationLogo, InvalidOrganizationLogoError } from "../security/organization-logo";
 import { decryptPatientData, encryptPatientData, patientDataKey } from "../security/patient-data";
-import { hashPassword, keyedHash, randomOtp, randomToken, secureEqual, verifyPassword } from "../security/tokens";
+import { createMfaOtp } from "../security/mfa-otp";
+import { hashPassword, keyedHash, randomToken, secureEqual, verifyPassword } from "../security/tokens";
 import type { ApplicationService, MfaChallengeResult, OtpDelivery, Principal, RequestContext, SessionResult, SignInResult } from "./application";
 import { ServiceError } from "./application";
 import { facilityAccessCondition } from "./facility-access";
@@ -157,7 +158,7 @@ export class PostgresApplicationService implements ApplicationService {
 
     if (principal.mfaEnabled || requiresMfa(principal.role, principal.platformRole === "NIQ_ADMIN")) {
       const challengeToken = randomToken();
-      const otp = randomOtp();
+      const otp = createMfaOtp(this.config);
       const sentAt = new Date();
       const expiresAt = new Date(sentAt.getTime() + this.config.MFA_OTP_TTL_MINUTES * 60_000);
       await this.db.insert(mfaChallenges).values({
@@ -185,7 +186,7 @@ export class PostgresApplicationService implements ApplicationService {
     const challengeHash = await keyedHash(input.challengeToken, this.config.SESSION_SECRET);
     const now = new Date();
     const challengeToken = randomToken();
-    const otp = randomOtp();
+    const otp = createMfaOtp(this.config);
     const result = await this.db.transaction(async (tx) => {
       const [challenge] = await tx.select().from(mfaChallenges)
         .where(and(eq(mfaChallenges.challengeTokenHash, challengeHash), isNull(mfaChallenges.consumedAt)))
