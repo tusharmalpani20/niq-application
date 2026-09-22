@@ -87,7 +87,7 @@ export function PatientsPage() {
   const currentPage = Math.min(page, pageCount);
   const visiblePatients = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const columns: Array<DataTableColumn<PatientRow>> = [
-    { id: "patient", header: "Patient", cell: ({ row }) => <Link className="grid gap-1 text-primary" to={`/patients/${row.original.reference}`}><strong>{row.original.displayName}</strong><span className="text-xs text-muted-foreground">{row.original.reference}</span></Link> },
+    { id: "patient", header: "Patient", cell: ({ row }) => <Link className="grid gap-1 text-foreground hover:underline" to={`/patients/${row.original.reference}`}><strong>{row.original.displayName}</strong><span className="text-xs text-muted-foreground">{row.original.reference}</span></Link> },
     { id: "ageGender", header: "Age / gender", cell: ({ row }) => `${row.original.age ?? "—"} · ${row.original.gender}` },
     { accessorKey: "facility", header: "Facility" }, { id: "lastAssessment", header: "Last assessment", cell: ({ row }) => assessmentState === "error" ? "Unavailable" : assessmentState === "loading" ? "Loading…" : row.original.lastAssessment ? <DateDisplay value={row.original.lastAssessment} /> : "No assessments" },
     { id: "open", header: () => <span className="sr-only">Open</span>, cell: ({ row }) => <RouterButtonLink variant="ghost" size="icon-sm" to={`/patients/${row.original.reference}`} aria-label={`Open ${row.original.reference}`}><Icon name="chevron" size={18}/></RouterButtonLink> },
@@ -236,8 +236,8 @@ export function PatientDetailPage() {
       <TabsContent id="assessments">
         <Card className="surface p-5">
           {historyState === "loading" ? <p>Loading assessments…</p> : historyState === "error" ? <div className="grid gap-3"><p>Assessment history could not be loaded.</p><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></div> : history.length ? <DataTable label="Patient assessments" data={history} columns={[
-            { id: "reference", header: "Assessment", cell: ({ row }) => <Link className="text-primary font-semibold" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> },
-            { id: "date", header: "Started", cell: ({ row }) => <Link className="text-primary underline" to={`/assessments/${row.original.reference}`}><DateDisplay value={row.original.createdAt} /></Link> },
+            { id: "reference", header: "Assessment", cell: ({ row }) => <Link className="text-foreground hover:underline font-semibold" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> },
+            { id: "date", header: "Started", cell: ({ row }) => <Link className="text-foreground underline" to={`/assessments/${row.original.reference}`}><DateDisplay value={row.original.createdAt} /></Link> },
             { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "No facility" },
             { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
           ]} /> : <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center"><h2 className="font-semibold">Start this patient’s first assessment</h2><RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18} />New assessment</RouterButtonLink></div>}
