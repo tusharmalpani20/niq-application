@@ -67,7 +67,7 @@ export function UsersPage() {
     finally { setBusy(false); }
   }
   const columns: DataTableColumn<OrganizationUser>[] = [
-    { id: "user", header: "User", cell: ({ row }) => <div className="grid gap-1"><strong>{row.original.displayName}{row.original.userId === currentUser.userId ? " (you)" : ""}</strong><span className="text-xs text-muted-foreground">{row.original.email}</span></div> },
+    { id: "user", header: "User", cell: ({ row }) => <div className="grid gap-1"><span>{row.original.displayName}{row.original.userId === currentUser.userId ? " (you)" : ""}</span><span className="text-xs text-muted-foreground">{row.original.email}</span></div> },
     { id: "role", header: "Role", cell: ({ row }) => userRoleLabels[row.original.role] },
     { id: "facilities", header: "Facility access", cell: ({ row }) => row.original.facilities?.length ? row.original.facilities.map((item) => item.name).join(", ") : row.original.facilities ? "All facilities" : "Unavailable" },
     { id: "status", header: "Status", cell: ({ row }) => <Badge variant="outline" className={row.original.active && row.original.status === "ACTIVE" ? "border-success/20 bg-success/10 text-success" : "bg-muted text-muted-foreground"}>{row.original.status === "SUSPENDED" ? "Account suspended" : row.original.status === "DEACTIVATED" ? "Account deactivated" : row.original.status === "INVITED" ? "Invitation pending" : row.original.active ? "Enabled" : "Disabled"}</Badge> },
