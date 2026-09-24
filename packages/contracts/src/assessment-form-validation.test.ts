@@ -64,6 +64,15 @@ test("derived values are never sent to scoring and supplied answers remain immut
   expect(answers.protein_intake).toBe("adequate");
 });
 
+test("required current weight does not start optional weight-loss scoring", () => {
+  const weights: AssessmentFormManifest = { version: "weights", sections: [{ id: "personal", title: "Personal", fields: [
+    { id: "current_weight_kg", label: "Current weight", kind: "number", required: true, owner: "supporting", source: "B9" },
+    { id: "previous_weight_kg", label: "Previous weight", kind: "number", required: false, owner: "supporting", source: "F120" },
+  ] }] };
+  expect(getScoringAssessmentAnswers(weights, { current_weight_kg: 70 })).toEqual({});
+  expect(getScoringAssessmentAnswers(weights, { current_weight_kg: 70, previous_weight_kg: 75 })).toEqual({ current_weight_kg: 70, previous_weight_kg: 75 });
+});
+
 test("text answers share the save request limit before being counted complete", () => {
   const answers = { age: 0, choice: [], parent: "yes", detail: "x".repeat(2000) };
   expect(validateAssessmentAnswers(manifest, answers)).toEqual({});

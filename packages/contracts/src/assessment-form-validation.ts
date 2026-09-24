@@ -95,7 +95,11 @@ export function getEffectiveAssessmentAnswers(manifest: AssessmentFormManifest, 
 }
 export function getScoringAssessmentAnswers(manifest: AssessmentFormManifest, answers: FormAnswers): FormAnswers {
   const effective = getEffectiveAssessmentAnswers(manifest, answers);
-  return Object.fromEntries(manifest.sections.flatMap(section => section.fields).filter(field => (field.owner === "scoring" || field.owner === "supporting") && effective[field.id] !== undefined).map(field => [field.id, effective[field.id]!]));
+  return Object.fromEntries(manifest.sections.flatMap(section => section.fields).filter(field =>
+    (field.owner === "scoring" || field.owner === "supporting") && effective[field.id] !== undefined &&
+    // Current weight is required patient context, not an attempt to answer optional weight loss.
+    (field.id !== "current_weight_kg" || effective.previous_weight_kg !== undefined)
+  ).map(field => [field.id, effective[field.id]!]));
 }
 export function calculateAssessmentBmi(heightCm: number, weightKg: number): number | null {
   if (!Number.isFinite(heightCm) || !Number.isFinite(weightKg) || heightCm <= 0 || weightKg <= 0) return null;
