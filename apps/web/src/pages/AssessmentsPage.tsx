@@ -1,4 +1,5 @@
 import { ClinicalReviewQueue } from "../features/assessments/ClinicalReviewQueue";
+import { listClinicalReviews } from "../features/assessments/clinical-review-api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility } from "@niq/application-contracts";
@@ -43,6 +44,7 @@ export function AssessmentsPage() {
   const canCreate = hasPermission(user.role, "assessments.edit");
   const [tab, setTab] = useState(() => canOpen && searchParams.get("tab") === "clinical-reviews" ? "clinical-reviews" : "assessments");
   const [records, setRecords] = useState<AssessmentSummary[]>([]);
+  const [reviewCount, setReviewCount] = useState<number | null>(null);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [reload, setReload] = useState(0);
   const [query, setQuery] = useState("");
@@ -66,6 +68,15 @@ export function AssessmentsPage() {
     Promise.all([listAssessments(user.organizationId), listFacilities(user.organizationId)]).then(([items, facilities]) => { if (active) { setRecords(items); setFacilities(facilities); setLoadState("ready"); } }).catch(() => { if (active) setLoadState("error"); });
     return () => { active = false; };
   }, [user.organizationId, reload]);
+  useEffect(() => {
+    if (!canOpen) return;
+    const controller = new AbortController();
+    setReviewCount(null);
+    listClinicalReviews(user.organizationId, new URLSearchParams({ page: "1", pageSize: "1" }), controller.signal)
+      .then(result => { if (!controller.signal.aborted) setReviewCount(result.total); })
+      .catch(() => { if (!controller.signal.aborted) setReviewCount(null); });
+    return () => controller.abort();
+  }, [canOpen, user.organizationId, reload]);
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     const now = new Date();
@@ -90,7 +101,7 @@ export function AssessmentsPage() {
     <h1 className="patient-page-title">Assessments</h1>
     <Tabs selectedKey={tab} onSelectionChange={key => setTab(String(key))}>
     <div className="assessment-list-toolbar flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-border max-[620px]:flex-col max-[620px]:items-stretch">
-      <TabsList variant="line" aria-label="Assessment lists" className="self-stretch"><TabsTrigger id="assessments">Assessments <span className="ml-2 text-xs">{records.length}</span></TabsTrigger>{canOpen && <TabsTrigger id="clinical-reviews">Clinical reviews</TabsTrigger>}</TabsList>
+      <TabsList variant="line" aria-label="Assessment lists" className="self-stretch"><TabsTrigger id="assessments">Assessments <span className="ml-2 text-xs">{records.length}</span></TabsTrigger>{canOpen && <TabsTrigger id="clinical-reviews">Clinical reviews {reviewCount !== null && <span className="ml-2 text-xs">{reviewCount}</span>}</TabsTrigger>}</TabsList>
       <div className="patient-search-actions ml-auto max-[620px]:ml-0"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label={tab === "clinical-reviews" ? "Search clinical reviews" : "Search by assessment ID, patient name or patient ID"} value={tab === "clinical-reviews" ? reviewQuery : query} onChange={(event) => { if (tab === "clinical-reviews") setReviewQuery(event.target.value); else { setQuery(event.target.value); setPage(1); } }} placeholder="Search assessments or patients…" /></InputGroup>{canCreate && <TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="New assessment" onPress={() => navigate("/assessments/new")}><Icon name="plus" size={20}/></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>
     </div>
     <div className="patient-filter-bar assessment-filter-bar">

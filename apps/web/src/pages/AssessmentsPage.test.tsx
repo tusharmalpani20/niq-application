@@ -16,7 +16,7 @@ async function renderAssessments(path: string, items: AssessmentFixture[], verif
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { value, configurable: true });
-  globalThis.fetch = (async (input: RequestInfo | URL) => Response.json(String(input).endsWith("/assessments") ? { items } : { items: [] })) as typeof fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => Response.json(String(input).includes("/clinical-reviews?") ? { items: [], total: 2, page: 1, pageSize: 1 } : String(input).endsWith("/assessments") ? { items } : { items: [] })) as typeof fetch;
   const user = { userId: id, organizationId: id, membershipId: id, email: "doctor@example.test", displayName: "Doctor", role: "DOCTOR", platformRole: "USER" };
   const router = createMemoryRouter([{ element: <Outlet context={user} />, children: [{ path: "/assessments", element: <AssessmentsPage /> }] }], { initialEntries: [path] });
   const root = createRoot(document.getElementById("root")!);
@@ -74,5 +74,11 @@ test("completed-this-month link excludes older completions and unfinished assess
     expect(table?.textContent).not.toContain("ASM-000002");
     expect(table?.textContent).not.toContain("ASM-000003");
     expect(document.body.textContent).toContain("1 total");
+  });
+});
+
+test("clinical reviews tab shows its unfiltered total", async () => {
+  await renderAssessments("/assessments?tab=clinical-reviews&review=QUEUED", records, () => {
+    expect(document.querySelector('[data-slot="tabs-list"]')?.textContent).toMatch(/Clinical reviews\s*2/);
   });
 });
