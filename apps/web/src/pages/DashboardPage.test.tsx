@@ -57,6 +57,13 @@ test("summary distinguishes accessible patients from assessments completed this 
   const now = new Date();
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 15).toISOString();
   await renderOverview("DOCTOR", body => {
+    const monthly = body.querySelector('[aria-label="This month"]');
+    const snapshot = body.querySelector('[aria-label="At a glance"]');
+    expect(monthly?.textContent).toContain("Patients registered this month");
+    expect(monthly?.textContent).toContain("Assessments completed this month");
+    expect(monthly?.textContent).not.toContain("Patients in your facilities");
+    expect(snapshot?.textContent).toContain("Patients in your facilities");
+    expect(snapshot?.textContent).toContain("Active facilities");
     expect(body.textContent).toContain("Patients in your facilities");
     expect(body.textContent).toContain("Patients registered this month");
     expect(body.textContent).toContain("Assessments completed this month");
@@ -91,12 +98,14 @@ test("zero admin alerts collapse and unlimited seats stay compact", async () => 
     expect(body.textContent).toContain("All clear");
     expect(body.textContent).toContain("Unlimited seats");
     expect(body.textContent).not.toContain("Awaiting review assignment");
-    expect(body.querySelectorAll('[aria-label="Workspace summary"] > a')).toHaveLength(4);
+    expect(body.querySelectorAll('[aria-label="This month"] a')).toHaveLength(2);
+    expect(body.querySelectorAll('[aria-label="At a glance"] a')).toHaveLength(2);
   }, { reviewTotal: 0, assessmentStatus: "DRAFT", userLimit: null });
 });
 
 test("support overview stays focused on patient registration", async () => {
   await renderOverview("SUPPORT", (body, requests) => {
+    expect(body.querySelectorAll('[aria-label="This month"] a')).toHaveLength(1);
     expect(body.textContent).toContain("Patient registration");
     expect(body.textContent).toContain("Example Patient");
     expect(requests.some(url => url.endsWith("/assessments") || url.includes("/clinical-reviews?"))).toBe(false);

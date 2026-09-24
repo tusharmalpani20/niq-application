@@ -93,21 +93,29 @@ export function DashboardPage() {
   const completedAssessments = data?.assessments.filter(item => item.status === "COMPLETED" && item.completedAt && thisMonth(item.completedAt, now)).length;
   const openAssessments = data?.assessments.filter(item => item.status === "DRAFT" || item.status === "READY_FOR_SCORING") ?? [];
   const scoringIssues = data?.assessments.filter(item => item.status === "SCORING_UNAVAILABLE").length ?? 0;
-  const metrics = [
-    { label: "Patients in your facilities", value: data?.patients.length, detail: null, to: "/patients", icon: UserRound },
+  const monthlyMetrics = [
     { label: "Patients registered this month", value: monthly, detail: now.toLocaleDateString(undefined, { month: "long", year: "numeric" }), to: "/patients?registered=this-month", icon: CalendarDays },
     ...(isClinician || isAdmin ? [{ label: "Assessments completed this month", value: completedAssessments, detail: now.toLocaleDateString(undefined, { month: "long", year: "numeric" }), to: "/assessments?status=COMPLETED_THIS_MONTH", icon: ClipboardList }] : []),
+  ];
+  const snapshotMetrics = [
+    { label: "Patients in your facilities", value: data?.patients.length, detail: null, to: "/patients", icon: UserRound },
     { label: "Active facilities", value: data?.facilityCount, detail: null, to: "/facilities", icon: Building2 },
   ];
+  const metricCard = ({ label, value, detail, to, icon: MetricIcon }: { label: string; value: number | undefined; detail: string | null; to: string; icon: typeof UserRound }) => <Link key={label} to={to} className="surface grid gap-3 p-5 no-underline transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary">
+    <div className="flex items-center justify-between gap-2"><span className="text-sm text-muted-foreground">{label}</span><MetricIcon className="size-5 text-primary" aria-hidden="true" /></div>
+    <strong className="text-3xl font-semibold tracking-tight">{value ?? "—"}</strong>
+    {detail && <span className="text-xs text-muted-foreground">{detail}</span>}
+  </Link>;
   return <>
     <h1 className="patient-page-title">Overview</h1>
     {error ? <Card className="surface p-6"><p role="alert">Overview could not be loaded.</p><Button className="w-fit" variant="outline" onPress={() => setAttempt((value) => value + 1)}>Retry</Button></Card> : <>
-      <section aria-label="Workspace summary" aria-busy={!data} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map(({ label, value, detail, to, icon: MetricIcon }) => <Link key={label} to={to} className="surface grid gap-3 p-5 no-underline transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary">
-          <div className="flex items-center justify-between gap-2"><span className="text-sm text-muted-foreground">{label}</span><MetricIcon className="size-5 text-primary" aria-hidden="true" /></div>
-          <strong className="text-3xl font-semibold tracking-tight">{value ?? "—"}</strong>
-          {detail && <span className="text-xs text-muted-foreground">{detail}</span>}
-        </Link>)}
+      <section aria-label="This month" aria-busy={!data} className="space-y-3">
+        <h2 className="text-lg font-semibold">This month</h2>
+        <div className="grid gap-4 sm:grid-cols-2">{monthlyMetrics.map(metricCard)}</div>
+      </section>
+      <section aria-label="At a glance" aria-busy={!data} className="mt-7 space-y-3">
+        <h2 className="text-lg font-semibold">At a glance</h2>
+        <div className="grid gap-4 sm:grid-cols-2">{snapshotMetrics.map(metricCard)}</div>
       </section>
     </>}
     {data && isClinician && <section className="mt-7" aria-label="Clinical work">
