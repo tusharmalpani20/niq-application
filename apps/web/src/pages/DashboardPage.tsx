@@ -90,14 +90,14 @@ export function DashboardPage() {
 
   const now = new Date();
   const monthly = data?.patients.filter(item => thisMonth(item.createdAt, now)).length;
-  const monthlyAssessments = data?.assessments.filter(item => thisMonth(item.createdAt, now)).length;
+  const completedAssessments = data?.assessments.filter(item => item.status === "COMPLETED" && item.completedAt && thisMonth(item.completedAt, now)).length;
   const openAssessments = data?.assessments.filter(item => item.status === "DRAFT" || item.status === "READY_FOR_SCORING") ?? [];
   const scoringIssues = data?.assessments.filter(item => item.status === "SCORING_UNAVAILABLE").length ?? 0;
   const metrics = [
-    { label: "Patients", value: data?.patients.length, detail: "In your accessible facilities", to: "/patients", icon: UserRound },
-    { label: "Registered this month", value: monthly, detail: now.toLocaleDateString(undefined, { month: "long", year: "numeric" }), to: "/patients?registered=this-month", icon: CalendarDays },
-    ...(isClinician || isAdmin ? [{ label: "Assessments started this month", value: monthlyAssessments, detail: "In your accessible facilities", to: "/assessments", icon: ClipboardList }] : []),
-    { label: "Active facilities", value: data?.facilityCount, detail: "Available to your account", to: "/facilities", icon: Building2 },
+    { label: "Patients in your facilities", value: data?.patients.length, detail: null, to: "/patients", icon: UserRound },
+    { label: "Patients registered this month", value: monthly, detail: now.toLocaleDateString(undefined, { month: "long", year: "numeric" }), to: "/patients?registered=this-month", icon: CalendarDays },
+    ...(isClinician || isAdmin ? [{ label: "Assessments completed this month", value: completedAssessments, detail: now.toLocaleDateString(undefined, { month: "long", year: "numeric" }), to: "/assessments?status=COMPLETED_THIS_MONTH", icon: ClipboardList }] : []),
+    { label: "Active facilities", value: data?.facilityCount, detail: null, to: "/facilities", icon: Building2 },
   ];
   return <>
     <h1 className="patient-page-title">Overview</h1>
@@ -106,7 +106,7 @@ export function DashboardPage() {
         {metrics.map(({ label, value, detail, to, icon: MetricIcon }) => <Link key={label} to={to} className="surface grid gap-3 p-5 no-underline transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary">
           <div className="flex items-center justify-between gap-2"><span className="text-sm text-muted-foreground">{label}</span><MetricIcon className="size-5 text-primary" aria-hidden="true" /></div>
           <strong className="text-3xl font-semibold tracking-tight">{value ?? "—"}</strong>
-          <span className="text-xs text-muted-foreground">{detail}</span>
+          {detail && <span className="text-xs text-muted-foreground">{detail}</span>}
         </Link>)}
       </section>
     </>}

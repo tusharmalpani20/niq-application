@@ -11,7 +11,7 @@ const date = "2026-09-20T00:00:00Z";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Example Patient", homeFacility: null, dateOfBirth: null, gender: "UNKNOWN", createdAt: date, updatedAt: date };
 const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: null, status: "SCORING_UNAVAILABLE", createdAt: date, completedAt: null };
 
-type Scenario = { reviewTotal?: number; assessmentStatus?: string; userLimit?: number | null };
+type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; userLimit?: number | null };
 async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, requests: string[]) => void, scenario: Scenario = {}) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
@@ -22,7 +22,7 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
     const url = String(input); requests.push(url);
     if (url.endsWith("/patients")) return Response.json({ items: [patient] });
     if (url.endsWith("/facilities")) return Response.json({ items: [] });
-    if (url.endsWith("/assessments")) return Response.json({ items: [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status }] });
+    if (url.endsWith("/assessments")) return Response.json({ items: [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status, createdAt: scenario.assessmentCreatedAt ?? date, completedAt: scenario.completedAt ?? null }] });
     if (url.endsWith("/users")) return Response.json({ items: [{ membershipId: id, userId: id, email: "admin@example.test", displayName: "Admin", status: "ACTIVE", role, active: true, createdAt: date }] });
     if (url.includes("/clinical-reviews?")) return Response.json({ items: [], total: scenario.reviewTotal ?? 2, page: 1, pageSize: 3 });
     if (url.endsWith(`/organizations/${id}`)) return Response.json({ organization: { id, legalName: "Example Health", displayName: "Example Health", slug: "example-health", logoObjectKey: null, primaryColor: "#006B5F", secondaryColor: "#FFFFFF", patientReferencePrefix: "PAT", status: "ACTIVE", createdAt: date, updatedAt: date }, entitlement: { userLimit: scenario.userLimit === undefined ? 5 : scenario.userLimit, effectiveFrom: date }, invitations: [], scoringConnection: null });
@@ -51,6 +51,20 @@ test("clinician overview shows review work without administrator operations", as
     expect(body.textContent).not.toContain("Organization operations");
     expect(requests.some(url => url.endsWith("/users"))).toBe(false);
   }, { assessmentStatus: "DRAFT" });
+});
+
+test("summary distinguishes accessible patients from assessments completed this month", async () => {
+  const now = new Date();
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 15).toISOString();
+  await renderOverview("DOCTOR", body => {
+    expect(body.textContent).toContain("Patients in your facilities");
+    expect(body.textContent).toContain("Patients registered this month");
+    expect(body.textContent).toContain("Assessments completed this month");
+    expect(body.querySelector('a[href="/assessments?status=COMPLETED_THIS_MONTH"] strong')?.textContent).toBe("1");
+  }, { assessmentStatus: "COMPLETED", assessmentCreatedAt: lastMonth, completedAt: now.toISOString() });
+  await renderOverview("DOCTOR", body => {
+    expect(body.querySelector('a[href="/assessments?status=COMPLETED_THIS_MONTH"] strong')?.textContent).toBe("0");
+  }, { assessmentStatus: "COMPLETED", assessmentCreatedAt: now.toISOString(), completedAt: lastMonth });
 });
 
 test("organization admin sees actionable operations but no clinician review card", async () => {
