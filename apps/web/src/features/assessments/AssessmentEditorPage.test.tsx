@@ -254,6 +254,28 @@ test("submission requires every section review and final confirmation", async ()
   }, { binding: { version: "version-a", checksum: "a".repeat(64) } }, "assessment-a", result);
 });
 
+test("blank scoring answers submit through verification and show an unscored summary", async () => {
+  const fixture = recordFixture();
+  const blank: AssessmentScoreResult = { formatVersion: 2, profile: "NIQ_FINAL_ASSESSMENT", complete: true, score: null, classification: null,
+    components: fixture.manifest.sections.flatMap(section => section.fields.filter(field => field.owner === "scoring").map(field => ({ id: field.id, sectionId: section.id, label: field.label, points: null, status: "unanswered" as const }))),
+    version: "version-a", checksum: "a".repeat(64), resultReference: "blank-result", calculatedAt: "2026-09-22T00:00:00Z", clinicalUsePermitted: true };
+  await harness(async ({ click, requests }) => {
+    await click("Review & score");
+    await click("Submit and request score");
+    for (let index = 0; index < fixture.manifest.sections.length + 2; index++) {
+      await act(async () => document.querySelector<HTMLInputElement>('[aria-label="Verify assessment before scoring"] input[type="checkbox"]')!.click());
+      await click("Next");
+    }
+    await act(async () => document.querySelector<HTMLInputElement>('[aria-label="Verify assessment before scoring"] input[type="checkbox"]')!.click());
+    await click("Confirm and request score");
+    expect(requests.some(request => request.method === "POST" && request.url.endsWith("/submit"))).toBe(true);
+    expect(document.querySelector('[aria-label="Assessment score review"]')).not.toBeNull();
+    expect(document.body.textContent).toContain("NIQ score—");
+    expect(document.body.textContent).not.toContain("Low Risk");
+    expect(document.body.textContent).toContain("Assessment submitted");
+  }, { binding: { version: "version-a", checksum: "a".repeat(64) } }, "assessment-a", blank);
+});
+
 test("an incomplete saved report is identified before submission", async () => harness(async ({ click, requests }) => {
   await click("Review & score");
   expect(document.body.textContent).toContain("Report 1 needs a date");
