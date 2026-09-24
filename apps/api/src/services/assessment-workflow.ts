@@ -171,8 +171,6 @@ export class AssessmentWorkflowService {
       const errors=validateAssessmentAnswers(state.manifest,answers,{requireComplete:true});
       if(Object.keys(errors).length) throw new ServiceError("VALIDATION_ERROR","Complete the required answers before submitting.",{fields:errors});
       const manifest=await this.reports.submissionManifest(tx,organizationId,id);
-      const [previous]=row.currentSubmissionId ? await tx.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.id,row.currentSubmissionId),eq(assessmentSubmissions.organizationId,organizationId),eq(assessmentSubmissions.assessmentId,id))) : [];
-      if(previous?.status==="REJECTED"&&JSON.stringify(this.unseal<StoredWorkflow>(previous.snapshot).answers)===JSON.stringify(answers)) throw new ServiceError("CONFLICT","Correct the rejected answers before submitting again.");
       const submissionId=createEntityId();
       const frozen={...state,patient,answers,cycle:row.cycle};
       await tx.insert(assessmentSubmissions).values({id:submissionId,organizationId,assessmentId:id,revision:row.revision,snapshot:this.seal({...frozen,reports:manifest}),idempotencyKey:submissionId});

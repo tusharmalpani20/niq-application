@@ -18,7 +18,7 @@ Patient context, answers, submissions, raw scoring results and measurements are 
 
 Initialization shells exist before remote calls and use a 120-second lease. Repeated caller request keys return the same initialization. Scoring submissions freeze the answer/attachment snapshot and idempotency key before contacting the provider, with a separate 120-second lease. An expired lease can be claimed again; the token fences a late worker from overwriting the new worker's result.
 
-Draft saves require exact optimistic revisions. A successful submission freezes editing. Transport errors, wrong connection, unknown responses and `REQUEST_IN_PROGRESS` do **not** reopen editing or issue another key. Only a validated pre-charge answer rejection reopens the draft; another submission requires changed answers. Every old snapshot remains preserved.
+Draft saves require exact optimistic revisions. A successful submission freezes editing. Transport errors, wrong connection, unknown responses and `REQUEST_IN_PROGRESS` do **not** reopen editing or issue another key. Only a validated pre-charge answer rejection reopens the draft. A clinician may submit again with the same answers; the scoring service may reject them again. Every old snapshot remains preserved.
 
 User retry endpoint: `POST /v1/organizations/:organizationId/assessments/:assessmentId/submission/retry`. Retries use the original key. Five-second backoff prevents rapid repeated calls. After three unsuccessful attempts the submission enters `RECONCILIATION_REQUIRED`; regular retries stop contacting scoring. The application cannot safely fix an abandoned provider operation itself.
 

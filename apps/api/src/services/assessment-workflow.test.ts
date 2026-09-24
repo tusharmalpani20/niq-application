@@ -136,15 +136,15 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  await db.update(tables.scoringConnections).set({deploymentId:original!.deploymentId}).where(eq(tables.scoringConnections.organizationId,org));
  await service.retrySubmission(actor,org,id,context);expect(keys).toHaveLength(2);
  });
- test("operator same-key rejection reopens only corrected answers and retains frozen files",async()=>{
+ test("operator same-key rejection permits resubmission and retains frozen files",async()=>{
  behavior="rejected";await db.update(tables.assessmentSubmissions).set({nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,id));
  let record=await service.retrySubmission({...actor,role:"ORGANIZATION_ADMIN"},org,id,context,true);expect(record.status).toBe("DRAFT");expect(record.submission?.issues).toEqual([{fieldId:"height_cm",message:"Review this answer before submitting again."}]);expect((await service.read(actor,org,id)).submission?.issues).toEqual(record.submission?.issues ?? []);expect(new Set(keys).size).toBe(1);
- await expect(service.submit(actor,org,id,record.revision,context)).rejects.toMatchObject({code:"CONFLICT"});
+ record=await service.submit(actor,org,id,record.revision,context);expect(record.status).toBe("DRAFT");expect(new Set(keys).size).toBe(2);
  const report=record.reports[0]!,file=report.files[0]!;const [stored]=await db.select().from(tables.assessmentFiles).where(eq(tables.assessmentFiles.id,file.id));
  record=await service.reports.remove(actor,org,id,report.id,record.revision,context);
  const retained=await service.storage!.open({organizationId:org,patientId:patient,assessmentId:id},stored!.objectKey!);expect(await new Response(retained.stream).text()).toContain("fixture");
  record=await service.save(actor,org,id,{revision:record.revision,answers:{...record.answers,height_cm:180}},context);behavior="success";
- record=await service.submit(actor,org,id,record.revision,context);expect(record.status).toBe("SCORED");expect(new Set(keys).size).toBe(2);
+ record=await service.submit(actor,org,id,record.revision,context);expect(record.status).toBe("SCORED");expect(new Set(keys).size).toBe(3);
  });
 
  test("saved versions and scoring evidence are encrypted and completion remains clinical",async()=>{
