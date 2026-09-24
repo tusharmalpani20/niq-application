@@ -12,7 +12,9 @@ export function assessmentResultView(record: ScoreRecord) {
   const expected = record.manifest.sections.flatMap(s => s.fields.filter(f => f.owner === "scoring").map(f => ({ id: f.id, sectionId: s.id })));
   const components = result.components;
   if (components.length !== expected.length || new Set(components.map(c => c.id)).size !== expected.length || components.some(c => !expected.some(f => f.id === c.id && f.sectionId === c.sectionId) || (c.status === "answered") !== (c.points !== null))) return null;
-  const total = components.reduce((sum, c) => sum + (c.points ?? 0), 0);
+  const questionnaireTotal = components.reduce((sum, c) => sum + (c.points ?? 0), 0);
+  const total = questionnaireTotal + (result.faceScan?.points ?? 0);
+  if (result.questionnaireScore !== undefined && (result.questionnaireScore === null ? components.some(component => component.status === "answered") : Math.abs(questionnaireTotal - result.questionnaireScore) > Number.EPSILON * Math.max(1, questionnaireTotal, result.questionnaireScore) * expected.length)) return null;
   if (result.score === null) {
     if (components.some(component => component.status !== "unanswered")) return null;
   } else if (!Number.isFinite(total) || Math.abs(total - result.score) > Number.EPSILON * Math.max(1, total, result.score) * expected.length) return null;
@@ -39,7 +41,7 @@ export function AssessmentResult({ record, onSection }: { record: ScoreRecord; o
   return <div className="grid min-w-0 gap-5">
     <section className="rounded-xl border border-border bg-card p-5"><h2 className="text-xl font-semibold">Assessment Report · {record.reference}</h2>
       <div className="mt-5 grid gap-5 sm:grid-cols-2"><div><p className="text-sm text-muted-foreground">Required answers</p><p className="mt-1 text-3xl font-semibold">{record.progress.percent === 100 ? "Complete" : record.progress.percent === null ? "Unavailable" : `${record.progress.answered}/${record.progress.required}`}</p><p className="mt-1 text-sm text-muted-foreground">{record.progress.answered} of {record.progress.required} required answers</p></div>
-        <div><p className="text-sm text-muted-foreground">NIQ questionnaire score</p><p className="mt-1 text-3xl font-semibold">{result.score === null ? "—" : <>{result.score} <span className="text-base font-normal">points</span></>}</p>{result.classification && <p className="mt-1 font-medium">{result.classification.label}</p>}</div></div>
+        <div><p className="text-sm text-muted-foreground">Final NIQ score</p><p className="mt-1 text-3xl font-semibold">{result.score === null ? "—" : <>{result.score} <span className="text-base font-normal">points</span></>}</p>{result.faceScan && <p className="text-sm text-muted-foreground">Questionnaire {result.questionnaireScore ?? "—"} + Vital IQ {result.faceScan.points}</p>}{result.classification && <p className="mt-1 font-medium">{result.classification.label}</p>}</div></div>
       {result.classification?.interpretation && <p className="mt-4 text-sm text-muted-foreground">{result.classification.interpretation}</p>}
       {!result.clinicalUsePermitted && <Alert className="mt-4"><AlertDescription>This result is not approved for clinical use.</AlertDescription></Alert>}
     </section>

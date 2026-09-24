@@ -20,7 +20,7 @@ type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 export type WorkflowExecutor = Database | Tx;
 type Fetcher=(input:Parameters<typeof fetch>[0],init?:Parameters<typeof fetch>[1])=>Promise<Response>;
 type ConnectionIdentity = { origin: string; deploymentId: string; scoringOrganizationId: string };
-export type StoredWorkflow = { cycle?: number; binding: AssessmentScoringStart; connection: ConnectionIdentity; manifest: AssessmentFormManifest; patient: AssessmentPatient; answers: FormAnswers; heightReferenceYear?: number; heightSource: {assessmentId:string;recordedAt:string}|null };
+export type StoredWorkflow = { cycle?: number; binding: AssessmentScoringStart; connection: ConnectionIdentity; manifest: AssessmentFormManifest; patient: AssessmentPatient; answers: FormAnswers; faceScanSessionId?: string | null; heightReferenceYear?: number; heightSource: {assessmentId:string;recordedAt:string}|null };
 export type WorkflowRow = typeof assessments.$inferSelect;
 export class AssessmentWorkflowService {
   readonly db: Database; readonly applicationService: ApplicationService; readonly config: ApplicationConfig;
@@ -191,7 +191,9 @@ export class AssessmentWorkflowService {
       if(Object.keys(errors).length) throw new ServiceError("VALIDATION_ERROR","Complete the required answers before submitting.",{fields:errors});
       const manifest=await this.reports.submissionManifest(tx,organizationId,id);
       const submissionId=createEntityId();
-      const frozen={...state,patient,answers,cycle:row.cycle};
+      const [currentScan]=await tx.select({remoteId:assessmentFaceScans.remoteId,state:assessmentFaceScans.state,projection:assessmentFaceScans.projection}).from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId,organizationId),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true)));
+      const scoredScan=currentScan?.projection?this.unseal<{score?:{status?:string}}>(currentScan.projection):null;
+      const frozen={...state,patient,answers,cycle:row.cycle,faceScanSessionId:currentScan?.state==="COMPLETED"&&scoredScan?.score?.status==="SCORED"?currentScan.remoteId:null};
       const attestation:AssessmentSubmissionAttestation={submissionId,cycle:row.cycle,revision:row.revision,confirmedAt:new Date().toISOString(),actorMembershipId:actor.membershipId,actorDisplayName:actor.displayName,statementVersion:input.attestation.statementVersion,reviewedSectionIds:expectedSections};
       await tx.insert(assessmentSubmissions).values({id:submissionId,organizationId,assessmentId:id,revision:row.revision,snapshot:this.seal({...frozen,reports:manifest}),attestation:this.seal(attestation),idempotencyKey:submissionId});
       await tx.insert(scoringRequests).values({id:submissionId,organizationId,assessmentId:id,idempotencyKey:submissionId,requestedVersion:state.binding.version});
@@ -214,7 +216,7 @@ export class AssessmentWorkflowService {
     const snapshot=this.unseal<StoredWorkflow>(submission.snapshot);
     try {
       const transport=await this.transport(organizationId,context,snapshot.connection);
-      const calculated=await requestAssessmentScoringCalculate({...transport,binding:snapshot.binding,idempotencyKey:submission.idempotencyKey,answers:getScoringAssessmentAnswers(snapshot.manifest,snapshot.answers)});
+      const calculated=await requestAssessmentScoringCalculate({...transport,binding:snapshot.binding,idempotencyKey:submission.idempotencyKey,answers:getScoringAssessmentAnswers(snapshot.manifest,snapshot.answers),faceScanSessionId:snapshot.faceScanSessionId??undefined});
       await this.db.transaction(async tx=>{
         const [current]=await tx.select().from(assessments).where(and(eq(assessments.id,id),eq(assessments.organizationId,organizationId))).for("update");
         if(!current || current.currentSubmissionId!==submission.id || current.cycle!==(snapshot.cycle??0) || !["SCORING_PENDING","SCORING_UNAVAILABLE"].includes(current.status)) return;

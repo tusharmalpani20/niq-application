@@ -22,7 +22,7 @@ export type ReviewedRisk = {
 export const retryReviewedRiskSchema = z.object({ expectedResultReference: z.string().min(1).max(200), expectedRevision: z.number().int().nonnegative() }).strict();
 export type AssessmentScoreReviews = {
   risk?: ReviewedRisk;
-  scan?: ReviewedScore & { id: string }; revision: number; canAdjust: boolean; entries: ScoreReviewEntry[]; overall: ReviewedScore;
+  scan?: ReviewedScore & { id: string }; scanIncluded?: boolean; revision: number; canAdjust: boolean; entries: ScoreReviewEntry[]; overall: ReviewedScore;
   sections: Array<ReviewedScore & { id: string; items: Array<ReviewedScore & { id: string }> }>;
 };
 /** Explicit parent overrides persist until reset, even when an underlying item changes. */
@@ -38,8 +38,9 @@ export function projectScoreReviews(result: AssessmentScoreResult, entries: Scor
     const sum = (key: "niqPoints" | "reviewedPoints") => items.some(i => i[key] !== null) ? items.reduce((s, i) => s + (i[key] ?? 0), 0) : null;
     return { id, items, ...value(`section:${id}`, sum("niqPoints"), sum("reviewedPoints")) };
   });
-  const total = sections.some(section => section.reviewedPoints !== null)
-    ? sections.reduce((sum, section) => sum + (section.reviewedPoints ?? 0), 0)
+  const includedScan = result.faceScan ? value(`scan:${scan?.id ?? result.faceScan.sessionId}`, result.faceScan.points, result.faceScan.points) : null;
+  const total = sections.some(section => section.reviewedPoints !== null) || includedScan?.reviewedPoints !== null && includedScan?.reviewedPoints !== undefined
+    ? sections.reduce((sum, section) => sum + (section.reviewedPoints ?? 0), 0) + (includedScan?.reviewedPoints ?? 0)
     : null;
-  return { ...(scan ? { scan: { id: scan.id, ...value(`scan:${scan.id}`, scan.points, scan.points) } } : {}), revision: entries.at(-1)?.revision ?? 0, canAdjust: true, entries, sections, overall: value("overall:", result.score, total) };
+  return { ...(scan ? { scan: { id: scan.id, ...value(`scan:${scan.id}`, result.faceScan?.points ?? scan.points, result.faceScan?.points ?? scan.points) } } : {}), scanIncluded: Boolean(includedScan), revision: entries.at(-1)?.revision ?? 0, canAdjust: true, entries, sections, overall: value("overall:", result.score, total) };
 }

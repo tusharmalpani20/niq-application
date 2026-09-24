@@ -37,6 +37,18 @@ describe("assessment scoring transport", () => {
     expect((await calculateBlank(response)).result).toMatchObject({ complete: true, score: null, classification: null, resultReference: "blank-usage" });
     await expect(calculateBlank({ ...response, result: { ...response.result, score: 0, classification: { id: "low", label: "Low", interpretation: "" } } })).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
+  test("accepts a scoring-owned Vital IQ total with no questionnaire answers", async () => {
+    const blank = { ...result(), questionnaireScore: null, faceScan: { sessionId: "scan-1", points: 1 }, score: 1,
+      components: result().components.map(component => ({ ...component, points: null, status: "unanswered" })),
+      answerCoverage: { totalEntries: 19, answeredEntries: 0, unansweredEntries: 19, pendingEntries: 0, allUnanswered: true }, resultReference: "combined-usage" };
+    const request = (body: unknown) => requestAssessmentScoringCalculate({ ...transport, binding, idempotencyKey: "request-key", answers: {}, faceScanSessionId: "scan-1", fetcher: async (_url, init) => {
+      expect(JSON.parse(String(init?.body)).faceScanSessionId).toBe("scan-1");
+      return Response.json(body);
+    } });
+    expect((await request({ result: blank, idempotencyKey: "request-key" })).result.score).toBe(1);
+    await expect(request({ result: { ...blank, score: 2 }, idempotencyKey: "request-key" })).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+    await expect(request({ result: { ...blank, faceScan: { sessionId: "other", points: 1 } }, idempotencyKey: "request-key" })).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+  });
   test("checks evidence, component membership, coverage and total", async () => {
     const valid = success();
     for (const body of [{ ...valid, idempotencyKey: "other" }, ...[{ bindingId: "other" }, { score: 3 }, { components: valid.result.components.slice(1) }, { answerCoverage: { ...valid.result.answerCoverage, answeredEntries: 19 } }, { components: valid.result.components.map((c, i) => i === 0 ? { ...c, sectionId: "other" } : c) }].map(patch => ({ ...valid, result: { ...valid.result, ...patch } }))])

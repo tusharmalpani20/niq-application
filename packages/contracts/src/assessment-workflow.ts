@@ -69,14 +69,16 @@ export type AssessmentWorkflow = {
 export const assessmentScoreResultSchema = z.object({
   formatVersion: z.literal(2), profile: z.literal("NIQ_FINAL_ASSESSMENT"), complete: z.literal(true),
   score: z.number().finite().nonnegative().nullable(),
+  questionnaireScore: z.number().finite().nonnegative().nullable().optional(),
+  faceScan: z.object({ sessionId: z.string(), points: z.number().finite().nonnegative() }).nullable().optional(),
   classification: z.object({ id: z.string(), label: z.string(), interpretation: z.string() }).nullable(),
   components: z.array(z.object({ id: z.string(), sectionId: z.string(), label: z.string(), points: z.number().finite().nonnegative().nullable(), status: z.enum(["answered", "unanswered", "pending"]), reason: z.string().optional() })),
   version: z.string(), checksum: z.string().regex(/^[a-f0-9]{64}$/), resultReference: z.string(), calculatedAt: z.iso.datetime(), clinicalUsePermitted: z.boolean(),
 }).superRefine((result, ctx) => {
   const answered = result.components.some(component => component.status === "answered");
-  if (result.score === null && (result.classification !== null || answered || result.components.some(component => component.status === "pending")))
+  if (result.score === null && (result.classification !== null || answered || result.faceScan || result.components.some(component => component.status === "pending")))
     ctx.addIssue({ code: "custom", message: "An unscored result must have only unanswered components" });
-  if (result.score !== null && (result.classification === null || !answered))
-    ctx.addIssue({ code: "custom", message: "A scored result needs answered components and a classification" });
+  if (result.score !== null && (result.classification === null || !answered && !result.faceScan))
+    ctx.addIssue({ code: "custom", message: "A scored result needs questionnaire or face scan points and a classification" });
 });
 export type AssessmentScoreResult = z.infer<typeof assessmentScoreResultSchema>;

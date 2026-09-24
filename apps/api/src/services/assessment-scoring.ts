@@ -28,6 +28,8 @@ const component = z.object({ id, sectionId: id, label: z.string(), points: z.num
 const evaluationSchema = evidenceSchema.extend({
   formatVersion: z.literal(2), profile: z.literal("NIQ_FINAL_ASSESSMENT"), complete: z.boolean(),
   score: z.number().finite().nonnegative().nullable(), classification: z.object({ id, label: z.string(), interpretation: z.string() }).strict().nullable(),
+  questionnaireScore: z.number().finite().nonnegative().nullable().optional(),
+  faceScan: z.object({ sessionId: id, points: z.number().finite().nonnegative() }).strict().nullable().optional(),
   components: z.array(component), answerCoverage: z.object({ totalEntries: z.literal(19), answeredEntries: z.number().int().nonnegative(), unansweredEntries: z.number().int().nonnegative(), pendingEntries: z.number().int().nonnegative(), allUnanswered: z.boolean() }).strict(),
   derived: z.object({ weightLossPercent: z.number().finite().nullable(), proteinAdequacy: z.enum(["adequate", "inadequate"]).nullable() }).strict(),
   riskStatus: z.enum(["DEVELOPMENT_PLACEHOLDER", "CLIENT_CONFIRMED"]), clinicalUsePermitted: z.boolean(),
@@ -70,7 +72,7 @@ export async function requestAssessmentScoringStart(input: AssessmentScoringTran
   if (!parsed.success || parsed.data.assessmentReference !== input.assessmentReference || input.expectedBinding && !sameEvidence(parsed.data, input.expectedBinding)) throw invalid();
   return parsed.data;
 }
-export async function requestAssessmentScoringCalculate(input: AssessmentScoringTransport & { binding: AssessmentScoringStart; idempotencyKey: string; answers: AssessmentScoringAnswers }): Promise<AssessmentScoringCalculation> {
+export async function requestAssessmentScoringCalculate(input: AssessmentScoringTransport & { binding: AssessmentScoringStart; idempotencyKey: string; answers: AssessmentScoringAnswers; faceScanSessionId?: string }): Promise<AssessmentScoringCalculation> {
   const allowed = new Set([
     ...input.binding.questionnaire.sections.flatMap(s => s.fields.filter(f => f.type !== "calculated" && f.type !== "derived").map(f => f.id)),
     ...input.binding.questionnaire.supportingInputs.map(f => f.id),
@@ -79,8 +81,10 @@ export async function requestAssessmentScoringCalculate(input: AssessmentScoring
   // Validate before JSON serialization: NaN/Infinity otherwise become null silently.
   if (!answers.success || Object.keys(input.answers).some(key => !allowed.has(key)))
     throw new AssessmentScoringRequestError("rejected", "INVALID_LOCAL_ANSWERS");
-  const reply = await post(input, "calculate", { assessmentReference: input.binding.assessmentReference, idempotencyKey: input.idempotencyKey, answers: answers.data });
+  const reply = await post(input, "calculate", { assessmentReference: input.binding.assessmentReference, idempotencyKey: input.idempotencyKey, answers: answers.data, ...(input.faceScanSessionId ? { faceScanSessionId: input.faceScanSessionId } : {}) });
   if (!reply.response.ok) {
+    if (reply.response.status === 422 && z.object({ error: z.literal("FACE_SCAN_UNAVAILABLE") }).safeParse(reply.body).success)
+      throw new AssessmentScoringRequestError("rejected", "FACE_SCAN_UNAVAILABLE", [{ path: "face_scan", code: "FACE_SCAN_UNAVAILABLE", message: "The reviewed face scan is unavailable for scoring." }]);
     const rejection = z.object({ error: z.enum(["INVALID_ASSESSMENT_ANSWERS", "ASSESSMENT_INCOMPLETE"]), result: evaluationSchema }).strict().safeParse(reply.body);
     if (rejection.success && sameEvidence(rejection.data.result, input.binding) &&
       (reply.response.status === 400 && rejection.data.error === "INVALID_ASSESSMENT_ANSWERS" && rejection.data.result.issues.length > 0 || reply.response.status === 422 && rejection.data.error === "ASSESSMENT_INCOMPLETE" && !rejection.data.result.complete)) {
@@ -97,13 +101,17 @@ export async function requestAssessmentScoringCalculate(input: AssessmentScoring
   const coverage = result.answerCoverage;
   const count = (status: string) => result.components.filter(c => c.status === status).length;
   if (coverage.totalEntries !== expected.length || coverage.answeredEntries !== count("answered") || coverage.unansweredEntries !== count("unanswered") || coverage.pendingEntries !== count("pending") || coverage.allUnanswered !== (count("answered") === 0)) throw invalid();
+  if (input.faceScanSessionId ? result.faceScan?.sessionId !== input.faceScanSessionId : result.faceScan != null) throw invalid();
+  const questionnaireScore = result.questionnaireScore ?? (result.faceScan ? null : result.score);
+  const questionnairePoints = result.components.reduce((total, c) => total + (c.points ?? 0), 0);
+  if (questionnaireScore === null ? coverage.answeredEntries !== 0 : coverage.answeredEntries === 0 || Math.abs(questionnaireScore - questionnairePoints) > Number.EPSILON * Math.max(1, questionnaireScore, questionnairePoints) * expected.length) throw invalid();
   if (result.score === null) {
-    if (result.classification !== null || !coverage.allUnanswered || coverage.pendingEntries !== 0) throw invalid();
+    if (result.classification !== null || !coverage.allUnanswered || coverage.pendingEntries !== 0 || result.faceScan) throw invalid();
     return parsed.data;
   }
-  if (result.classification === null || coverage.answeredEntries === 0) throw invalid();
-  const sum = result.components.reduce((total, c) => total + (c.points ?? 0), 0);
-  if (!Number.isFinite(sum) || Math.abs(sum - result.score) > Number.EPSILON * Math.max(1, sum, result.score) * expected.length) throw invalid();
+  if (result.classification === null || coverage.answeredEntries === 0 && !result.faceScan) throw invalid();
+  const sum = questionnairePoints + (result.faceScan?.points ?? 0);
+  if (!Number.isFinite(sum) || Math.abs(sum - result.score) > Number.EPSILON * Math.max(1, sum, result.score) * (expected.length + 1)) throw invalid();
   return parsed.data;
 }
 

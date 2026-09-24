@@ -38,11 +38,22 @@ test("completed blank assessment shows a dash without a risk category", () => {
     components: value.components.map(component => ({ ...component, points: null, status: "unanswered" })) } };
   expect(assessmentResultView(blank)).not.toBeNull();
   const html = renderToStaticMarkup(<AssessmentResult record={blank} onSection={() => {}} />);
-  expect(html).toContain("NIQ questionnaire score");
+  expect(html).toContain("Final NIQ score");
   expect(html).toContain("—");
   expect(html).not.toContain("Low");
   expect(html).not.toContain("0 points");
   expect(assessmentResultView({ ...blank, result: { ...blank.result, components: value.components } })).toBeNull();
+});
+
+test("server-scored Vital IQ appears in the final total when the questionnaire is blank", () => {
+  const value = record.result as { components: Array<Record<string, unknown>> };
+  const combined = { ...record, result: { ...value, score: 1, questionnaireScore: null, faceScan: { sessionId: "scan-1", points: 1 },
+    components: value.components.map(component => ({ ...component, points: null, status: "unanswered" })) } };
+  expect(assessmentResultView(combined)).not.toBeNull();
+  const html = renderToStaticMarkup(<AssessmentResult record={combined} onSection={() => {}} />);
+  expect(html).toContain("Final NIQ score");
+  expect(html).toContain("Questionnaire — + Vital IQ 1");
+  expect(assessmentResultView({ ...combined, result: { ...combined.result, score: 2 } })).toBeNull();
 });
 
 test("unresolved component includes the server reason rather than implying processing", () => {

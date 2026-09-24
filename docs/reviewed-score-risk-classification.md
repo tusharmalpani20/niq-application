@@ -2,11 +2,11 @@
 
 ## Behavior
 
-Original questionnaire answers, NIQ score and NIQ risk classification remain unchanged. Score adjustments retain their reasons and history. The effective reviewed total respects item, section and overall overrides; face-scan scores remain separate from the questionnaire total.
+Original questionnaire answers, final NIQ score and NIQ risk classification remain unchanged. Score adjustments retain their reasons and history. The effective reviewed total respects item, section and overall overrides. For scoring results that include a selected Vital IQ scan, its points and any scan review contribute to the final total; older scoring results retain their original totals.
 
 NIQ classifies the reviewed total using the assessment's original pinned rule version. The workspace displays this classification beside the reviewed score. Pending or failed classification never displays an older classification as current. Completion requires confirmation for the current reviewed score; an older request cannot satisfy that requirement.
 
-Restoring all questionnaire overrides uses the original NIQ classification again. An unchanged effective total can reuse the previous classification request for that submission, including changes only to face-scan points or items beneath a fixed parent override.
+Restoring all overrides uses the original NIQ classification again. An unchanged effective total can reuse the previous classification request for that submission, including changes to items beneath a fixed parent override.
 
 ## Requests and recovery
 

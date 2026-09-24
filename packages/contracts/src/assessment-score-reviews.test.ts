@@ -44,3 +44,11 @@ test("scan overrides are tied to their scan and excluded from questionnaire tota
  expect(next.scan?.overridden).toBe(false);
  expect(next.entries).toHaveLength(1);
 });
+test("Vital IQ included by NIQ Scoring contributes to reviewed final totals", () => {
+ const combined = { ...result, score: 1, questionnaireScore: null, faceScan: { sessionId: "remote-scan", points: 1 }, components: result.components.map(component => ({ ...component, points: null, status: "unanswered" })) } as AssessmentScoreResult;
+ const original = projectScoreReviews(combined, [], { id: "local-scan", points: 1 });
+ expect(original.scanIncluded).toBe(true);
+ expect(original.overall).toMatchObject({ niqPoints: 1, reviewedPoints: 1 });
+ const reviewed = projectScoreReviews(combined, [event(1, "scan", "local-scan", 3)], { id: "local-scan", points: 1 });
+ expect(reviewed.overall.reviewedPoints).toBe(3);
+});

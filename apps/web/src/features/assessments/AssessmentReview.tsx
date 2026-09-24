@@ -15,12 +15,14 @@ export function AssessmentReview({ record, answers, scanStatus, scanSession, org
     const issues = getReportSubmissionIssues(report);
     return issues.length ? [{ index: index + 1, issues }] : [];
   });
-  const blocked = missing.length > 0 || incompleteReports.length > 0;
+  const scanRejected = record.submission?.status === "REJECTED" && record.submission.failureCode === "FACE_SCAN_UNAVAILABLE";
+  const blocked = missing.length > 0 || incompleteReports.length > 0 || scanRejected;
   return <div className="grid min-w-0 gap-4">
     {!scored && <section className={`rounded-xl border p-4 ${blocked ? "border-destructive/40 bg-destructive/5" : "border-border bg-card"}`}>
       <div className="flex items-center gap-2">{blocked && <CircleAlert className="size-5 text-destructive" aria-hidden="true"/>}<h3 className={`font-semibold ${blocked ? "text-destructive" : ""}`}>{blocked ? "Submission blocked" : "Submission readiness"}</h3></div>
       {missing.length > 0 ? <><p className="mt-2 text-sm text-muted-foreground">Check these answers before submitting.</p><ul className="mt-3 grid gap-1">{missing.map(({ sectionId, field, error }) => <li key={field.id}><Button className="h-auto min-h-11 whitespace-normal text-left text-destructive hover:text-destructive" variant="link" onPress={() => onSection(sectionId, field.id)}>{field.label}: {error === "Required" ? "Not answered" : error}</Button></li>)}</ul></> : <p className="mt-2 text-sm text-muted-foreground">Required answers are complete.</p>}
       {incompleteReports.length > 0 && <><p className="mt-3 text-sm text-muted-foreground">Complete these attachments before submitting:</p><ul className="mt-2 grid gap-1">{incompleteReports.map(({ index, issues }) => <li key={index}><Button className="h-auto min-h-11 whitespace-normal text-left font-semibold text-destructive hover:text-destructive" variant="link" onPress={() => onSection("reports")}>Report {index} needs {issues.map(issue => issue === "name" ? "a report name" : issue === "date" ? "a date" : "an uploaded file").join(" and ")}</Button></li>)}</ul></>}
+      {scanRejected && <Button className="mt-2 h-auto min-h-11 whitespace-normal text-left text-destructive hover:text-destructive" variant="link" onPress={() => onSection("face_scan")}>NIQ Scoring could not use the selected face scan. Review the scan before submitting again.</Button>}
       {!incompleteReports.length && !record.reports.length && <p className="mt-2 text-sm text-muted-foreground">Attachments are optional when no report has been created.</p>}
     </section>}
     <div className="overflow-hidden rounded-xl border border-border bg-card">{record.manifest.sections.map(section => {

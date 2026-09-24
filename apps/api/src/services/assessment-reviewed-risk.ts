@@ -11,7 +11,7 @@ import type { Principal, RequestContext } from "./application";
 type Task = typeof assessmentReviewedRisks.$inferSelect;
 type Request = {score:number; snapshot:StoredWorkflow};
 export function hasQuestionnaireOverrides(projection:AssessmentScoreReviews){
- return projection.overall.overridden||projection.sections.some(s=>s.overridden||s.items.some(i=>i.overridden));
+ return projection.overall.overridden||Boolean(projection.scanIncluded && projection.scan?.overridden)||projection.sections.some(s=>s.overridden||s.items.some(i=>i.overridden));
 }
 /** A separate request log prevents recalculation from overwriting questionnaire or review history. */
 export class AssessmentReviewedRiskService {
@@ -35,7 +35,7 @@ export class AssessmentReviewedRiskService {
   const previous=await this.task(tx,row,projection.revision-1);
   const request:Request={score:projection.overall.reviewedPoints!,snapshot:this.service.unseal<StoredWorkflow>(submission.snapshot)};
   const equivalent=previous&&this.service.unseal<Request>(previous.request).score===request.score;
-  // Scan-only changes and parent overrides that keep the same total reuse the upstream request.
+  // Changes that keep the same total reuse the upstream classification request.
   const [task]=await tx.insert(assessmentReviewedRisks).values({id:createEntityId(),organizationId:row.organizationId,assessmentId:row.id,submissionId:submission.id,revision:projection.revision,requestKey:equivalent?previous.requestKey:createEntityId(),request:this.service.seal(request),status:equivalent&&previous.status==="SUCCEEDED"?"SUCCEEDED":"PENDING",result:equivalent&&previous.status==="SUCCEEDED"?previous.result:null}).returning();
   return task!;
  }
