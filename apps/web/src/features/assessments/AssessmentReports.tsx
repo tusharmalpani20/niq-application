@@ -16,6 +16,7 @@ type Props = {
   onChanged: () => Promise<void>; onBusyChange?: (busy: boolean) => void; onDirtyChange?: (dirty: boolean) => void;
 };
 type Upload = { key: string; reportId: string; file: File; progress: number; error?: string; state: "queued" | "uploading" | "failed" };
+type StagedFile = { key: string; file: File };
 type Editor = { id?: string; label: string; purpose: string; datePrecision: "DAY" | "MONTH"; date: string };
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "Something went wrong. Please try again.";
 export const formatReportMegabytes = (bytes: number) => Number((bytes / 1024 / 1024).toFixed(2)).toString();
@@ -33,14 +34,15 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [uploads, setUploads] = useState<Upload[]>([]);
+  const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
   const [remove, setRemove] = useState<{ reportId: string; fileId?: string; label: string } | null>(null);
   const controller = useRef<AbortController | null>(null);
   const base = reportBase(organizationId, assessmentId);
   useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
-  useEffect(() => { onDirtyChange?.(dirty || uploads.length > 0); }, [dirty, uploads.length, onDirtyChange]);
+  useEffect(() => { onDirtyChange?.(dirty || uploads.length > 0 || stagedFiles.length > 0); }, [dirty, uploads.length, stagedFiles.length, onDirtyChange]);
   useEffect(() => () => { controller.current?.abort(); }, []);
   const currentBytes = reports.flatMap(report => report.files).reduce((sum, file) => sum + file.size, 0);
-  const beginAddReport = () => { setMessage(""); setEditor({ label: "", purpose: "", datePrecision: "DAY", date: "" }); };
+  const beginAddReport = () => { setMessage(""); setStagedFiles([]); setEditor({ label: "", purpose: "", datePrecision: "DAY", date: "" }); };
 
   async function refresh() {
     try { await onChanged(); } catch { setMessage("Changes may be saved. Refresh this assessment before continuing."); }
@@ -54,26 +56,60 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
     const parsed = reportInputSchema.safeParse(input);
     if (!parsed.success) { setMessage(parsed.error.issues[0]?.message ?? "Check the report details."); return; }
     setBusy(true); setMessage("");
+    let createdReportId: string | undefined;
     try {
-      await mutateReport(editor.id ? `${base}/${editor.id}` : base, editor.id ? "PATCH" : "POST", parsed.data);
-      setEditor(null); setDirty(false); await refresh();
+      const result = await mutateReport(editor.id ? `${base}/${editor.id}` : base, editor.id ? "PATCH" : "POST", parsed.data);
+      if (!editor.id) createdReportId = result.reports.find(report => !reports.some(existing => existing.id === report.id))?.id;
+      setEditor(null); setDirty(false);
+      if (stagedFiles.length && !editor.id) {
+        if (!createdReportId) { setStagedFiles([]); setMessage("Report saved, but its files could not be matched. Refresh before uploading them."); await refresh(); return; }
+        const reportId = createdReportId;
+        const pending: Upload[] = stagedFiles.map(({ key, file }) => ({ key, file, reportId, progress: 0, state: "queued" }));
+        setStagedFiles([]);
+        setUploads(previous => [...previous, ...pending]);
+        let nextRevision = result.revision;
+        for (const upload of pending) {
+          const abort = new AbortController(); controller.current = abort;
+          setUploads(previous => previous.map(item => item.key === upload.key ? { ...item, state: "uploading" } : item));
+          try {
+            const updated = await uploadReportFile({ url: `${base}/${reportId}/files`, file: upload.file, revision: nextRevision, requestKey: upload.key, signal: abort.signal, maxFileBytes: limits.fileBytes,
+              onProgress: progress => setUploads(previous => previous.map(item => item.key === upload.key ? { ...item, progress } : item)),
+            });
+            nextRevision = updated.revision;
+            setUploads(previous => previous.filter(item => item.key !== upload.key));
+          } catch (error) {
+            setUploads(previous => previous.map(item => item.key === upload.key ? { ...item, state: "failed", error: errorMessage(error) } : item));
+            setMessage("The report was created, but a file did not upload. Check the saved files and retry from the report below.");
+            break;
+          } finally { controller.current = null; }
+        }
+      }
+      await refresh();
     } catch (error) {
       if (!editor.id && error instanceof ReportMutationError && error.uncertain) {
         // A lost response may follow a committed POST. Do not offer the same create form as a retry.
-        setUnconfirmed(editor); setEditor(null); setDirty(false);
+        setUnconfirmed(editor); setEditor(null); setDirty(false); setStagedFiles([]);
       }
       setMessage(errorMessage(error)); await refresh();
     }
     finally { setBusy(false); }
   }
+  function validFiles(files: File[], existingCount: number) {
+    if (existingCount + files.length > limits.filesPerReport) { setMessage(`Each report can contain up to ${limits.filesPerReport} files.`); return false; }
+    if (files.some(file => !supported.has(file.type) || file.size === 0 || file.size > limits.fileBytes)) { setMessage(`Choose PDF, JPEG or PNG files up to ${formatReportMegabytes(limits.fileBytes)} MB each.`); return false; }
+    if (currentBytes + uploads.reduce((sum, upload) => sum + upload.file.size, 0) + stagedFiles.reduce((sum, staged) => sum + staged.file.size, 0) + files.reduce((sum, file) => sum + file.size, 0) > limits.assessmentBytes) { setMessage(`This assessment can contain up to ${formatReportMegabytes(limits.assessmentBytes)} MB of reports.`); return false; }
+    setMessage(""); return true;
+  }
+  function selectStagedFiles(files: FileList | null) {
+    if (!files || busy) return;
+    const next = Array.from(files);
+    if (validFiles(next, stagedFiles.length)) setStagedFiles(previous => [...previous, ...next.map(file => ({ key: crypto.randomUUID(), file }))]);
+  }
   function selectFiles(report: AssessmentReport, files: FileList | null) {
     if (!files || busy) return;
     const next = Array.from(files);
     const queued = uploads.filter(upload => upload.reportId === report.id);
-    if (report.files.length + queued.length + next.length > limits.filesPerReport) { setMessage(`Each report can contain up to ${limits.filesPerReport} files.`); return; }
-    if (next.some(file => !supported.has(file.type) || file.size === 0 || file.size > limits.fileBytes)) { setMessage(`Choose PDF, JPEG or PNG files up to ${formatReportMegabytes(limits.fileBytes)} MB each.`); return; }
-    if (currentBytes + uploads.reduce((sum, upload) => sum + upload.file.size, 0) + next.reduce((sum, file) => sum + file.size, 0) > limits.assessmentBytes) { setMessage(`This assessment can contain up to ${formatReportMegabytes(limits.assessmentBytes)} MB of reports.`); return; }
-    setMessage("");
+    if (!validFiles(next, report.files.length + queued.length)) return;
     setUploads(previous => [...previous, ...next.map(file => ({ key: crypto.randomUUID(), reportId: report.id, file, progress: 0, state: "queued" as const }))]);
   }
   async function uploadFile(upload: Upload) {
@@ -108,14 +144,22 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
         <Field><FieldLabel htmlFor="report-date-precision">Date format</FieldLabel><Select aria-label="Date format" className="w-full" value={editor.datePrecision} isDisabled={busy} onChange={value => { const datePrecision = value as "DAY" | "MONTH"; setEditor({ ...editor, datePrecision, date: datePrecision === "MONTH" ? editor.date.slice(0, 7) : "" }); setDirty(true); }}><SelectTrigger id="report-date-precision" className="w-full"><SelectValue/></SelectTrigger><SelectContent><SelectItem id="DAY">Exact date</SelectItem><SelectItem id="MONTH">Month and year</SelectItem></SelectContent></Select></Field>
         <Field><FieldLabel htmlFor="report-date">Date on report</FieldLabel>{editor.datePrecision === "MONTH" ? <MonthPicker id="report-date" value={editor.date} disabled={busy} onChange={date => { setEditor({ ...editor, date }); setDirty(true); }} /> : <AssessmentDateInput id="report-date" label="Date on report" value={editor.date} disabled={busy} invalid={false} onChange={date => { setEditor({ ...editor, date: date ?? "" }); setDirty(true); }} />}</Field>
         
-        <div className="col-span-full flex flex-wrap justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => { setEditor(null); setDirty(false); }}>Cancel</Button><Button type="submit" isDisabled={busy}>{busy ? "Saving…" : editor.id ? "Save changes" : "Create report"}</Button></div>
+        {!editor.id && <div className="col-span-full">
+          <p className="mb-2 text-sm font-medium">Files <span className="font-normal text-muted-foreground">(optional)</span></p>
+          <label className="relative flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-brand-ink hover:bg-muted focus-within:ring-2 focus-within:ring-ring">
+            <Plus className="size-4" aria-hidden="true"/>Choose PDF, JPEG or PNG files
+            <input className="absolute inset-0 w-full cursor-pointer opacity-0" aria-label="Choose files for new report" type="file" multiple accept="application/pdf,image/jpeg,image/png" disabled={busy} onChange={event => { selectStagedFiles(event.target.files); event.target.value = ""; }}/>
+          </label>
+          {stagedFiles.length > 0 && <ul className="mt-2 space-y-2">{stagedFiles.map(({ key, file }) => <li key={key} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-border px-3 py-1 text-sm"><span className="min-w-0 break-all">{file.name}</span><Button variant="ghost" size="icon" className="size-11 shrink-0" isDisabled={busy} aria-label={`Remove ${file.name} from selection`} onPress={() => setStagedFiles(previous => previous.filter(item => item.key !== key))}><X aria-hidden="true"/></Button></li>)}</ul>}
+        </div>}
+        <div className="col-span-full flex flex-wrap justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => { setEditor(null); setDirty(false); setStagedFiles([]); }}>Cancel</Button><Button type="submit" isDisabled={busy}>{busy ? "Saving…" : editor.id ? "Save changes" : stagedFiles.length ? "Create and upload" : "Create report"}</Button></div>
       </div></form>
   );
   return <section className="flex min-w-0 flex-col gap-5" aria-label="Attachments">
     <p className="text-sm text-muted-foreground">Add supporting documents to this assessment. PDF, JPEG or PNG · Up to {formatReportMegabytes(limits.fileBytes)} MB per file</p>
     {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
     {unconfirmed && <Alert><AlertDescription><p>Check whether this report was saved before adding it again.</p><dl className="mt-2 grid gap-1"><div><dt className="font-medium">Report name</dt><dd className="break-words">{unconfirmed.label || "Not entered"}</dd></div><div><dt className="font-medium">Purpose</dt><dd className="break-words">{unconfirmed.purpose || "Not entered"}</dd></div><div><dt className="font-medium">Date</dt><dd>{unconfirmed.date || "Not entered"}</dd></div></dl><Button className="mt-2" variant="outline" onPress={() => setUnconfirmed(null)}>Dismiss</Button></AlertDescription></Alert>}
-    {!reports.length && !editor && <div className="rounded-xl border border-border bg-card px-5 py-8 text-center"><FileText className="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true"/><h3 className="font-semibold">No attachments yet</h3><p className="mt-2 text-sm text-muted-foreground">Create a report entry, then add its files.</p>{!readOnly && <Button variant="outline" className="mt-5 min-h-11 border-primary/30 text-brand-ink" isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={beginAddReport}><Plus aria-hidden="true"/>Add report</Button>}</div>}
+    {!reports.length && !editor && <div className="rounded-xl border border-border bg-card px-5 py-8 text-center"><FileText className="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true"/><h3 className="font-semibold">No attachments yet</h3><p className="mt-2 text-sm text-muted-foreground">Create a report and choose its files in one step.</p>{!readOnly && <Button variant="outline" className="mt-5 min-h-11 border-primary/30 text-brand-ink" isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={beginAddReport}><Plus aria-hidden="true"/>Add report</Button>}</div>}
     {reports.map((report, index) => <article key={report.id} className="min-w-0 rounded-xl border border-border bg-card p-4 text-card-foreground">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Report {index + 1}</h3>
         {!readOnly && <div className="flex gap-2"><Button variant="ghost" isDisabled={busy || !!editor} onPress={() => { setMessage(""); setEditor({ id: report.id, label: report.label, purpose: report.purpose, datePrecision: report.datePrecision, date: dateValue(report) }); }}>Edit details</Button><Button variant="ghost" className="text-destructive" isDisabled={busy || !!editor} onPress={() => setRemove({ reportId: report.id, label: report.label || "this report" })}><Trash2 aria-hidden="true"/>Remove report</Button></div>}
@@ -142,7 +186,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
         {upload.error && <p role="alert" className="mt-2 text-sm text-destructive">{upload.error}</p>}
       </div>)}
     </article>)}
-    {editor && !editor.id && <article className="rounded-xl border border-border bg-card p-4"><h3 className="font-semibold">New report</h3><p className="mb-4 mt-1 text-sm text-muted-foreground">Details are optional. Create the report, then choose and upload its files.</p>{reportEditor}</article>}
+    {editor && !editor.id && <article className="rounded-xl border border-border bg-card p-4"><h3 className="font-semibold">New report</h3><p className="mb-4 mt-1 text-sm text-muted-foreground">Report name, purpose, date and files are optional. Selected files upload when you create the report.</p>{reportEditor}</article>}
     {!readOnly && !editor && reports.length > 0 && <Button variant="outline" className="min-h-11 w-full border-primary/30 text-brand-ink" isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={beginAddReport}><Plus aria-hidden="true"/>Add another report</Button>}
     {remove && <Dialog ariaLabel="Remove report attachment" isOpen isDismissable={!busy} showCloseButton={!busy} onOpenChange={open => { if (!open && !busy) setRemove(null); }}><DialogTitle>Remove {remove.fileId ? "file" : "report"}?</DialogTitle><p className="break-words">{remove.fileId ? `Remove ${remove.label}?` : `Remove ${remove.label} and all its files?`}</p><div className="flex justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => setRemove(null)}>Cancel</Button><Button variant="destructive" isDisabled={busy} onPress={() => void removeItem()}>Remove</Button></div></Dialog>}
   </section>;

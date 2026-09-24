@@ -143,7 +143,7 @@ test("report editor survives section changes without a discard prompt", async ()
   dom.window.confirm = () => { throw new Error("Section navigation must not use browser confirmation"); };
   await click("Attachments");
   await click("Add report");
-  expect(document.body.textContent).toContain("Details are optional. Create the report, then choose and upload its files.");
+  expect(document.body.textContent).toContain("Report name, purpose, date and files are optional. Selected files upload when you create the report.");
   expect(document.body.textContent).toContain("Create report");
   const input = document.querySelector<HTMLInputElement>('#report-label')!;
   await act(async () => {
