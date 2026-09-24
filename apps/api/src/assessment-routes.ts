@@ -4,7 +4,7 @@ import { AssessmentScoreReviewService } from "./services/assessment-score-review
 import { scoreReviewInputSchema } from "../../../packages/contracts/src/assessment-score-reviews";
 import type { Hono } from "hono";
 import { z } from "zod";
-import { initializeAssessmentSchema, saveAssessmentSchema, assessmentRevisionSchema, reportInputSchema } from "../../../packages/contracts/src/assessment-workflow";
+import { initializeAssessmentSchema, saveAssessmentSchema, assessmentRevisionSchema, assessmentSubmitSchema, reportInputSchema } from "../../../packages/contracts/src/assessment-workflow";
 import { ServiceError } from "./services/application";
 import type { AssessmentWorkflowService } from "./services/assessment-workflow";
 const json=async(c:any)=>{try{return await c.req.json();}catch(error){if(!(error instanceof SyntaxError))throw error;throw new ServiceError("VALIDATION_ERROR","Invalid JSON request.");}};
@@ -31,7 +31,7 @@ export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowSe
   app.get(`${base}/assessments/:assessmentId/clinical-review/eligible-reviewers`,async c=>{const p=parts(c);return c.json(await clinicalReviews.eligible(p.actor,p.org,p.assessment));});
   app.post(`${base}/assessments/:assessmentId/clinical-review`,async c=>{const p=parts(c);return c.json(await clinicalReviews.command(p.actor,p.org,p.assessment,parse(clinicalReviewActionSchema,await json(c)),p.context));});
   app.patch(`${base}/assessments/:assessmentId`,async c=>{const p=parts(c);return c.json(await service.save(p.actor,p.org,p.assessment,parse(saveAssessmentSchema,await json(c)),p.context));});
-  app.post(`${base}/assessments/:assessmentId/submit`,async c=>{const p=parts(c);return c.json(await service.submit(p.actor,p.org,p.assessment,parse(assessmentRevisionSchema,await json(c)).revision,p.context));});
+  app.post(`${base}/assessments/:assessmentId/submit`,async c=>{const p=parts(c);return c.json(await service.submit(p.actor,p.org,p.assessment,parse(assessmentSubmitSchema,await json(c)),p.context));});
   app.post(`${base}/assessments/:assessmentId/submission/retry`,async c=>{const p=parts(c);return c.json(await service.retrySubmission(p.actor,p.org,p.assessment,p.context));});
   app.post(`${base}/assessments/:assessmentId/submission/reconcile`,async c=>{const p=parts(c);return c.json(await service.retrySubmission(p.actor,p.org,p.assessment,p.context,true));});
   app.patch(`${base}/patients/:patientId/contact`,async c=>{const input=parse(z.object({phone:z.string().trim().min(3).max(32).regex(/^[+\d ()-]+$/),assessmentId:id.optional(),revision:z.number().int().nonnegative().optional()}).refine(v=>(v.assessmentId===undefined)===(v.revision===undefined)).strict(),await json(c));return c.json(await service.updateContact(c.get("principal"),parse(id,c.req.param("organizationId")),parse(id,c.req.param("patientId")),input.phone,{requestId:c.get("requestId")},input.assessmentId?{assessmentId:input.assessmentId,revision:input.revision!}:undefined) as any);});

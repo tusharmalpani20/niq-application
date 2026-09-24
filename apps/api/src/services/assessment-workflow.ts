@@ -1,11 +1,12 @@
 import { appendAssessmentHistory, assertCorrectionOwner, reviewState } from "./clinical-review-state";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { ApplicationConfig } from "@niq/application-config";
 import { hasPermission, type Permission, formatAssessmentReference, clearInactiveAssessmentAnswers, buildAssessmentForm, getAssessmentCompletion, getScoringAssessmentAnswers, validateAssessmentAnswers, type FormAnswers, type AssessmentFormManifest } from "@niq/application-contracts";
-import type { AssessmentWorkflow, AssessmentPatient, AssessmentInitialization } from "../../../../packages/contracts/src/assessment-workflow";
+import type { AssessmentWorkflow, AssessmentPatient, AssessmentInitialization, AssessmentReport, AssessmentSubmitInput, AssessmentSubmissionAttestation } from "../../../../packages/contracts/src/assessment-workflow";
 import { createEntityId, selectAssessmentHeight } from "@niq/application-domain";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
-import { assessments, assessmentInitializations, assessmentSubmissions, assessmentAnswers, assessmentReports, assessmentFiles, questionnaireDefinitions, scoringConnections, scoringRequests, scoringResults, measurements, patients, auditEvents, facilities } from "../db/schema";
+import { assessments, assessmentInitializations, assessmentSubmissions, assessmentAnswers, assessmentReports, assessmentFiles, assessmentFaceScans, questionnaireDefinitions, scoringConnections, scoringRequests, scoringResults, measurements, patients, auditEvents, facilities } from "../db/schema";
 import { decryptCredential } from "../security/credential-encryption";
 import { decryptPatientData, encryptPatientData, patientDataKey } from "../security/patient-data";
 import { LocalReportStorage } from "../storage/local-report-storage";
@@ -27,6 +28,13 @@ export class AssessmentWorkflowService {
   private fetcher?: Fetcher;
   seal(value:unknown):{encrypted:string} {const key=patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY,this.config.SESSION_SECRET);return {encrypted:encryptPatientData(JSON.stringify(value),key).toString("base64")};}
   unseal<T>(value:unknown):T {const encrypted=(value as {encrypted?:string})?.encrypted;if(!encrypted) throw new ServiceError("CONFLICT","Assessment data could not be read.");return JSON.parse(decryptPatientData(Buffer.from(encrypted,"base64"),patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY,this.config.SESSION_SECRET))) as T;}
+  private async reviewScan(organizationId:string,assessmentId:string,executor:WorkflowExecutor=this.db) {
+    const [scan]=await executor.select({id:assessmentFaceScans.id,state:assessmentFaceScans.state,updatedAt:assessmentFaceScans.updatedAt}).from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId,organizationId),eq(assessmentFaceScans.assessmentId,assessmentId),eq(assessmentFaceScans.isCurrent,true)));
+    return scan?{id:scan.id,state:scan.state,updatedAt:scan.updatedAt.toISOString()}:null;
+  }
+  private reviewToken(row:WorkflowRow,patient:AssessmentPatient,answers:FormAnswers,reports:AssessmentReport[],scan:Awaited<ReturnType<AssessmentWorkflowService["reviewScan"]>>) {
+    return createHmac("sha256",this.config.SESSION_SECRET).update(JSON.stringify({assessmentId:row.id,cycle:row.cycle,revision:row.revision,patient,answers,reports,scan})).digest("hex");
+  }
   constructor(input: {db:Database;applicationService:ApplicationService;config:ApplicationConfig;fetcher?:Fetcher}) {
     this.db=input.db;this.applicationService=input.applicationService;this.config=input.config;this.fetcher=input.fetcher;
     this.storage=input.config.REPORT_UPLOAD_ROOT ? new LocalReportStorage({root:input.config.REPORT_UPLOAD_ROOT,maxFileBytes:input.config.REPORT_MAX_FILE_BYTES}) : null;
@@ -139,7 +147,11 @@ export class AssessmentWorkflowService {
     const patient=row.status==="DRAFT"?await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient:state.patient;
     const answers=row.status==="DRAFT"?clearInactiveAssessmentAnswers(state.manifest,{...state.answers,...patientAnswers(patient,row.createdAt)}):state.answers;
     const [submission]=row.currentSubmissionId ? await this.db.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.id,row.currentSubmissionId),eq(assessmentSubmissions.assessmentId,id),eq(assessmentSubmissions.organizationId,organizationId))) : [];
-    return {id:row.id,reference:formatAssessmentReference(row.serialNumber),serialNumber:row.serialNumber,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,canEditDraft:row.status === "DRAFT" && hasPermission(actor.role,"assessments.edit") && (!reviewState(this,row).correctionPerson || reviewState(this,row).correctionPerson!.membershipId === actor.membershipId),patient,answers,manifest:state.manifest,progress:getAssessmentCompletion(state.manifest,answers),reports:await this.reports.list(organizationId,id),reportLimits:{fileBytes:this.config.REPORT_MAX_FILE_BYTES,filesPerReport:this.config.REPORT_MAX_FILES_PER_GROUP,reportsPerAssessment:this.config.REPORT_MAX_GROUPS,assessmentBytes:this.config.REPORT_MAX_ASSESSMENT_BYTES},binding:{version:state.binding.version,checksum:state.binding.checksum},result:submission?.result?this.unseal(submission.result):null,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode,nextRetryAt:submission.nextAttemptAt?.toISOString()??null,issues:submission.failureIssues?this.unseal(submission.failureIssues):[]}:null,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
+    const reports=await this.reports.list(organizationId,id);
+    const scan=await this.reviewScan(organizationId,id);
+    const submissions=await this.db.select({attestation:assessmentSubmissions.attestation}).from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,organizationId),eq(assessmentSubmissions.assessmentId,id))).orderBy(assessmentSubmissions.createdAt,assessmentSubmissions.id);
+    const attestations=submissions.filter(item=>item.attestation).map(item=>this.unseal<AssessmentSubmissionAttestation>(item.attestation));
+    return {id:row.id,reference:formatAssessmentReference(row.serialNumber),serialNumber:row.serialNumber,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,canEditDraft:row.status === "DRAFT" && hasPermission(actor.role,"assessments.edit") && (!reviewState(this,row).correctionPerson || reviewState(this,row).correctionPerson!.membershipId === actor.membershipId),patient,answers,manifest:state.manifest,progress:getAssessmentCompletion(state.manifest,answers),reports,reportLimits:{fileBytes:this.config.REPORT_MAX_FILE_BYTES,filesPerReport:this.config.REPORT_MAX_FILES_PER_GROUP,reportsPerAssessment:this.config.REPORT_MAX_GROUPS,assessmentBytes:this.config.REPORT_MAX_ASSESSMENT_BYTES},binding:{version:state.binding.version,checksum:state.binding.checksum},result:submission?.result?this.unseal(submission.result):null,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode,nextRetryAt:submission.nextAttemptAt?.toISOString()??null,issues:submission.failureIssues?this.unseal(submission.failureIssues):[]}:null,reviewToken:this.reviewToken(row,patient,answers,reports,scan),attestations,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
   }
   async save(actor:Principal,organizationId:string,id:string,input:{revision:number;answers:FormAnswers},context:RequestContext) {
     this.clinicalActor(actor,organizationId,"assessments.edit");
@@ -158,26 +170,34 @@ export class AssessmentWorkflowService {
     });
     return this.read(actor,organizationId,id);
   }
-  async submit(actor:Principal,organizationId:string,id:string,revision:number,context:RequestContext) {
+  async submit(actor:Principal,organizationId:string,id:string,input:AssessmentSubmitInput,context:RequestContext) {
     this.clinicalActor(actor,organizationId,"assessments.submit");
     await this.db.transaction(async tx=>{
       const row=await this.authorize(actor,organizationId,id,tx,true);
       assertCorrectionOwner(this,row,actor);
       if(row.status!=="DRAFT") return; // Response-loss replay uses the already frozen submission.
-      this.editable(row,revision,actor);
+      this.editable(row,input.revision,actor);
       const state=this.unseal<StoredWorkflow>(row.workflow);
       const patient=await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient;
-      const answers={...state.answers,...patientAnswers(patient,row.createdAt)};
+      const answers=clearInactiveAssessmentAnswers(state.manifest,{...state.answers,...patientAnswers(patient,row.createdAt)});
+      const expectedSections=[...state.manifest.sections.map(section=>section.id),"face-scan","attachments"];
+      const reviewed=new Set(input.attestation.reviewedSectionIds);
+      if(!input.attestation.confirmed||reviewed.size!==expectedSections.length||expectedSections.some(section=>!reviewed.has(section))) throw new ServiceError("VALIDATION_ERROR","Review every section and confirm the submission before requesting a score.");
+      const reports=await this.reports.list(organizationId,id,tx);
+      const scan=await this.reviewScan(organizationId,id,tx);
+      const actualToken=this.reviewToken(row,patient,answers,reports,scan);
+      if(!/^[a-f0-9]{64}$/.test(input.reviewToken)||!timingSafeEqual(Buffer.from(actualToken,"hex"),Buffer.from(input.reviewToken,"hex"))) throw new ServiceError("CONFLICT","Assessment details changed during review. Review the latest values before submitting.");
       const errors=validateAssessmentAnswers(state.manifest,answers,{requireComplete:true});
       if(Object.keys(errors).length) throw new ServiceError("VALIDATION_ERROR","Complete the required answers before submitting.",{fields:errors});
       const manifest=await this.reports.submissionManifest(tx,organizationId,id);
       const submissionId=createEntityId();
       const frozen={...state,patient,answers,cycle:row.cycle};
-      await tx.insert(assessmentSubmissions).values({id:submissionId,organizationId,assessmentId:id,revision:row.revision,snapshot:this.seal({...frozen,reports:manifest}),idempotencyKey:submissionId});
+      const attestation:AssessmentSubmissionAttestation={submissionId,cycle:row.cycle,revision:row.revision,confirmedAt:new Date().toISOString(),actorMembershipId:actor.membershipId,actorDisplayName:actor.displayName,statementVersion:input.attestation.statementVersion,reviewedSectionIds:expectedSections};
+      await tx.insert(assessmentSubmissions).values({id:submissionId,organizationId,assessmentId:id,revision:row.revision,snapshot:this.seal({...frozen,reports:manifest}),attestation:this.seal(attestation),idempotencyKey:submissionId});
       await tx.insert(scoringRequests).values({id:submissionId,organizationId,assessmentId:id,idempotencyKey:submissionId,requestedVersion:state.binding.version});
       await tx.update(assessments).set({status:"SCORING_PENDING",currentSubmissionId:submissionId,workflow:this.seal(frozen),revision:row.revision+1,updatedAt:new Date()}).where(eq(assessments.id,id));
       await appendAssessmentHistory(this,tx,{...row,revision:row.revision+1},actor,"SCORING_SUBMITTED",{submissionId,workflow:frozen,reports:manifest});
-      await this.audit(tx,actor,context,id,"ASSESSMENT_SUBMITTED",{submissionId});
+      await this.audit(tx,actor,context,id,"ASSESSMENT_SUBMITTED",{submissionId,attestationStatementVersion:attestation.statementVersion,attestedAt:attestation.confirmedAt});
     });
     return this.retrySubmission(actor,organizationId,id,context);
   }

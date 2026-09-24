@@ -10,9 +10,9 @@ import type { ReportMediaType, StagedReport } from "../storage/report-storage";
 import { appendAssessmentHistory } from "./clinical-review-state";
 export class AssessmentReportWorkflow {
   constructor(private readonly service:AssessmentWorkflowService) {}
-  async list(organizationId:string,assessmentId:string):Promise<AssessmentReport[]> {
-    const groups=await this.service.db.select().from(reports).where(and(eq(reports.organizationId,organizationId),eq(reports.assessmentId,assessmentId),isNull(reports.removedAt))).orderBy(reports.createdAt);
-    const attachments=await this.service.db.select().from(files).where(and(eq(files.organizationId,organizationId),eq(files.assessmentId,assessmentId),sql`${files.status} in ('READY','PENDING')`)).orderBy(files.createdAt);
+  async list(organizationId:string,assessmentId:string,executor:WorkflowExecutor=this.service.db):Promise<AssessmentReport[]> {
+    const groups=await executor.select().from(reports).where(and(eq(reports.organizationId,organizationId),eq(reports.assessmentId,assessmentId),isNull(reports.removedAt))).orderBy(reports.createdAt,reports.id);
+    const attachments=await executor.select().from(files).where(and(eq(files.organizationId,organizationId),eq(files.assessmentId,assessmentId),sql`${files.status} in ('READY','PENDING')`)).orderBy(files.createdAt,files.id);
     return groups.map(group=>({id:group.id,label:group.label,purpose:group.purpose,datePrecision:group.datePrecision as "DAY"|"MONTH",year:group.year,month:group.month,day:group.day,files:attachments.filter(file=>file.reportId===group.id).map(file=>({id:file.id,reportId:file.reportId,originalFilename:file.originalFilename,mediaType:file.mediaType,size:file.size,status:file.status,createdAt:file.createdAt.toISOString()}))}));
   }
   async edit(actor:Principal,organizationId:string,assessmentId:string,input:z.infer<typeof reportInputSchema>,context:RequestContext,reportId?:string) {

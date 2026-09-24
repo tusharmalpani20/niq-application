@@ -12,6 +12,25 @@ export const initializeAssessmentSchema = z.object({ patientId: entity, requestK
 export const assessmentAnswerSchema = z.union([z.string().max(ASSESSMENT_ANSWER_TEXT_LIMIT), z.number().finite(), z.array(z.string().max(100)).max(100), z.null()]);
 export const saveAssessmentSchema = z.object({ revision: z.number().int().nonnegative(), answers: z.record(z.string().max(100), assessmentAnswerSchema) }).strict();
 export const assessmentRevisionSchema = z.object({ revision: z.number().int().nonnegative() }).strict();
+/** Exact wording acknowledged for statementVersion 1; retain when adding a new version. */
+export const ASSESSMENT_ATTESTATION_STATEMENT_V1 = "I have reviewed the information in every section and confirm it is accurate to the best of my knowledge.";
+/** Exact wording acknowledged for statementVersion 2. */
+export const ASSESSMENT_ATTESTATION_STATEMENT_V2 = "I have reviewed every section and confirm the information is accurate.";
+export const assessmentSubmitSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  reviewToken: z.string().regex(/^[a-f0-9]{64}$/),
+  attestation: z.object({
+    statementVersion: z.union([z.literal(1), z.literal(2)]),
+    reviewedSectionIds: z.array(z.string().min(1).max(100)).min(1).max(30),
+    confirmed: z.literal(true),
+  }).strict(),
+}).strict();
+export type AssessmentSubmitInput = z.infer<typeof assessmentSubmitSchema>;
+export type AssessmentSubmissionAttestation = {
+  submissionId: string; cycle: number; revision: number; confirmedAt: string;
+  actorMembershipId: string; actorDisplayName: string; statementVersion: 1 | 2;
+  reviewedSectionIds: string[];
+};
 export const reportInputSchema = z.object({
   revision: z.number().int().nonnegative(), label: z.string().trim().min(1, "Enter a report name.").max(120), purpose: z.string().trim().max(300),
   datePrecision: z.enum(["DAY", "MONTH"]), year: z.number().int().min(1900).max(9999).nullable(),
@@ -40,6 +59,8 @@ export type AssessmentWorkflow = {
   progress: ReturnType<typeof getAssessmentCompletion>; reports: AssessmentReport[]; reportLimits?: AssessmentReportLimits;
   binding: { version: string; checksum: string }; result: unknown | null;
   submission: { id: string; status: string; failureCode: string | null; nextRetryAt?: string | null; issues?: Array<{ fieldId: string; message: string }> } | null;
+  reviewToken: string;
+  attestations: AssessmentSubmissionAttestation[];
   heightSource: { assessmentId: string; recordedAt: string } | null;
   createdAt: string; updatedAt: string;
 };

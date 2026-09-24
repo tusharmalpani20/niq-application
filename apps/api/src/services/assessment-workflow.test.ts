@@ -44,6 +44,10 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  return behavior==="success"?Response.json({result:{...result,resultReference:"test-result"},idempotencyKey:body.idempotencyKey}):Response.json({error:"INVALID_ASSESSMENT_ANSWERS",result},{status:400});
  }throw new Error("uncertain transport");}});
  });
+ const submit=async (actor:Principal,organizationId:string,assessmentId:string,revision:number,context:{requestId:string})=>{
+   const record=await service.read(actor,organizationId,assessmentId);
+   return service.submit(actor,organizationId,assessmentId,{revision,reviewToken:record.reviewToken,attestation:{statementVersion:1,reviewedSectionIds:[...record.manifest.sections.map(section=>section.id),"face-scan","attachments"],confirmed:true}},context);
+ };
  afterAll(async()=>{await client.end();if(root)await rm(root,{recursive:true,force:true});});
  test("initialization is durable and idempotent, health snapshots encrypted",async()=>{const a=await service.initialize(actor,org,{patientId:patient,requestKey:"init-request-key-12345"},context);expect(a.status).toBe("READY");id=a.assessmentId!;expect((await service.initialize(actor,org,{patientId:patient,requestKey:"init-request-key-12345"},context)).assessmentId).toBe(id);expect(starts).toBe(1);expect(JSON.stringify((await db.select().from(tables.assessments).where(eq(tables.assessments.id,id)))[0]!.workflow)).not.toContain("Fixture Patient");});
  test("readable references retain tenant and facility authorization",async()=>{
@@ -122,12 +126,24 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
    const outcome=pending.then(()=>"ready",()=>"cancelled");let file:typeof tables.assessmentFiles.$inferSelect|undefined;
    for(let n=0;n<100&&!file;n++){file=(await db.select().from(tables.assessmentFiles).where(eq(tables.assessmentFiles.uploadKey,"pending-upload-key-1234"))).find(f=>f.assessmentId===id);if(!file)await Bun.sleep(5);}
    expect(file?.status).toBe("PENDING");
-   await expect(service.submit(actor,org,id,record.revision,context)).rejects.toMatchObject({code:"CONFLICT"});
+   await expect(submit(actor,org,id,record.revision,context)).rejects.toMatchObject({code:"CONFLICT"});
    record=await service.reports.remove(actor,org,id,report.id,record.revision,context,file!.id);
    controller.enqueue(bytes);controller.close();expect(await outcome).toBe("cancelled");
    expect((await service.read(actor,org,id)).reports[0]!.files).toHaveLength(1);
  });
- test("uncertain scoring freezes edits and preserves retry key",async()=>{let record=await service.read(actor,org,id);record=await service.submit(actor,org,id,record.revision,context);expect(record.status).toBe("SCORING_UNAVAILABLE");await expect(service.save(actor,org,id,{revision:record.revision,answers:{}},context)).rejects.toMatchObject({code:"CONFLICT"});await expect(service.retrySubmission(actor,org,id,context)).rejects.toMatchObject({code:"CONFLICT"});await db.update(tables.assessmentSubmissions).set({nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,id));await service.retrySubmission(actor,org,id,context);expect(keys).toHaveLength(2);expect(new Set(keys).size).toBe(1);});
+ test("uncertain scoring freezes edits and preserves retry key",async()=>{let record=await service.read(actor,org,id);
+  const sections=[...record.manifest.sections.map(section=>section.id),"face-scan","attachments"];
+  await expect(service.submit(actor,org,id,{revision:record.revision,reviewToken:record.reviewToken,attestation:{statementVersion:1,reviewedSectionIds:sections.slice(1),confirmed:true}},context)).rejects.toMatchObject({code:"VALIDATION_ERROR"});
+  await expect(service.submit(actor,org,id,{revision:record.revision,reviewToken:"0".repeat(64),attestation:{statementVersion:1,reviewedSectionIds:sections,confirmed:true}},context)).rejects.toMatchObject({code:"CONFLICT"});
+  expect((await db.select().from(tables.assessmentSubmissions).where(eq(tables.assessmentSubmissions.assessmentId,id)))).toHaveLength(0);
+  record=await submit(actor,org,id,record.revision,context);expect(record.status).toBe("SCORING_UNAVAILABLE");
+  expect(record.attestations).toMatchObject([{submissionId:record.submission!.id,cycle:0,actorMembershipId:actor.membershipId,statementVersion:1,reviewedSectionIds:sections}]);
+  const [storedAttestation]=await db.select({attestation:tables.assessmentSubmissions.attestation}).from(tables.assessmentSubmissions).where(eq(tables.assessmentSubmissions.id,record.submission!.id));
+  expect(JSON.stringify(storedAttestation!.attestation)).not.toContain(actor.displayName);
+  await expect(db.update(tables.assessmentSubmissions).set({attestation:null}).where(eq(tables.assessmentSubmissions.id,record.submission!.id))).rejects.toThrow("Assessment submission attestation is immutable");
+  const firstAttestation=record.attestations[0]!;
+  await expect(service.save(actor,org,id,{revision:record.revision,answers:{}},context)).rejects.toMatchObject({code:"CONFLICT"});await expect(service.retrySubmission(actor,org,id,context)).rejects.toMatchObject({code:"CONFLICT"});await db.update(tables.assessmentSubmissions).set({nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,id));record=await service.retrySubmission(actor,org,id,context);expect(keys).toHaveLength(2);expect(new Set(keys).size).toBe(1);expect(record.attestations).toEqual([firstAttestation]);
+ });
  test("connection change preserves frozen answers and requires reconciliation",async()=>{
  const [original]=await db.select().from(tables.scoringConnections).where(eq(tables.scoringConnections.organizationId,org));
  await db.update(tables.scoringConnections).set({deploymentId:createEntityId()}).where(eq(tables.scoringConnections.organizationId,org));
@@ -139,12 +155,12 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  test("operator same-key rejection permits resubmission and retains frozen files",async()=>{
  behavior="rejected";await db.update(tables.assessmentSubmissions).set({nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,id));
  let record=await service.retrySubmission({...actor,role:"ORGANIZATION_ADMIN"},org,id,context,true);expect(record.status).toBe("DRAFT");expect(record.submission?.issues).toEqual([{fieldId:"height_cm",message:"Review this answer before submitting again."}]);expect((await service.read(actor,org,id)).submission?.issues).toEqual(record.submission?.issues ?? []);expect(new Set(keys).size).toBe(1);
- record=await service.submit(actor,org,id,record.revision,context);expect(record.status).toBe("DRAFT");expect(new Set(keys).size).toBe(2);
+ record=await submit(actor,org,id,record.revision,context);expect(record.status).toBe("DRAFT");expect(new Set(keys).size).toBe(2);
  const report=record.reports[0]!,file=report.files[0]!;const [stored]=await db.select().from(tables.assessmentFiles).where(eq(tables.assessmentFiles.id,file.id));
  record=await service.reports.remove(actor,org,id,report.id,record.revision,context);
  const retained=await service.storage!.open({organizationId:org,patientId:patient,assessmentId:id},stored!.objectKey!);expect(await new Response(retained.stream).text()).toContain("fixture");
  record=await service.save(actor,org,id,{revision:record.revision,answers:{...record.answers,height_cm:180}},context);behavior="success";
- record=await service.submit(actor,org,id,record.revision,context);expect(record.status).toBe("SCORED");expect(new Set(keys).size).toBe(3);
+ record=await submit(actor,org,id,record.revision,context);expect(record.status).toBe("SCORED");expect(new Set(keys).size).toBe(3);
  });
 
  test("saved versions and scoring evidence are encrypted and completion remains clinical",async()=>{
@@ -163,7 +179,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   const initialized=await service.initialize(actor,org,{patientId:patient,requestKey:"current-pointer-isolation-test"},context);
   const copyId=initialized.assessmentId!;let record=await service.read(actor,org,copyId);
   record=await service.save(actor,org,copyId,{revision:record.revision,answers:{height_cm:175,current_weight_kg:70}},context);
-  behavior="success";record=await service.submit(actor,org,copyId,record.revision,context);expect(record.result).not.toBeNull();
+  behavior="success";record=await submit(actor,org,copyId,record.revision,context);expect(record.result).not.toBeNull();
   await db.update(tables.assessments).set({status:"DRAFT",cycle:1,currentSubmissionId:null}).where(eq(tables.assessments.id,copyId));
   const returned=await service.read(actor,org,copyId);expect(returned.result).toBeNull();expect(returned.submission).toBeNull();
   expect(await db.select().from(tables.assessmentSubmissions).where(eq(tables.assessmentSubmissions.assessmentId,copyId))).toHaveLength(1);
@@ -173,7 +189,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  const initialized=await service.initialize(actor,org,{patientId:patient,requestKey:"lease-fencing-test-1234"},context);const otherId=initialized.assessmentId!;
  let record=await service.read(actor,org,otherId);record=await service.save(actor,org,otherId,{revision:record.revision,answers:{height_cm:175,current_weight_kg:70}},context);
  behavior="success";let release!:()=>void;blockCalculate=()=>new Promise<void>(resolve=>{release=resolve;});
- const late=service.submit(actor,org,otherId,record.revision,context);
+ const late=submit(actor,org,otherId,record.revision,context);
  for(let n=0;n<100&&!release;n++)await Bun.sleep(5);
  expect(release).toBeDefined();await db.update(tables.assessmentSubmissions).set({leaseExpiresAt:new Date(0),nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,otherId));
  const recovered=await service.retrySubmission(actor,org,otherId,context);expect(recovered.status).toBe("SCORED");release();expect((await late).status).toBe("SCORED");
@@ -186,7 +202,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  const cooldown=(await service.initialize(actor,org,{patientId:patient,requestKey:"recovery-cooldown-12345"},context)).assessmentId!;
  const due=(await service.initialize(actor,org,{patientId:patient,requestKey:"recovery-due-123456789"},context)).assessmentId!;
  behavior="uncertain";
- for(const assessmentId of [cooldown,due]){let record=await service.read(actor,org,assessmentId);record=await service.save(actor,org,assessmentId,{revision:record.revision,answers:{height_cm:170,current_weight_kg:70}},context);await service.submit(actor,org,assessmentId,record.revision,context);}
+ for(const assessmentId of [cooldown,due]){let record=await service.read(actor,org,assessmentId);record=await service.save(actor,org,assessmentId,{revision:record.revision,answers:{height_cm:170,current_weight_kg:70}},context);await submit(actor,org,assessmentId,record.revision,context);}
  await db.update(tables.assessmentSubmissions).set({nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,due));
  await db.insert(tables.assessmentInitializations).values({id:createEntityId(),organizationId:org,patientId:patient,facilityId:other,creatorId:membership,requestKey:"inaccessible-recovery-12345",connection:{}});
  const before=keys.length;behavior="success";
@@ -314,7 +330,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   };
   let draft=await service.read(actor,org,assessment);
   draft=await service.save(actor,org,assessment,{revision:draft.revision,answers:{...draft.answers,height_cm:170,current_weight_kg:65}},context);
-  let scored=await service.submit(actor,org,assessment,draft.revision,context);expect(scored.status).toBe("SCORED");
+  let scored=await submit(actor,org,assessment,draft.revision,context);expect(scored.status).toBe("SCORED");
   const [original]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,assessment));
   const originalPointer=original!.currentSubmissionId;
   const [originalSubmission]=await db.select().from(tables.assessmentSubmissions).where(eq(tables.assessmentSubmissions.id,originalPointer!));
@@ -326,10 +342,13 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
    const returned=await act("RETURN_TO_DRAFT",{assigneeId:actor.membershipId,reason:`Correction ${cycle}`});expect(returned.cycle).toBe(cycle);
    draft=await service.read(actor,org,assessment);expect(draft.status).toBe("DRAFT");expect(draft.result).toBeNull();expect(draft.canEditDraft).toBe(true);
    draft=await service.save(actor,org,assessment,{revision:draft.revision,answers:{...draft.answers,current_weight_kg:65+cycle}},context);
-   scored=await service.submit(actor,org,assessment,draft.revision,context);expect(scored.status).toBe("SCORED");
+   scored=await submit(actor,org,assessment,draft.revision,context);expect(scored.status).toBe("SCORED");
    const [row]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,assessment));
    const [submission]=await db.select().from(tables.assessmentSubmissions).where(eq(tables.assessmentSubmissions.id,row!.currentSubmissionId!));
    expect(seenKeys).not.toContain(submission!.idempotencyKey);seenKeys.push(submission!.idempotencyKey);
+   const attestations=(await service.read(actor,org,assessment)).attestations;
+   expect(attestations).toHaveLength(cycle+1);
+   expect(attestations.at(-1)).toMatchObject({submissionId:submission!.id,cycle,actorMembershipId:actor.membershipId,statementVersion:1});
    expect(service.unseal<any>(submission!.snapshot).binding).toEqual(binding);expect(service.unseal<any>(submission!.snapshot).answers.current_weight_kg).toBe(65+cycle);
    expect((await scores.read(actor,org,assessment)).revision).toBe(0);
    expect((await clinical.read(actor,org,assessment)).state).toBe("AWAITING_RESUBMISSION");
