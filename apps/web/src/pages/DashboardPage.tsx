@@ -9,10 +9,10 @@ import { OverviewUsage } from "../components/OverviewUsage";
 import { listClinicalReviews } from "../features/assessments/clinical-review-api";
 import { getOrganization, listAssessments, listFacilities, listOrganizationUsers, listPatients } from "../lib/api";
 import { assessmentStatusLabels } from "../lib/patient-display";
+import { monthlyTrend } from "./monthly-trend";
+import { MonthlyTrendCard } from "./MonthlyTrendCard";
 
 type Overview = { patients: Patient[]; assessments: AssessmentSummary[]; facilityCount: number; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
-
-const thisMonth = (date: Date, now: Date) => date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
 
 function ActionCard({ title, count, detail, to }: { title: string; count: number | string; detail: string; to: string }) {
   return <Link to={to} className="surface flex min-h-32 flex-col justify-between gap-3 p-5 no-underline transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary">
@@ -89,13 +89,13 @@ export function DashboardPage() {
   }, [user.organizationId, isAdmin, isClinician, attempt]);
 
   const now = new Date();
-  const monthly = data?.patients.filter(item => thisMonth(item.createdAt, now)).length;
-  const completedAssessments = data?.assessments.filter(item => item.status === "COMPLETED" && item.completedAt && thisMonth(item.completedAt, now)).length;
+  const patientTrend = data ? monthlyTrend(data.patients.map(item => item.createdAt), now) : null;
+  const completedTrend = data ? monthlyTrend(data.assessments.flatMap(item => item.status === "COMPLETED" && item.completedAt ? [item.completedAt] : []), now) : null;
   const openAssessments = data?.assessments.filter(item => item.status === "DRAFT" || item.status === "READY_FOR_SCORING") ?? [];
   const scoringIssues = data?.assessments.filter(item => item.status === "SCORING_UNAVAILABLE").length ?? 0;
   const monthlyMetrics = [
-    { label: "Patients registered this month", value: monthly, detail: now.toLocaleDateString(undefined, { month: "long", year: "numeric" }), to: "/patients?registered=this-month", icon: CalendarDays },
-    ...(isClinician || isAdmin ? [{ label: "Assessments completed this month", value: completedAssessments, detail: now.toLocaleDateString(undefined, { month: "long", year: "numeric" }), to: "/assessments?status=COMPLETED_THIS_MONTH", icon: ClipboardList }] : []),
+    { label: "Patients registered this month", trend: patientTrend, to: "/patients?registered=this-month", icon: CalendarDays },
+    ...(isClinician || isAdmin ? [{ label: "Assessments completed this month", trend: completedTrend, to: "/assessments?status=COMPLETED_THIS_MONTH", icon: ClipboardList }] : []),
   ];
   const snapshotMetrics = [
     { label: "Patients in your facilities", value: data?.patients.length, detail: null, to: "/patients", icon: UserRound },
@@ -110,8 +110,8 @@ export function DashboardPage() {
     <h1 className="patient-page-title">Overview</h1>
     {error ? <Card className="surface p-6"><p role="alert">Overview could not be loaded.</p><Button className="w-fit" variant="outline" onPress={() => setAttempt((value) => value + 1)}>Retry</Button></Card> : <>
       <section aria-label="This month" aria-busy={!data} className="space-y-3">
-        <h2 className="text-lg font-semibold">This month</h2>
-        <div className="grid gap-4 sm:grid-cols-2">{monthlyMetrics.map(metricCard)}</div>
+        <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-lg font-semibold">This month</h2><span className="text-xs text-muted-foreground">{now.toLocaleDateString(undefined, { month: "long", year: "numeric" })} to date</span></div>
+        <div className="grid gap-4 sm:grid-cols-2">{monthlyMetrics.map(metric => <MonthlyTrendCard key={metric.label} {...metric} />)}</div>
       </section>
       <section aria-label="At a glance" aria-busy={!data} className="mt-7 space-y-3">
         <h2 className="text-lg font-semibold">At a glance</h2>

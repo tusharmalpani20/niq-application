@@ -61,9 +61,12 @@ test("summary distinguishes accessible patients from assessments completed this 
     const snapshot = body.querySelector('[aria-label="At a glance"]');
     expect(monthly?.textContent).toContain("Patients registered this month");
     expect(monthly?.textContent).toContain("Assessments completed this month");
+    expect(monthly?.querySelectorAll('svg[role="img"]')).toHaveLength(2);
+    expect(monthly?.querySelector('svg[role="img"]')?.getAttribute("aria-label")).toContain("monthly totals for the last six months");
     expect(monthly?.textContent).not.toContain("Patients in your facilities");
     expect(snapshot?.textContent).toContain("Patients in your facilities");
     expect(snapshot?.textContent).toContain("Active facilities");
+    expect(snapshot?.querySelector('svg[role="img"]')).toBeNull();
     expect(body.textContent).toContain("Patients in your facilities");
     expect(body.textContent).toContain("Patients registered this month");
     expect(body.textContent).toContain("Assessments completed this month");
