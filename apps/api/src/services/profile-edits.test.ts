@@ -10,9 +10,9 @@ import { PostgresApplicationService } from "./postgres-application";
 import type { Principal } from "./application";
 
 const context = { requestId: "profile-edit-test" };
-test("edit schemas clear optional contact fields and reject invalid dates, roles and duplicate assignments", () => {
-  const input = { medicalRecordNumber: "MRN", name: "Patient", homeFacilityId: createEntityId(), dateOfBirth: "2000-01-01", gender: "UNKNOWN", phone: "", email: null };
-  expect(updatePatientSchema.parse(input).phone).toBeUndefined();
+test("edit schemas require mobile, clear optional email and reject invalid dates, roles and duplicate assignments", () => {
+  const input = { medicalRecordNumber: "MRN", name: "Patient", homeFacilityId: createEntityId(), dateOfBirth: "2000-01-01", gender: "UNKNOWN", phone: "1234567890", email: null };
+  expect(updatePatientSchema.safeParse({ ...input, phone: "" }).success).toBe(false);
   expect(updatePatientSchema.parse(input).email).toBeUndefined();
   expect(updatePatientSchema.safeParse({ ...input, dateOfBirth: "3000-01-01" }).success).toBe(false);
   const id = createEntityId();
@@ -41,13 +41,13 @@ describe.skipIf(!process.env.PROFILE_TEST_DATABASE_URL)("profile edits PostgreSQ
     await db.insert(tables.assessments).values({ id: assessmentId, organizationId: org, patientId, facilityId: a, questionnaireDefinitionId: definitionId, questionnaireScopeKey: org, createdByMembershipId: member, workflow: historicalSnapshot });
   });
   afterAll(async () => { await client.end(); });
-  test("persists encrypted patient edits and clears contacts, rejects tenant/source/destination violations", async () => {
-    const edit = updatePatientSchema.parse({ ...input, name: "Corrected Patient", phone: "", email: "" });
+  test("persists encrypted patient edits and clears optional email, rejects tenant/source/destination violations", async () => {
+    const edit = updatePatientSchema.parse({ ...input, name: "Corrected Patient", phone: "9876543210", email: "" });
     const result = await service.updatePatient(actor, org, patientId, edit, context);
     expect((await db.select().from(tables.assessments).where(eq(tables.assessments.id, assessmentId)))[0]!.workflow).toEqual(historicalSnapshot);
     const audit = (await db.select().from(tables.auditEvents).where(eq(tables.auditEvents.resourceId, patientId))).find(item => item.action === "PATIENT_UPDATED");
     expect(JSON.stringify(audit?.metadata)).not.toContain("Corrected Patient");
-    expect(result.displayName).toBe("Corrected Patient"); expect(result.phone).toBeUndefined(); expect(result.email).toBeUndefined();
+    expect(result.displayName).toBe("Corrected Patient"); expect(result.phone).toBe("9876543210"); expect(result.email).toBeUndefined();
     const [raw] = await db.select().from(tables.patients).where(eq(tables.patients.id, patientId));
     expect(Buffer.from(raw!.encryptedProfile).toString()).not.toContain("Corrected Patient");
     await expect(service.updatePatient(actor, org2, patientId, edit, context)).rejects.toMatchObject({ code: "FORBIDDEN" });

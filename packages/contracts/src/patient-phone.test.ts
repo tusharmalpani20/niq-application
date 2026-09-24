@@ -7,13 +7,11 @@ for (const [name, schema] of [["registration", registerPatientSchema], ["editing
     expect(schema.parse({ ...patient, phone: "0987654321" }).phone).toBe("0987654321");
   });
 }
-test("registration requires a nonempty mobile number", () => {
-  expect(registerPatientSchema.safeParse(patient).success).toBe(false);
-  expect(registerPatientSchema.safeParse({ ...patient, phone: "" }).success).toBe(false);
-  expect(registerPatientSchema.safeParse({ ...patient, phone: "   " }).success).toBe(false);
-});
-test("editing can still clear an optional mobile number", () => {
-  expect(updatePatientSchema.safeParse(patient).success).toBe(true);
-  expect(updatePatientSchema.parse({ ...patient, phone: "" }).phone).toBeUndefined();
-  expect(updatePatientSchema.parse({ ...patient, phone: null }).phone).toBeUndefined();
-});
+for (const [name, schema] of [["registration", registerPatientSchema], ["editing", updatePatientSchema]] as const) {
+  test(`${name} requires a nonempty mobile number`, () => {
+    expect(schema.safeParse(patient).success).toBe(false);
+    expect(schema.safeParse({ ...patient, phone: "" }).success).toBe(false);
+    expect(schema.safeParse({ ...patient, phone: "   " }).success).toBe(false);
+    expect(schema.safeParse({ ...patient, phone: null }).success).toBe(false);
+  });
+}

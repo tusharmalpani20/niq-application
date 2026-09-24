@@ -4,9 +4,9 @@ import { updatePatient } from "./patient-edit";
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
-const input = { name: "Updated Patient", medicalRecordNumber: "MRN-1", homeFacilityId: "01ARZ3NDEKTSV4RRFFQ69G5FAV", dateOfBirth: "1999-03-20", gender: "MALE" as const, phone: undefined, email: undefined };
+const input = { name: "Updated Patient", medicalRecordNumber: "MRN-1", homeFacilityId: "01ARZ3NDEKTSV4RRFFQ69G5FAV", dateOfBirth: "1999-03-20", gender: "MALE" as const, phone: "9012345678", email: undefined };
 
-test("patient edit sends a scoped patch, preserving an ISO birth date and omitted cleared contacts", async () => {
+test("patient edit sends a scoped patch with a mobile number and ISO birth date", async () => {
   let request: { url: string; options?: RequestInit } | undefined;
   globalThis.fetch = (async (url, options) => {
     request = { url: String(url), options };
@@ -16,7 +16,7 @@ test("patient edit sends a scoped patch, preserving an ISO birth date and omitte
   expect(request?.url).toBe("/api/v1/organizations/01ARZ3NDEKTSV4RRFFQ69G5FAX/patients/PAT-2");
   expect(request?.options?.method).toBe("PATCH");
   expect(request?.options?.credentials).toBe("include");
-  expect(JSON.parse(String(request?.options?.body))).toEqual({ name: input.name, medicalRecordNumber: input.medicalRecordNumber, homeFacilityId: input.homeFacilityId, dateOfBirth: "1999-03-20", gender: "MALE" });
+  expect(JSON.parse(String(request?.options?.body))).toEqual({ name: input.name, medicalRecordNumber: input.medicalRecordNumber, homeFacilityId: input.homeFacilityId, dateOfBirth: "1999-03-20", gender: "MALE", phone: input.phone });
   expect(patient.displayName).toBe(input.name);
 });
 

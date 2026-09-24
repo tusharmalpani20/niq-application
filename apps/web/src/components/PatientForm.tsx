@@ -60,7 +60,7 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
     const parsed = (patient ? updatePatientSchema : registerPatientSchema).safeParse({
       medicalRecordNumber: String(form.get("mrn") ?? ""), homeFacilityId: facilityId,
       dateOfBirth: birth, gender, name: String(form.get("name") ?? ""),
-      phone: patient ? phone || undefined : phone, ...(email ? { email } : {}),
+      phone, ...(email ? { email } : {}),
     });
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
@@ -98,7 +98,7 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
         </div>
       </div>
       <div className="border-t pt-4 grid gap-4"><h3 className="font-semibold">Contact details</h3><div className="grid gap-4 sm:grid-cols-2">
-        <Field><FieldLabel htmlFor="patient-phone" className={patient ? undefined : "required-field-label"}>Mobile number {patient ? "(optional)" : <span aria-hidden="true">*</span>}</FieldLabel><Input id="patient-phone" name="phone" defaultValue={patient?.phone} type="tel" inputMode="numeric" pattern="[0-9]*" title="Use digits only" autoComplete="tel" maxLength={40} required={!patient} onInput={event => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g, ""); }} /></Field>
+        <Field><FieldLabel htmlFor="patient-phone" className="required-field-label">Mobile number <span aria-hidden="true">*</span></FieldLabel><Input id="patient-phone" name="phone" defaultValue={patient?.phone} type="tel" inputMode="numeric" pattern="[0-9]*" title="Use digits only" autoComplete="tel" maxLength={40} required onInput={event => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g, ""); }} /></Field>
         <Field><FieldLabel htmlFor="patient-email">Email address (optional)</FieldLabel><Input id="patient-email" name="email" defaultValue={patient?.email} type="email" autoComplete="email" maxLength={320} /></Field>
       </div></div>
       {!options.length && !missingCurrent && <Alert><AlertDescription>Add an active facility before registering a patient.</AlertDescription></Alert>}

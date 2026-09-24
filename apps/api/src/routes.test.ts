@@ -47,8 +47,9 @@ describe("local authentication routes", () => {
       },
     }) });
     const request = (path: string, method: string, input: unknown, cookie = "niq_session=valid-session") => app.request(`/v1/organizations/${principal.organizationId}/${path}`, { method, headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(input) });
-    const patient = { medicalRecordNumber: "TEST", name: "Patient", homeFacilityId: principal.organizationId, dateOfBirth: "2000-01-01", gender: "UNKNOWN", email: "" };
+    const patient = { medicalRecordNumber: "TEST", name: "Patient", homeFacilityId: principal.organizationId, dateOfBirth: "2000-01-01", gender: "UNKNOWN", phone: "9012345678", email: "" };
     expect((await request("patients/PAT-2", "PATCH", patient)).status).toBe(200);
+    expect((await request("patients/PAT-2", "PATCH", { ...patient, phone: "" })).status).toBe(400);
     expect((await request("patients/PAT-2", "PATCH", patient, "")).status).toBe(401);
     expect((await request("patients/PAT-2", "PATCH", { ...patient, dateOfBirth: "01/01/2000" })).status).toBe(400);
     const user = { displayName: "Colleague", role: "DOCTOR", facilityIds: [] };

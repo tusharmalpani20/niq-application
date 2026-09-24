@@ -326,7 +326,6 @@ export const registerPatientSchema = z.object({
 }).strict();
 
 export const updatePatientSchema = registerPatientSchema.extend({
-  phone: patientPhoneSchema.nullish().transform(value => value || undefined),
   email: z.union([z.email().max(320), z.literal("")]).nullish().transform(value => value || undefined),
 });
 export type UpdatePatient = z.infer<typeof updatePatientSchema>;
