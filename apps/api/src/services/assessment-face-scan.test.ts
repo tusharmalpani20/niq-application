@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { loadApplicationConfig } from "@niq/application-config";
-import { frozenFaceScanContext, canProjectScan } from "./assessment-face-scan";
+import { AssessmentFaceScanService, frozenFaceScanContext, canProjectScan } from "./assessment-face-scan";
 import { assessmentFaceScans } from "../db/schema";
 import { faceScanSignalSchema, startFaceScanSchema, faceScanResultSchema } from "../../../../packages/contracts/src/face-scan";
 test("new capture is unavailable by default",()=>expect(loadApplicationConfig({DATABASE_URL:"postgres://test",SESSION_SECRET:"test-secret-that-is-at-least-32-characters"}).FACE_SCAN_ENABLED).toBe(false));
@@ -24,6 +24,20 @@ test("normalized scoring result preserves provider completion evidence",()=>{
  const result={schemaVersion:1,providerScanId:"provider-id",providerCompletedAt:"2026-09-20T12:00:00+05:30",wellnessScore:60,healthRiskScore:null,vitals:{heartRate:70,oxygenSaturation:null,respiratoryRate:null,systolic:null,diastolic:null},physiologicalScore:null,mentalWellbeingScore:null};
  expect(faceScanResultSchema.parse(result).providerCompletedAt).toBe(result.providerCompletedAt);
  expect(faceScanResultSchema.safeParse({...result,providerCompletedAt:"invalid"}).success).toBe(false);
+});
+
+test("legacy stored score bands stay out of application responses", () => {
+ const stored = {
+  id: "scan-1", state: "COMPLETED", context: { dob: "1990-01-01", gender: "female", heightCm: 170, weightKg: 65, posture: "resting", employeeId: "operator" },
+  createdAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z", completedAt: "2026-09-22T00:00:00Z",
+  failureCode: null, result: null,
+  score: { status: "SCORED", points: 1, ruleVersionId: "rule-1", wellnessScore: 85, scoringVersion: null,
+   configuration: { ranges: [{ id: "above", min: 80, max: 100, points: 1 }] } }
+ };
+ const scans = new AssessmentFaceScanService({ unseal: () => stored } as any);
+ const response = scans.dto({ id: "scan-1", projection: "encrypted", failureCode: null } as any);
+ expect(response.score).toEqual({ status: "SCORED", points: 1, ruleVersionId: "rule-1", wellnessScore: 85, scoringVersion: null });
+ expect(stored.score.configuration.ranges).toHaveLength(1);
 });
 
 test("start freezes the configured staging employee and replay ignores later override changes", async () => {

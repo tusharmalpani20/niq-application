@@ -76,12 +76,15 @@ export class AssessmentFaceScanService {
     };
   }
   dto(row: Row): FaceScanSession {
-    if (row.projection)
-      return {
-        ...this.workflow.unseal<FaceScanSession>(row.projection),
+    if (row.projection) {
+      const projection = this.workflow.unseal<FaceScanSession>(row.projection);
+      // Older projections may contain internal scoring bands; the public schema strips them.
+      return faceScanSessionSchema.parse({
+        ...projection,
         id: row.id,
-        failureCode: row.failureCode ?? this.workflow.unseal<FaceScanSession>(row.projection).failureCode
-      };
+        failureCode: row.failureCode ?? projection.failureCode
+      });
+    }
     return {
       id: row.id,
       state: terminal.has(row.state) ? row.state as FaceScanSession["state"] : "RECONCILIATION_REQUIRED",

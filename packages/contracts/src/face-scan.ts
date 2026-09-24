@@ -61,8 +61,11 @@ export const faceScanSessionSchema = z.object({
   result: faceScanResultSchema.nullable(),
   score: z.object({
     status: z.string(),
-    points: metric.optional()
-  }).passthrough().nullable()
+    points: metric.optional(),
+    ruleVersionId: z.string().nullable().optional(),
+    wellnessScore: metric.optional(),
+    scoringVersion: z.string().nullable().optional()
+  }).nullable()
 });
 export const faceScanListSchema = z.object({
   enabled: z.boolean(),
