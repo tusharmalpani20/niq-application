@@ -22,6 +22,10 @@ import { assessmentStatusLabels } from "../lib/patient-display";
 
 const assessmentPageSize = 10;
 const assessmentDate = (date: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
+const initialStatus = (params: URLSearchParams) => {
+  const value = params.get("status");
+  return value === "OPEN" || value === "SCORING_UNAVAILABLE" ? value : "all";
+};
 
 export function AssessmentsPage() {
   const user = useOutletContext<AuthenticatedUser>();
@@ -35,13 +39,13 @@ export function AssessmentsPage() {
   const [reload, setReload] = useState(0);
   const [query, setQuery] = useState("");
   const [facility, setFacility] = useState("all");
-  const [status, setStatus] = useState(() => searchParams.get("status") === "SCORING_UNAVAILABLE" ? "SCORING_UNAVAILABLE" : "all");
+  const [status, setStatus] = useState(() => initialStatus(searchParams));
   const reviewFilter = searchParams.get("review") === "QUEUED" ? "QUEUED" : searchParams.get("review") === "mine-active" ? "mine-active" : "all";
   const [page, setPage] = useState(1);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   useEffect(() => {
     setTab(canOpen && searchParams.get("tab") === "clinical-reviews" ? "clinical-reviews" : "assessments");
-    setStatus(searchParams.get("status") === "SCORING_UNAVAILABLE" ? "SCORING_UNAVAILABLE" : "all");
+    setStatus(initialStatus(searchParams));
     setPage(1);
   }, [canOpen, searchParams]);
   useEffect(() => {
@@ -54,7 +58,8 @@ export function AssessmentsPage() {
     const normalizedQuery = query.trim().toLowerCase();
     return records.filter((record) => {
       const matchesQuery = !normalizedQuery || `${record.reference} ${record.patient.reference} ${record.patient.displayName} ${record.facility?.name ?? ""}`.toLowerCase().includes(normalizedQuery);
-      return matchesQuery && (facility === "all" || record.facility?.id === facility) && (status === "all" || record.status === status);
+      const matchesStatus = status === "all" || (status === "OPEN" ? record.status === "DRAFT" || record.status === "READY_FOR_SCORING" : record.status === status);
+      return matchesQuery && (facility === "all" || record.facility?.id === facility) && matchesStatus;
     });
   }, [facility, query, records, status]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / assessmentPageSize));
@@ -79,7 +84,7 @@ export function AssessmentsPage() {
     </div>
     <div className="patient-filter-bar assessment-filter-bar">
       <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { setFacility(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
-      <Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem>{Object.entries(assessmentStatusLabels).filter(([id]) => ["DRAFT", "SCORING_PENDING", "SCORING_UNAVAILABLE", "SCORED", "UNDER_REVIEW", "COMPLETED"].includes(id) || records.some(record => record.status === id)).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>
+      <Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem><SelectItem id="OPEN">Open assessments</SelectItem>{Object.entries(assessmentStatusLabels).filter(([id]) => ["DRAFT", "SCORING_PENDING", "SCORING_UNAVAILABLE", "SCORED", "UNDER_REVIEW", "COMPLETED"].includes(id) || records.some(record => record.status === id)).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>
     </div>
     <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card" key={record.id}><div>{canOpen ? <Link className="font-normal text-foreground hover:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}<span>{record.patient.reference} · {record.patient.displayName}</span></div><StatusBadge status={assessmentStatusLabels[record.status]}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
