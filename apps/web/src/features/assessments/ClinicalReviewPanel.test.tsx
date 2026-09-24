@@ -84,7 +84,7 @@ test("first review after corrections says send and preserves correction-owner co
  expect(document.body.textContent).not.toContain("Corrections assigned to:");
  expect(document.body.textContent).not.toContain("resend");
  await click("Send for clinical review");
- expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Send this scored assessment to the clinical review queue.");
+ expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Send this scored assessment for clinical review.");
  await click("Send for clinical review");
  expect(posts[0]).toMatchObject({action:"RESEND"});
 },{review:{...review,state:"AWAITING_RESUBMISSION",correctionPerson:review.assignee,returnReason:"Previous return",allowedActions:["RESEND"]}}));
@@ -93,7 +93,7 @@ test("previously submitted review still says resend after corrections", async()=
  expect(document.body.textContent).toContain("Ready to resend for clinical review");
  expect(document.body.textContent).toContain("can resend this assessment for clinical review.");
  await click("Resend for clinical review");
- expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Resend to the previous reviewer");
+ expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Resend this scored assessment for clinical review.");
 },{review:{...review,state:"AWAITING_RESUBMISSION",submittedAt:"2026-09-23T00:00:00Z",allowedActions:["RESEND"]}}));
 
 test("return reason stays visible while corrections are needed", async()=>harness(async()=>{
