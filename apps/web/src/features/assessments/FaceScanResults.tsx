@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 import type { FaceScanSession } from "@niq/application-contracts";
 import { ChevronRight } from "lucide-react";
 import { scanPostureLabels } from "./face-scan-posture";
+import { assessFaceScanRange } from "./face-scan-reference-ranges";
 
-type Metric = { label: string; value: number | string | null; unit: string };
+type Metric = { key?: string; label: string; value: number | string | null; unit: string };
 const display = ({ value, unit }: Metric) => value === null ? "—" : `${value} ${unit}`.trim();
 
 function ResultGroup({ title, availability, children }: { title: string; availability?: string; children: ReactNode }) {
@@ -15,16 +16,23 @@ function ResultGroup({ title, availability, children }: { title: string; availab
   </details>;
 }
 
-function MetricRows({ metrics }: { metrics: Metric[] }) {
-  return <dl className="grid gap-x-8 @min-[40rem]:grid-cols-2">{metrics.map(metric => <div key={metric.label} className="flex min-w-0 items-baseline justify-between gap-4 py-2 text-sm">
-    <dt className="min-w-0 text-muted-foreground">{metric.label}</dt><dd className="shrink-0 font-medium tabular-nums" aria-label={metric.value === null ? "Not available" : undefined}>{display(metric)}</dd>
-  </div>)}</dl>;
+function MetricRows({ metrics, context }: { metrics: Metric[]; context: FaceScanSession["context"] }) {
+  return <dl className="grid gap-x-8 @min-[40rem]:grid-cols-2">{metrics.map(metric => {
+    const assessment = metric.key ? assessFaceScanRange(metric.key, metric.value, context) : null;
+    return <div key={metric.label} className={`flex min-w-0 items-baseline justify-between gap-4 py-2 text-sm ${assessment?.outside ? "rounded-lg bg-warning-soft px-2 text-warning" : ""}`}>
+      <dt className={`min-w-0 ${assessment?.outside ? "" : "text-muted-foreground"}`}>{metric.label}</dt>
+      <dd className="min-w-0 shrink-0 text-right font-medium tabular-nums" aria-label={metric.value === null ? "Not available" : undefined}>
+        {display(metric)}
+        {assessment?.outside && <span className="block text-xs font-normal">Outside report range · {assessment.reference}</span>}
+      </dd>
+    </div>;
+  })}</dl>;
 }
 
 export function FaceScanResults({ session }: { session: FaceScanSession }) {
   if (!session.result) return null;
   const r = session.result;
-  const metric = (key: string, label: string, unit = ""): Metric => ({ label, unit, value: r.additionalMetrics?.[key] ?? null });
+  const metric = (key: string, label: string, unit = ""): Metric => ({ key, label, unit, value: r.additionalMetrics?.[key] ?? null });
   const groups: Array<{ title: string; metrics: Metric[] }> = [
     { title: "Heart & circulation", metrics: [
       metric("sdnn", "SDNN", "ms"), metric("rmssd", "RMSSD", "ms"), metric("pnn50", "PNN50", "%"),
@@ -48,22 +56,29 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
   // A partial pressure reading must not look like a complete measurement.
   const bloodPressure = r.vitals.systolic === null && r.vitals.diastolic === null ? null : `${r.vitals.systolic ?? "—"}/${r.vitals.diastolic ?? "—"}`;
   const vitals: Metric[] = [
-    { label: "Heart rate", value: r.vitals.heartRate, unit: "bpm" },
-    { label: "Blood pressure", value: bloodPressure, unit: "mmHg" },
-    { label: "Oxygen saturation", value: r.vitals.oxygenSaturation, unit: "%" },
-    { label: "Breathing", value: r.vitals.respiratoryRate, unit: "/min" },
+    { key: "heartRate", label: "Heart rate", value: r.vitals.heartRate, unit: "bpm" },
+    { key: "bloodPressure", label: "Blood pressure", value: bloodPressure, unit: "mmHg" },
+    { key: "oxygenSaturation", label: "Oxygen saturation", value: r.vitals.oxygenSaturation, unit: "%" },
+    { key: "respiratoryRate", label: "Breathing", value: r.vitals.respiratoryRate, unit: "/min" },
   ];
   return <section aria-label="Face scan results" className="@container space-y-4">
     <p role="status" className="text-xs text-muted-foreground">Completed{session.completedAt ? ` · ${new Date(session.completedAt).toLocaleString()}` : ""}</p>
     <dl className="grid gap-4 rounded-xl border border-border bg-card py-4 @min-[30rem]:grid-cols-3">
       {[{ label: "Vital IQ score", value: session.score?.status === "SCORED" ? session.score.points : null, unit: "" }, { label: "Wellness score", value: r.wellnessScore, unit: "/100" }, { label: "Health risk score", value: r.healthRiskScore, unit: "/100" }].map(item => <div key={item.label} className="min-w-0 px-4"><dt className="text-sm text-muted-foreground">{item.label}</dt><dd className="mt-1 text-2xl font-semibold tabular-nums">{item.value ?? "—"}{item.value != null && item.unit && <span className="ml-1 text-base font-normal text-muted-foreground">{item.unit}</span>}</dd></div>)}
     </dl>
-    <dl className="grid grid-cols-2 gap-3 @min-[44rem]:grid-cols-4">{vitals.map(item => <div key={item.label} className="min-w-0 rounded-xl border border-border bg-card p-3"><dt className="text-xs text-muted-foreground">{item.label}</dt><dd className="mt-2 flex flex-wrap items-baseline gap-x-1 font-semibold tabular-nums"><span className="text-xl">{item.value ?? "—"}</span>{item.value !== null && <span className="text-sm font-normal">{item.unit}</span>}</dd></div>)}</dl>
+    <dl className="grid grid-cols-2 gap-3 @min-[44rem]:grid-cols-4">{vitals.map(item => {
+      const assessment = item.key ? assessFaceScanRange(item.key, item.value, session.context) : null;
+      return <div key={item.label} className={`min-w-0 rounded-xl border p-3 ${assessment?.outside ? "border-warning bg-warning-soft text-warning" : "border-border bg-card"}`}>
+        <dt className={`text-xs ${assessment?.outside ? "" : "text-muted-foreground"}`}>{item.label}</dt>
+        <dd className="mt-2 flex flex-wrap items-baseline gap-x-1 font-semibold tabular-nums"><span className="text-xl">{item.value ?? "—"}</span>{item.value !== null && <span className="text-sm font-normal">{item.unit}</span>}</dd>
+        {assessment?.outside && <p className="mt-2 text-xs">Outside report range · {assessment.reference}</p>}
+      </div>;
+    })}</dl>
     {groups.map(group => <ResultGroup key={group.title} title={group.title} availability={`${group.metrics.filter(item => item.value !== null).length}/${group.metrics.length} available`}>
-      <MetricRows metrics={group.metrics}/>
+      <MetricRows metrics={group.metrics} context={session.context}/>
     </ResultGroup>)}
     <ResultGroup title="Scan details">
-      <MetricRows metrics={[
+      <MetricRows context={session.context} metrics={[
         { label: "Date of birth at scan", value: session.context.dob, unit: "" },
         { label: "Gender at scan", value: session.context.gender === "female" ? "Female" : "Male", unit: "" },
         { label: "Height at scan", value: session.context.heightCm, unit: "cm" },
