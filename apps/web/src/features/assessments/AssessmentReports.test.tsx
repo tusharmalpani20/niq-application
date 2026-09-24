@@ -39,9 +39,9 @@ test("read-only report cards have no mutation controls", () => {
 
 test("creating a report uploads selected files using each saved revision", async () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/", pretendToBeVisual: true });
-  const keys = ["FocusEvent", "window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch", "XMLHttpRequest"];
+  const keys = ["FocusEvent", "window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch", "XMLHttpRequest"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  const values = { FocusEvent: dom.window.FocusEvent, window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true };
+  const values = { FocusEvent: dom.window.FocusEvent, window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, NodeFilter: dom.window.NodeFilter, DocumentFragment: dom.window.DocumentFragment, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true };
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable: true });
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {} });
   const revisions: string[] = [];
@@ -80,10 +80,14 @@ test("creating a report uploads selected files using each saved revision", async
       name.dispatchEvent(new dom.window.KeyboardEvent("keyup", { bubbles: true, key: "s" }));
     });
     const input = document.querySelector('input[aria-label="Choose files for new report"]') as HTMLInputElement;
-    const files = [new File(["first"], "first.pdf", { type: "application/pdf" }), new File(["second"], "second.pdf", { type: "application/pdf" })];
+    const files = [new File(["first"], "first.png", { type: "image/png" }), new File(["second"], "second.pdf", { type: "application/pdf" })];
     Object.defineProperty(input, "files", { configurable: true, value: files });
     await act(async () => { input.dispatchEvent(new dom.window.Event("change", { bubbles: true })); });
     expect(name.getAttribute("aria-invalid")).toBe("false");
+    expect(document.querySelector('button[aria-label="Preview first.png"] img')).not.toBeNull();
+    await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="Preview first.png"]')!.click(); });
+    expect(document.querySelector('img[alt="Preview of first.png"]')).not.toBeNull();
+    await act(async () => { document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click(); });
     expect(document.body.textContent).toContain("Create and upload");
     await act(async () => { input.closest("form")!.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); await new Promise(resolve => setTimeout(resolve, 10)); });
     expect(revisions).toEqual(["4", "5"]);
