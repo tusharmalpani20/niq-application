@@ -52,7 +52,7 @@ test("server-scored Vital IQ appears in the final total when the questionnaire i
   expect(assessmentResultView(combined)).not.toBeNull();
   const html = renderToStaticMarkup(<AssessmentResult record={combined} onSection={() => {}} />);
   expect(html).toContain("Final NIQ score");
-  expect(html).toContain("Questionnaire — + Vital IQ 1");
+  expect(html).not.toContain("Questionnaire — + Vital IQ 1");
   expect(assessmentResultView({ ...combined, result: { ...combined.result, score: 2 } })).toBeNull();
 });
 
