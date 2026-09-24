@@ -37,9 +37,9 @@ async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) =>
 test("clinician sees the latest assessment and actions without switching tabs", async () => {
   await renderDetail("DOCTOR", body => {
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("Draft");
-    expect(body.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("Continue assessment");
-    expect(body.querySelector('a[href^="/assessments/new?"]')?.textContent).toContain("New assessment");
-    expect(body.querySelector("button")?.textContent).toContain("Edit patient");
+    expect(body.querySelector('button[aria-label="Continue assessment"] svg')).not.toBeNull();
+    expect(body.querySelector('button[aria-label="New assessment"] svg')).not.toBeNull();
+    expect(body.querySelector('button[aria-label="Edit patient"] svg')).not.toBeNull();
     expect(body.textContent).not.toContain("Patient reference");
   });
 });
@@ -47,8 +47,8 @@ test("clinician sees the latest assessment and actions without switching tabs", 
 test("support can edit patient details but cannot open a clinical assessment", async () => {
   await renderDetail("SUPPORT", body => {
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("Draft");
-    expect(body.querySelector('a[href="/assessments/ASM-000001"]')).toBeNull();
-    expect(body.querySelector('a[href^="/assessments/new?"]')).toBeNull();
-    expect(body.querySelector("button")?.textContent).toContain("Edit patient");
+    expect(body.querySelector('button[aria-label="Continue assessment"]')).toBeNull();
+    expect(body.querySelector('button[aria-label="New assessment"]')).toBeNull();
+    expect(body.querySelector('button[aria-label="Edit patient"] svg')).not.toBeNull();
   });
 });

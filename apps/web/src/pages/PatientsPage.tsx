@@ -140,7 +140,9 @@ export function PatientDetailPage() {
 }
 
 function LatestAssessment({ history, state, canRead, canEdit }: { history: AssessmentSummary[]; state: "loading" | "ready" | "error"; canRead: boolean; canEdit: boolean }) {
+  const navigate = useNavigate();
   const latest = history[0];
+  const actionLabel = canEdit && (latest?.status === "DRAFT" || latest?.status === "READY_FOR_SCORING") ? "Continue assessment" : "Open assessment";
   return <section className="surface mb-5 p-5" aria-label="Latest assessment">
     <h2 className="font-semibold">Latest assessment</h2>
     {state === "loading" ? <p className="mt-3 text-sm text-muted-foreground">Loading assessment history…</p>
@@ -149,7 +151,7 @@ function LatestAssessment({ history, state, canRead, canEdit }: { history: Asses
       : <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><span className="font-medium">{latest.reference}</span><StatusBadge status={assessmentStatusLabels[latest.status]} /></div>
           <p className="text-sm text-muted-foreground">{latest.facility?.name ?? "No facility"} · Started <DateDisplay value={latest.createdAt} />{latest.completedAt && <> · Completed <DateDisplay value={latest.completedAt} /></>}</p></div>
-        {canRead && <RouterButtonLink variant="outline" to={`/assessments/${latest.reference}`}>{canEdit && (latest.status === "DRAFT" || latest.status === "READY_FOR_SCORING") ? "Continue assessment" : "Open assessment"}</RouterButtonLink>}
+        {canRead && <TooltipTrigger><Button variant="outline" size="icon-lg" className="size-10 shrink-0" aria-label={actionLabel} onPress={() => navigate(`/assessments/${latest.reference}`)}><Icon name="arrow" size={20} /></Button><Tooltip>{actionLabel}</Tooltip></TooltipTrigger>}
       </div>}
   </section>;
 }
@@ -192,7 +194,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
     finally { setEditLoading(false); }
   };
   return <>
-    <PatientHeader patient={patient} action={<div className="flex flex-wrap gap-2">{canEditPatient && <Button variant="outline" onPress={openEditor} isDisabled={editLoading}>{editLoading ? "Loading…" : "Edit patient"}</Button>}{canEditAssessment && <RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18} />New assessment</RouterButtonLink>}</div>} />
+    <PatientHeader patient={patient} action={<div className="flex flex-wrap gap-2">{canEditPatient && <TooltipTrigger><Button variant="outline" size="icon-lg" className="size-10 shrink-0" aria-label="Edit patient" onPress={openEditor} isDisabled={editLoading}><Pencil className="size-4" /></Button><Tooltip>Edit patient</Tooltip></TooltipTrigger>}{canEditAssessment && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>} />
     {editError && <Alert variant="destructive"><AlertDescription>Facilities could not be loaded for editing. <Button variant="link" onPress={openEditor}>Retry</Button></AlertDescription></Alert>}
     <Tabs selectedKey={patientTab} onSelectionChange={(key) => setPatientTab(String(key))} className="organization-detail-tabs gap-5">
       <TabsList variant="line" aria-label="Patient record" className="w-full justify-start gap-5 border-b p-0">
