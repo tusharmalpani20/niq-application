@@ -39,12 +39,10 @@ function ReviewHistoryEvent({ event, history }: { event: ClinicalReviewEvent; hi
   </li>;
 }
 function ReviewHistory({ history }: { history: ClinicalReviewEvent[] }) {
-  const [latest, ...older] = [...history].reverse();
-  if (!latest) return null;
+  if (!history.length) return null;
   return <details className="mt-4 border-t border-border pt-3">
     <summary className="min-h-11 cursor-pointer font-medium">Review history ({history.length})</summary>
-    <ol className="mt-2"><ReviewHistoryEvent event={latest} history={history} /></ol>
-    {older.length > 0 && <details className="mt-2 pl-5"><summary className="min-h-9 cursor-pointer text-sm text-muted-foreground">Show {older.length} older {older.length === 1 ? "event" : "events"}</summary><ol className="mt-2">{older.map(event => <ReviewHistoryEvent key={event.id} event={event} history={history} />)}</ol></details>}
+    <ol className="mt-2">{[...history].reverse().map(event => <ReviewHistoryEvent key={event.id} event={event} history={history} />)}</ol>
   </details>;
 }
 export function ClinicalReviewPanel({ organizationId, assessmentId, review, error, loading, blocked, onRefresh, onChanged, onBusyChange }: {

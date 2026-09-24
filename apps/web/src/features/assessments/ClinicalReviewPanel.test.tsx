@@ -92,17 +92,20 @@ test("previously submitted review still says resend after corrections", async()=
  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Resend to the previous reviewer");
 },{review:{...review,state:"AWAITING_RESUBMISSION",submittedAt:"2026-09-23T00:00:00Z",allowedActions:["RESEND"]}}));
 
-test("review history explains returns without a same-person arrow and hides older events", async()=>harness(async()=>{
+test("one review history disclosure shows every event without a same-person arrow", async()=>harness(async()=>{
   const history = document.querySelector("details");
   expect(history?.querySelector("summary")?.textContent).toBe("Review history (2)");
-  expect(history?.querySelector("li")?.textContent).toContain("Returned for correction");
-  expect(history?.querySelector("li")?.textContent).toContain("Cycle 2");
-  expect(history?.querySelector("li")?.textContent).toContain("Corrections assigned to: Reviewer");
-  expect(history?.querySelector("li")?.textContent).toContain("Reason: Latest correction");
+  history?.querySelector("summary")?.click();
+  expect(history?.open).toBe(true);
+  const events = history?.querySelectorAll("li");
+  expect(events).toHaveLength(2);
+  expect(events?.[0]?.textContent).toContain("Returned for correction");
+  expect(events?.[0]?.textContent).toContain("Cycle 2");
+  expect(events?.[0]?.textContent).toContain("Corrections assigned to: Reviewer");
+  expect(events?.[0]?.textContent).toContain("Reason: Latest correction");
+  expect(events?.[1]?.textContent).toContain("Cycle 1");
   expect(history?.textContent).not.toContain("Reviewer → Reviewer");
-  const older = history?.querySelector("details");
-  expect(older?.open).toBe(false);
-  expect(older?.querySelectorAll("li")).toHaveLength(1);
+  expect(history?.querySelector("details")).toBeNull();
 }, {review:{...review,history:[
   {id:"first",action:"RETURN_TO_DRAFT",revision:1,cycle:1,actor:review.assignee!,assignee:review.assignee!,createdAt:"2026-09-23T00:00:00Z",reason:"Earlier correction"},
   {id:"second",action:"RETURN_TO_DRAFT",revision:2,cycle:2,actor:review.assignee!,assignee:review.assignee!,createdAt:"2026-09-24T00:00:00Z",reason:"Latest correction"},
