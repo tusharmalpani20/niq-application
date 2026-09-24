@@ -22,12 +22,6 @@ export function clearInactiveAssessmentAnswers(manifest: AssessmentFormManifest,
   } while (changed);
   return cleaned;
 }
-/** Older drafts can contain the exclusive “No problem while eating” choice with symptoms. */
-export function clearConflictingDietaryNone(answers: FormAnswers): FormAnswers {
-  const symptoms = answers.dietary_symptoms;
-  if (!Array.isArray(symptoms) || symptoms.length < 2 || !symptoms.includes("dietary_symptoms_no_problem")) return answers;
-  return { ...answers, dietary_symptoms: symptoms.filter(id => id !== "dietary_symptoms_no_problem") };
-}
 const unanswered = (value: unknown) => value === undefined || value === null || value === "" || (typeof value === "string" && !value.trim());
 export function assessmentFieldError(field: FormField, value: unknown): string | null {
   if (unanswered(value)) return field.required ? "Required" : null;

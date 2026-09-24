@@ -1,7 +1,7 @@
 import { saveAssessmentSchema } from "./assessment-workflow";
 import { describe, expect, test } from "bun:test";
 import type { AssessmentFormManifest } from "./assessment-form";
-import { clearConflictingDietaryNone, clearInactiveAssessmentAnswers, getAssessmentCompletion, validateAssessmentAnswers, getScoringAssessmentAnswers, getEffectiveAssessmentAnswers, calculateAssessmentBmi } from "./assessment-form-validation";
+import { clearInactiveAssessmentAnswers, getAssessmentCompletion, validateAssessmentAnswers, getScoringAssessmentAnswers, getEffectiveAssessmentAnswers, calculateAssessmentBmi } from "./assessment-form-validation";
 const manifest: AssessmentFormManifest = { version: "test", sections: [{ id: "one", title: "One", fields: [
   { id: "age", label: "Age", kind: "number", required: true, min: 0, owner: "context", source: "C3" },
   { id: "choice", label: "Choice", kind: "multi_select", required: true, options: [{ id: "yes", label: "Yes" }], owner: "scoring", source: "F11" },
@@ -55,12 +55,6 @@ test("legacy mixed dietary symptoms can be retained without blocking a draft", (
   expect(getAssessmentCompletion(symptoms, { dietary_symptoms: ["dietary_symptoms_no_problem", "dietary_symptoms_nausea"] }).percent).toBe(100);
   expect(validateAssessmentAnswers(symptoms, { dietary_symptoms: ["dietary_symptoms_no_problem"] })).toEqual({});
   expect(validateAssessmentAnswers(symptoms, { dietary_symptoms: ["dietary_symptoms_nausea"] })).toEqual({});
-});
-test("legacy mixed dietary symptoms keep reported symptoms and discard contradictory none", () => {
-  const answers = { dietary_symptoms: ["dietary_symptoms_no_problem", "dietary_symptoms_nausea"], current_weight_kg: 70 };
-  expect(clearConflictingDietaryNone(answers)).toEqual({ dietary_symptoms: ["dietary_symptoms_nausea"], current_weight_kg: 70 });
-  expect(answers.dietary_symptoms).toEqual(["dietary_symptoms_no_problem", "dietary_symptoms_nausea"]);
-  expect(clearConflictingDietaryNone({ dietary_symptoms: ["dietary_symptoms_no_problem"] })).toEqual({ dietary_symptoms: ["dietary_symptoms_no_problem"] });
 });
 test("derived values are never sent to scoring and supplied answers remain immutable", () => {
   const withDerived: AssessmentFormManifest = { ...manifest, sections: [{ ...manifest.sections[0]!, fields: [...manifest.sections[0]!.fields, { id: "protein_intake", label: "Protein", kind: "calculated", required: false, owner: "scoring", source: "F152" }] }] };

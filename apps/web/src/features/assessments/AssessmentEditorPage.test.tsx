@@ -158,12 +158,6 @@ test("past scoring feedback does not reappear after reviewing answers", async ()
   expect(document.body.textContent).not.toContain("Previous scoring feedback");
 }, { answers: { ...recordFixture().answers, dietary_symptoms: ["dietary_symptoms_no_problem", "dietary_symptoms_nausea"] }, submission: { status: "REJECTED", failureCode: "VALIDATION_ERROR", issues: [{ fieldId: "dietary_symptoms", message: "No problem while eating cannot be selected with other symptoms" }] } }));
 
-test("a legacy mixed dietary answer is corrected before saving again", async () => harness(async ({ click, requests }) => {
-  expect(document.body.textContent).toContain("Unsaved changes");
-  await click("Save draft");
-  expect(requests.find(request => request.method === "PATCH")?.body.answers.dietary_symptoms).toEqual(["dietary_symptoms_nausea"]);
-}, { answers: { ...recordFixture().answers, dietary_symptoms: ["dietary_symptoms_no_problem", "dietary_symptoms_nausea"] } }));
-
 
 test("questionnaire section changes preserve answers without a leave confirmation", async () => harness(async ({ click, dom }) => {
   dom.window.confirm = () => { throw new Error("Section navigation must not use browser confirmation"); };

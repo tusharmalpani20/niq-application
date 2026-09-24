@@ -34,10 +34,8 @@ function calculated(field: FormField, answers: FormAnswers): string {
   return "Calculated when scored";
 }
 const explicitNoneFields = new Set(["current_medications", "supplements_intake", "co_morbidities", "gastrointestinal_symptoms"]);
-const noEatingProblem = "dietary_symptoms_no_problem";
-export function addAssessmentMultiChoice(fieldId: string, selected: string[], choice: string): string[] {
-  if (fieldId !== "dietary_symptoms") return [...selected, choice];
-  return choice === noEatingProblem ? [choice] : [...selected.filter(item => item !== noEatingProblem), choice];
+export function addAssessmentMultiChoice(selected: string[], choice: string): string[] {
+  return [...selected, choice];
 }
 const otherFields: Record<string, { option: string; detail: string }> = {
   cancer_type: { option: "cancer_other", detail: "cancer_type_other" },
@@ -70,11 +68,6 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
       if (allOptions.length <= 6) return <fieldset id={id} key={field.id} tabIndex={-1} aria-describedby={error ? errorId : undefined} aria-invalid={Boolean(error)} className="col-[1/-1] min-w-0 space-y-3">
         <legend className="mb-2 w-full text-sm font-medium"><span className="flex min-h-8 items-center justify-between gap-2"><span>{label}{required}</span>{reset}</span></legend>
         <MultipleChoiceGroup label={label} options={allOptions} value={Array.isArray(value) && !selected.length && explicitNoneFields.has(field.id) ? ["__none__"] : selected} disabled={readOnly} onChange={next => {
-          if (field.id === "dietary_symptoms") {
-            const choices = next.includes(noEatingProblem) && !selected.includes(noEatingProblem) ? [noEatingProblem] : next.filter(id => id !== noEatingProblem);
-            onChange(field.id, choices.length ? choices : null);
-            return;
-          }
           if (next.includes("__none__") && !selected.includes("__none__") && selected.length) onChange(field.id, []);
           else { const choices = next.filter(id => id !== "__none__"); onChange(field.id, choices.length ? choices : next.includes("__none__") ? [] : null); }
         }} />{errorMarkup}
@@ -87,7 +80,7 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
           <span className="break-words">{field.options?.find(option => option.id === item)?.label || item}</span>
           <Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove ${field.options?.find(option => option.id === item)?.label || item}`} onPress={() => onChange(field.id, selected.length === 1 ? null : selected.filter(choice => choice !== item))}><X className="size-3.5" /></Button>
         </span>) : explicitNoneFields.has(field.id) ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 pl-3 text-sm">None<Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove None from ${field.label}`} onPress={() => onChange(field.id, null)}><X className="size-3.5" /></Button></span> : <span className="text-sm text-muted-foreground">No selections</span>}</div>}
-        {!readOnly && <div className="max-w-md"><SearchCombobox key={JSON.stringify(value)} label={`Add ${field.label.toLowerCase()}`} placeholder={`Add ${field.label.toLowerCase()}…`} options={options} value={null} onChange={choice => onChange(field.id, choice === "__none__" ? [] : addAssessmentMultiChoice(field.id, selected, choice))} invalid={Boolean(error)} describedBy={error ? errorId : undefined} /></div>}
+        {!readOnly && <div className="max-w-md"><SearchCombobox key={JSON.stringify(value)} label={`Add ${field.label.toLowerCase()}`} placeholder={`Add ${field.label.toLowerCase()}…`} options={options} value={null} onChange={choice => onChange(field.id, choice === "__none__" ? [] : addAssessmentMultiChoice(selected, choice))} invalid={Boolean(error)} describedBy={error ? errorId : undefined} /></div>}
         {errorMarkup}
       </fieldset>;
     }

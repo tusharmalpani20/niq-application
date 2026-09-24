@@ -12,10 +12,10 @@ test("multi-selection uses selected chips without adding a generic None", () => 
   expect(render([field], { choices: ["nausea"] })).toContain('aria-label="Remove Nausea"');
   expect(render([field])).not.toContain("Optional");
 });
-test("selecting No problem replaces symptoms and selecting a symptom clears No problem", () => {
-  expect(addAssessmentMultiChoice("dietary_symptoms", ["dietary_symptoms_nausea"], "dietary_symptoms_no_problem")).toEqual(["dietary_symptoms_no_problem"]);
-  expect(addAssessmentMultiChoice("dietary_symptoms", ["dietary_symptoms_no_problem"], "dietary_symptoms_nausea")).toEqual(["dietary_symptoms_nausea"]);
-  expect(addAssessmentMultiChoice("gastrointestinal_symptoms", ["nausea"], "vomiting")).toEqual(["nausea", "vomiting"]);
+test("No problem while eating can be selected alongside other symptoms", () => {
+  expect(addAssessmentMultiChoice(["dietary_symptoms_nausea"], "dietary_symptoms_no_problem")).toEqual(["dietary_symptoms_nausea", "dietary_symptoms_no_problem"]);
+  expect(addAssessmentMultiChoice(["dietary_symptoms_no_problem"], "dietary_symptoms_nausea")).toEqual(["dietary_symptoms_no_problem", "dietary_symptoms_nausea"]);
+  expect(addAssessmentMultiChoice(["nausea"], "vomiting")).toEqual(["nausea", "vomiting"]);
 });
 test("a saved mixed symptom answer stays editable without a local error", () => {
   const symptoms = { ...field, id: "dietary_symptoms", options: [
