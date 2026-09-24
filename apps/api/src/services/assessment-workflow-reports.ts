@@ -17,6 +17,7 @@ export class AssessmentReportWorkflow {
   }
   async edit(actor:Principal,organizationId:string,assessmentId:string,input:z.infer<typeof reportInputSchema>,context:RequestContext,reportId?:string) {
     this.service.clinicalActor(actor,organizationId,"reports.manage");
+    if(!input.label.trim()) throw new ServiceError("VALIDATION_ERROR","Enter a report name.");
     await this.service.db.transaction(async tx=>{
       const row=await this.service.authorize(actor,organizationId,assessmentId,tx,true);this.service.editable(row,input.revision,actor);
       const {revision,...data}=input;

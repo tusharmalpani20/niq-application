@@ -13,7 +13,7 @@ export const assessmentAnswerSchema = z.union([z.string().max(ASSESSMENT_ANSWER_
 export const saveAssessmentSchema = z.object({ revision: z.number().int().nonnegative(), answers: z.record(z.string().max(100), assessmentAnswerSchema) }).strict();
 export const assessmentRevisionSchema = z.object({ revision: z.number().int().nonnegative() }).strict();
 export const reportInputSchema = z.object({
-  revision: z.number().int().nonnegative(), label: z.string().trim().max(120), purpose: z.string().trim().max(300),
+  revision: z.number().int().nonnegative(), label: z.string().trim().min(1, "Enter a report name.").max(120), purpose: z.string().trim().max(300),
   datePrecision: z.enum(["DAY", "MONTH"]), year: z.number().int().min(1900).max(9999).nullable(),
   month: z.number().int().min(1).max(12).nullable(), day: z.number().int().min(1).max(31).nullable(),
 }).strict().superRefine((value, ctx) => {
