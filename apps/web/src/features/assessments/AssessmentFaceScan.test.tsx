@@ -56,12 +56,13 @@ test("saves draft before capture and unlocks navigation only after upload accept
   const start = requests.find(r => r.body?.revision); expect(start?.body.revision).toBe(4); expect(start?.body.requestKey.length).toBeGreaterThan(16);
   await finish(); expect(busy()).toBe(false); expect(document.body.textContent).toContain("Your capture is saved");
 }));
-test("shows position and stillness guidance inside the camera preview", async () => harness(async ({ consent, click, frame }) => {
+test("shows position and stillness guidance below the camera image", async () => harness(async ({ consent, click, frame }) => {
   await consent(); await click("Start face scan");
-  const preview = document.querySelector('canvas[aria-label="Camera scan preview"]')?.parentElement;
+  const videoArea = document.querySelector('canvas[aria-label="Camera scan preview"]')?.parentElement;
+  const preview = videoArea?.parentElement;
   const guidance = preview?.querySelector('[role="status"]');
+  expect(videoArea?.contains(guidance ?? null)).toBe(false);
   expect(guidance?.textContent).toContain("Preparing camera");
-  expect(guidance?.classList.contains("bottom-3")).toBe(true);
   await frame("Please move a bit closer to the screen.");
   expect(preview?.querySelector('[role="status"]')?.textContent).toBe("Please move a bit closer to the screen.");
   await frame("25% Completed");

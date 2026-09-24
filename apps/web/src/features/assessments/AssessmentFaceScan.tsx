@@ -187,10 +187,12 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {session?.state === "COMPLETED" && record.status === "DRAFT" && <p className="text-sm text-muted-foreground">The saved face scan is retained. Scan again only if a new measurement is needed.</p>}
     {changedScanInputs.length > 0 && <p role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm">The saved scan used different {changedScanInputs.join(", ")}. Its results still reflect the original scan details shown below; changing questionnaire answers does not update those results.</p>}
     {session && <FaceScanResults session={session}/>}
-    <div hidden={phase !== "capturing" && phase !== "preparing"} className="relative aspect-[4/3] max-h-96 overflow-hidden rounded-lg bg-muted">
-      <video ref={video} autoPlay muted playsInline className="absolute size-px opacity-0" aria-hidden="true"/>
-      <canvas ref={canvas} className="h-full w-full -scale-x-100 object-contain" aria-label="Camera scan preview"/>
-      {phase === "capturing" && <div className="pointer-events-none absolute bottom-3 left-1/2 flex w-fit max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-2 rounded-xl border border-white/70 bg-white/90 px-3 py-2 text-center text-sm font-medium leading-snug text-slate-900 shadow-sm backdrop-blur-sm sm:max-w-sm" role="status" aria-live="polite"><ScanFace className="size-4 shrink-0" aria-hidden="true"/><span>{/^\d+% Completed$/i.test(guidance) ? "Hold still and keep your face in view." : guidance}</span></div>}
+    <div hidden={phase !== "capturing" && phase !== "preparing"} className="overflow-hidden rounded-lg bg-muted">
+      <div className="relative aspect-video max-h-96">
+        <video ref={video} autoPlay muted playsInline className="absolute size-px opacity-0" aria-hidden="true"/>
+        <canvas ref={canvas} className="h-full w-full -scale-x-100 object-contain" aria-label="Camera scan preview"/>
+      </div>
+      {phase === "capturing" && <div className="flex min-h-14 items-center justify-center px-3 py-2"><div className="flex w-fit max-w-full items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-center text-sm font-medium leading-snug text-foreground shadow-sm" role="status" aria-live="polite"><ScanFace className="size-4 shrink-0" aria-hidden="true"/><span className="sm:whitespace-nowrap">{/^\d+% Completed$/i.test(guidance) ? "Hold still and keep your face in view." : guidance}</span></div></div>}
     </div>
     {phase === "capturing" && <div className="space-y-3"><Progress aria-label="Face scan capture progress" value={progress} className="[&_[data-slot=progress-track]]:h-2.5 [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-indicator]]:duration-300"><ProgressLabel>Capturing scan</ProgressLabel><ProgressValue className="font-semibold text-brand-ink" /></Progress>{lowPerformance && <p className="text-sm text-muted-foreground">Device performance is limited. Keep other applications closed during capture.</p>}<Button variant="outline" onPress={() => { void cancel(); }}>Cancel capture</Button></div>}
     {phase === "preparing" && <p role="status">Preparing scan…</p>}
@@ -199,7 +201,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {data?.enabled && session?.state === "COMPLETED" && !rescanRequested && phase === "idle" && record.status === "DRAFT" && <Button variant="outline" isDisabled={disabled || stale} onPress={() => { setConsented(false); setPosture(""); setRescanRequested(true); }}>Scan again</Button>}
     {data?.enabled && canStart && (session?.state !== "COMPLETED" || rescanRequested) && phase === "idle" && record.status === "DRAFT" && <div className="space-y-4 border-t border-border pt-4">
       {session?.state === "COMPLETED" && <p className="text-sm text-muted-foreground">A new scan will replace the current result. Previous results stay saved in the assessment history.</p>}
-      <p className="text-sm text-muted-foreground">Keep your face still and well-lit for 60 seconds.</p>
+      <p className="text-sm text-muted-foreground">Keep your face still and well-lit for 30 seconds. Follow the position guidance during capture.</p>
       <p className="text-sm text-muted-foreground">Stay on this page. Clicking elsewhere stops the scan.</p>
       <div className="space-y-2"><p className="text-sm font-medium">Posture <span aria-hidden="true" className="text-destructive">*</span></p><ChoiceGroup id="face-scan-posture" label="Posture" options={scanPostureOptions} value={selectedPosture} onChange={value => { setPosture(value as ScanPosture); }} required disabled={disabled || session?.state === "REQUESTED" || (startKey.current !== null && !terminal.has(session?.state ?? ""))} /></div>
       {session?.state === "REQUESTED" && <p className="text-sm">This attempt uses {session.context.heightCm} cm and {session.context.weightKg} kg, {scanPostureLabels[session.context.posture].toLowerCase()}. Cancel it to use changed details.</p>}
