@@ -34,6 +34,7 @@ export function assessmentFieldError(field: FormField, value: unknown): string |
   }
   if (field.kind === "multi_select") {
     if (!Array.isArray(value) || value.length > 200 || new Set(value).size !== value.length || !value.every(v => typeof v === "string" && field.options?.some(o => o.id === v))) return "Choose valid options";
+    if (field.id === "dietary_symptoms" && value.includes("dietary_symptoms_no_problem") && value.length > 1) return "No problem while eating cannot be selected with other symptoms";
     return null;
   }
   if (typeof value !== "string" || value.length > ASSESSMENT_ANSWER_TEXT_LIMIT) return "Enter valid text";

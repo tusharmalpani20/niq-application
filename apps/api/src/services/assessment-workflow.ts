@@ -302,7 +302,7 @@ export function assessmentRejectionIssues(manifest:AssessmentFormManifest,issues
   const messages:Record<string,string>={INVALID_WEIGHT:"Enter a weight greater than zero.",INVALID_COUNT:"Enter a positive whole number.",CONTRADICTORY_ANSWER:"Choose compatible answers for this question.",INACTIVE_DEPENDENCY:"Review this answer and its parent question.",INVALID_ARITHMETIC:"Review the number; its calculated result is outside the supported range."};
   for(const issue of issues.slice(0,128)) {
     const ids=issue.path==="answers.weight"?["previous_weight_kg","current_weight_kg"]:[issue.path.startsWith("answers.")?issue.path.slice(8):""];
-    for(const fieldId of ids) if(fields.has(fieldId)&&!result.has(fieldId)) result.set(fieldId,{fieldId,message:messages[issue.code]??"Review this answer before submitting again."});
+    for(const fieldId of ids) if(fields.has(fieldId)&&!result.has(fieldId)) result.set(fieldId,{fieldId,message:fieldId==="dietary_symptoms"&&issue.code==="CONTRADICTORY_ANSWER"?"No problem while eating cannot be selected with other symptoms.":messages[issue.code]??"Review this answer before submitting again."});
   }
   return [...result.values()];
 }

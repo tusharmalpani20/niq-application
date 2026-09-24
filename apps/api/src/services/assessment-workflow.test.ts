@@ -24,6 +24,11 @@ test("rejection guidance excludes unknown paths and upstream private text",()=>{
  expect(assessmentRejectionIssues(manifest,[{path:"answers.weight",code:"INVALID_WEIGHT",message:"private upstream answer"},{path:"answers.current_weight_kg",code:"INVALID_WEIGHT",message:"duplicate"},{path:"credentials.secret",code:"INVALID",message:"secret"}])).toEqual([
  {fieldId:"previous_weight_kg",message:"Enter a weight greater than zero."},{fieldId:"current_weight_kg",message:"Enter a weight greater than zero."}]);
 });
+test("dietary symptom contradiction has specific local guidance",()=>{
+ const manifest=buildAssessmentForm(questionnaire());
+ expect(assessmentRejectionIssues(manifest,[{path:"answers.dietary_symptoms",code:"CONTRADICTORY_ANSWER",message:"private upstream answer"}])).toEqual([
+  {fieldId:"dietary_symptoms",message:"No problem while eating cannot be selected with other symptoms."}]);
+});
 // Must point ONLY to an isolated, migrated disposable database.
 describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQL lifecycle",()=>{
  const client=postgres(process.env.ASSESSMENT_TEST_DATABASE_URL!,{max:10,prepare:false}),db=drizzle(client);
