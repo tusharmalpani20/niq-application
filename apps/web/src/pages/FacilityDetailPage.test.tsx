@@ -16,7 +16,7 @@ const team = [
   { membershipId: otherId, userId: otherId, email: "other@example.test", displayName: "Other Doctor", status: "ACTIVE", role: "DOCTOR", active: true, facilities: [{ id: otherId, name: "Elsewhere" }], createdAt: facility.createdAt },
 ];
 
-async function renderDetail(role: MembershipRole, verify: (body: HTMLElement, requested: string[]) => void, id = facilityId) {
+async function renderDetail(role: MembershipRole, verify: (body: HTMLElement, requested: string[], path: string) => void, id = facilityId) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -40,7 +40,7 @@ async function renderDetail(role: MembershipRole, verify: (body: HTMLElement, re
   const root = createRoot(document.getElementById("root")!);
   try {
     await act(async () => { root.render(<RouterProvider router={router} />); await new Promise(resolve => setTimeout(resolve, 0)); });
-    verify(document.body, requested);
+    verify(document.body, requested, router.state.location.pathname);
   } finally {
     await act(async () => root.unmount()); router.dispose(); dom.window.close();
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as Record<string, unknown>)[key]; }
@@ -48,7 +48,8 @@ async function renderDetail(role: MembershipRole, verify: (body: HTMLElement, re
 }
 
 test("admin sees facility metrics, assigned team, and management actions", async () => {
-  await renderDetail("ORGANIZATION_ADMIN", (body, requested) => {
+  await renderDetail("ORGANIZATION_ADMIN", (body, requested, path) => {
+    expect(path).toBe("/facilities/hyd");
     expect(body.querySelector('[aria-label="Facility at a glance"]')?.textContent).toContain("Enabled team members1");
     expect(body.querySelector('[aria-label="Facility team"]')?.textContent).toContain("Example Doctor");
     expect(body.querySelector('[aria-label="Facility team"]')?.textContent).not.toContain("Other Doctor");
@@ -66,14 +67,15 @@ test("admin sees facility metrics, assigned team, and management actions", async
 });
 
 test("clinician sees assessment work without facility management", async () => {
-  await renderDetail("DOCTOR", (body, requested) => {
+  await renderDetail("DOCTOR", (body, requested, path) => {
+    expect(path).toBe("/facilities/hyd");
     expect(body.querySelector('a[href="/assessments/ASM-000001"]')).not.toBeNull();
     expect(body.querySelector('[aria-label="Facility team"]')).toBeNull();
     expect(body.querySelector('button[aria-label="Edit facility"]')).toBeNull();
     expect(requested.some(url => url.endsWith("/users"))).toBe(false);
     expect(requested.some(url => url.includes("/performance"))).toBe(false);
     expect(body.querySelector('[aria-label="Facility performance"]')).toBeNull();
-  });
+  }, "hyd");
 });
 
 test("support sees workflow status but no clinical assessment link", async () => {

@@ -2,7 +2,7 @@ import { hasPermission, membershipRoleLabels } from "@niq/application-contracts"
 import type { AssessmentSummary, AuthenticatedUser, Facility, FacilityPerformance as Performance, OrganizationUser, Patient } from "@niq/application-contracts";
 import { Pencil, Power } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useOutletContext, useParams } from "react-router-dom";
+import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { openAssessmentStatuses } from "../lib/assessment-work";
 import { assessmentStatusLabels } from "../lib/patient-display";
 import { FacilityDialog } from "./FacilitiesPage";
 import { FacilityPerformance } from "./FacilityPerformance";
+import { facilityUrl } from "../lib/facility-url";
 
 type FacilityOverview = { facility: Facility; patients: Patient[]; assessments: AssessmentSummary[]; team: OrganizationUser[] | null; performance: Performance | null };
 const dateLabel = (date: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
@@ -25,7 +26,8 @@ function Metric({ label, value, detail }: { label: string; value: number | strin
 
 export function FacilityDetailPage() {
   const user = useOutletContext<AuthenticatedUser>();
-  const { facilityId } = useParams();
+  const navigate = useNavigate();
+  const { facilityId: facilityLocator } = useParams();
   const canManage = hasPermission(user.role, "facilities.manage");
   const canManageUsers = hasPermission(user.role, "users.manage");
   const canOpenAssessment = hasPermission(user.role, "assessments.read");
@@ -41,14 +43,15 @@ export function FacilityDetailPage() {
     let active = true;
     setState("loading");
     setOverview(null);
-    Promise.all([
+    void Promise.all([
       listFacilities(user.organizationId), listPatients(user.organizationId), listAssessments(user.organizationId),
       canManageUsers ? listOrganizationUsers(user.organizationId).catch(() => null) : Promise.resolve(null),
-      canManageUsers && facilityId ? getFacilityPerformance(user.organizationId, facilityId).catch(() => null) : Promise.resolve(null),
-    ]).then(([facilities, patients, assessments, users, performance]) => {
+    ]).then(async ([facilities, patients, assessments, users]) => {
       if (!active) return;
-      const facility = facilities.find(item => item.id === facilityId);
+      const facility = facilities.find(item => item.id === facilityLocator || item.code.toLowerCase() === facilityLocator?.toLowerCase());
       if (!facility) { setState("missing"); return; }
+      const performance = canManageUsers ? await getFacilityPerformance(user.organizationId, facility.id).catch(() => null) : null;
+      if (!active) return;
       setOverview({
         facility,
         patients: patients.filter(item => item.homeFacility?.id === facility.id),
@@ -57,9 +60,10 @@ export function FacilityDetailPage() {
         performance,
       });
       setState("ready");
+      if (`/facilities/${encodeURIComponent(facilityLocator ?? "")}` !== facilityUrl(facility)) navigate(facilityUrl(facility), { replace: true });
     }).catch(() => { if (active) setState("error"); });
     return () => { active = false; };
-  }, [user.organizationId, canManageUsers, facilityId, reload]);
+  }, [user.organizationId, canManageUsers, facilityLocator, navigate, reload]);
 
   if (state === "loading") return <p role="status">Loading facility…</p>;
   if (state === "missing") return <Alert><AlertDescription>Facility not found or you do not have access. <Link to="/facilities">Back to facilities</Link></AlertDescription></Alert>;
@@ -77,7 +81,7 @@ export function FacilityDetailPage() {
     { id: "email", header: "Email", cell: ({ row }) => <span className="text-muted-foreground">{row.original.email}</span> },
     { id: "role", header: "Role", cell: ({ row }) => membershipRoleLabels[row.original.role] },
   ];
-  const saveFacility = (updated: Facility) => { setOverview(value => value ? { ...value, facility: updated } : value); setEditing(false); setChangingStatus(false); };
+  const saveFacility = (updated: Facility) => { setOverview(value => value ? { ...value, facility: updated } : value); setEditing(false); setChangingStatus(false); if (facilityLocator?.toLowerCase() !== updated.code.toLowerCase()) navigate(facilityUrl(updated), { replace: true }); };
 
   return <>
     <nav className="breadcrumb" aria-label="Breadcrumb"><Link to="/facilities">Facilities</Link><span aria-hidden="true">/</span><span aria-current="page">{facility.name}</span></nav>
