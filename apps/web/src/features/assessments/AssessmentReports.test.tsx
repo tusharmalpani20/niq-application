@@ -25,6 +25,8 @@ test("report cards retain download and labelled removal controls in a compact gr
   expect(html).toContain("Before treatment");
   expect(html).toContain("Month and year");
   expect(html).toContain("2026-08");
+  expect(html).toContain('aria-label="Edit report details"');
+  expect(html).toContain('aria-label="Remove report"');
   expect(html).toContain('aria-label="Remove CBC.pdf"');
   expect(html).toContain('aria-label="Add files to report 1"');
   expect(html).toContain("Add another report");

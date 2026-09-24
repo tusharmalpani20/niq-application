@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { FileText, Plus, Trash2 } from "lucide-react";
+import { FileText, Pencil, Plus, Trash2 } from "lucide-react";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ReportMutationError, mutateReport, reportBase, uploadReportFile, type ReportInput } from "./report-api";
@@ -166,7 +166,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
     {!reports.length && !editor && <div className="rounded-xl border border-border bg-card px-5 py-8 text-center"><FileText className="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true"/><h3 className="font-semibold">No attachments yet</h3><p className="mt-2 text-sm text-muted-foreground">Create a report and choose its files in one step.</p>{!readOnly && <Button variant="outline" className="mt-5 min-h-11 border-primary/30 text-brand-ink" isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={beginAddReport}><Plus aria-hidden="true"/>Add report</Button>}</div>}
     {reports.map((report, index) => <article key={report.id} className="min-w-0 rounded-xl border border-border bg-card p-4 text-card-foreground">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Report {index + 1}</h3>
-        {!readOnly && <div className="flex gap-2"><Button variant="ghost" isDisabled={busy || !!editor} onPress={() => { setMessage(""); setNameError(false); setEditor({ id: report.id, label: report.label, purpose: report.purpose, datePrecision: report.datePrecision, date: dateValue(report) }); }}>Edit details</Button><Button variant="ghost" className="text-destructive" isDisabled={busy || !!editor} onPress={() => setRemove({ reportId: report.id, label: report.label || "this report" })}><Trash2 aria-hidden="true"/>Remove report</Button></div>}
+        {!readOnly && <div className="flex gap-1"><Button variant="ghost" size="icon" className="size-10" aria-label="Edit report details" isDisabled={busy || !!editor} onPress={() => { setMessage(""); setNameError(false); setEditor({ id: report.id, label: report.label, purpose: report.purpose, datePrecision: report.datePrecision, date: dateValue(report) }); }}><Pencil aria-hidden="true"/></Button><Button variant="ghost" size="icon" className="size-10 text-destructive" aria-label="Remove report" isDisabled={busy || !!editor} onPress={() => setRemove({ reportId: report.id, label: report.label || "this report" })}><Trash2 aria-hidden="true"/></Button></div>}
       </div>
       {editor?.id === report.id ? reportEditor : <dl className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-4 text-sm">
         <div><dt className="mb-1 text-muted-foreground">Report name</dt><dd className="break-words font-medium">{report.label || "Untitled report"}</dd></div>
