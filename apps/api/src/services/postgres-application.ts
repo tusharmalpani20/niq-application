@@ -801,6 +801,22 @@ export class PostgresApplicationService implements ApplicationService {
     if (!row) throw new ServiceError("NOT_FOUND", "Patient not found.");
     return this.presentPatient(row);
   }
+  async listPatientActivity(actor: Principal, organizationId: string, patientLocator: string) {
+    this.ensureOrganizationAccess(actor, organizationId, "users.manage");
+    // Resolve through the patient read path so facility access and archived records are enforced.
+    const patient = await this.getPatient(actor, organizationId, patientLocator);
+    const rows = await this.db.select({
+      id: auditEvents.id,
+      action: auditEvents.action,
+      occurredAt: auditEvents.occurredAt,
+      actorName: users.displayName,
+    }).from(auditEvents)
+      .leftJoin(organizationMemberships, and(eq(organizationMemberships.organizationId, auditEvents.organizationId), eq(organizationMemberships.id, auditEvents.actorMembershipId)))
+      .leftJoin(users, eq(users.id, organizationMemberships.userId))
+      .where(and(eq(auditEvents.organizationId, organizationId), eq(auditEvents.resourceId, patient.id), inArray(auditEvents.action, ["PATIENT_CREATED", "PATIENT_UPDATED", "PATIENT_CONTACT_UPDATED"])))
+      .orderBy(desc(auditEvents.occurredAt)).limit(50);
+    return rows.map((row) => ({ id: row.id, type: row.action === "PATIENT_CREATED" ? "REGISTERED" : row.action === "PATIENT_CONTACT_UPDATED" ? "CONTACT_UPDATED" : "PROFILE_UPDATED", occurredAt: row.occurredAt, actorName: row.actorName ?? "System" }));
+  }
   async listAssessments(actor: Principal, organizationId: string) {
     this.ensureOrganizationAccess(actor, organizationId, "assessments.list");
     const rows = await this.db.select({
