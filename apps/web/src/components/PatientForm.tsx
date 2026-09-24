@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from "./ui/alert";
 import { Button } from "./ui/button";
 import { DateInput, displayDate } from "./ui/date-input";
 import { Dialog, DialogHeader, DialogTitle } from "./ui/dialog";
-import { Field, FieldLabel } from "./ui/field";
+import { Field, FieldError, FieldLabel } from "./ui/field";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { ApiRequestError, registerPatient } from "../lib/api";
@@ -13,6 +13,7 @@ import { updatePatient } from "../lib/patient-edit";
 import { todayDate } from "../lib/patient-display";
 
 type PatientFormHandle = { requestClose: () => void };
+type PatientField = "name" | "medicalRecordNumber" | "homeFacilityId" | "dateOfBirth" | "gender" | "phone" | "email";
 
 type Props = {
   ref?: Ref<PatientFormHandle>;
@@ -46,7 +47,8 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
   useImperativeHandle(ref, () => ({ requestClose }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [birthInvalid, setBirthInvalid] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<PatientField, string>>>({});
+  const clearFieldError = (field: PatientField) => setFieldErrors(current => ({ ...current, [field]: undefined }));
   const options = facilities.filter(item => item.status === "ACTIVE" || item.id === patient?.homeFacility?.id);
   const currentFacility = patient?.homeFacility;
   const missingCurrent = currentFacility && !options.some(item => item.id === currentFacility.id);
@@ -63,14 +65,20 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
       phone, ...(email ? { email } : {}),
     });
     if (!parsed.success) {
-      const issue = parsed.error.issues[0];
-      setBirthInvalid(parsed.error.issues.some(item => item.path[0] === "dateOfBirth"));
-      setMessage(!facilityId || !gender ? "Select a facility and gender." : issue?.path[0] === "dateOfBirth"
-        ? birth > todayDate() && /^\d{4}-\d{2}-\d{2}$/.test(birth) ? "Date of birth cannot be in the future." : "Enter a valid date of birth in dd/mm/yyyy format."
-        : issue?.path[0] === "phone" ? phone ? "Mobile number must contain digits only." : "Enter a mobile number."
-        : "Check the patient details and enter a valid name, medical record number and contact information.");
+      const invalid = new Set(parsed.error.issues.map(issue => issue.path[0]));
+      setFieldErrors({
+        name: invalid.has("name") ? "Enter a patient name." : undefined,
+        medicalRecordNumber: invalid.has("medicalRecordNumber") ? "Enter a medical record number." : undefined,
+        homeFacilityId: invalid.has("homeFacilityId") ? "Select a facility." : undefined,
+        dateOfBirth: invalid.has("dateOfBirth") ? birth > todayDate() && /^\d{4}-\d{2}-\d{2}$/.test(birth) ? "Date of birth cannot be in the future." : "Enter a valid date of birth in dd/mm/yyyy format." : undefined,
+        gender: invalid.has("gender") ? "Select a gender." : undefined,
+        phone: invalid.has("phone") ? phone ? "Mobile number must contain digits only." : "Enter a mobile number." : undefined,
+        email: invalid.has("email") ? "Enter a valid email address." : undefined,
+      });
+      setMessage(null);
       return;
     }
+    setFieldErrors({});
     submitting.current = true;
     setIsSubmitting(true);
     onBusyChange?.(true);
@@ -85,21 +93,21 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
     }
   }
 
-  return <><form ref={formRef} className="clinical-form" onSubmit={submit}>
+  return <><form ref={formRef} className="clinical-form" noValidate onSubmit={submit}>
     <fieldset disabled={isSubmitting} className="form-fields facility-dialog-fields m-0 min-w-0 border-0 grid gap-5">
       <div className="grid gap-4">
         <h3 className="font-semibold">Patient details</h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field><FieldLabel htmlFor="patient-name" className="required-field-label">Patient name <span aria-hidden="true">*</span></FieldLabel><Input id="patient-name" name="name" defaultValue={patient?.displayName} autoComplete="name" required maxLength={200} autoFocus /></Field>
-          <Field><FieldLabel htmlFor="patient-mrn" className="required-field-label">Medical record number <span aria-hidden="true">*</span></FieldLabel><Input id="patient-mrn" name="mrn" defaultValue={patient?.medicalRecordNumber} placeholder="Hospital MRN" maxLength={120} required /></Field>
-          <Field><FieldLabel className="required-field-label">Facility <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Facility" placeholder="Select facility" selectedKey={facilityId} onSelectionChange={key => setFacilityId(String(key))} isRequired isDisabled={isSubmitting}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{options.map(item => <SelectItem id={item.id} key={item.id}>{item.name}{item.status !== "ACTIVE" ? " (inactive)" : ""}</SelectItem>)}{missingCurrent && <SelectItem id={currentFacility.id}>{currentFacility.name} (current)</SelectItem>}</SelectContent></Select></Field>
-          <Field><FieldLabel htmlFor="patient-birth" className="required-field-label">Date of birth <span aria-hidden="true">*</span></FieldLabel><DateInput id="patient-birth" label="Date of birth" value={birth} disabled={isSubmitting} required invalid={birthInvalid} max={todayDate()} onChange={value => { setBirth(value ?? ""); setBirthInvalid(false); }} /></Field>
-          <Field><FieldLabel className="required-field-label">Gender <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Gender" placeholder="Select gender" selectedKey={gender} onSelectionChange={key => setGender(String(key) as Patient["gender"])} isRequired isDisabled={isSubmitting}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(["FEMALE", "MALE", "OTHER", "UNKNOWN"] as const).map(value => <SelectItem id={value} key={value}>{value[0] + value.slice(1).toLowerCase()}</SelectItem>)}</SelectContent></Select></Field>
+          <Field data-invalid={!!fieldErrors.name || undefined}><FieldLabel htmlFor="patient-name" className="required-field-label">Patient name <span aria-hidden="true">*</span></FieldLabel><Input id="patient-name" name="name" defaultValue={patient?.displayName} autoComplete="name" required maxLength={200} autoFocus aria-invalid={!!fieldErrors.name} aria-describedby={fieldErrors.name ? "patient-name-error" : undefined} onChange={() => clearFieldError("name")} />{fieldErrors.name && <FieldError id="patient-name-error">{fieldErrors.name}</FieldError>}</Field>
+          <Field data-invalid={!!fieldErrors.medicalRecordNumber || undefined}><FieldLabel htmlFor="patient-mrn" className="required-field-label">Medical record number <span aria-hidden="true">*</span></FieldLabel><Input id="patient-mrn" name="mrn" defaultValue={patient?.medicalRecordNumber} placeholder="Hospital MRN" maxLength={120} required aria-invalid={!!fieldErrors.medicalRecordNumber} aria-describedby={fieldErrors.medicalRecordNumber ? "patient-mrn-error" : undefined} onChange={() => clearFieldError("medicalRecordNumber")} />{fieldErrors.medicalRecordNumber && <FieldError id="patient-mrn-error">{fieldErrors.medicalRecordNumber}</FieldError>}</Field>
+          <Field data-invalid={!!fieldErrors.homeFacilityId || undefined}><FieldLabel className="required-field-label">Facility <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Facility" placeholder="Select facility" selectedKey={facilityId} onSelectionChange={key => { setFacilityId(String(key)); clearFieldError("homeFacilityId"); }} isRequired isInvalid={!!fieldErrors.homeFacilityId} aria-describedby={fieldErrors.homeFacilityId ? "patient-facility-error" : undefined} isDisabled={isSubmitting}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{options.map(item => <SelectItem id={item.id} key={item.id}>{item.name}{item.status !== "ACTIVE" ? " (inactive)" : ""}</SelectItem>)}{missingCurrent && <SelectItem id={currentFacility.id}>{currentFacility.name} (current)</SelectItem>}</SelectContent></Select>{fieldErrors.homeFacilityId && <FieldError id="patient-facility-error">{fieldErrors.homeFacilityId}</FieldError>}</Field>
+          <Field data-invalid={!!fieldErrors.dateOfBirth || undefined}><FieldLabel htmlFor="patient-birth" className="required-field-label">Date of birth <span aria-hidden="true">*</span></FieldLabel><DateInput id="patient-birth" label="Date of birth" value={birth} disabled={isSubmitting} required invalid={!!fieldErrors.dateOfBirth} describedBy={fieldErrors.dateOfBirth ? "patient-birth-error" : undefined} max={todayDate()} onChange={value => { setBirth(value ?? ""); clearFieldError("dateOfBirth"); }} />{fieldErrors.dateOfBirth && <FieldError id="patient-birth-error">{fieldErrors.dateOfBirth}</FieldError>}</Field>
+          <Field data-invalid={!!fieldErrors.gender || undefined}><FieldLabel className="required-field-label">Gender <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Gender" placeholder="Select gender" selectedKey={gender} onSelectionChange={key => { setGender(String(key) as Patient["gender"]); clearFieldError("gender"); }} isRequired isInvalid={!!fieldErrors.gender} aria-describedby={fieldErrors.gender ? "patient-gender-error" : undefined} isDisabled={isSubmitting}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(["FEMALE", "MALE", "OTHER", "UNKNOWN"] as const).map(value => <SelectItem id={value} key={value}>{value[0] + value.slice(1).toLowerCase()}</SelectItem>)}</SelectContent></Select>{fieldErrors.gender && <FieldError id="patient-gender-error">{fieldErrors.gender}</FieldError>}</Field>
         </div>
       </div>
       <div className="border-t pt-4 grid gap-4"><h3 className="font-semibold">Contact details</h3><div className="grid gap-4 sm:grid-cols-2">
-        <Field><FieldLabel htmlFor="patient-phone" className="required-field-label">Mobile number <span aria-hidden="true">*</span></FieldLabel><Input id="patient-phone" name="phone" defaultValue={patient?.phone} type="tel" inputMode="numeric" pattern="[0-9]*" title="Use digits only" autoComplete="tel" maxLength={40} required onInput={event => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g, ""); }} /></Field>
-        <Field><FieldLabel htmlFor="patient-email">Email address (optional)</FieldLabel><Input id="patient-email" name="email" defaultValue={patient?.email} type="email" autoComplete="email" maxLength={320} /></Field>
+        <Field data-invalid={!!fieldErrors.phone || undefined}><FieldLabel htmlFor="patient-phone" className="required-field-label">Mobile number <span aria-hidden="true">*</span></FieldLabel><Input id="patient-phone" name="phone" defaultValue={patient?.phone} type="tel" inputMode="numeric" pattern="[0-9]*" title="Use digits only" autoComplete="tel" maxLength={40} required aria-invalid={!!fieldErrors.phone} aria-describedby={fieldErrors.phone ? "patient-phone-error" : undefined} onInput={event => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g, ""); clearFieldError("phone"); }} />{fieldErrors.phone && <FieldError id="patient-phone-error">{fieldErrors.phone}</FieldError>}</Field>
+        <Field data-invalid={!!fieldErrors.email || undefined}><FieldLabel htmlFor="patient-email">Email address (optional)</FieldLabel><Input id="patient-email" name="email" defaultValue={patient?.email} type="email" autoComplete="email" maxLength={320} aria-invalid={!!fieldErrors.email} aria-describedby={fieldErrors.email ? "patient-email-error" : undefined} onChange={() => clearFieldError("email")} />{fieldErrors.email && <FieldError id="patient-email-error">{fieldErrors.email}</FieldError>}</Field>
       </div></div>
       {!options.length && !missingCurrent && <Alert><AlertDescription>Add an active facility before registering a patient.</AlertDescription></Alert>}
       {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}

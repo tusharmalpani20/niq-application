@@ -74,6 +74,16 @@ test("empty registration closes without confirmation", async () => withDialog(as
   expect(document.body.textContent).not.toContain("Discard patient changes?");
 }));
 
+test("empty registration shows application field errors instead of native validation", async () => withDialog(async ({ click }) => {
+  expect(document.querySelector("form")?.hasAttribute("novalidate")).toBe(true);
+  await click("Register patient");
+  expect(document.body.textContent).toContain("Enter a patient name.");
+  expect(document.body.textContent).toContain("Enter a medical record number.");
+  expect(document.body.textContent).toContain("Select a facility.");
+  expect(document.body.textContent).toContain("Enter a mobile number.");
+  expect(document.querySelector("#patient-phone")?.getAttribute("aria-invalid")).toBe("true");
+}));
+
 for (const action of ["Cancel", "Close"]) {
   test(`${action} protects autofilled details and keeps them when continuing`, async () => withDialog(async ({ click, closeCount }) => {
     const email = document.querySelector<HTMLInputElement>("#patient-email")!;
