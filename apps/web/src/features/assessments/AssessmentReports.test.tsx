@@ -56,7 +56,9 @@ test("creating a report uploads selected files using each saved revision", async
     abort() {}
   }
   globalThis.XMLHttpRequest = SavedXHR as unknown as typeof XMLHttpRequest;
+  let creates = 0;
   globalThis.fetch = (async (_url, init) => {
+    creates++;
     expect(init?.method).toBe("POST");
     return Response.json({ revision: 4, reports: [{ id: "created-report", files: [] }] });
   }) as typeof fetch;
@@ -64,6 +66,17 @@ test("creating a report uploads selected files using each saved revision", async
   try {
     await act(async () => { root.render(<AssessmentReports organizationId="org" assessmentId="assessment" reports={[]} revision={3} onChanged={async () => {}}/>); });
     await act(async () => { [...document.querySelectorAll("button")].find(button => button.textContent?.includes("Add report"))!.click(); });
+    const name = document.querySelector<HTMLInputElement>("#report-label")!;
+    expect(name.required).toBe(true);
+    await act(async () => { name.closest("form")!.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); });
+    expect(creates).toBe(0);
+    expect(document.body.textContent).toContain("Enter a report name.");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!.call(name, "Blood test results");
+      name.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+      name.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      name.dispatchEvent(new dom.window.KeyboardEvent("keyup", { bubbles: true, key: "s" }));
+    });
     const input = document.querySelector('input[aria-label="Choose files for new report"]') as HTMLInputElement;
     const files = [new File(["first"], "first.pdf", { type: "application/pdf" }), new File(["second"], "second.pdf", { type: "application/pdf" })];
     Object.defineProperty(input, "files", { configurable: true, value: files });
@@ -71,6 +84,7 @@ test("creating a report uploads selected files using each saved revision", async
     expect(document.body.textContent).toContain("Create and upload");
     await act(async () => { input.closest("form")!.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); await new Promise(resolve => setTimeout(resolve, 10)); });
     expect(revisions).toEqual(["4", "5"]);
+    expect(creates).toBe(1);
   } finally {
     await act(async () => root.unmount()); dom.window.close();
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key]; }

@@ -50,6 +50,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
   async function saveReport(event: React.FormEvent) {
     event.preventDefault();
     if (!editor || busy) return;
+    if (!editor.label.trim()) { setMessage("Enter a report name."); return; }
     if (editor.date && !(editor.datePrecision === "DAY" ? /^\d{4}-\d{2}-\d{2}$/ : /^\d{4}-\d{2}$/).test(editor.date)) { setMessage(editor.datePrecision === "DAY" ? "Enter a complete date in dd/mm/yyyy format." : "Select a month and year."); return; }
     const [year, month, day] = editor.date.split("-").map(Number);
     const input: ReportInput = { revision, label: editor.label, purpose: editor.purpose, datePrecision: editor.datePrecision, year: year || null, month: month || null, day: editor.datePrecision === "DAY" ? day || null : null };
@@ -139,7 +140,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
   }
   const reportEditor = editor && (
       <form onSubmit={saveReport}><div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-4">
-        <Field><FieldLabel htmlFor="report-label">Report name</FieldLabel><Input id="report-label" placeholder="e.g. Blood test results" value={editor.label} maxLength={120} disabled={busy} autoFocus onChange={event => { setEditor({ ...editor, label: event.target.value }); setDirty(true); }}/></Field>
+        <Field><FieldLabel htmlFor="report-label">Report name <span className="text-destructive">*</span></FieldLabel><Input id="report-label" placeholder="e.g. Blood test results" value={editor.label} maxLength={120} required aria-required="true" disabled={busy} autoFocus onChange={event => { setEditor({ ...editor, label: event.target.value }); setDirty(true); setMessage(""); }}/></Field>
         <Field><FieldLabel htmlFor="report-purpose">Purpose</FieldLabel><Input id="report-purpose" placeholder="e.g. Before treatment" value={editor.purpose} maxLength={300} disabled={busy} onChange={event => { setEditor({ ...editor, purpose: event.target.value }); setDirty(true); }}/></Field>
         <Field><FieldLabel htmlFor="report-date-precision">Date format</FieldLabel><Select aria-label="Date format" className="w-full" value={editor.datePrecision} isDisabled={busy} onChange={value => { const datePrecision = value as "DAY" | "MONTH"; setEditor({ ...editor, datePrecision, date: datePrecision === "MONTH" ? editor.date.slice(0, 7) : "" }); setDirty(true); }}><SelectTrigger id="report-date-precision" className="w-full"><SelectValue/></SelectTrigger><SelectContent><SelectItem id="DAY">Exact date</SelectItem><SelectItem id="MONTH">Month and year</SelectItem></SelectContent></Select></Field>
         <Field><FieldLabel htmlFor="report-date">Date on report</FieldLabel>{editor.datePrecision === "MONTH" ? <MonthPicker id="report-date" value={editor.date} disabled={busy} onChange={date => { setEditor({ ...editor, date }); setDirty(true); }} /> : <AssessmentDateInput id="report-date" label="Date on report" value={editor.date} disabled={busy} invalid={false} onChange={date => { setEditor({ ...editor, date: date ?? "" }); setDirty(true); }} />}</Field>
@@ -186,7 +187,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
         {upload.error && <p role="alert" className="mt-2 text-sm text-destructive">{upload.error}</p>}
       </div>)}
     </article>)}
-    {editor && !editor.id && <article className="rounded-xl border border-border bg-card p-4"><h3 className="font-semibold">New report</h3><p className="mb-4 mt-1 text-sm text-muted-foreground">Report name, purpose, date and files are optional. Selected files upload when you create the report.</p>{reportEditor}</article>}
+    {editor && !editor.id && <article className="rounded-xl border border-border bg-card p-4"><h3 className="font-semibold">New report</h3><p className="mb-4 mt-1 text-sm text-muted-foreground">Report name is required. Add a date and file before submitting the assessment; purpose is optional. Selected files upload when you create the report.</p>{reportEditor}</article>}
     {!readOnly && !editor && reports.length > 0 && <Button variant="outline" className="min-h-11 w-full border-primary/30 text-brand-ink" isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={beginAddReport}><Plus aria-hidden="true"/>Add another report</Button>}
     {remove && <Dialog ariaLabel="Remove report attachment" isOpen isDismissable={!busy} showCloseButton={!busy} onOpenChange={open => { if (!open && !busy) setRemove(null); }}><DialogTitle>Remove {remove.fileId ? "file" : "report"}?</DialogTitle><p className="break-words">{remove.fileId ? `Remove ${remove.label}?` : `Remove ${remove.label} and all its files?`}</p><div className="flex justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => setRemove(null)}>Cancel</Button><Button variant="destructive" isDisabled={busy} onPress={() => void removeItem()}>Remove</Button></div></Dialog>}
   </section>;
