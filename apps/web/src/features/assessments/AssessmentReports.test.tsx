@@ -16,6 +16,9 @@ test("report cards retain download and labelled removal controls in a compact gr
     files: [{ id: "file-1", reportId: "report-1", originalFilename: "CBC.pdf", mediaType: "application/pdf", size: 1000, status: "READY", createdAt: "2026-08-01" }],
   }]}/>);
   expect(html).toContain("Report 1");
+  expect(html).toContain("Report name");
+  expect(html).toContain("Purpose");
+  expect(html).toContain("Date on report");
   expect(html).toContain("Before treatment");
   expect(html).toContain("Month and year");
   expect(html).toContain("2026-08");
