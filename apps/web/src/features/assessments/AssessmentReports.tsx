@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { FileImage, FileText, Plus, Trash2, X } from "lucide-react";
+import { FileText, Plus, Trash2, X } from "lucide-react";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ReportMutationError, mutateReport, reportBase, uploadReportFile, type ReportInput } from "./report-api";
+import { StagedReportFile } from "./StagedReportFile";
 
 type Props = {
   organizationId: string; assessmentId: string; reports: AssessmentReport[]; revision: number; readOnly?: boolean; limits?: AssessmentReportLimits;
@@ -25,27 +26,6 @@ function dateValue(report: AssessmentReport) {
   if (!report.year || !report.month) return "";
   const month = `${report.year}-${String(report.month).padStart(2, "0")}`;
   return report.datePrecision === "DAY" ? report.day ? `${month}-${String(report.day).padStart(2, "0")}` : "" : month;
-}
-
-function StagedFileRow({ file, busy, onRemove }: { file: File; busy: boolean; onRemove: () => void }) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const image = file.type === "image/jpeg" || file.type === "image/png";
-  useEffect(() => {
-    if (!URL.createObjectURL) return;
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-  const kind = file.type === "application/pdf" ? "PDF document" : file.type === "image/png" ? "PNG image" : "JPEG image";
-  return <li className="flex min-w-0 items-center gap-3 rounded-lg border border-border p-2 text-sm">
-    <button type="button" className="flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed" aria-label={`Preview ${file.name}`} disabled={!previewUrl} onClick={() => setPreviewOpen(true)}>
-      {image && previewUrl ? <img src={previewUrl} alt="" className="h-full w-full object-cover" /> : image ? <FileImage className="size-6 text-muted-foreground" aria-hidden="true"/> : <FileText className="size-6 text-muted-foreground" aria-hidden="true"/>}
-    </button>
-    <div className="min-w-0 flex-1"><p className="break-all font-medium">{file.name}</p><p className="text-xs text-muted-foreground">{kind} · {(file.size / 1024).toFixed(1)} KB</p>{previewUrl && <button type="button" className="mt-1 text-xs font-medium text-brand-ink underline underline-offset-2" onClick={() => setPreviewOpen(true)}>Preview file</button>}</div>
-    <Button variant="ghost" size="icon" className="size-11 shrink-0" isDisabled={busy} aria-label={`Remove ${file.name} from selection`} onPress={onRemove}><X aria-hidden="true"/></Button>
-    {previewOpen && previewUrl && <Dialog ariaLabel={`Preview ${file.name}`} isOpen onOpenChange={setPreviewOpen} className="max-h-[calc(100dvh-2rem)] overflow-auto sm:max-w-3xl"><DialogTitle className="break-all pr-10">{file.name}</DialogTitle>{image ? <img src={previewUrl} alt={`Preview of ${file.name}`} className="max-h-[75dvh] w-full rounded-lg object-contain" /> : <iframe title={`Preview of ${file.name}`} src={previewUrl} className="h-[70dvh] w-full rounded-lg border border-border" />}</Dialog>}
-  </li>;
 }
 
 export function AssessmentReports({ organizationId, assessmentId, reports, revision, readOnly = false, limits = REPORT_LIMITS, onChanged, onBusyChange, onDirtyChange }: Props) {
@@ -173,7 +153,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
             <Plus className="size-4" aria-hidden="true"/>Choose PDF, JPEG or PNG files
             <input className="absolute inset-0 w-full cursor-pointer opacity-0" aria-label="Choose files for new report" type="file" multiple accept="application/pdf,image/jpeg,image/png" disabled={busy} onChange={event => { selectStagedFiles(event.target.files); event.target.value = ""; }}/>
           </label>
-          {stagedFiles.length > 0 && <ul className="mt-2 space-y-2">{stagedFiles.map(({ key, file }) => <StagedFileRow key={key} file={file} busy={busy} onRemove={() => setStagedFiles(previous => previous.filter(item => item.key !== key))}/>)}</ul>}
+          {stagedFiles.length > 0 && <ul className="mt-2 space-y-2">{stagedFiles.map(({ key, file }) => <StagedReportFile key={key} file={file} busy={busy} onRemove={() => setStagedFiles(previous => previous.filter(item => item.key !== key))}/>)}</ul>}
         </div>}
         <div className="col-span-full flex flex-wrap justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => { setEditor(null); setNameError(false); setDirty(false); setStagedFiles([]); }}>Cancel</Button><Button type="submit" isDisabled={busy}>{busy ? "Saving…" : editor.id ? "Save changes" : stagedFiles.length ? "Create and upload" : "Create report"}</Button></div>
       </div></form>
