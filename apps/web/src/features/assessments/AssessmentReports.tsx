@@ -10,7 +10,8 @@ import { FileText, Plus, Trash2, X } from "lucide-react";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ReportMutationError, mutateReport, reportBase, uploadReportFile, type ReportInput } from "./report-api";
-import { StagedReportFile } from "./StagedReportFile";
+import { ReportFilePreview } from "./ReportFilePreview";
+import { SavedReportFilePreview } from "./SavedReportFilePreview";
 
 type Props = {
   organizationId: string; assessmentId: string; reports: AssessmentReport[]; revision: number; readOnly?: boolean; limits?: AssessmentReportLimits;
@@ -153,7 +154,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
             <Plus className="size-4" aria-hidden="true"/>Choose PDF, JPEG or PNG files
             <input className="absolute inset-0 w-full cursor-pointer opacity-0" aria-label="Choose files for new report" type="file" multiple accept="application/pdf,image/jpeg,image/png" disabled={busy} onChange={event => { selectStagedFiles(event.target.files); event.target.value = ""; }}/>
           </label>
-          {stagedFiles.length > 0 && <ul className="mt-2 space-y-2">{stagedFiles.map(({ key, file }) => <StagedReportFile key={key} file={file} busy={busy} onRemove={() => setStagedFiles(previous => previous.filter(item => item.key !== key))}/>)}</ul>}
+          {stagedFiles.length > 0 && <ul className="mt-2 space-y-2">{stagedFiles.map(({ key, file }) => <ReportFilePreview key={key} file={file} busy={busy} onRemove={() => setStagedFiles(previous => previous.filter(item => item.key !== key))}/>)}</ul>}
         </div>}
         <div className="col-span-full flex flex-wrap justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => { setEditor(null); setNameError(false); setDirty(false); setStagedFiles([]); }}>Cancel</Button><Button type="submit" isDisabled={busy}>{busy ? "Saving…" : editor.id ? "Save changes" : stagedFiles.length ? "Create and upload" : "Create report"}</Button></div>
       </div></form>
@@ -176,7 +177,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
       <h4 className="mt-5 text-sm font-medium">Files ({report.files.length})</h4>
       {!report.files.length && <p className="mt-2 text-sm text-muted-foreground">No files yet. Choose files below, then upload them.</p>}
       <ul className="mt-3 flex flex-col gap-3">{report.files.map(file => <li key={file.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 px-3 py-1">
-        <div className="flex min-w-0 flex-1 items-center gap-2"><FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/><div className="min-w-0">{file.status === "READY" ? <a className="break-all text-sm text-brand-ink underline underline-offset-2" href={`${base}/${report.id}/files/${file.id}`} download>{file.originalFilename}</a> : <span className="break-all text-sm">{file.originalFilename}</span>}<p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(1)} MB · {file.status === "READY" ? "Saved" : file.status}</p></div></div>
+        <div className="flex min-w-0 flex-1 items-center gap-2"><FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/><div className="min-w-0">{file.status === "READY" ? <a className="break-all text-sm text-brand-ink underline underline-offset-2" href={`${base}/${report.id}/files/${file.id}`} download>{file.originalFilename}</a> : <span className="break-all text-sm">{file.originalFilename}</span>}<p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(1)} MB · {file.status === "READY" ? "Saved" : file.status}</p>{file.status === "READY" && <SavedReportFilePreview file={file} url={`${base}/${report.id}/files/${file.id}`} />}</div></div>
         {!readOnly && <Button variant="ghost" size="icon" className="size-11" isDisabled={busy || !!editor} aria-label={`Remove ${file.originalFilename}`} onPress={() => setRemove({ reportId: report.id, fileId: file.id, label: file.originalFilename })}><X aria-hidden="true"/></Button>}
       </li>)}</ul>
       {!readOnly && <label className={`relative mt-3 flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-brand-ink hover:bg-muted focus-within:ring-2 focus-within:ring-ring ${busy || editor ? "opacity-50" : ""}`}>
