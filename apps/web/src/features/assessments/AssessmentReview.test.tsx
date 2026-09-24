@@ -17,7 +17,7 @@ test("review distinguishes questionnaire coverage from required readiness", () =
   expect(html).toContain("No attachments added.");
   expect(html).not.toContain("Review attachments");
   expect(html.indexOf("Face scan")).toBeGreaterThan(html.indexOf("Personal details"));
-  expect(html.indexOf("Attachments")).toBeGreaterThan(html.indexOf("Dietary details"));
+  expect(html.indexOf('>Attachments</span>')).toBeGreaterThan(html.indexOf('>Dietary details</span>'));
 });
 
 test("review includes saved face scan measurements inside its Face scan section", () => {
