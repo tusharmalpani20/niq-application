@@ -11,12 +11,12 @@ import { StatusBadge } from "../components/StatusBadge";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { getFacilityPerformance, listAssessments, listFacilities, listOrganizationUsers, listPatients } from "../lib/api";
 import { updateFacility } from "../lib/facility-management";
+import { openAssessmentStatuses } from "../lib/assessment-work";
 import { assessmentStatusLabels } from "../lib/patient-display";
 import { FacilityDialog } from "./FacilitiesPage";
 import { FacilityPerformance } from "./FacilityPerformance";
 
 type FacilityOverview = { facility: Facility; patients: Patient[]; assessments: AssessmentSummary[]; team: OrganizationUser[] | null; performance: Performance | null };
-const openStatuses = new Set<AssessmentSummary["status"]>(["DRAFT", "READY_FOR_SCORING"]);
 const dateLabel = (date: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
 
 function Metric({ label, value, detail }: { label: string; value: number | string; detail: string }) {
@@ -66,7 +66,7 @@ export function FacilityDetailPage() {
   if (state === "error" || !overview) return <Alert variant="destructive"><AlertDescription>Facility overview could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button></AlertDescription></Alert>;
 
   const { facility, patients, assessments, team, performance } = overview;
-  const open = assessments.filter(item => openStatuses.has(item.status));
+  const open = assessments.filter(item => openAssessmentStatuses.has(item.status));
   const underReview = assessments.filter(item => item.status === "UNDER_REVIEW");
   const needsAttention = assessments.filter(item => item.status === "SCORING_UNAVAILABLE");
   const work = [...open, ...underReview, ...needsAttention].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 5);
@@ -100,7 +100,7 @@ export function FacilityDetailPage() {
 
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
       <section className="surface p-5" aria-label="Facility assessment work">
-        <div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="font-semibold">Assessment and review work</h2><p className="mt-1 text-sm text-muted-foreground">{open.length} open · {underReview.length} under review{needsAttention.length ? ` · ${needsAttention.length} scoring unavailable` : ""}</p></div><Link className="text-sm text-primary hover:underline" to={`/assessments?facility=${facility.id}`}>View assessments</Link></div>
+        <div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="font-semibold">Assessment and review work</h2><p className="mt-1 text-sm text-muted-foreground">{open.length} open · {underReview.length} under review{needsAttention.length ? ` · ${needsAttention.length} scoring unavailable` : ""}</p></div><Link className="text-sm text-primary hover:underline" to={`/assessments?facility=${facility.id}&status=WORK`}>View assessments</Link></div>
         {work.length ? <ul className="mt-3 divide-y">{work.map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><div>{canOpenAssessment ? <Link className="font-medium text-foreground hover:underline" to={`/assessments/${item.reference}`}>{item.reference}</Link> : <span className="font-medium">{item.reference}</span>}<p className="text-xs text-muted-foreground">{item.patient.displayName} · Started {dateLabel(item.createdAt)}</p></div><StatusBadge status={assessmentStatusLabels[item.status]} /></li>)}</ul> : <p className="mt-5 text-sm text-muted-foreground">No open assessments, reviews, or scoring issues at this facility.</p>}
       </section>
       <section className="surface p-5" aria-label="Facility patients">

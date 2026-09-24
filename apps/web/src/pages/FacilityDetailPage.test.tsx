@@ -57,6 +57,7 @@ test("admin sees facility metrics, assigned team, and management actions", async
     expect(body.querySelector('button[aria-label="Edit facility"]')).not.toBeNull();
     expect(body.querySelector('button[aria-label="Deactivate facility"]')).not.toBeNull();
     expect(body.querySelector('a[href="/patients?facility=' + facilityId + '"]')).not.toBeNull();
+    expect(body.querySelector('a[href="/assessments?facility=' + facilityId + '&status=WORK"]')).not.toBeNull();
     expect(requested.some(url => url.endsWith("/users"))).toBe(true);
     expect(requested.some(url => url.endsWith(`/facilities/${facilityId}/performance`))).toBe(true);
     expect(body.querySelector('[aria-label="Facility performance"]')?.textContent).toContain("Assessments completed2");
