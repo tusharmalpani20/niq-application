@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
 import type { z } from "zod";
-import type { AssessmentReport, reportInputSchema } from "../../../../packages/contracts/src/assessment-workflow";
+import { getReportSubmissionIssues, type AssessmentReport, type reportInputSchema } from "../../../../packages/contracts/src/assessment-workflow";
 import { assessmentReports as reports, assessmentFiles as files, assessments, assessmentSubmissions } from "../db/schema";
 import type { Principal, RequestContext } from "./application";
 import { ServiceError } from "./application";
@@ -131,7 +131,13 @@ export class AssessmentReportWorkflow {
     const groups=await tx.select().from(reports).where(and(eq(reports.organizationId,organizationId),eq(reports.assessmentId,assessmentId),isNull(reports.removedAt)));
     const attachments=await tx.select().from(files).where(and(eq(files.organizationId,organizationId),eq(files.assessmentId,assessmentId),sql`${files.status} in ('READY','PENDING')`));
     if(attachments.some(x=>x.status==="PENDING")) throw new ServiceError("CONFLICT","Wait for uploads to finish or cancel them before submitting.");
-    for(const group of groups) if(!group.label.trim()||!group.year||!group.month||(group.datePrecision==="DAY"&&!group.day)||!attachments.some(x=>x.reportId===group.id)) throw new ServiceError("VALIDATION_ERROR","Complete each report's details and add a file, or remove the empty report.");
+    for(const [index,group] of groups.entries()) {
+      const issues=getReportSubmissionIssues({...group,files:attachments.filter(file=>file.reportId===group.id)});
+      if(issues.length) {
+        const descriptions=issues.map(issue=>issue==="name"?"a report name":issue==="date"?"a date":"an uploaded file");
+        throw new ServiceError("VALIDATION_ERROR",`Report ${index+1} needs ${descriptions.join(" and ")} before submission. Edit it or remove the report.`);
+      }
+    }
     return groups.map(group=>({...group,files:attachments.filter(x=>x.reportId===group.id).map(({id,objectKey,sha256,size,mediaType,originalFilename})=>({id,objectKey,sha256,size,mediaType,originalFilename}))}));
   }
   async cleanup(actor:Principal,organizationId:string,assessmentId:string) {

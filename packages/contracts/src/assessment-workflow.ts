@@ -25,6 +25,14 @@ export type AssessmentReportLimits = { fileBytes: number; filesPerReport: number
 export type AssessmentPatient = { id: string; reference: string; displayName: string; dateOfBirth: string; gender: string; phone?: string; homeFacility: { id: string; name: string } | null };
 export type AssessmentReportFile = { id: string; reportId: string; originalFilename: string; mediaType: string; size: number; status: string; createdAt: string };
 export type AssessmentReport = { id: string; label: string; purpose: string; datePrecision: "DAY" | "MONTH"; year: number | null; month: number | null; day: number | null; files: AssessmentReportFile[] };
+export type ReportSubmissionIssue = "name" | "date" | "file";
+export function getReportSubmissionIssues(report: Pick<AssessmentReport, "label" | "year" | "month" | "day"> & { datePrecision: string; files: Array<Pick<AssessmentReportFile, "status">> }): ReportSubmissionIssue[] {
+  const issues: ReportSubmissionIssue[] = [];
+  if (!report.label.trim()) issues.push("name");
+  if (!report.year || !report.month || (report.datePrecision === "DAY" && !report.day)) issues.push("date");
+  if (!report.files.some(file => file.status === "READY")) issues.push("file");
+  return issues;
+}
 export type AssessmentInitialization = { id: string; status: string; assessmentId: string | null; assessmentReference?: string | null; failureCode: string | null };
 export type AssessmentWorkflow = {
   id: string; reference: string; serialNumber: number; organizationId: string; patientId: string; facilityId: string | null; status: string; revision: number; canEditDraft?: boolean;
