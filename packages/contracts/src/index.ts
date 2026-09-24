@@ -346,6 +346,14 @@ export const patientSchema = z.object({
 });
 
 export const patientListResponseSchema = z.object({ items: z.array(patientSchema) });
+export const patientActivitySchema = z.object({
+  id: idSchema,
+  type: z.enum(["REGISTERED", "PROFILE_UPDATED", "CONTACT_UPDATED"]),
+  occurredAt: z.coerce.date(),
+  actorName: z.string(),
+});
+export const patientActivityListResponseSchema = z.object({ items: z.array(patientActivitySchema) });
+export type PatientActivity = z.infer<typeof patientActivitySchema>;
 
 export const createPatientSchema = z.object({
   organizationId: idSchema,

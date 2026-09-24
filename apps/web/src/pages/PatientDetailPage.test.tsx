@@ -18,6 +18,7 @@ async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) =>
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.endsWith("/patients/PAT-2")) return Response.json(patient);
+    if (url.endsWith("/patients/PAT-2/activity")) return Response.json({ items: [{ id, type: "PROFILE_UPDATED", actorName: "Example Admin", occurredAt: "2026-09-23T00:00:00Z" }] });
     if (url.endsWith("/assessments")) return Response.json({ items: [assessment] });
     if (url.endsWith("/facilities")) return Response.json({ items: [{ ...patient.homeFacility, organizationId: id, code: "HYD", timezone: "Asia/Kolkata", status: "ACTIVE", createdAt: patient.createdAt, updatedAt: patient.updatedAt }] });
     return Response.json({ error: { code: "NOT_FOUND", message: "Not found" } }, { status: 404 });
@@ -50,5 +51,13 @@ test("support can edit patient details but cannot open a clinical assessment", a
     expect(body.querySelector('a[href="/assessments/ASM-000001"]')).toBeNull();
     expect(body.querySelector('a[href^="/assessments/new?"]')).toBeNull();
     expect(body.querySelector("button")?.textContent).toContain("Edit patient");
+    expect(body.querySelector('[aria-label="Patient record activity"]')).toBeNull();
+  });
+});
+
+test("organization admin sees patient activity without changed contact values", async () => {
+  await renderDetail("ORGANIZATION_ADMIN", body => {
+    expect(body.querySelector('[aria-label="Patient record activity"]')?.textContent).toContain("Profile updated · Example Admin");
+    expect(body.querySelector('[aria-label="Patient record activity"]')?.textContent).not.toContain(patient.phone);
   });
 });
