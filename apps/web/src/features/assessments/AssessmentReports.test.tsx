@@ -68,9 +68,11 @@ test("creating a report uploads selected files using each saved revision", async
     await act(async () => { [...document.querySelectorAll("button")].find(button => button.textContent?.includes("Add report"))!.click(); });
     const name = document.querySelector<HTMLInputElement>("#report-label")!;
     expect(name.required).toBe(true);
+    expect(name.closest("form")!.noValidate).toBe(true);
     await act(async () => { name.closest("form")!.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); });
     expect(creates).toBe(0);
-    expect(document.body.textContent).toContain("Enter a report name.");
+    expect(name.getAttribute("aria-invalid")).toBe("true");
+    expect(document.getElementById("report-label-error")?.textContent).toBe("Required");
     await act(async () => {
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!.call(name, "Blood test results");
       name.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
@@ -81,6 +83,7 @@ test("creating a report uploads selected files using each saved revision", async
     const files = [new File(["first"], "first.pdf", { type: "application/pdf" }), new File(["second"], "second.pdf", { type: "application/pdf" })];
     Object.defineProperty(input, "files", { configurable: true, value: files });
     await act(async () => { input.dispatchEvent(new dom.window.Event("change", { bubbles: true })); });
+    expect(name.getAttribute("aria-invalid")).toBe("false");
     expect(document.body.textContent).toContain("Create and upload");
     await act(async () => { input.closest("form")!.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true })); await new Promise(resolve => setTimeout(resolve, 10)); });
     expect(revisions).toEqual(["4", "5"]);

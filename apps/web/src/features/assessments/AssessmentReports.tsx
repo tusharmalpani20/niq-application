@@ -29,6 +29,7 @@ function dateValue(report: AssessmentReport) {
 
 export function AssessmentReports({ organizationId, assessmentId, reports, revision, readOnly = false, limits = REPORT_LIMITS, onChanged, onBusyChange, onDirtyChange }: Props) {
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [nameError, setNameError] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [unconfirmed, setUnconfirmed] = useState<Editor | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,7 +43,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
   useEffect(() => { onDirtyChange?.(dirty || uploads.length > 0 || stagedFiles.length > 0); }, [dirty, uploads.length, stagedFiles.length, onDirtyChange]);
   useEffect(() => () => { controller.current?.abort(); }, []);
   const currentBytes = reports.flatMap(report => report.files).reduce((sum, file) => sum + file.size, 0);
-  const beginAddReport = () => { setMessage(""); setStagedFiles([]); setEditor({ label: "", purpose: "", datePrecision: "DAY", date: "" }); };
+  const beginAddReport = () => { setMessage(""); setNameError(false); setStagedFiles([]); setEditor({ label: "", purpose: "", datePrecision: "DAY", date: "" }); };
 
   async function refresh() {
     try { await onChanged(); } catch { setMessage("Changes may be saved. Refresh this assessment before continuing."); }
@@ -50,7 +51,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
   async function saveReport(event: React.FormEvent) {
     event.preventDefault();
     if (!editor || busy) return;
-    if (!editor.label.trim()) { setMessage("Enter a report name."); return; }
+    if (!editor.label.trim()) { setNameError(true); return; }
     if (editor.date && !(editor.datePrecision === "DAY" ? /^\d{4}-\d{2}-\d{2}$/ : /^\d{4}-\d{2}$/).test(editor.date)) { setMessage(editor.datePrecision === "DAY" ? "Enter a complete date in dd/mm/yyyy format." : "Select a month and year."); return; }
     const [year, month, day] = editor.date.split("-").map(Number);
     const input: ReportInput = { revision, label: editor.label, purpose: editor.purpose, datePrecision: editor.datePrecision, year: year || null, month: month || null, day: editor.datePrecision === "DAY" ? day || null : null };
@@ -139,8 +140,8 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
     finally { setBusy(false); }
   }
   const reportEditor = editor && (
-      <form onSubmit={saveReport}><div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-4">
-        <Field><FieldLabel htmlFor="report-label">Report name <span className="text-destructive">*</span></FieldLabel><Input id="report-label" placeholder="e.g. Blood test results" value={editor.label} maxLength={120} required aria-required="true" disabled={busy} autoFocus onChange={event => { setEditor({ ...editor, label: event.target.value }); setDirty(true); setMessage(""); }}/></Field>
+      <form noValidate onSubmit={saveReport}><div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-4">
+        <Field data-invalid={nameError || undefined}><FieldLabel htmlFor="report-label">Report name <span aria-hidden="true" className="ml-1 text-destructive">*</span><span className="sr-only"> (required)</span></FieldLabel><Input id="report-label" placeholder="e.g. Blood test results" value={editor.label} maxLength={120} required aria-required="true" aria-invalid={nameError} aria-describedby={nameError ? "report-label-error" : undefined} disabled={busy} autoFocus onChange={event => { setEditor({ ...editor, label: event.target.value }); setDirty(true); setNameError(false); setMessage(""); }}/>{nameError && <p id="report-label-error" className="text-sm text-destructive" role="alert">Required</p>}</Field>
         <Field><FieldLabel htmlFor="report-purpose">Purpose</FieldLabel><Input id="report-purpose" placeholder="e.g. Before treatment" value={editor.purpose} maxLength={300} disabled={busy} onChange={event => { setEditor({ ...editor, purpose: event.target.value }); setDirty(true); }}/></Field>
         <Field><FieldLabel htmlFor="report-date-precision">Date format</FieldLabel><Select aria-label="Date format" className="w-full" value={editor.datePrecision} isDisabled={busy} onChange={value => { const datePrecision = value as "DAY" | "MONTH"; setEditor({ ...editor, datePrecision, date: datePrecision === "MONTH" ? editor.date.slice(0, 7) : "" }); setDirty(true); }}><SelectTrigger id="report-date-precision" className="w-full"><SelectValue/></SelectTrigger><SelectContent><SelectItem id="DAY">Exact date</SelectItem><SelectItem id="MONTH">Month and year</SelectItem></SelectContent></Select></Field>
         <Field><FieldLabel htmlFor="report-date">Date on report</FieldLabel>{editor.datePrecision === "MONTH" ? <MonthPicker id="report-date" value={editor.date} disabled={busy} onChange={date => { setEditor({ ...editor, date }); setDirty(true); }} /> : <AssessmentDateInput id="report-date" label="Date on report" value={editor.date} disabled={busy} invalid={false} onChange={date => { setEditor({ ...editor, date: date ?? "" }); setDirty(true); }} />}</Field>
@@ -153,7 +154,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
           </label>
           {stagedFiles.length > 0 && <ul className="mt-2 space-y-2">{stagedFiles.map(({ key, file }) => <li key={key} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-border px-3 py-1 text-sm"><span className="min-w-0 break-all">{file.name}</span><Button variant="ghost" size="icon" className="size-11 shrink-0" isDisabled={busy} aria-label={`Remove ${file.name} from selection`} onPress={() => setStagedFiles(previous => previous.filter(item => item.key !== key))}><X aria-hidden="true"/></Button></li>)}</ul>}
         </div>}
-        <div className="col-span-full flex flex-wrap justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => { setEditor(null); setDirty(false); setStagedFiles([]); }}>Cancel</Button><Button type="submit" isDisabled={busy}>{busy ? "Saving…" : editor.id ? "Save changes" : stagedFiles.length ? "Create and upload" : "Create report"}</Button></div>
+        <div className="col-span-full flex flex-wrap justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => { setEditor(null); setNameError(false); setDirty(false); setStagedFiles([]); }}>Cancel</Button><Button type="submit" isDisabled={busy}>{busy ? "Saving…" : editor.id ? "Save changes" : stagedFiles.length ? "Create and upload" : "Create report"}</Button></div>
       </div></form>
   );
   return <section className="flex min-w-0 flex-col gap-5" aria-label="Attachments">
@@ -163,7 +164,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
     {!reports.length && !editor && <div className="rounded-xl border border-border bg-card px-5 py-8 text-center"><FileText className="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true"/><h3 className="font-semibold">No attachments yet</h3><p className="mt-2 text-sm text-muted-foreground">Create a report and choose its files in one step.</p>{!readOnly && <Button variant="outline" className="mt-5 min-h-11 border-primary/30 text-brand-ink" isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={beginAddReport}><Plus aria-hidden="true"/>Add report</Button>}</div>}
     {reports.map((report, index) => <article key={report.id} className="min-w-0 rounded-xl border border-border bg-card p-4 text-card-foreground">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Report {index + 1}</h3>
-        {!readOnly && <div className="flex gap-2"><Button variant="ghost" isDisabled={busy || !!editor} onPress={() => { setMessage(""); setEditor({ id: report.id, label: report.label, purpose: report.purpose, datePrecision: report.datePrecision, date: dateValue(report) }); }}>Edit details</Button><Button variant="ghost" className="text-destructive" isDisabled={busy || !!editor} onPress={() => setRemove({ reportId: report.id, label: report.label || "this report" })}><Trash2 aria-hidden="true"/>Remove report</Button></div>}
+        {!readOnly && <div className="flex gap-2"><Button variant="ghost" isDisabled={busy || !!editor} onPress={() => { setMessage(""); setNameError(false); setEditor({ id: report.id, label: report.label, purpose: report.purpose, datePrecision: report.datePrecision, date: dateValue(report) }); }}>Edit details</Button><Button variant="ghost" className="text-destructive" isDisabled={busy || !!editor} onPress={() => setRemove({ reportId: report.id, label: report.label || "this report" })}><Trash2 aria-hidden="true"/>Remove report</Button></div>}
       </div>
       {editor?.id === report.id ? reportEditor : <dl className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-4 text-sm">
         <div><dt className="mb-1 text-muted-foreground">Report name</dt><dd className="break-words font-medium">{report.label || "Untitled report"}</dd></div>
