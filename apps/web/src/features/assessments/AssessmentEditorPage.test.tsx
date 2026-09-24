@@ -94,6 +94,20 @@ test("review missing-answer link focuses its field after changing section", asyn
 }, { answers: { ...recordFixture().answers, height_cm: null } }));
 
 const reportFixture = { id: "report-a", label: "Blood report", purpose: "", datePrecision: "MONTH" as const, year: 2026, month: 8, day: null, files: [] };
+test("report cards collapse and expand without leaving attachments", async () => harness(async ({ click }) => {
+  await click("Attachments");
+  const content = document.getElementById("report-content-report-a")!;
+  expect(content.hidden).toBe(false);
+  await click("Collapse report 1: Blood report");
+  expect(content.hidden).toBe(true);
+  expect(document.body.textContent).toContain("Blood report");
+  await click("Expand report 1: Blood report");
+  expect(content.hidden).toBe(false);
+  await click("Collapse report 1: Blood report");
+  await click("Edit report details");
+  expect(content.hidden).toBe(false);
+  expect(document.querySelector<HTMLInputElement>("#report-label")?.value).toBe("Blood report");
+}, { reports: [reportFixture] }));
 test("report refresh preserves local answers and blocks overwriting concurrent answer edits", async () => harness(async ({ click, remoteAnswers, requests }) => {
   await click("Disease status");
   await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());

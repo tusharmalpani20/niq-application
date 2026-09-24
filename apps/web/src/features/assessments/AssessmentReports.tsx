@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { FileText, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, FileText, Pencil, Plus, Trash2 } from "lucide-react";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ReportMutationError, mutateReport, reportBase, uploadReportFile, type ReportInput } from "./report-api";
@@ -39,6 +39,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
   const [remove, setRemove] = useState<{ reportId: string; fileId?: string; label: string } | null>(null);
+  const [collapsedReports, setCollapsedReports] = useState<Set<string>>(() => new Set());
   const controller = useRef<AbortController | null>(null);
   const base = reportBase(organizationId, assessmentId);
   useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
@@ -164,10 +165,13 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
     {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
     {unconfirmed && <Alert><AlertDescription><p>Check whether this report was saved before adding it again.</p><dl className="mt-2 grid gap-1"><div><dt className="font-medium">Report name</dt><dd className="break-words">{unconfirmed.label || "Not entered"}</dd></div><div><dt className="font-medium">Purpose</dt><dd className="break-words">{unconfirmed.purpose || "Not entered"}</dd></div><div><dt className="font-medium">Date</dt><dd>{unconfirmed.date || "Not entered"}</dd></div></dl><Button className="mt-2" variant="outline" onPress={() => setUnconfirmed(null)}>Dismiss</Button></AlertDescription></Alert>}
     {!reports.length && !editor && <div className="rounded-xl border border-border bg-card px-5 py-8 text-center"><FileText className="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true"/><h3 className="font-semibold">No attachments yet</h3><p className="mt-2 text-sm text-muted-foreground">Create a report and choose its files in one step.</p>{!readOnly && <Button variant="outline" className="mt-5 min-h-11 border-primary/30 text-brand-ink" isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={beginAddReport}><Plus aria-hidden="true"/>Add report</Button>}</div>}
-    {reports.map((report, index) => <article key={report.id} className="min-w-0 rounded-xl border border-border bg-card p-4 text-card-foreground">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Report {index + 1}</h3>
-        {!readOnly && <div className="flex gap-1"><Button variant="ghost" size="icon" className="size-10" aria-label="Edit report details" isDisabled={busy || !!editor} onPress={() => { setMessage(""); setNameError(false); setEditor({ id: report.id, label: report.label, purpose: report.purpose, datePrecision: report.datePrecision, date: dateValue(report) }); }}><Pencil aria-hidden="true"/></Button><Button variant="ghost" size="icon" className="size-10 text-destructive" aria-label="Remove report" isDisabled={busy || !!editor} onPress={() => setRemove({ reportId: report.id, label: report.label || "this report" })}><Trash2 aria-hidden="true"/></Button></div>}
+    {reports.map((report, index) => {
+      const expanded = editor?.id === report.id || !collapsedReports.has(report.id);
+      return <article key={report.id} className="min-w-0 rounded-xl border border-border bg-card p-4 text-card-foreground">
+      <div className={`${expanded ? "mb-4" : ""} flex items-center justify-between gap-2`}><h3 className="min-w-0 flex-1" aria-label={`Report ${index + 1}: ${report.label || "Untitled report"}`}><Button variant="ghost" className="h-auto min-h-10 max-w-full justify-start gap-2 px-2 text-left" aria-label={`${expanded ? "Collapse" : "Expand"} report ${index + 1}: ${report.label || "Untitled report"}`} aria-expanded={expanded} aria-controls={`report-content-${report.id}`} isDisabled={editor?.id === report.id} onPress={() => setCollapsedReports(previous => { const next = new Set(previous); if (next.has(report.id)) next.delete(report.id); else next.add(report.id); return next; })}><ChevronRight className={`size-4 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} aria-hidden="true"/><span className="shrink-0 font-semibold">Report {index + 1}</span><span className="min-w-0 truncate font-normal text-muted-foreground">{report.label || "Untitled report"}</span></Button></h3>
+        {!readOnly && <div className="flex gap-1"><Button variant="ghost" size="icon" className="size-10" aria-label="Edit report details" isDisabled={busy || !!editor} onPress={() => { setMessage(""); setNameError(false); setCollapsedReports(previous => { const next = new Set(previous); next.delete(report.id); return next; }); setEditor({ id: report.id, label: report.label, purpose: report.purpose, datePrecision: report.datePrecision, date: dateValue(report) }); }}><Pencil aria-hidden="true"/></Button><Button variant="ghost" size="icon" className="size-10 text-destructive" aria-label="Remove report" isDisabled={busy || !!editor} onPress={() => setRemove({ reportId: report.id, label: report.label || "this report" })}><Trash2 aria-hidden="true"/></Button></div>}
       </div>
+      <div id={`report-content-${report.id}`} hidden={!expanded}>
       {editor?.id === report.id ? reportEditor : <dl className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-4 text-sm">
         <div><dt className="mb-1 text-muted-foreground">Report name</dt><dd className="break-words font-medium">{report.label || "Untitled report"}</dd></div>
         <div><dt className="mb-1 text-muted-foreground">Purpose</dt><dd className="break-words">{report.purpose || "Not specified"}</dd></div>
@@ -186,7 +190,9 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
         {upload.state === "uploading" ? <><progress className="mt-2 w-full accent-primary" max={100} value={upload.progress} aria-label={`Uploading ${upload.file.name}`}/><p className="text-xs text-muted-foreground" role="status">{upload.progress >= 99 ? "Finishing upload…" : `${upload.progress}% uploaded`}</p><Button variant="outline" onPress={() => controller.current?.abort()}>Cancel upload</Button></> : <div className="mt-2 flex flex-wrap gap-2"><Button isDisabled={busy || readOnly || !!editor} onPress={() => void uploadFile(upload)}>{upload.state === "failed" ? "Retry upload" : "Upload"}</Button><Button variant="outline" isDisabled={busy} onPress={() => setUploads(previous => previous.filter(item => item.key !== upload.key))}>Remove from queue</Button></div>}
         {upload.error && <p role="alert" className="mt-2 text-sm text-destructive">{upload.error}</p>}
       </div>)}
-    </article>)}
+      </div>
+    </article>;
+    })}
     {editor && !editor.id && <article className="rounded-xl border border-border bg-card p-4"><h3 className="font-semibold">New report</h3><p className="mb-4 mt-1 text-sm text-muted-foreground">Report name is required. Add a date and file before submitting the assessment; purpose is optional. Selected files upload when you create the report.</p>{reportEditor}</article>}
     {!readOnly && !editor && reports.length > 0 && <Button variant="outline" className="min-h-11 w-full border-primary/30 text-brand-ink" isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={beginAddReport}><Plus aria-hidden="true"/>Add another report</Button>}
     {remove && <Dialog ariaLabel="Remove report attachment" isOpen isDismissable={!busy} showCloseButton={!busy} onOpenChange={open => { if (!open && !busy) setRemove(null); }}><DialogTitle>Remove {remove.fileId ? "file" : "report"}?</DialogTitle><p className="break-words">{remove.fileId ? `Remove ${remove.label}?` : `Remove ${remove.label} and all its files?`}</p><div className="flex justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => setRemove(null)}>Cancel</Button><Button variant="destructive" isDisabled={busy} onPress={() => void removeItem()}>Remove</Button></div></Dialog>}
