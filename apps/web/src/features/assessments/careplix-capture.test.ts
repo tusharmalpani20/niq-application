@@ -51,6 +51,15 @@ test("SDK errors are user-safe and stop capture", async () => {
   f.error(); expect(message).toContain("Camera access"); expect(message).not.toContain("private"); expect(f.counts().tracks).toBe(1); controller.cancel();
 });
 
+test("requests a 30-second camera capture", async () => {
+  let duration = 0;
+  const f = fixture(async options => { duration = options.scanDuration; });
+  const controller = createCaptureController(async () => f.sdk);
+  await controller.start(f.elements, { frame: () => {}, finish: () => {}, error: () => {} });
+  expect(duration).toBe(30);
+  controller.cancel();
+});
+
 test("SDK focus loss explains how to resume and never submits partial signal", async () => {
   const f = fixture(), controller = createCaptureController(async () => f.sdk);
   let message = "", results = 0;

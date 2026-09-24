@@ -67,7 +67,7 @@ export function createCaptureController(load: () => Promise<CaptureSDK> = () => 
       });
       // Local watchdog only cancels capture; it does not assert provider failure or billability.
       watchdog = setTimeout(() => fail("FCSCN01"), 180_000);
-      startup = sdk.facescan.startScan({ videoElement: elements.video, canvasElement: elements.canvas, scanDuration: 60, tryHDCamera: false });
+      startup = sdk.facescan.startScan({ videoElement: elements.video, canvasElement: elements.canvas, scanDuration: 30, tryHDCamera: false });
       await startup;
       if (!active()) stopCamera();
     } catch { startup = Promise.resolve(); fail("CMUSR01"); }
