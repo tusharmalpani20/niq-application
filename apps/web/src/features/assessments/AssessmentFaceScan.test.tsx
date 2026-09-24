@@ -7,7 +7,7 @@ import { AssessmentFaceScan } from "./AssessmentFaceScan";
 import { createCaptureController, type CaptureSDK } from "./careplix-capture";
 
 const session: FaceScanSession = { id: "session", state: "REQUESTED", context: { dob: "1990-01-01", gender: "female", heightCm: 170, weightKg: 70, posture: "resting", employeeId: "employee" }, createdAt: "2026-09-20T12:00:00.000Z", updatedAt: "2026-09-20T12:00:00.000Z", completedAt: null, failureCode: null, result: null, score: null };
-async function harness(run: (ctx: { click: (text: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number } = {}) {
+async function harness(run: (ctx: { click: (text: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "https://niq.test", pretendToBeVisual: true });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -17,7 +17,8 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; cons
   let current = options.existing ?? null, starts = 0, saves = 0, busy = false, reads = 0;
   let releaseStatus: () => void = () => {};
   let finish: Parameters<CaptureSDK["facescan"]["onScanFinish"]>[0] = () => {};
-  const sdk: CaptureSDK = { facescan: { onFrame: () => {}, onError: () => {}, onScanFinish: fn => { finish = fn; }, startScan: async () => { starts++; }, stopScan: () => {} } };
+  let onFrame: Parameters<CaptureSDK["facescan"]["onFrame"]>[0] = () => {};
+  const sdk: CaptureSDK = { facescan: { onFrame: fn => { onFrame = fn; }, onError: () => {}, onScanFinish: fn => { finish = fn; }, startScan: async () => { starts++; }, stopScan: () => {} } };
   values.fetch = async (input: string, init?: RequestInit) => {
     const path = String(input), body = init?.body ? JSON.parse(String(init.body)) : null;
     requests.push({ path, body });
@@ -41,6 +42,7 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; cons
       click: async text => { const button = [...document.querySelectorAll("button")].find(b => b.textContent?.trim() === text); if (!button) throw new Error(`Missing ${text}`); await act(async () => { button.click(); await flush(); }); },
       consent: async () => { await act(async () => { document.querySelector<HTMLInputElement>('input[type="radio"][value="standing"]:not(:disabled)')?.click(); document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(); }); },
       finish: async () => { await act(async () => { finish({ raw_intensity: [{ r: 1, g: 2, b: 3 }, { r: 2, g: 3, b: 4 }], ppg_time: [0, 33], average_fps: 30 }); await flush(); }); },
+      frame: async message => { await act(async () => { onFrame({ message, progress: 25, type: "scan", isLiteMode: false, isThrottling: false }); await flush(); }); },
     });
   } finally { await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key]; } }
 }
@@ -53,6 +55,17 @@ test("saves draft before capture and unlocks navigation only after upload accept
   expect(saved()).toBe(1); expect(starts()).toBe(1); expect(busy()).toBe(true);
   const start = requests.find(r => r.body?.revision); expect(start?.body.revision).toBe(4); expect(start?.body.requestKey.length).toBeGreaterThan(16);
   await finish(); expect(busy()).toBe(false); expect(document.body.textContent).toContain("Your capture is saved");
+}));
+test("shows position and stillness guidance inside the camera preview", async () => harness(async ({ consent, click, frame }) => {
+  await consent(); await click("Start face scan");
+  const preview = document.querySelector('canvas[aria-label="Camera scan preview"]')?.parentElement;
+  const guidance = preview?.querySelector('[role="status"]');
+  expect(guidance?.textContent).toContain("Preparing camera");
+  expect(guidance?.classList.contains("bottom-3")).toBe(true);
+  await frame("Please move a bit closer to the screen.");
+  expect(preview?.querySelector('[role="status"]')?.textContent).toBe("Please move a bit closer to the screen.");
+  await frame("25% Completed");
+  expect(preview?.querySelector('[role="status"]')?.textContent).toBe("Hold still and keep your face in view.");
 }));
 test("lost upload response reconciles accepted scan without another capture", async () => harness(async ({ consent, click, finish, starts, requests }) => {
   await consent(); await click("Start face scan"); await finish();
