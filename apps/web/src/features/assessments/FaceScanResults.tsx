@@ -73,7 +73,7 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
     </dl>
     <dl className="grid grid-cols-2 gap-3 @min-[44rem]:grid-cols-4">{vitals.map(item => {
       const assessment = item.key ? assessFaceScanRange(item.key, item.value, session.context) : null;
-      return <div key={item.label} className={`min-w-0 rounded-xl border p-3 ${assessment?.outside ? "border-warning bg-warning-soft text-warning" : "border-border bg-card"}`}>
+      return <div key={item.label} className={`min-w-0 rounded-xl border border-border bg-card p-3 ${assessment?.outside ? "text-warning" : ""}`}>
         <dt className={`text-xs ${assessment?.outside ? "" : "text-muted-foreground"}`}>{item.label}</dt>
         <dd className="mt-2 flex flex-wrap items-baseline gap-x-1 font-semibold tabular-nums"><span className="text-xl">{item.value ?? "—"}</span>{item.value !== null && <span className="text-sm font-normal">{item.unit}</span>}</dd>
         {assessment?.outside && <p className="mt-2 text-xs">Outside report range · {assessment.reference}</p>}
