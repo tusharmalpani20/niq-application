@@ -52,6 +52,8 @@ test("admin sees facility metrics, assigned team, and management actions", async
     expect(body.querySelector('[aria-label="Facility at a glance"]')?.textContent).toContain("Enabled team members1");
     expect(body.querySelector('[aria-label="Facility team"]')?.textContent).toContain("Example Doctor");
     expect(body.querySelector('[aria-label="Facility team"]')?.textContent).not.toContain("Other Doctor");
+    expect(body.querySelector('[aria-label="Facility team members"]')?.textContent).toContain("NameEmailRole");
+    expect(body.querySelector('[aria-label="Facility team members"]')?.textContent).toContain("doctor@example.test");
     expect(body.querySelector('button[aria-label="Edit facility"]')).not.toBeNull();
     expect(body.querySelector('button[aria-label="Deactivate facility"]')).not.toBeNull();
     expect(body.querySelector('a[href="/patients?facility=' + facilityId + '"]')).not.toBeNull();

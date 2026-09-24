@@ -8,6 +8,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescripti
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatusBadge } from "../components/StatusBadge";
+import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { getFacilityPerformance, listAssessments, listFacilities, listOrganizationUsers, listPatients } from "../lib/api";
 import { updateFacility } from "../lib/facility-management";
 import { assessmentStatusLabels } from "../lib/patient-display";
@@ -71,6 +72,11 @@ export function FacilityDetailPage() {
   const work = [...open, ...underReview, ...needsAttention].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 5);
   const recentPatients = [...patients].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 5);
   const visibleTeam = [...(team ?? [])].sort((a, b) => a.displayName.localeCompare(b.displayName)).slice(0, 5);
+  const teamColumns: DataTableColumn<OrganizationUser>[] = [
+    { id: "name", header: "Name", cell: ({ row }) => row.original.displayName },
+    { id: "email", header: "Email", cell: ({ row }) => <span className="text-muted-foreground">{row.original.email}</span> },
+    { id: "role", header: "Role", cell: ({ row }) => membershipRoleLabels[row.original.role] },
+  ];
   const saveFacility = (updated: Facility) => { setOverview(value => value ? { ...value, facility: updated } : value); setEditing(false); setChangingStatus(false); };
 
   return <>
@@ -103,7 +109,13 @@ export function FacilityDetailPage() {
       </section>
     </div>
 
-    {canManageUsers && <section className="surface mt-4 p-5" aria-label="Facility team"><div className="flex flex-wrap items-start justify-between gap-2"><h2 className="font-semibold">Team with access</h2><Link className="text-sm text-primary hover:underline" to="/users">Manage users</Link></div>{team === null ? <p className="mt-5 text-sm text-muted-foreground">Team information could not be loaded.</p> : visibleTeam.length ? <ul className="mt-3 max-w-2xl divide-y divide-border">{visibleTeam.map(item => <li key={item.membershipId} className="grid gap-1 py-3 text-sm sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] sm:gap-4"><span className="font-medium">{item.displayName}</span><span className="text-muted-foreground">{membershipRoleLabels[item.role]}</span></li>)}</ul> : <p className="mt-5 text-sm text-muted-foreground">No enabled team members have access.</p>}</section>}
+    {canManageUsers && <section className="surface table-surface mt-4" aria-label="Facility team">
+      <div className="flex flex-wrap items-start justify-between gap-2 px-5 pt-5"><h2 className="font-semibold">Team with access</h2><Link className="text-sm text-primary hover:underline" to="/users">Manage users</Link></div>
+      {team === null ? <p className="p-5 text-sm text-muted-foreground">Team information could not be loaded.</p> : visibleTeam.length ? <>
+        <div className="mobile-card-list">{visibleTeam.map(item => <article className="mobile-data-card" key={item.membershipId}><strong>{item.displayName}</strong><span>{item.email}</span><span>{membershipRoleLabels[item.role]}</span></article>)}</div>
+        <div className="desktop-table p-5"><DataTable label="Facility team members" columns={teamColumns} data={visibleTeam} /></div>
+      </> : <p className="p-5 text-sm text-muted-foreground">No enabled team members have access.</p>}
+    </section>}
 
     {editing && <FacilityDialog organizationId={user.organizationId} facility={facility} onClose={() => setEditing(false)} onSaved={saveFacility} />}
     <AlertDialog ariaLabel="Change facility status" isOpen={changingStatus} isDismissable={!savingStatus} onOpenChange={open => { if (!open && !savingStatus) setChangingStatus(false); }}>
