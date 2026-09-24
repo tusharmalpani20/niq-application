@@ -46,12 +46,13 @@ test("date validation catches calendar rollover and accepts leap day", () => {
   expect(validateAssessmentAnswers(dates, { date: "2024-02-29" })).toEqual({});
   expect(validateAssessmentAnswers(dates, { date: "2026-02-31" }).date).toBeDefined();
 });
-test("No problem while eating cannot be combined with dietary symptoms", () => {
+test("legacy mixed dietary symptoms can be retained without blocking a draft", () => {
   const symptoms: AssessmentFormManifest = { version: "symptoms", sections: [{ id: "diet", title: "Diet", fields: [{
     id: "dietary_symptoms", label: "Symptoms", kind: "multi_select", required: true, owner: "scoring", source: "F132",
     options: [{ id: "dietary_symptoms_no_problem", label: "No problem while eating" }, { id: "dietary_symptoms_nausea", label: "Nausea" }],
   }] }] };
-  expect(validateAssessmentAnswers(symptoms, { dietary_symptoms: ["dietary_symptoms_no_problem", "dietary_symptoms_nausea"] }).dietary_symptoms).toBe("No problem while eating cannot be selected with other symptoms");
+  expect(validateAssessmentAnswers(symptoms, { dietary_symptoms: ["dietary_symptoms_no_problem", "dietary_symptoms_nausea"] })).toEqual({});
+  expect(getAssessmentCompletion(symptoms, { dietary_symptoms: ["dietary_symptoms_no_problem", "dietary_symptoms_nausea"] }).percent).toBe(100);
   expect(validateAssessmentAnswers(symptoms, { dietary_symptoms: ["dietary_symptoms_no_problem"] })).toEqual({});
   expect(validateAssessmentAnswers(symptoms, { dietary_symptoms: ["dietary_symptoms_nausea"] })).toEqual({});
 });

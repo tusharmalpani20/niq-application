@@ -17,12 +17,12 @@ test("selecting No problem replaces symptoms and selecting a symptom clears No p
   expect(addAssessmentMultiChoice("dietary_symptoms", ["dietary_symptoms_no_problem"], "dietary_symptoms_nausea")).toEqual(["dietary_symptoms_nausea"]);
   expect(addAssessmentMultiChoice("gastrointestinal_symptoms", ["nausea"], "vomiting")).toEqual(["nausea", "vomiting"]);
 });
-test("a saved contradictory symptom answer shows its correction beside the field", () => {
+test("a saved mixed symptom answer stays editable without a local error", () => {
   const symptoms = { ...field, id: "dietary_symptoms", options: [
     { id: "dietary_symptoms_no_problem", label: "No problem while eating" },
     { id: "dietary_symptoms_nausea", label: "Nausea" },
   ] };
-  expect(render([symptoms], { dietary_symptoms: ["dietary_symptoms_no_problem", "dietary_symptoms_nausea"] })).toContain("No problem while eating cannot be selected with other symptoms");
+  expect(render([symptoms], { dietary_symptoms: ["dietary_symptoms_no_problem", "dietary_symptoms_nausea"] })).not.toContain("No problem while eating cannot be selected with other symptoms");
 });
 test("workbook None is shown only for supported empty selections", () => {
   expect(render([{ ...field, id: "co_morbidities" }], { co_morbidities: [] })).toContain(">None<");

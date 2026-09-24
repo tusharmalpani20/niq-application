@@ -1,5 +1,5 @@
 import { AssessmentDateInput } from "./AssessmentDateInput";
-import { ASSESSMENT_ANSWER_TEXT_LIMIT, assessmentFieldError, calculateAssessmentBmi, calculateAssessmentWeightChange, isAssessmentFieldApplicable, type AssessmentFormManifest, type FormAnswer, type FormAnswers, type FormField } from "@niq/application-contracts";
+import { ASSESSMENT_ANSWER_TEXT_LIMIT, calculateAssessmentBmi, calculateAssessmentWeightChange, isAssessmentFieldApplicable, type AssessmentFormManifest, type FormAnswer, type FormAnswers, type FormField } from "@niq/application-contracts";
 import { AssessmentWeightComparison } from "./AssessmentWeightComparison";
 import { Tooltip, TooltipTrigger } from "../../components/ui/tooltip";
 import { X } from "lucide-react";
@@ -59,7 +59,7 @@ export function assessmentFieldGroups(fields: FormField[], answers: FormAnswers)
 export function AssessmentFields({ section, answers, onChange, errors, readOnly, heightSourceDate, onEditContact }: AssessmentFieldsProps) {
   const renderField = (field: FormField) => {
     const id = `assessment-field-${field.id}`; const errorId = `${id}-error`;
-    const value = answers[field.id]; const error = errors[field.id] ?? (field.id === "dietary_symptoms" ? assessmentFieldError(field, value) : null);
+    const value = answers[field.id]; const error = errors[field.id];
     const label = `${field.label}${field.unit && field.unit !== "surgeries" ? ` (${field.unit})` : ""}`;
     const required = field.required ? <><span aria-hidden="true" className="ml-1 text-destructive">*</span><span className="sr-only"> (required)</span></> : null;
     const errorMarkup = error ? <p id={errorId} className="text-sm text-destructive" role="alert">{error}</p> : null;
