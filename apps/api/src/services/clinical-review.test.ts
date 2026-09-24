@@ -39,8 +39,17 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   await db.insert(t.questionnaireDefinitions).values({id:definition,organizationId:org,scopeKey:org,key:"clinical-test",version:"1",schema:{},checksum:"test"});
  });
  afterAll(async()=>{await client.end();});
- async function assessment(owner=creator){const id=createEntityId(),submission=createEntityId(),snapshot=workflow.seal({answers:{item:"original"},patient:{id:patient},binding,connection:{origin:"http://scoring.test",deploymentId:"deployment",scoringOrganizationId:"scoring-org"}});await db.insert(t.assessments).values({id,organizationId:org,patientId:patient,facilityId:facility,questionnaireDefinitionId:definition,questionnaireScopeKey:org,createdByMembershipId:owner.membershipId,status:"SCORED",workflow:snapshot});await db.insert(t.assessmentSubmissions).values({id:submission,organizationId:org,assessmentId:id,revision:0,snapshot,idempotencyKey:submission,status:"SUCCEEDED",result:workflow.seal(result)});await db.update(t.assessments).set({currentSubmissionId:submission}).where(eq(t.assessments.id,id));return id;}
+ async function assessment(owner=creator, scoringResult: typeof result | (typeof result & { score: null; classification: null })=result){const id=createEntityId(),submission=createEntityId(),snapshot=workflow.seal({answers:{item:"original"},patient:{id:patient},binding,connection:{origin:"http://scoring.test",deploymentId:"deployment",scoringOrganizationId:"scoring-org"}});await db.insert(t.assessments).values({id,organizationId:org,patientId:patient,facilityId:facility,questionnaireDefinitionId:definition,questionnaireScopeKey:org,createdByMembershipId:owner.membershipId,status:"SCORED",workflow:snapshot});await db.insert(t.assessmentSubmissions).values({id:submission,organizationId:org,assessmentId:id,revision:0,snapshot,idempotencyKey:submission,status:"SUCCEEDED",result:workflow.seal(scoringResult)});await db.update(t.assessments).set({currentSubmissionId:submission}).where(eq(t.assessments.id,id));return id;}
  async function command(actor:Principal,id:string,action:ClinicalReviewAction["action"],extra:object={}){const state=await reviews.read(actor,org,id);return reviews.command(actor,org,id,{action,expectedRevision:state.revision,expectedScoreRevision:state.scoreRevision,requestKey:createEntityId(),...extra} as ClinicalReviewAction,context);}
+ test("an unscored blank questionnaire advances through clinical review", async () => {
+  const blank = { ...result, score: null, classification: null, components: [{ ...result.components[0]!, points: null, status: "unanswered" }] } as typeof result & {score:null;classification:null};
+  const id = await assessment(creator, blank);
+  expect((await scores.read(creator, org, id)).overall.reviewedPoints).toBeNull();
+  await command(creator, id, "SEND");
+  await command(nurse, id, "CLAIM");
+  expect((await reviews.read(nurse, org, id)).riskClassificationPending).toBe(false);
+  expect((await command(nurse, id, "COMPLETE", {remark:"Reviewed without scoring answers"})).state).toBe("COMPLETED");
+ });
  test("creator sends, concurrent claims have one winner, transfer revokes ownership and completion freezes score",async()=>{
   const id=await assessment();await expect(command(admin,id,"SEND")).rejects.toMatchObject({code:"FORBIDDEN"});
   await command(creator,id,"SEND");await expect(command(admin,id,"CLAIM")).rejects.toMatchObject({code:"FORBIDDEN"});

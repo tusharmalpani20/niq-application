@@ -28,6 +28,15 @@ describe("assessment scoring transport", () => {
   test("accepts complete upstream totals with unanswered optional components", async () => {
     expect((await calculate(success())).result.score).toBe(2);
   });
+  test("accepts a completed blank questionnaire without inventing a score or risk", async () => {
+    const blank = { ...result(), score: null, classification: null,
+      components: result().components.map(component => ({ ...component, points: null, status: "unanswered" })),
+      answerCoverage: { totalEntries: 19, answeredEntries: 0, unansweredEntries: 19, pendingEntries: 0, allUnanswered: true } };
+    const response = { result: { ...blank, resultReference: "blank-usage" }, idempotencyKey: "request-key" };
+    const calculateBlank = (body: unknown) => requestAssessmentScoringCalculate({ ...transport, binding, idempotencyKey: "request-key", answers: {}, fetcher: async () => Response.json(body) });
+    expect((await calculateBlank(response)).result).toMatchObject({ complete: true, score: null, classification: null, resultReference: "blank-usage" });
+    await expect(calculateBlank({ ...response, result: { ...response.result, score: 0, classification: { id: "low", label: "Low", interpretation: "" } } })).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+  });
   test("checks evidence, component membership, coverage and total", async () => {
     const valid = success();
     for (const body of [{ ...valid, idempotencyKey: "other" }, ...[{ bindingId: "other" }, { score: 3 }, { components: valid.result.components.slice(1) }, { answerCoverage: { ...valid.result.answerCoverage, answeredEntries: 19 } }, { components: valid.result.components.map((c, i) => i === 0 ? { ...c, sectionId: "other" } : c) }].map(patch => ({ ...valid, result: { ...valid.result, ...patch } }))])

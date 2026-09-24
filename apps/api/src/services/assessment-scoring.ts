@@ -91,12 +91,17 @@ export async function requestAssessmentScoringCalculate(input: AssessmentScoring
   const parsed = assessmentScoringCalculationSchema.safeParse(reply.body);
   if (!parsed.success) throw invalid();
   const { result } = parsed.data;
-  if (!sameEvidence(result, input.binding) || parsed.data.idempotencyKey !== input.idempotencyKey || !result.complete || result.score === null || result.classification === null || result.issues.length) throw invalid();
+  if (!sameEvidence(result, input.binding) || parsed.data.idempotencyKey !== input.idempotencyKey || !result.complete || result.issues.length) throw invalid();
   const expected = input.binding.questionnaire.sections.flatMap(s => s.fields.map(f => ({ id: f.id, sectionId: s.id })));
   if (result.components.length !== expected.length || new Set(result.components.map(c => c.id)).size !== expected.length || result.components.some(c => !expected.some(f => f.id === c.id && f.sectionId === c.sectionId) || (c.status === "answered") !== (c.points !== null))) throw invalid();
   const coverage = result.answerCoverage;
   const count = (status: string) => result.components.filter(c => c.status === status).length;
   if (coverage.totalEntries !== expected.length || coverage.answeredEntries !== count("answered") || coverage.unansweredEntries !== count("unanswered") || coverage.pendingEntries !== count("pending") || coverage.allUnanswered !== (count("answered") === 0)) throw invalid();
+  if (result.score === null) {
+    if (result.classification !== null || !coverage.allUnanswered || coverage.pendingEntries !== 0) throw invalid();
+    return parsed.data;
+  }
+  if (result.classification === null || coverage.answeredEntries === 0) throw invalid();
   const sum = result.components.reduce((total, c) => total + (c.points ?? 0), 0);
   if (!Number.isFinite(sum) || Math.abs(sum - result.score) > Number.EPSILON * Math.max(1, sum, result.score) * expected.length) throw invalid();
   return parsed.data;

@@ -32,6 +32,19 @@ test("rejects inconsistent persisted results instead of showing fabricated total
   expect(assessmentResultView({ ...record, result: { ...value, components: [] } })).toBeNull();
 });
 
+test("completed blank assessment shows a dash without a risk category", () => {
+  const value = record.result as { components: Array<Record<string, unknown>> };
+  const blank = { ...record, result: { ...value, score: null, classification: null,
+    components: value.components.map(component => ({ ...component, points: null, status: "unanswered" })) } };
+  expect(assessmentResultView(blank)).not.toBeNull();
+  const html = renderToStaticMarkup(<AssessmentResult record={blank} onSection={() => {}} />);
+  expect(html).toContain("NIQ questionnaire score");
+  expect(html).toContain("—");
+  expect(html).not.toContain("Low");
+  expect(html).not.toContain("0 points");
+  expect(assessmentResultView({ ...blank, result: { ...blank.result, components: value.components } })).toBeNull();
+});
+
 test("unresolved component includes the server reason rather than implying processing", () => {
   const original = record.result as { components: Array<Record<string, unknown>> };
   const pending = { ...record, result: { ...original, components: original.components.map((component, index) => index === 1 ? { ...component, status: "pending", reason: "Enter both weights to calculate weight loss." } : component) } };

@@ -38,6 +38,8 @@ export function projectScoreReviews(result: AssessmentScoreResult, entries: Scor
     const sum = (key: "niqPoints" | "reviewedPoints") => items.some(i => i[key] !== null) ? items.reduce((s, i) => s + (i[key] ?? 0), 0) : null;
     return { id, items, ...value(`section:${id}`, sum("niqPoints"), sum("reviewedPoints")) };
   });
-  const total = sections.reduce((sum, section) => sum + (section.reviewedPoints ?? 0), 0);
+  const total = sections.some(section => section.reviewedPoints !== null)
+    ? sections.reduce((sum, section) => sum + (section.reviewedPoints ?? 0), 0)
+    : null;
   return { ...(scan ? { scan: { id: scan.id, ...value(`scan:${scan.id}`, scan.points, scan.points) } } : {}), revision: entries.at(-1)?.revision ?? 0, canAdjust: true, entries, sections, overall: value("overall:", result.score, total) };
 }

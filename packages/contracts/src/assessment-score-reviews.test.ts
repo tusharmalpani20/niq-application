@@ -7,6 +7,13 @@ test("original scores unchanged and missing scores remain null",()=>{
  const before=JSON.stringify(result);const view=projectScoreReviews(result,[event(1,"item","a",5)]);
  expect(view.overall.reviewedPoints).toBe(7);expect(view.sections[0]?.niqPoints).toBe(8);expect(view.sections[2]?.reviewedPoints).toBeNull();expect(JSON.stringify(result)).toBe(before);
 });
+test("a blank scoring result has no overall NIQ or reviewed score", () => {
+ const blank = { ...result, score: null, classification: null,
+  components: result.components.map(component => ({ ...component, points: null, status: "unanswered" })) } as AssessmentScoreResult;
+ const view = projectScoreReviews(blank, []);
+ expect(view.overall).toMatchObject({ niqPoints: null, reviewedPoints: null, overridden: false });
+ expect(view.sections.every(section => section.reviewedPoints === null)).toBe(true);
+});
 test("parent overrides persist, resetting reveals latest child total",()=>{
  const events=[event(1,"section","s",20),event(2,"overall",null,50),event(3,"item","a",3)];
  expect(projectScoreReviews(result,events).overall.reviewedPoints).toBe(50);
