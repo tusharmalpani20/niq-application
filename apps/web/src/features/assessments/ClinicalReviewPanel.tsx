@@ -18,6 +18,10 @@ function actionLabel(action: Action, review: ClinicalReview) {
   if (action === "RESEND" && !previouslySent(review)) return clinicalActionLabels.SEND;
   return action === "TRANSFER" && !review.assignee ? "Assign reviewer" : clinicalActionLabels[action];
 }
+function reviewStatusLabel(review: ClinicalReview) {
+  if (review.state === "AWAITING_RESUBMISSION") return previouslySent(review) ? "Ready to resend for clinical review" : "Ready to send for clinical review";
+  return clinicalReviewLabels[review.state];
+}
 function historyLabel(event: ClinicalReviewEvent, history: ClinicalReviewEvent[]) {
   if (event.action === "RESEND" && !history.some(prior => prior.revision < event.revision && (prior.action === "SEND" || prior.action === "RESEND"))) return "Sent for clinical review";
   const labels: Record<Action, string> = {
@@ -51,17 +55,17 @@ export function ClinicalReviewPanel({ organizationId, assessmentId, review, erro
 }) {
   const [action, setAction] = useState<Action | null>(null);
   return <section aria-label="Clinical review" className="my-5 rounded-xl border border-border bg-card p-4 sm:p-6">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl">Clinical review</h2>{review && <span className="text-sm text-muted-foreground">{review.state === "AWAITING_RESUBMISSION" && !previouslySent(review) ? "Ready for clinical review" : clinicalReviewLabels[review.state]}</span>}</div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl">Clinical review</h2>{review && <span className="text-sm text-muted-foreground">{reviewStatusLabel(review)}</span>}</div>
     {loading && <p className="mt-3 text-sm" role="status">Loading review…</p>}
     {error && <div role="alert" className="mt-3 text-sm text-destructive">{error}<Button variant="link" isDisabled={blocked || loading} onPress={() => { void onRefresh(); }}>Reload review</Button></div>}
     {review && <>
       {review.assignee && <p className="mt-3 text-sm">Reviewer: {review.assignee.displayName}</p>}
-      {review.correctionPerson && <p className="mt-3 text-sm">Corrections assigned to: {review.correctionPerson.displayName}</p>}
-      {review.returnReason && (review.state === "RETURNED" || review.state === "AWAITING_RESUBMISSION") && <div className="mt-3 rounded-lg bg-muted p-3 text-sm"><p>Return reason</p><p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{review.returnReason}</p></div>}
+      {review.correctionPerson && review.state !== "AWAITING_RESUBMISSION" && <p className="mt-3 text-sm">Corrections assigned to: {review.correctionPerson.displayName}</p>}
+      {review.returnReason && review.state === "RETURNED" && <div className="mt-3 rounded-lg bg-muted p-3 text-sm"><p>Return reason</p><p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{review.returnReason}</p></div>}
       {review.state === "NOT_SUBMITTED" && <p className="mt-3 text-sm text-muted-foreground">The original assessment creator can send the scored assessment for clinical review.</p>}
       {review.state === "QUEUED" && <p className="mt-3 text-sm text-muted-foreground">An eligible clinician can claim this review.</p>}
       {review.state === "RETURNED" && <p className="mt-3 text-sm text-muted-foreground">The clinician assigned to corrections updates the questionnaire, requests a new score, then {previouslySent(review) ? "resends" : "sends"} it for clinical review.</p>}
-      {review.state === "AWAITING_RESUBMISSION" && <p className="mt-3 text-sm text-muted-foreground">{previouslySent(review) ? "The clinician assigned to corrections can resend this scored assessment. It returns to the previous reviewer if they are still eligible, otherwise to the queue." : "The clinician assigned to corrections can send this scored assessment to the clinical review queue."}</p>}
+      {review.state === "AWAITING_RESUBMISSION" && <p className="mt-3 text-sm text-muted-foreground">Scoring is complete. {review.correctionPerson?.displayName ?? "The clinician assigned to corrections"} can {previouslySent(review) ? "resend" : "send"} this assessment {previouslySent(review) ? "to the previous reviewer if eligible, or to the queue" : "to the clinical review queue"}.</p>}
       {review.state === "COMPLETED" && <div className="mt-3 text-sm"><p>This review is final and cannot be reopened.</p>{review.finalRemark && <p className="mt-2 whitespace-pre-wrap break-words">{review.finalRemark}</p>}</div>}
       {review.riskClassificationPending && <p className="mt-3 text-sm text-muted-foreground">NIQ must confirm the current reviewed risk before this review can be completed. Check the assessment summary below.</p>}
       {blocked && !!review.allowedActions?.length && <p className="mt-3 text-sm text-muted-foreground">Finish or cancel your current changes before changing the review workflow.</p>}

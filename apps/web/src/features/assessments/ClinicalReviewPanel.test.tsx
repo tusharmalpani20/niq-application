@@ -78,19 +78,28 @@ test("completion waits for reviewed risk confirmation while handover remains ava
 
 
 test("first review after corrections says send and preserves correction-owner command", async()=>harness(async({click,posts})=>{
- expect(document.body.textContent).toContain("Ready for clinical review");
+ expect(document.body.textContent).toContain("Ready to send for clinical review");
+ expect(document.body.textContent).toContain("Scoring is complete. Reviewer can send this assessment to the clinical review queue.");
+ expect(document.body.textContent).not.toContain("Return reason");
+ expect(document.body.textContent).not.toContain("Corrections assigned to:");
  expect(document.body.textContent).not.toContain("resend");
  await click("Send for clinical review");
  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Send this scored assessment to the clinical review queue.");
  await click("Send for clinical review");
  expect(posts[0]).toMatchObject({action:"RESEND"});
-},{review:{...review,state:"AWAITING_RESUBMISSION",allowedActions:["RESEND"]}}));
+},{review:{...review,state:"AWAITING_RESUBMISSION",correctionPerson:review.assignee,returnReason:"Previous return",allowedActions:["RESEND"]}}));
 
 test("previously submitted review still says resend after corrections", async()=>harness(async({click})=>{
- expect(document.body.textContent).toContain("Awaiting resubmission");
+ expect(document.body.textContent).toContain("Ready to resend for clinical review");
  await click("Resend for clinical review");
  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Resend to the previous reviewer");
 },{review:{...review,state:"AWAITING_RESUBMISSION",submittedAt:"2026-09-23T00:00:00Z",allowedActions:["RESEND"]}}));
+
+test("return reason stays visible while corrections are needed", async()=>harness(async()=>{
+ expect(document.body.textContent).toContain("Returned for correction");
+ expect(document.body.textContent).toContain("Return reason");
+ expect(document.body.textContent).toContain("Please correct this");
+}, {review:{...review,state:"RETURNED",correctionPerson:review.assignee,returnReason:"Please correct this",allowedActions:[]}}));
 
 test("one review history disclosure shows every event without a same-person arrow", async()=>harness(async()=>{
   const history = document.querySelector("details");
