@@ -10,8 +10,8 @@ export function CapacityCard({ title, used, limit, detail, to }: { title: string
   const percent = limit === null ? null : limit === 0 ? (used > 0 ? 100 : 0) : Math.min(100, used / limit * 100);
   return <Link to={to} className="surface grid gap-3 p-5 no-underline focus-visible:outline-2 focus-visible:outline-primary">
     <span className="text-sm font-medium">{title}</span>
-    <div><strong className="text-3xl font-semibold">{used.toLocaleString()}</strong><span className="ml-2 text-sm text-muted-foreground">{limit === null ? "used · Unlimited" : `of ${limit.toLocaleString()} used`}</span></div>
-    {percent !== null && <><div role="meter" aria-label={title} aria-valuemin={0} aria-valuemax={Math.max(limit ?? 0, used, 1)} aria-valuenow={used} aria-valuetext={`${used} of ${limit} used`} className="h-1.5 overflow-hidden rounded-full bg-muted"><div className={used >= (limit ?? Infinity) ? "h-full bg-destructive" : "h-full bg-primary"} style={{ width: `${percent}%` }} /></div><span className="text-xs text-muted-foreground">{Math.max(0, (limit ?? 0) - used).toLocaleString()} remaining</span></>}
+    <div><strong className="text-3xl font-semibold">{used.toLocaleString()}</strong><span className="ml-2 text-sm text-muted-foreground">{limit === null ? "this month · Unlimited" : `of ${limit.toLocaleString()} used`}</span></div>
+    {percent !== null && <><div role="meter" aria-label={title} aria-valuemin={0} aria-valuemax={Math.max(limit ?? 0, used, 1)} aria-valuenow={used} aria-valuetext={`${used} of ${limit} used`} className="h-1.5 overflow-hidden rounded-full bg-muted"><div className={used >= (limit ?? Infinity) ? "h-full bg-destructive" : percent >= 80 ? "h-full bg-amber-500" : "h-full bg-primary"} style={{ width: `${percent}%` }} /></div><span className="text-xs text-muted-foreground">{Math.max(0, (limit ?? 0) - used).toLocaleString()} remaining</span></>}
     <span className="text-xs text-muted-foreground">{detail}</span>
   </Link>;
 }
@@ -35,7 +35,8 @@ export function OverviewUsage({ organizationId }: { organizationId: string }) {
         <CapacityCard title="Scores" used={data.usage.scores} limit={data.limits.scoresPerMonth} detail={data.services.scoring.enabled ? "Scores used this month" : "Scoring is disabled"} to="/settings/scoring" />
         <CapacityCard title="Face scans" used={data.usage.faceScans} limit={data.limits.faceScansPerMonth} detail={data.services.faceScan.enabled ? "Face scans used this month" : "Face scans are disabled"} to="/settings/scoring" />
       </div>
-      {loadedAt && <p className="text-xs text-muted-foreground">Last refreshed {loadedAt.toLocaleString()}. Monthly limits reset at the start of each month.</p>}
+      <p className="text-xs text-muted-foreground">NIQ Scoring counts score and scan usage events. One assessment can use either service more than once, so these totals can exceed assessments started. Usage follows a UTC month; the patient and assessment cards above use your local month.</p>
+      {loadedAt && <p className="text-xs text-muted-foreground">Last refreshed {loadedAt.toLocaleString()}. Monthly limits reset at the start of each UTC month.</p>}
     </>}
   </section>;
 }

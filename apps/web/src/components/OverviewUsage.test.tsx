@@ -21,3 +21,8 @@ test("unlimited capacity shows actual usage without a fake limit or progress bar
   expect(markup).not.toContain('role="meter"');
   expect(markup).not.toContain("remaining");
 });
+test("limited usage changes emphasis as it approaches the allowance", () => {
+  expect(render(7, 10)).not.toContain("bg-amber-500");
+  expect(render(8, 10)).toContain("bg-amber-500");
+  expect(render(10, 10)).toContain("bg-destructive");
+});
