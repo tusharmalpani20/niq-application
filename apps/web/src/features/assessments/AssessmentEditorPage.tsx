@@ -145,6 +145,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const index = tabs.findIndex(tab => tab.id === sectionId);
   const locked = busy || reportBusy || scanBusy || reviewBusy || conflict;
   const scanStepStatus = scanStatus === "Scan complete" ? "Done" : scanStatus === "Face scan ready" ? "Pending" : scanStatus.replace(/^Face scan |^Scan /, "");
+  const attachmentCounts = { reports: record.reports.length, files: record.reports.reduce((total, report) => total + report.files.filter(file => file.status === "READY").length, 0) };
   const separatedEditor = record.result !== null || clinical.review?.state === "RETURNED" || !!clinical.error
     || !!error || Object.keys(errors).length > 0 || record.submission?.status === "REJECTED"
     || (["SCORING_PENDING", "SCORING_UNAVAILABLE"].includes(record.status) && !record.result);
@@ -169,7 +170,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
     {record.result !== null && showScoredAnswers && <Button className="my-4" variant="outline" onPress={() => setShowScoredAnswers(false)}><ArrowLeft aria-hidden="true"/>Back to summary</Button>}
     <div hidden={record.result !== null && !showScoredAnswers}>
     <div className={`grid min-w-0 border-x border-border bg-card @min-[48rem]:grid-cols-[250px_minmax(0,1fr)] ${separatedEditor ? "rounded-t-xl border-t" : ""}`}>
-      <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} scores={sectionScores} scanStatus={scanStepStatus} disabled={locked} onSelect={id => { void selectSection(id); }} />
+      <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} scores={sectionScores} scanStatus={scanStepStatus} attachmentCounts={attachmentCounts} disabled={locked} onSelect={id => { void selectSection(id); }} />
       <div className="min-w-0 p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 id="assessment-section-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>{sectionCoverage && <span className="text-xs text-muted-foreground">{sectionCoverage.answered}/{sectionCoverage.total} answered · {sectionCoverage.percent ?? 0}%</span>}</div>
         {(record.result === null || showScoredAnswers) && <AssessmentFaceScan organizationId={organizationId} record={{ ...record, answers }} active={sectionId === "face_scan"} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onBusyChange={setScanBusy} onStatusChange={setScanStatus} onSessionChange={setScanSession}/>}
         {section && <section><AssessmentFields heightSourceDate={record.heightSource?.recordedAt} section={section} answers={answers} errors={errors} readOnly={!editable || locked} onEditContact={editable ? () => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); } : undefined} onChange={(id, value) => { setAnswers(current => clearInactiveAssessmentAnswers(record.manifest, { ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}

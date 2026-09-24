@@ -47,7 +47,7 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
   const router = createMemoryRouter([{ element: <Outlet context={{ userId: "user-a", organizationId: "org-a", role }} />, children: [{ path: "/assessments", element: <p>Assessment list</p> }, { path: "/assessments/:assessmentId", element: <AssessmentEditorPage /> }, { path: "/patients/:id", element: <p>Patient record</p> }] }], { initialEntries: [`/assessments/${locator}`] });
   const root = createRoot(document.getElementById("root")!);
   async function click(label: string) {
-    const button = [...document.querySelectorAll("button")].filter(item => (item.textContent?.trim() === label || item.getAttribute("aria-label") === label)).at(-1);
+    const button = [...document.querySelectorAll("button")].filter(item => (item.textContent?.trim() === label || item.getAttribute("aria-label") === label || item.getAttribute("aria-label")?.startsWith(`${label}: `))).at(-1);
     if (!button) throw new Error(`Missing button ${label}`);
     await act(async () => { button.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
   }
@@ -108,10 +108,12 @@ test("report refresh preserves local answers and blocks overwriting concurrent a
 }, { reports: [reportFixture] }));
 
 test("report refresh adopts concurrent server answers when local answers are clean", async () => harness(async ({ click, remoteAnswers, requests }) => {
+  expect(document.querySelector('button[aria-label="Attachments: 1 report · 0 files"]')).not.toBeNull();
   await click("Attachments");
   remoteAnswers({ ...recordFixture().answers, current_weight_kg: 72 });
   await click("Remove report");
   await click("Remove");
+  expect(document.querySelector('button[aria-label="Attachments: 0 reports · 0 files"]')).not.toBeNull();
   expect(document.body.textContent).not.toContain("Unsaved changes");
   expect(document.body.textContent).not.toContain("Load saved version");
   await click("Save draft");
