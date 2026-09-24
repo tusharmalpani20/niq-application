@@ -35,6 +35,18 @@ const matchesStatus = (record: AssessmentSummary, status: string, now: Date) => 
   if (status === "COMPLETED_THIS_MONTH") return record.status === "COMPLETED" && record.completedAt !== null && record.completedAt.getFullYear() === now.getFullYear() && record.completedAt.getMonth() === now.getMonth();
   return record.status === status;
 };
+const assessmentActionLabel = (status: AssessmentSummary["status"]) => {
+  switch (status) {
+    case "DRAFT": return "Open draft";
+    case "READY_FOR_SCORING": return "Review answers";
+    case "SCORING_PENDING": return "View progress";
+    case "SCORING_UNAVAILABLE": return "Review issue";
+    case "SCORED": return "View score";
+    case "UNDER_REVIEW": return "View review";
+    case "COMPLETED": return "View result";
+    case "VOIDED": return "View assessment";
+  }
+};
 
 export function AssessmentsPage() {
   const user = useOutletContext<AuthenticatedUser>();
@@ -95,6 +107,7 @@ export function AssessmentsPage() {
     { id: "created", header: "Started", cell: ({ row }) => <DateDisplay value={row.original.createdAt} /> },
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
   ];
+  if (canOpen) columns.push({ id: "actions", header: () => <span className="block text-right">Action</span>, cell: ({ row }) => <div className="flex justify-end"><RouterButtonLink variant="outline" size="sm" className="whitespace-nowrap" to={`/assessments/${row.original.reference}`} aria-label={`${assessmentActionLabel(row.original.status)} ${row.original.reference}`}>{assessmentActionLabel(row.original.status)}</RouterButtonLink></div> });
   const hasFilters = query.trim() || facility !== "all" || status !== "all";
   const emptyContent = <div className="table-empty-content">{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : <><p className="text-sm text-foreground">No assessments yet</p><p className="text-sm">{canCreate ? "Choose a patient to start their first assessment." : "Assessments will appear here once created."}</p>{canCreate && <RouterButtonLink to="/assessments/new"><Icon name="plus" size={18} />New assessment</RouterButtonLink>}</>}</div>;
   return <>
@@ -111,7 +124,7 @@ export function AssessmentsPage() {
       </> : <Select aria-label="Review stage" selectedKey={reviewState} onSelectionChange={key => setReviewState(String(key))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All clinical reviews</SelectItem><SelectItem id="QUEUED">Awaiting reviewer</SelectItem><SelectItem id="mine-active">My reviews in progress</SelectItem><SelectItem id="mine">My work</SelectItem><SelectItem id="IN_REVIEW">In review</SelectItem><SelectItem id="RETURNED">Returned for correction</SelectItem><SelectItem id="AWAITING_RESUBMISSION">Awaiting resubmission</SelectItem><SelectItem id="COMPLETED">Completed</SelectItem></SelectContent></Select>}
     </div>
     <TabsContent id="assessments">
-    <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card" key={record.id}><div>{canOpen ? <Link className="font-normal text-foreground hover:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}<span>{record.patient.reference} · {record.patient.displayName}</span></div><StatusBadge status={assessmentStatusLabels[record.status]}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
+    <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card" key={record.id}><div>{canOpen ? <Link className="font-normal text-foreground hover:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}<span>{record.patient.reference} · {record.patient.displayName}</span></div><StatusBadge status={assessmentStatusLabels[record.status]}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span>{canOpen && <RouterButtonLink variant="outline" size="sm" className="w-fit" to={`/assessments/${record.reference}`} aria-label={`${assessmentActionLabel(record.status)} ${record.reference}`}>{assessmentActionLabel(record.status)}</RouterButtonLink>}</article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
     </TabsContent>{canOpen && <TabsContent id="clinical-reviews"><ClinicalReviewQueue key={`${user.organizationId}:${user.membershipId}:${reviewFilter}`} user={user} query={reviewQuery} state={reviewState} /></TabsContent>}</Tabs>
   </>;
