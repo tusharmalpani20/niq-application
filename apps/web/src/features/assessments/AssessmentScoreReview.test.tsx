@@ -27,7 +27,7 @@ test("summary keeps scored answers readable without score edit controls", async 
   expect(document.querySelector("form")).toBeNull();
   await click("Face scan");
   expect(document.getElementById("score-section-face_scan")?.hidden).toBe(false);
-  await click("Reports");
+  await click("Attachments");
   expect(document.getElementById("score-section-reports")?.hidden).toBe(false);
   expect(posts).toHaveLength(0);
 }));

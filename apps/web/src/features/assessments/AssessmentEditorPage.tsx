@@ -138,7 +138,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const sectionScores = Object.fromEntries((scored?.sections ?? []).flatMap(section => { const label = sectionScoreLabel(section); return label ? [[section.id, label]] : []; }));
   const progress = getAssessmentCompletion(record.manifest, answers);
   const coverage = getAssessmentAnswerCoverage(record.manifest, answers);
-  const tabs = record.manifest.sections.flatMap(section => [{ id: section.id, title: section.title }, ...(section.id === "personal_details" ? [{ id: "face_scan", title: "Face scan" }] : [])]).concat([{ id: "reports", title: "Reports" }, { id: "review", title: "Review & score" }]);
+  const tabs = record.manifest.sections.flatMap(section => [{ id: section.id, title: section.title }, ...(section.id === "personal_details" ? [{ id: "face_scan", title: "Face scan" }] : [])]).concat([{ id: "reports", title: "Attachments" }, { id: "review", title: "Review & score" }]);
   const sectionCoverage = coverage.sections.find(item => item.id === sectionId);
   const section = record.manifest.sections.find(item => item.id === sectionId);
   const index = tabs.findIndex(tab => tab.id === sectionId);

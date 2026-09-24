@@ -114,7 +114,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
         </div>
       </div>{section.id === "personal_details" && scanSection}</Fragment>;
     })}{!sections.some(section => section.id === "personal_details") && scanSection}</div>
-    {[{id: "reports", title: "Reports", status: `${record.reports.length} reports`}].map(section => {
+    {[{id: "reports", title: "Attachments", status: `${record.reports.length} reports`}].map(section => {
       const open = expanded === section.id;
       return <div key={section.id} className="mt-3 overflow-hidden rounded-xl border border-border">
         <div className={`flex flex-wrap items-center gap-2 p-3 ${open ? "bg-muted/40" : ""}`}>

@@ -25,6 +25,6 @@ export function AssessmentReview({ record, answers, onSection }: { record: Asses
         })}</dl>
       </details>;
     })}</div>
-    <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4"><div><h3 className="font-semibold">Reports</h3><p className="mt-1 text-sm text-muted-foreground">{record.reports.length} reports · {record.reports.reduce((total, report) => total + report.files.filter(file => file.status === "READY").length, 0)} files ready</p></div><Button className="min-h-11" variant="link" onPress={() => onSection("reports")}>Review reports</Button></section>
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4"><div><h3 className="font-semibold">Attachments</h3><p className="mt-1 text-sm text-muted-foreground">{record.reports.length} reports · {record.reports.reduce((total, report) => total + report.files.filter(file => file.status === "READY").length, 0)} files ready</p></div><Button className="min-h-11" variant="link" onPress={() => onSection("reports")}>Review attachments</Button></section>
   </div>;
 }

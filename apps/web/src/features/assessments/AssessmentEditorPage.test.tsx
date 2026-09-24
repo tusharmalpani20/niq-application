@@ -97,7 +97,7 @@ const reportFixture = { id: "report-a", label: "Blood report", purpose: "", date
 test("report refresh preserves local answers and blocks overwriting concurrent answer edits", async () => harness(async ({ click, remoteAnswers, requests }) => {
   await click("Disease status");
   await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
-  await click("Reports");
+  await click("Attachments");
   remoteAnswers({ ...recordFixture().answers, current_weight_kg: 72 });
   await click("Remove report");
   await click("Remove");
@@ -108,7 +108,7 @@ test("report refresh preserves local answers and blocks overwriting concurrent a
 }, { reports: [reportFixture] }));
 
 test("report refresh adopts concurrent server answers when local answers are clean", async () => harness(async ({ click, remoteAnswers, requests }) => {
-  await click("Reports");
+  await click("Attachments");
   remoteAnswers({ ...recordFixture().answers, current_weight_kg: 72 });
   await click("Remove report");
   await click("Remove");
@@ -141,7 +141,7 @@ test("questionnaire section changes preserve answers without a leave confirmatio
 
 test("report editor survives section changes without a discard prompt", async () => harness(async ({ click, dom }) => {
   dom.window.confirm = () => { throw new Error("Section navigation must not use browser confirmation"); };
-  await click("Reports");
+  await click("Attachments");
   await click("Add report");
   const input = document.querySelector<HTMLInputElement>('#report-label')!;
   await act(async () => {
@@ -152,7 +152,7 @@ test("report editor survives section changes without a discard prompt", async ()
   });
   await click("Disease status");
   expect(document.querySelector('[role="dialog"]')).toBeNull();
-  await click("Reports");
+  await click("Attachments");
   expect(document.querySelector<HTMLInputElement>('#report-label')?.value).toBe("Draft report label");
 }));
 
