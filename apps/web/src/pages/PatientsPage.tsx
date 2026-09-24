@@ -48,7 +48,7 @@ export function PatientsPage() {
   const [facilityOptions, setFacilityOptions] = useState<Facility[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [query, setQuery] = useState("");
-  const [facility, setFacility] = useState("all");
+  const [facility, setFacility] = useState(() => searchParams.get("facility") ?? "all");
   const [gender, setGender] = useState("all");
   const [page, setPage] = useState(1);
   const [showRegistration, setShowRegistration] = useState(false);
@@ -56,6 +56,7 @@ export function PatientsPage() {
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
   const [assessmentState, setAssessmentState] = useState<"loading" | "ready" | "error">("loading");
   const [reload, setReload] = useState(0);
+  useEffect(() => { setFacility(searchParams.get("facility") ?? "all"); setPage(1); }, [searchParams]);
   const patientRecords = useMemo(() => { const dates = latestAssessmentDates(assessments); return patients.map(patient => patientRow(patient, dates)); }, [patients, assessments]);
   useEffect(() => {
     let active = true;
@@ -109,7 +110,7 @@ export function PatientsPage() {
     </div>
     {registeredThisMonth && <div className="flex items-center gap-3 text-sm"><span>Registered this month ({new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })})</span><Button variant="link" onPress={() => { setSearchParams(params => { params.delete("registered"); return params; }); setPage(1); }}>Clear</Button></div>}
     <div className="patient-filter-bar">
-      <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { setFacility(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilityOptions.map((item) => <SelectItem key={item.id} id={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
+      <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { const selected = String(key); setFacility(selected); setSearchParams(params => { if (selected === "all") params.delete("facility"); else params.set("facility", selected); return params; }); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilityOptions.map((item) => <SelectItem key={item.id} id={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
       <Select aria-label="Filter by gender" selectedKey={gender} onSelectionChange={(key) => { setGender(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All genders</SelectItem><SelectItem id="Female">Female</SelectItem><SelectItem id="Male">Male</SelectItem><SelectItem id="Other">Other</SelectItem><SelectItem id="Unknown">Unknown</SelectItem></SelectContent></Select>
     </div>
     {assessmentState === "error" && <Alert><AlertDescription>Assessment history could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button></AlertDescription></Alert>}

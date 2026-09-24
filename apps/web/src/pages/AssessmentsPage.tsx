@@ -36,7 +36,7 @@ const matchesStatus = (record: AssessmentSummary, status: string, now: Date) => 
 export function AssessmentsPage() {
   const user = useOutletContext<AuthenticatedUser>();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const canOpen = hasPermission(user.role, "assessments.read");
   const canCreate = hasPermission(user.role, "assessments.edit");
   const [tab, setTab] = useState(() => canOpen && searchParams.get("tab") === "clinical-reviews" ? "clinical-reviews" : "assessments");
@@ -44,7 +44,7 @@ export function AssessmentsPage() {
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [reload, setReload] = useState(0);
   const [query, setQuery] = useState("");
-  const [facility, setFacility] = useState("all");
+  const [facility, setFacility] = useState(() => searchParams.get("facility") ?? "all");
   const [status, setStatus] = useState(() => initialStatus(searchParams));
   const reviewFilter = searchParams.get("review") === "QUEUED" ? "QUEUED" : searchParams.get("review") === "mine-active" ? "mine-active" : "all";
   const [page, setPage] = useState(1);
@@ -52,6 +52,7 @@ export function AssessmentsPage() {
   useEffect(() => {
     setTab(canOpen && searchParams.get("tab") === "clinical-reviews" ? "clinical-reviews" : "assessments");
     setStatus(initialStatus(searchParams));
+    setFacility(searchParams.get("facility") ?? "all");
     setPage(1);
   }, [canOpen, searchParams]);
   useEffect(() => {
@@ -89,7 +90,7 @@ export function AssessmentsPage() {
       <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search by assessment ID, patient name or patient ID" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search assessments or patients…" /></InputGroup>{canCreate && <TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="New assessment" onPress={() => navigate("/assessments/new")}><Icon name="plus" size={20}/></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>
     </div>
     <div className="patient-filter-bar assessment-filter-bar">
-      <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { setFacility(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
+      <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { const selected = String(key); setFacility(selected); setSearchParams(params => { if (selected === "all") params.delete("facility"); else params.set("facility", selected); return params; }); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
       <Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem><SelectItem id="OPEN">Open assessments</SelectItem><SelectItem id="COMPLETED_THIS_MONTH">Completed this month</SelectItem>{Object.entries(assessmentStatusLabels).filter(([id]) => ["DRAFT", "SCORING_PENDING", "SCORING_UNAVAILABLE", "SCORED", "UNDER_REVIEW", "COMPLETED"].includes(id) || records.some(record => record.status === id)).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>
     </div>
     <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card" key={record.id}><div>{canOpen ? <Link className="font-normal text-foreground hover:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}<span>{record.patient.reference} · {record.patient.displayName}</span></div><StatusBadge status={assessmentStatusLabels[record.status]}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>

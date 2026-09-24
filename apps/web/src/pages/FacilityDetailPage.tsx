@@ -81,7 +81,7 @@ export function FacilityDetailPage() {
     </header>
 
     {facility.status !== "ACTIVE" && <Alert className="mb-5"><AlertDescription>This facility is deactivated. Existing patient and assessment records remain available.</AlertDescription></Alert>}
-    <section aria-label="Facility at a glance" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <section aria-label="Facility at a glance" className={`grid gap-4 sm:grid-cols-2${canManageUsers ? " lg:grid-cols-3" : ""}`}>
       <Metric label="Patients" value={patients.length} detail="Home facility is here" />
       <Metric label="Open assessments" value={open.length} detail="Draft or ready for scoring" />
       {canManageUsers && <Metric label="Enabled team members" value={team?.length ?? "—"} detail={team ? "Members with access to this facility" : "Team information unavailable"} />}
