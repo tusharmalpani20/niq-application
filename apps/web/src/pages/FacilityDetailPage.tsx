@@ -75,7 +75,7 @@ export function FacilityDetailPage() {
 
   return <>
     <nav className="breadcrumb" aria-label="Breadcrumb"><Link to="/facilities">Facilities</Link><span aria-hidden="true">/</span><span aria-current="page">{facility.name}</span></nav>
-    <header className="patient-detail-header">
+    <header className="patient-detail-header border-b border-border pb-4">
       <div className="patient-detail-summary"><div className="organization-title-row"><h1>{facility.name}</h1><StatusBadge status={facility.status === "ACTIVE" ? "Active" : "Deactivated"} /></div><p>{facility.code} · {facility.timezone}</p></div>
       {canManage && <div className="flex gap-2">
         <TooltipTrigger><Button variant="outline" size="icon-lg" className="size-10" aria-label="Edit facility" onPress={() => setEditing(true)}><Pencil className="size-4" /></Button><Tooltip>Edit facility</Tooltip></TooltipTrigger>
