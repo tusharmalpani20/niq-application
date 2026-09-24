@@ -28,7 +28,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     getScoringOrganizationInfo: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], updateFacility: async () => ({}),
     updatePatient: async () => ({}), updateOrganizationUser: async () => ({}),
-    createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listPatientActivity: async () => [], listAssessments: async () => [],
+    createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [],
     invitationAccess: async () => ({ allFacilities: true }), manageUserInvitation: async () => ({ invitation: {}, token: "replacement-token" }),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
     ...overrides,
@@ -243,18 +243,6 @@ describe("local authentication routes", () => {
     const response = await app.request(`/v1/organizations/${principal.organizationId}/patients/01J00000000000000000000009`, { headers: { cookie: "niq_session=valid-session" } });
     expect(response.status).toBe(200);
     expect(observedLocator).toBe("01J00000000000000000000009");
-  });
-
-  test("routes patient activity with the organization and patient reference", async () => {
-    let observed = "";
-    const app = createApp({
-      allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
-      service: fakeService({ listPatientActivity: async (_actor, organizationId, locator) => { observed = `${organizationId}:${locator}`; return [{ type: "REGISTERED" }]; } }),
-    });
-    const response = await app.request(`/v1/organizations/${principal.organizationId}/patients/PAT-2/activity`, { headers: { cookie: "niq_session=valid-session" } });
-    expect(response.status).toBe(200);
-    expect(observed).toBe(`${principal.organizationId}:PAT-2`);
-    expect((await response.json()).items).toEqual([{ type: "REGISTERED" }]);
   });
 
   test("lists assessments through the tenant boundary", async () => {

@@ -22,7 +22,6 @@ import {
   onboardOrganizationResponseSchema,
   onboardOrganizationSchema,
   patientListResponseSchema,
-  patientActivityListResponseSchema,
   patientSchema,
   registerPatientSchema,
   resendMfaRequestSchema,
@@ -46,7 +45,6 @@ import {
   type OnboardOrganization,
   type OnboardOrganizationResponse,
   type Patient,
-  type PatientActivity,
   type RegisterPatient,
   type SignInRequest,
   type UpdateOrganization,
@@ -269,11 +267,6 @@ export async function listAssessments(organizationId: string): Promise<Assessmen
 export async function getPatient(organizationId: string, patientLocator: string): Promise<Patient> {
   const response = await fetch(`/api/v1/organizations/${organizationId}/patients/${encodeURIComponent(patientLocator)}`, { credentials: "include" });
   return patientSchema.parse(await responseBody(response));
-}
-
-export async function listPatientActivity(organizationId: string, patientLocator: string): Promise<PatientActivity[]> {
-  const response = await fetch(`/api/v1/organizations/${organizationId}/patients/${encodeURIComponent(patientLocator)}/activity`, { credentials: "include" });
-  return patientActivityListResponseSchema.parse(await responseBody(response)).items;
 }
 
 export async function registerPatient(organizationId: string, input: RegisterPatient): Promise<Patient> {

@@ -1,5 +1,5 @@
 import { hasPermission } from "@niq/application-contracts";
-import type { AssessmentSummary, AuthenticatedUser, Facility, Patient, PatientActivity } from "@niq/application-contracts";
+import type { AssessmentSummary, AuthenticatedUser, Facility, Patient } from "@niq/application-contracts";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { Pencil, Search } from "lucide-react";
@@ -16,7 +16,7 @@ import { PatientForm, PatientFormDialog } from "../components/PatientForm";
 import { PatientHeader } from "../components/PatientHeader";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
-import { getPatient, listAssessments, listFacilities, listPatientActivity, listPatients } from "../lib/api";
+import { getPatient, listAssessments, listFacilities, listPatients } from "../lib/api";
 import { Icon } from "../lib/icons";
 
 import { DateDisplay } from "../components/DateDisplay";
@@ -166,9 +166,6 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState(false);
   const [facilityOptions, setFacilityOptions] = useState<Facility[]>([]);
-  const [activity, setActivity] = useState<PatientActivity[]>([]);
-  const [activityState, setActivityState] = useState<"loading" | "ready" | "error">("loading");
-  const [activityReload, setActivityReload] = useState(0);
   useEffect(() => {
     let active = true;
     setPatient(null);
@@ -182,13 +179,6 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
     }).catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
   }, [navigate, patientLocator, user.organizationId, reload]);
-  useEffect(() => {
-    if (!patient || !hasPermission(user.role, "users.manage")) return;
-    let active = true;
-    setActivityState("loading");
-    listPatientActivity(user.organizationId, patient.reference).then(items => { if (active) { setActivity(items); setActivityState("ready"); } }).catch(() => { if (active) setActivityState("error"); });
-    return () => { active = false; };
-  }, [patient?.id, patient?.reference, user.organizationId, user.role, activityReload]);
   if (failed) return <Alert variant="destructive"><AlertDescription>This patient could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button> <Link to="/patients">Back to patients</Link></AlertDescription></Alert>;
   if (!patient) return <p className="muted">Loading patient…</p>;
   const canEditPatient = hasPermission(user.role, "patients.edit");
@@ -215,13 +205,6 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
           <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Patient information</h2><dl className="patient-definition"><div><dt>Date of birth</dt><dd>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</dd></div><div><dt>Gender</dt><dd>{genderLabel(patient.gender)}</dd></div><div><dt>Registered</dt><dd>{formatPatientDate(patient.createdAt)}</dd></div></dl></Card>
           <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Care and contact</h2><dl className="patient-definition"><div><dt>Home facility</dt><dd>{patient.homeFacility?.name ?? "—"}</dd></div><div><dt>Mobile number</dt><dd>{patient.phone || "Not provided"}</dd></div><div><dt>Email address</dt><dd>{patient.email || "Not provided"}</dd></div></dl></Card>
         </div>
-        {hasPermission(user.role, "users.manage") && <section className="surface mt-5 p-5" aria-label="Patient record activity">
-          <h2 className="font-semibold">Record activity</h2>
-          {activityState === "loading" ? <p className="mt-3 text-sm text-muted-foreground">Loading activity…</p>
-            : activityState === "error" ? <p className="mt-3 text-sm text-muted-foreground">Activity could not be loaded. <Button variant="link" onPress={() => setActivityReload(value => value + 1)}>Retry</Button></p>
-            : activity.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">No recorded changes yet.</p>
-            : <ul className="mt-3 divide-y">{activity.map(item => <li key={item.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm"><span>{item.type === "REGISTERED" ? "Patient registered" : item.type === "CONTACT_UPDATED" ? "Contact updated" : "Profile updated"} · {item.actorName}</span><time className="text-muted-foreground" dateTime={item.occurredAt.toISOString()}>{new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(item.occurredAt)}</time></li>)}</ul>}
-        </section>}
       </TabsContent>
       <TabsContent id="assessments">
         <Card className="surface p-5">
@@ -234,6 +217,6 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
         </Card>
       </TabsContent>
     </Tabs>
-    {editing && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={patient} onClose={() => setEditing(false)} onSaved={updated => { setPatient(updated); setEditing(false); setActivityReload(value => value + 1); }} />}
+    {editing && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={patient} onClose={() => setEditing(false)} onSaved={updated => { setPatient(updated); setEditing(false); }} />}
   </>;
 }
