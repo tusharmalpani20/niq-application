@@ -7,10 +7,15 @@ import { assessFaceScanRange } from "./face-scan-reference-ranges";
 type Metric = { key?: string; label: string; value: number | string | null; unit: string };
 const display = ({ value, unit }: Metric) => value === null ? "—" : `${value} ${unit}`.trim();
 
-function ResultGroup({ title, availability, children }: { title: string; availability?: string; children: ReactNode }) {
+function ResultGroup({ title, availability, outOfRangeCount = 0, children }: { title: string; availability?: string; outOfRangeCount?: number; children: ReactNode }) {
   return <details className="group overflow-hidden rounded-xl border border-border bg-card">
     <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 py-3 font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-      <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" /><span className="min-w-0 flex-1">{title}</span>{availability && <span className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">{availability}</span>}
+      <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className={outOfRangeCount ? "text-warning" : undefined}>{title}</span>
+        {outOfRangeCount > 0 && <span className="block text-xs font-normal text-warning tabular-nums">{outOfRangeCount} outside range</span>}
+      </span>
+      {availability && <span className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">{availability}</span>}
     </summary>
     <div className="border-t border-border px-4 py-3">{children}</div>
   </details>;
@@ -74,9 +79,12 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
         {assessment?.outside && <p className="mt-2 text-xs">Outside report range · {assessment.reference}</p>}
       </div>;
     })}</dl>
-    {groups.map(group => <ResultGroup key={group.title} title={group.title} availability={`${group.metrics.filter(item => item.value !== null).length}/${group.metrics.length} available`}>
-      <MetricRows metrics={group.metrics} context={session.context}/>
-    </ResultGroup>)}
+    {groups.map(group => {
+      const outOfRangeCount = group.metrics.filter(item => item.key && assessFaceScanRange(item.key, item.value, session.context)?.outside).length;
+      return <ResultGroup key={group.title} title={group.title} availability={`${group.metrics.filter(item => item.value !== null).length}/${group.metrics.length} available`} outOfRangeCount={outOfRangeCount}>
+        <MetricRows metrics={group.metrics} context={session.context}/>
+      </ResultGroup>;
+    })}
     <ResultGroup title="Scan details">
       <MetricRows context={session.context} metrics={[
         { label: "Date of birth at scan", value: session.context.dob, unit: "" },
