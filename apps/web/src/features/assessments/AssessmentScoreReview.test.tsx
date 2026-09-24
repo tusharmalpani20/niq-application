@@ -39,7 +39,7 @@ test("all original and reviewed scores remain visible without adjustment actions
   await click("Disease status");
   expect(document.body.textContent).toContain("Reviewed 11 pts");
   await click("Face scan");
-  expect(document.body.textContent).toContain("NIQ 8 pts");
+  expect(document.body.textContent).toContain("Vital IQ 8 pts");
   expect(document.querySelector('[aria-label^="Adjust "]')).toBeNull();
   expect(document.querySelector("form")).toBeNull();
   expect(posts).toHaveLength(0);

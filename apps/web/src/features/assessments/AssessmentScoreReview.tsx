@@ -58,7 +58,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   const scanSection = <div className="overflow-hidden rounded-xl border border-border">
     <div className={`flex flex-wrap items-center gap-2 p-3 ${expanded === "face_scan" ? "bg-muted/40" : ""}`}>
       <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start text-left" aria-expanded={expanded === "face_scan"} aria-controls="score-section-face_scan" onPress={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>{expanded === "face_scan" ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}Face scan</Button>
-      <div className="text-right text-sm"><p className="text-xs text-muted-foreground">{scanStatus}</p>{scan?.niqPoints !== null && scan?.niqPoints !== undefined && <p>NIQ {points(scan.niqPoints)}</p>}{scan?.overridden && <p className="text-brand-ink">Reviewed {points(scan.reviewedPoints)}</p>}</div>
+      <div className="text-right text-sm"><p className="text-xs text-muted-foreground">{scanStatus}</p>{scan?.niqPoints !== null && scan?.niqPoints !== undefined && <p>Vital IQ {points(scan.niqPoints)}</p>}{scan?.overridden && <p className="text-brand-ink">Reviewed Vital IQ {points(scan.reviewedPoints)}</p>}</div>
     </div>
     <div id="score-section-face_scan" hidden={expanded !== "face_scan"} className="border-t border-border p-4">
       <p className="mb-3 text-xs text-muted-foreground">Face-scan points are separate from the questionnaire total.</p>
@@ -68,7 +68,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   return <section className="my-5 min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6" aria-label="Assessment score review">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="assessment-summary-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">Assessment summary</h2><span className="text-sm text-muted-foreground">{record.progress.answered}/{record.progress.required} required answers complete</span></div>
     <div className="my-5 flex flex-wrap items-center gap-x-8 gap-y-3">
-      <div><p className="text-sm text-muted-foreground">NIQ score</p><p className="mt-1 text-2xl font-semibold">{points(result.score)}</p>{result.classification && <p className="text-sm text-muted-foreground">{result.classification.label} · NIQ</p>}</div>
+      <div><p className="text-sm text-muted-foreground">NIQ questionnaire score</p><p className="mt-1 text-2xl font-semibold">{points(result.score)}</p>{result.classification && <p className="text-sm text-muted-foreground">{result.classification.label} · NIQ</p>}</div>
       {revised && overall && <div><p className="text-sm text-muted-foreground">Reviewed score</p><p className="mt-1 text-2xl font-semibold text-brand-ink">{points(overall.reviewedPoints)}</p><p className="text-xs text-muted-foreground">{overall.overridden ? "Total override" : "From section scores"}</p>
         <p className="mt-1 text-sm" role="status">{data?.risk?.classification && ["ORIGINAL", "CONFIRMED"].includes(data.risk.status)
           ? `${data.risk.classification.label} · NIQ${data.risk.status === "ORIGINAL" ? " (original restored)" : ""}`
