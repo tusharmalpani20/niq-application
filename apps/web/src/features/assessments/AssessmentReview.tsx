@@ -3,8 +3,9 @@ import { Fragment } from "react";
 import { assessmentResultView, sectionScoreLabel } from "./AssessmentResult";
 import { FaceScanResults } from "./FaceScanResults";
 import { Button } from "@/components/ui/button";
+import { AssessmentReports } from "./AssessmentReports";
 
-export function AssessmentReview({ record, answers, scanStatus, scanSession, onSection }: { record: AssessmentWorkflow; answers: FormAnswers; scanStatus: string; scanSession: FaceScanSession | null; onSection: (id: string, fieldId?: string) => void }) {
+export function AssessmentReview({ record, answers, scanStatus, scanSession, organizationId, assessmentId, onSection }: { record: AssessmentWorkflow; answers: FormAnswers; scanStatus: string; scanSession: FaceScanSession | null; organizationId: string; assessmentId: string; onSection: (id: string, fieldId?: string) => void }) {
   const scored = assessmentResultView(record);
   const completion = getAssessmentAnswerCoverage(record.manifest, answers);
   const missing = record.manifest.sections.flatMap(section => section.fields.filter(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers) && assessmentFieldError(field, answers[field.id])).map(field => ({ sectionId: section.id, field, error: assessmentFieldError(field, answers[field.id]) })));
@@ -38,9 +39,8 @@ export function AssessmentReview({ record, answers, scanStatus, scanSession, onS
     })}
     <details className="min-w-0 px-4">
       <summary className="min-h-14 cursor-pointer rounded-md py-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"><span className="font-semibold">Attachments</span><span className="ml-2 inline-block text-sm text-muted-foreground">{record.reports.length} reports · {readyFiles} files ready</span></summary>
-      <div className="mb-4 mt-2 space-y-4">
-        {record.reports.length ? <ul className="grid gap-2 text-sm">{record.reports.map((report, index) => <li key={report.id} className="flex flex-wrap justify-between gap-2"><span className="font-medium">{report.label || `Report ${index + 1}`}</span><span className="text-muted-foreground">{report.files.filter(file => file.status === "READY").length}/{report.files.length} files ready</span></li>)}</ul> : <p className="text-sm text-muted-foreground">No attachments added.</p>}
-        <div className="flex justify-end"><Button className="min-h-11" variant="outline" onPress={() => onSection("reports")}>Review attachments</Button></div>
+      <div className="mb-4 mt-2">
+        {record.reports.length ? <AssessmentReports organizationId={organizationId} assessmentId={assessmentId} reports={record.reports} revision={record.revision} readOnly showIntro={false} onChanged={async () => {}} /> : <p className="text-sm text-muted-foreground">No attachments added.</p>}
       </div>
     </details>
     </div>
