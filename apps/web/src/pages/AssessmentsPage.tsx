@@ -3,7 +3,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility } from "@niq/application-contracts";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useOutletContext } from "react-router-dom";
+import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { Search } from "lucide-react";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -26,17 +26,24 @@ const assessmentDate = (date: Date) => new Intl.DateTimeFormat("en-GB", { day: "
 export function AssessmentsPage() {
   const user = useOutletContext<AuthenticatedUser>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const canOpen = hasPermission(user.role, "assessments.read");
   const canCreate = hasPermission(user.role, "assessments.edit");
-  const [tab, setTab] = useState("assessments");
+  const [tab, setTab] = useState(() => canOpen && searchParams.get("tab") === "clinical-reviews" ? "clinical-reviews" : "assessments");
   const [records, setRecords] = useState<AssessmentSummary[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [reload, setReload] = useState(0);
   const [query, setQuery] = useState("");
   const [facility, setFacility] = useState("all");
-  const [status, setStatus] = useState("all");
+  const [status, setStatus] = useState(() => searchParams.get("status") === "SCORING_UNAVAILABLE" ? "SCORING_UNAVAILABLE" : "all");
+  const reviewFilter = searchParams.get("review") === "QUEUED" ? "QUEUED" : searchParams.get("review") === "mine-active" ? "mine-active" : "all";
   const [page, setPage] = useState(1);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  useEffect(() => {
+    setTab(canOpen && searchParams.get("tab") === "clinical-reviews" ? "clinical-reviews" : "assessments");
+    setStatus(searchParams.get("status") === "SCORING_UNAVAILABLE" ? "SCORING_UNAVAILABLE" : "all");
+    setPage(1);
+  }, [canOpen, searchParams]);
   useEffect(() => {
     let active = true;
     setLoadState("loading");
@@ -76,7 +83,6 @@ export function AssessmentsPage() {
     </div>
     <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card" key={record.id}><div>{canOpen ? <Link className="font-normal text-foreground hover:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}<span>{record.patient.reference} · {record.patient.displayName}</span></div><StatusBadge status={assessmentStatusLabels[record.status]}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
-    </TabsContent>{canOpen && <TabsContent id="clinical-reviews"><ClinicalReviewQueue key={`${user.organizationId}:${user.membershipId}`} user={user} /></TabsContent>}</Tabs>
+    </TabsContent>{canOpen && <TabsContent id="clinical-reviews"><ClinicalReviewQueue key={`${user.organizationId}:${user.membershipId}:${reviewFilter}`} user={user} initialState={reviewFilter} /></TabsContent>}</Tabs>
   </>;
 }
-
