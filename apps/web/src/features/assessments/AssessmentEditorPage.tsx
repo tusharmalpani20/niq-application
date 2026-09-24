@@ -1,5 +1,5 @@
 import { hasPermission, type MembershipRole } from "@niq/application-contracts";
-import { clearInactiveAssessmentAnswers, getAssessmentCompletion, getAssessmentAnswerCoverage, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FormAnswers } from "@niq/application-contracts";
+import { clearInactiveAssessmentAnswers, getAssessmentCompletion, getAssessmentAnswerCoverage, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Link, useOutletContext, useParams } from "react-router-dom";
 import { PatientHeader } from "@/components/PatientHeader";
@@ -41,6 +41,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const [reportBusy, setReportBusy] = useState(false);
   const [scanBusy, setScanBusy] = useState(false);
   const [scanStatus, setScanStatus] = useState("Face scan unavailable");
+  const [scanSession, setScanSession] = useState<FaceScanSession | null>(null);
   const [showScoredAnswers, setShowScoredAnswers] = useState(false);
   const [reportDirty, setReportDirty] = useState(false);
   const [conflict, setConflict] = useState(false);
@@ -143,6 +144,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const section = record.manifest.sections.find(item => item.id === sectionId);
   const index = tabs.findIndex(tab => tab.id === sectionId);
   const locked = busy || reportBusy || scanBusy || reviewBusy || conflict;
+  const scanStepStatus = scanStatus === "Scan complete" ? "Done" : scanStatus === "Face scan ready" ? "Pending" : scanStatus.replace(/^Face scan |^Scan /, "");
   const separatedEditor = record.result !== null || clinical.review?.state === "RETURNED" || !!clinical.error
     || !!error || Object.keys(errors).length > 0 || record.submission?.status === "REJECTED"
     || (["SCORING_PENDING", "SCORING_UNAVAILABLE"].includes(record.status) && !record.result);
@@ -167,12 +169,12 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
     {record.result !== null && showScoredAnswers && <Button className="my-4" variant="outline" onPress={() => setShowScoredAnswers(false)}><ArrowLeft aria-hidden="true"/>Back to summary</Button>}
     <div hidden={record.result !== null && !showScoredAnswers}>
     <div className={`grid min-w-0 border-x border-border bg-card @min-[48rem]:grid-cols-[250px_minmax(0,1fr)] ${separatedEditor ? "rounded-t-xl border-t" : ""}`}>
-      <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} scores={sectionScores} scanStatus={scanStatus === "Scan complete" ? "Done" : scanStatus === "Face scan ready" ? "Pending" : scanStatus.replace(/^Face scan |^Scan /, "")} disabled={locked} onSelect={id => { void selectSection(id); }} />
+      <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} scores={sectionScores} scanStatus={scanStepStatus} disabled={locked} onSelect={id => { void selectSection(id); }} />
       <div className="min-w-0 p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 id="assessment-section-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>{sectionCoverage && <span className="text-xs text-muted-foreground">{sectionCoverage.answered}/{sectionCoverage.total} answered · {sectionCoverage.percent ?? 0}%</span>}</div>
-        {(record.result === null || showScoredAnswers) && <AssessmentFaceScan organizationId={organizationId} record={{ ...record, answers }} active={sectionId === "face_scan"} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onBusyChange={setScanBusy} onStatusChange={setScanStatus}/>}
+        {(record.result === null || showScoredAnswers) && <AssessmentFaceScan organizationId={organizationId} record={{ ...record, answers }} active={sectionId === "face_scan"} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onBusyChange={setScanBusy} onStatusChange={setScanStatus} onSessionChange={setScanSession}/>}
         {section && <section><AssessmentFields heightSourceDate={record.heightSource?.recordedAt} section={section} answers={answers} errors={errors} readOnly={!editable || locked} onEditContact={editable ? () => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); } : undefined} onChange={(id, value) => { setAnswers(current => clearInactiveAssessmentAnswers(record.manifest, { ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
         <div hidden={sectionId !== "reports"}>{(record.result === null || showScoredAnswers) && <AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!hasPermission(role, "reports.manage") || !editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />}</div>
-        {sectionId === "review" && <AssessmentReview record={record} answers={answers} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}
+        {sectionId === "review" && <AssessmentReview record={record} answers={answers} scanStatus={scanStepStatus} scanSession={scanSession} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}
       </div>
     </div>
     <footer className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border border-border bg-card px-4 py-3 sm:px-5">

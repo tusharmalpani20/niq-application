@@ -17,9 +17,10 @@ const labels: Record<FaceScanSession["state"], string> = {
 };
 const terminal = new Set(["COMPLETED", "FAILED", "EXPIRED", "CANCELLED"]);
 const cancellable = new Set(["REQUESTED", "UPLOAD_ACCEPTED", "PAUSED"]);
-export function AssessmentFaceScan({ organizationId, record, active, disabled, beforeStart, onBusyChange, onStatusChange, captureFactory = createCaptureController }: {
+export function AssessmentFaceScan({ organizationId, record, active, disabled, beforeStart, onBusyChange, onStatusChange, onSessionChange, captureFactory = createCaptureController }: {
   organizationId: string; record: AssessmentWorkflow; active: boolean; disabled: boolean;
   beforeStart: () => Promise<AssessmentWorkflow | null>; onBusyChange: (value: boolean) => void; onStatusChange: (value: string) => void;
+  onSessionChange?: (session: FaceScanSession | null) => void;
   captureFactory?: typeof createCaptureController;
 }) {
   const [data, setData] = useState<FaceScanList | null>(null);
@@ -42,6 +43,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const captureId = useRef<string | null>(null);
   const statusVersion = useRef(0);
   const session = data?.sessions.find(item => item.id === data.currentSessionId) ?? null;
+  useEffect(() => { onSessionChange?.(session); }, [session, onSessionChange]);
   useEffect(() => { setRescanRequested(false); }, [session?.id]);
   const changedScanInputs = session?.state === "COMPLETED" ? [
     session.context.dob !== record.patient.dateOfBirth ? "date of birth" : null,
