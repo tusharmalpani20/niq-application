@@ -139,6 +139,21 @@ export function PatientDetailPage() {
   return <PatientDetailView key={`${user.organizationId}:${user.userId}:${user.membershipId}:${user.role}:${patientLocator}`} user={user} patientLocator={patientLocator} />;
 }
 
+function LatestAssessment({ history, state, canRead, canEdit }: { history: AssessmentSummary[]; state: "loading" | "ready" | "error"; canRead: boolean; canEdit: boolean }) {
+  const latest = history[0];
+  return <section className="surface mb-5 p-5" aria-label="Latest assessment">
+    <h2 className="font-semibold">Latest assessment</h2>
+    {state === "loading" ? <p className="mt-3 text-sm text-muted-foreground">Loading assessment history…</p>
+      : state === "error" ? <p className="mt-3 text-sm text-muted-foreground">Assessment history is unavailable.</p>
+      : !latest ? <p className="mt-3 text-sm text-muted-foreground">No assessments yet.</p>
+      : <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
+        <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><span className="font-medium">{latest.reference}</span><StatusBadge status={assessmentStatusLabels[latest.status]} /></div>
+          <p className="text-sm text-muted-foreground">{latest.facility?.name ?? "No facility"} · Started <DateDisplay value={latest.createdAt} />{latest.completedAt && <> · Completed <DateDisplay value={latest.completedAt} /></>}</p></div>
+        {canRead && <RouterButtonLink variant="outline" to={`/assessments/${latest.reference}`}>{canEdit && (latest.status === "DRAFT" || latest.status === "READY_FOR_SCORING") ? "Continue assessment" : "Open assessment"}</RouterButtonLink>}
+      </div>}
+  </section>;
+}
+
 function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; patientLocator: string }) {
   const navigate = useNavigate();
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -147,6 +162,10 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
   const [history, setHistory] = useState<AssessmentSummary[]>([]);
   const [patientTab, setPatientTab] = useState("details");
   const [historyState, setHistoryState] = useState<"loading" | "ready" | "error">("loading");
+  const [editing, setEditing] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState(false);
+  const [facilityOptions, setFacilityOptions] = useState<Facility[]>([]);
   useEffect(() => {
     let active = true;
     setPatient(null);
@@ -162,18 +181,29 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
   }, [navigate, patientLocator, user.organizationId, reload]);
   if (failed) return <Alert variant="destructive"><AlertDescription>This patient could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button> <Link to="/patients">Back to patients</Link></AlertDescription></Alert>;
   if (!patient) return <p className="muted">Loading patient…</p>;
-  const age = patientAgeLabel(patient.dateOfBirth);
+  const canEditPatient = hasPermission(user.role, "patients.edit");
+  const canEditAssessment = hasPermission(user.role, "assessments.edit");
+  const canReadAssessment = hasPermission(user.role, "assessments.read");
+  const openEditor = async () => {
+    setEditLoading(true);
+    setEditError(false);
+    try { setFacilityOptions(await listFacilities(user.organizationId)); setEditing(true); }
+    catch { setEditError(true); }
+    finally { setEditLoading(false); }
+  };
   return <>
-    <PatientHeader patient={patient} action={<div className="flex gap-2">{patientTab === "assessments" && hasPermission(user.role, "assessments.edit") && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>} />
+    <PatientHeader patient={patient} action={<div className="flex flex-wrap gap-2">{canEditPatient && <Button variant="outline" onPress={openEditor} isDisabled={editLoading}>{editLoading ? "Loading…" : "Edit patient"}</Button>}{canEditAssessment && <RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18} />New assessment</RouterButtonLink>}</div>} />
+    {editError && <Alert variant="destructive"><AlertDescription>Facilities could not be loaded for editing. <Button variant="link" onPress={openEditor}>Retry</Button></AlertDescription></Alert>}
     <Tabs selectedKey={patientTab} onSelectionChange={(key) => setPatientTab(String(key))} className="organization-detail-tabs gap-5">
       <TabsList variant="line" aria-label="Patient record" className="w-full justify-start gap-5 border-b p-0">
         <TabsTrigger id="details" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Details</TabsTrigger>
         <TabsTrigger id="assessments" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Assessments {historyState === "ready" && <span className="patient-tab-count">{history.length}</span>}</TabsTrigger>
       </TabsList>
       <TabsContent id="details">
+        <LatestAssessment history={history} state={historyState} canRead={canReadAssessment} canEdit={canEditAssessment} />
         <div className="admin-detail-grid">
-          <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Patient information</h2><dl className="patient-definition"><div><dt>Patient reference</dt><dd>{patient.reference}</dd></div><div><dt>Date of birth</dt><dd>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</dd></div><div><dt>Gender</dt><dd>{genderLabel(patient.gender)}</dd></div><div><dt>Age</dt><dd>{age}</dd></div></dl></Card>
-          <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Care and contact</h2><dl className="patient-definition"><div><dt>Home facility</dt><dd>{patient.homeFacility?.name ?? "—"}</dd></div><div><dt>Mobile number</dt><dd>{patient.phone || "Not provided"}</dd></div><div><dt>Email address</dt><dd>{patient.email || "Not provided"}</dd></div><div><dt>Registered</dt><dd>{formatPatientDate(patient.createdAt)}</dd></div></dl></Card>
+          <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Patient information</h2><dl className="patient-definition"><div><dt>Date of birth</dt><dd>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</dd></div><div><dt>Gender</dt><dd>{genderLabel(patient.gender)}</dd></div><div><dt>Registered</dt><dd>{formatPatientDate(patient.createdAt)}</dd></div></dl></Card>
+          <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Care and contact</h2><dl className="patient-definition"><div><dt>Home facility</dt><dd>{patient.homeFacility?.name ?? "—"}</dd></div><div><dt>Mobile number</dt><dd>{patient.phone || "Not provided"}</dd></div><div><dt>Email address</dt><dd>{patient.email || "Not provided"}</dd></div></dl></Card>
         </div>
       </TabsContent>
       <TabsContent id="assessments">
@@ -187,5 +217,6 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
         </Card>
       </TabsContent>
     </Tabs>
+    {editing && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={patient} onClose={() => setEditing(false)} onSaved={updated => { setPatient(updated); setEditing(false); }} />}
   </>;
 }
