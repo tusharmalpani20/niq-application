@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AssessmentFields, assessmentNumericInput, assessmentFieldGroups } from "./AssessmentFields";
+import { AssessmentFields, assessmentNumericInput, assessmentFieldGroups, addAssessmentMultiChoice } from "./AssessmentFields";
 import type { FormAnswers, FormField } from "@niq/application-contracts";
 const field: FormField = { id: "choices", label: "Symptoms", kind: "multi_select", owner: "scoring", required: false, source: "F104", options: [{ id: "nausea", label: "Nausea" }, ...Array.from({ length: 6 }, (_, i) => ({ id: `item${i}`, label: `Item ${i}` }))] };
 function render(fields: FormField[], answers: FormAnswers = {}) {
@@ -11,6 +11,18 @@ test("multi-selection uses selected chips without adding a generic None", () => 
   expect(render([field], { choices: [] })).toContain("No selections");
   expect(render([field], { choices: ["nausea"] })).toContain('aria-label="Remove Nausea"');
   expect(render([field])).not.toContain("Optional");
+});
+test("selecting No problem replaces symptoms and selecting a symptom clears No problem", () => {
+  expect(addAssessmentMultiChoice("dietary_symptoms", ["dietary_symptoms_nausea"], "dietary_symptoms_no_problem")).toEqual(["dietary_symptoms_no_problem"]);
+  expect(addAssessmentMultiChoice("dietary_symptoms", ["dietary_symptoms_no_problem"], "dietary_symptoms_nausea")).toEqual(["dietary_symptoms_nausea"]);
+  expect(addAssessmentMultiChoice("gastrointestinal_symptoms", ["nausea"], "vomiting")).toEqual(["nausea", "vomiting"]);
+});
+test("a saved contradictory symptom answer shows its correction beside the field", () => {
+  const symptoms = { ...field, id: "dietary_symptoms", options: [
+    { id: "dietary_symptoms_no_problem", label: "No problem while eating" },
+    { id: "dietary_symptoms_nausea", label: "Nausea" },
+  ] };
+  expect(render([symptoms], { dietary_symptoms: ["dietary_symptoms_no_problem", "dietary_symptoms_nausea"] })).toContain("No problem while eating cannot be selected with other symptoms");
 });
 test("workbook None is shown only for supported empty selections", () => {
   expect(render([{ ...field, id: "co_morbidities" }], { co_morbidities: [] })).toContain(">None<");
