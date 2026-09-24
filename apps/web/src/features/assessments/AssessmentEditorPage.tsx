@@ -1,5 +1,5 @@
 import { hasPermission, type MembershipRole } from "@niq/application-contracts";
-import { assessmentFieldError, clearInactiveAssessmentAnswers, getAssessmentCompletion, getAssessmentAnswerCoverage, getReportSubmissionIssues, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
+import { assessmentFieldError, clearConflictingDietaryNone, clearInactiveAssessmentAnswers, getAssessmentCompletion, getAssessmentAnswerCoverage, getReportSubmissionIssues, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Link, useOutletContext, useParams } from "react-router-dom";
 import { PatientHeader } from "@/components/PatientHeader";
@@ -52,7 +52,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const dirty = !!record && JSON.stringify(answers) !== JSON.stringify(record.answers);
   const editable = record?.status === "DRAFT" && hasPermission(role, "assessments.edit") && (record.canEditDraft ?? true) && clinical.review?.canEditDraft !== false && !clinical.error;
   const navigationDialog = useDraftNavigationGuard(dirty || reportDirty || reportBusy || scanBusy || reviewBusy || contactOpen && !!phone, scanBusy ? "Camera capture or upload is unfinished. Leaving may discard the local capture. Accepted uploads continue processing." : undefined);
-  const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers); setConflict(false); if (value.result) { setShowScoredAnswers(false); requestAnimationFrame(() => document.getElementById("assessment-summary-heading")?.focus()); } }, []);
+  const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.status === "DRAFT" ? clearConflictingDietaryNone(clearInactiveAssessmentAnswers(value.manifest, value.answers)) : value.answers); setConflict(false); if (value.result) { setShowScoredAnswers(false); requestAnimationFrame(() => document.getElementById("assessment-summary-heading")?.focus()); } }, []);
   const handleError = useCallback((cause: unknown) => {
     if (cause instanceof AssessmentRequestError && cause.status === 401) {
       setAnswers({}); setRecord(null); window.location.assign("/sign-in"); return;
@@ -77,7 +77,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
         setConflict(true);
         setError("Saved answers changed while updating reports. Your local changes are preserved. Load the saved version before continuing.");
       } else if (!dirty) {
-        setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers);
+        setAnswers(value.status === "DRAFT" ? clearConflictingDietaryNone(clearInactiveAssessmentAnswers(value.manifest, value.answers)) : value.answers);
       }
       setRecord(value);
     } catch (cause) { handleError(cause); throw cause; }

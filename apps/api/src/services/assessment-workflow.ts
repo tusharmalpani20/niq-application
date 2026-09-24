@@ -1,6 +1,6 @@
 import { appendAssessmentHistory, assertCorrectionOwner, reviewState } from "./clinical-review-state";
 import type { ApplicationConfig } from "@niq/application-config";
-import { hasPermission, type Permission, formatAssessmentReference, clearInactiveAssessmentAnswers, buildAssessmentForm, getAssessmentCompletion, getScoringAssessmentAnswers, validateAssessmentAnswers, type FormAnswers, type AssessmentFormManifest } from "@niq/application-contracts";
+import { hasPermission, type Permission, formatAssessmentReference, clearConflictingDietaryNone, clearInactiveAssessmentAnswers, buildAssessmentForm, getAssessmentCompletion, getScoringAssessmentAnswers, validateAssessmentAnswers, type FormAnswers, type AssessmentFormManifest } from "@niq/application-contracts";
 import type { AssessmentWorkflow, AssessmentPatient, AssessmentInitialization } from "../../../../packages/contracts/src/assessment-workflow";
 import { createEntityId, selectAssessmentHeight } from "@niq/application-domain";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
@@ -147,7 +147,7 @@ export class AssessmentWorkflowService {
       const row=await this.authorize(actor,organizationId,id,tx,true);this.editable(row,input.revision,actor);
       const state=this.unseal<StoredWorkflow>(row.workflow);
       const patient=await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient;
-      const answers=clearInactiveAssessmentAnswers(state.manifest,{...input.answers,...patientAnswers(patient,row.createdAt)});
+      const answers=clearConflictingDietaryNone(clearInactiveAssessmentAnswers(state.manifest,{...input.answers,...patientAnswers(patient,row.createdAt)}));
       const errors=validateAssessmentAnswers(state.manifest,answers);
       if(Object.keys(errors).length) throw new ServiceError("VALIDATION_ERROR","Some answers need attention.",{fields:errors});
       await tx.update(assessments).set({workflow:this.seal({...state,answers,patient,heightSource:answers.height_cm===state.answers.height_cm?state.heightSource:null}),revision:row.revision+1,updatedAt:new Date()}).where(eq(assessments.id,id));
@@ -167,7 +167,7 @@ export class AssessmentWorkflowService {
       this.editable(row,revision,actor);
       const state=this.unseal<StoredWorkflow>(row.workflow);
       const patient=await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient;
-      const answers={...state.answers,...patientAnswers(patient,row.createdAt)};
+      const answers=clearConflictingDietaryNone({...state.answers,...patientAnswers(patient,row.createdAt)});
       const errors=validateAssessmentAnswers(state.manifest,answers,{requireComplete:true});
       if(Object.keys(errors).length) throw new ServiceError("VALIDATION_ERROR","Complete the required answers before submitting.",{fields:errors});
       const manifest=await this.reports.submissionManifest(tx,organizationId,id);
