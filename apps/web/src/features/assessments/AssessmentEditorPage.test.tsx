@@ -140,16 +140,22 @@ test("report refresh adopts concurrent server answers when local answers are cle
 
 
 test("persisted scoring rejection shows correction guidance and focuses the affected field", async () => harness(async ({ click }) => {
-  expect(document.body.textContent).toContain("Check the value before submitting again.");
+  expect(document.body.textContent).not.toContain("Review the questionnaire answers");
+  await click("Review & score");
+  expect(document.body.textContent).toContain("Submission blocked");
   await click("Current weight: Check the value before submitting again.");
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
   expect(document.activeElement?.id).toBe("assessment-field-current_weight_kg");
 }, { submission: { status: "REJECTED", failureCode: "VALIDATION_ERROR", issues: [{ fieldId: "current_weight_kg", message: "Check the value before submitting again." }] } }));
 
 test("a rejected dietary symptom combination shows its exact conflict", async () => harness(async ({ click }) => {
+  expect(document.body.textContent).not.toContain("Review the questionnaire answers");
+  await click("Review & score");
   expect(document.body.textContent).toContain("Symptoms: No problem while eating cannot be selected with other symptoms");
-  await click("Symptoms: No problem while eating cannot be selected with other symptoms");
-  expect(document.activeElement?.id).toBe("assessment-field-dietary_symptoms");
+  expect(document.body.textContent).toContain("Submission blocked");
+  expect(document.body.textContent).not.toContain("Review the questionnaire answers");
+  await click("Dietary details");
+  expect(document.body.textContent).not.toContain("Review the questionnaire answers");
 }, { answers: { ...recordFixture().answers, dietary_symptoms: ["dietary_symptoms_no_problem", "dietary_symptoms_nausea"] }, submission: { status: "REJECTED", failureCode: "VALIDATION_ERROR", issues: [{ fieldId: "dietary_symptoms", message: "Choose compatible answers for this question." }] } }));
 
 
