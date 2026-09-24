@@ -12,6 +12,7 @@ import { AssessmentEditorPage } from "./features/assessments/AssessmentEditorPag
 import { BrandingPage } from "./pages/BrandingPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FacilitiesPage } from "./pages/FacilitiesPage";
+import { FacilityDetailPage } from "./pages/FacilityDetailPage";
 import { PatientDetailPage, PatientsPage, RegisterPatientPage } from "./pages/PatientsPage";
 import { SignInPage } from "./pages/SignInPage";
 import { ScoringConnectionPage } from "./pages/ScoringConnectionPage";
@@ -35,6 +36,7 @@ export function App() {
         <Route element={<AuthenticatedShell area="organization" />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/facilities" element={<FacilitiesPage />} />
+          <Route path="/facilities/:facilityId" element={<FacilityDetailPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/patients" element={<PatientsPage />} />
           <Route path="/patients/new" element={<RegisterPatientPage />} />
