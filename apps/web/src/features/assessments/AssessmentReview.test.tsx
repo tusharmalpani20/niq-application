@@ -14,7 +14,8 @@ test("review distinguishes questionnaire coverage from required readiness", () =
   expect(html).toMatch(/Face scan<\/span><span[^>]*>Done<\/span>/);
   expect(html).toContain("Loading saved scan results…");
   expect(html).toContain("Go to Face scan");
-  expect(html).toContain('aria-label="Review attachments"');
+  expect(html).toContain("No attachments added.");
+  expect(html).toContain("Review attachments");
   expect(html.indexOf("Face scan")).toBeGreaterThan(html.indexOf("Personal details"));
   expect(html.indexOf("Attachments")).toBeGreaterThan(html.indexOf("Dietary details"));
 });

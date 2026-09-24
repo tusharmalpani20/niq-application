@@ -1,17 +1,8 @@
 import { assessmentFieldError, getAssessmentAnswerCoverage, isAssessmentFieldApplicable, type AssessmentWorkflow, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
 import { Fragment } from "react";
-import { ChevronRight } from "lucide-react";
 import { assessmentResultView, sectionScoreLabel } from "./AssessmentResult";
 import { FaceScanResults } from "./FaceScanResults";
 import { Button } from "@/components/ui/button";
-
-function LinkedReviewSection({ title, status, action, onPress }: { title: string; status: string; action: string; onPress: () => void }) {
-  return <div className="min-w-0 border-b border-border px-4 last:border-0">
-    <Button variant="ghost" className="min-h-14 w-full justify-start gap-1 rounded-md px-0 py-4 text-left" aria-label={action} onPress={onPress}>
-      <ChevronRight className="size-4 shrink-0" aria-hidden="true"/><span className="font-semibold">{title}</span><span className="ml-1 inline-block text-sm font-normal text-muted-foreground">{status}</span>
-    </Button>
-  </div>;
-}
 
 export function AssessmentReview({ record, answers, scanStatus, scanSession, onSection }: { record: AssessmentWorkflow; answers: FormAnswers; scanStatus: string; scanSession: FaceScanSession | null; onSection: (id: string, fieldId?: string) => void }) {
   const scored = assessmentResultView(record);
@@ -45,7 +36,13 @@ export function AssessmentReview({ record, answers, scanStatus, scanSession, onS
       </details>}
       </Fragment>;
     })}
-    <LinkedReviewSection title="Attachments" status={`${record.reports.length} reports · ${readyFiles} files ready`} action="Review attachments" onPress={() => onSection("reports")}/>
+    <details className="min-w-0 px-4">
+      <summary className="min-h-14 cursor-pointer rounded-md py-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"><span className="font-semibold">Attachments</span><span className="ml-2 inline-block text-sm text-muted-foreground">{record.reports.length} reports · {readyFiles} files ready</span></summary>
+      <div className="mb-4 mt-2 space-y-4">
+        {record.reports.length ? <ul className="grid gap-2 text-sm">{record.reports.map((report, index) => <li key={report.id} className="flex flex-wrap justify-between gap-2"><span className="font-medium">{report.label || `Report ${index + 1}`}</span><span className="text-muted-foreground">{report.files.filter(file => file.status === "READY").length}/{report.files.length} files ready</span></li>)}</ul> : <p className="text-sm text-muted-foreground">No attachments added.</p>}
+        <div className="flex justify-end"><Button className="min-h-11" variant="outline" onPress={() => onSection("reports")}>Review attachments</Button></div>
+      </div>
+    </details>
     </div>
   </div>;
 }
