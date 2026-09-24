@@ -28,6 +28,11 @@ async function renderDetail(role: MembershipRole, verify: (body: HTMLElement, re
     if (url.endsWith("/patients")) return Response.json({ items: [patient] });
     if (url.endsWith("/assessments")) return Response.json({ items: [assessment] });
     if (url.endsWith("/users")) return Response.json({ items: team });
+    if (url.endsWith(`/facilities/${facilityId}/performance`)) return Response.json({
+      timezone: "Asia/Kolkata",
+      assessments: { months: ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"].map((month, index) => ({ month, count: index === 5 ? 2 : 0 })), previous: { count: 0, through: "2026-08-24" } },
+      faceScans: { months: ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"].map((month, index) => ({ month, count: index === 5 ? 3 : 0 })), previous: { count: 0, through: "2026-08-24" } },
+    });
     return Response.json({}, { status: 404 });
   }) as typeof fetch;
   const user = { userId: facilityId, organizationId: facilityId, membershipId: facilityId, email: "user@example.test", displayName: "Example User", role, platformRole: "USER" };
@@ -51,6 +56,9 @@ test("admin sees facility metrics, assigned team, and management actions", async
     expect(body.querySelector('button[aria-label="Deactivate facility"]')).not.toBeNull();
     expect(body.querySelector('a[href="/patients?facility=' + facilityId + '"]')).not.toBeNull();
     expect(requested.some(url => url.endsWith("/users"))).toBe(true);
+    expect(requested.some(url => url.endsWith(`/facilities/${facilityId}/performance`))).toBe(true);
+    expect(body.querySelector('[aria-label="Facility performance"]')?.textContent).toContain("Assessments completed2");
+    expect(body.querySelector('[aria-label="Facility performance"]')?.textContent).toContain("Face scans completed3");
   });
 });
 
@@ -60,6 +68,8 @@ test("clinician sees assessment work without facility management", async () => {
     expect(body.querySelector('[aria-label="Facility team"]')).toBeNull();
     expect(body.querySelector('button[aria-label="Edit facility"]')).toBeNull();
     expect(requested.some(url => url.endsWith("/users"))).toBe(false);
+    expect(requested.some(url => url.includes("/performance"))).toBe(false);
+    expect(body.querySelector('[aria-label="Facility performance"]')).toBeNull();
   });
 });
 

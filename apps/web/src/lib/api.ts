@@ -8,6 +8,7 @@ import {
   invitationAcceptanceResponseSchema,
   facilityListResponseSchema,
   facilitySchema,
+  facilityPerformanceSchema,
   createPlatformAdministratorInvitationSchema,
   createFacilitySchema,
   organizationListResponseSchema,
@@ -37,6 +38,7 @@ import {
   type CreatePlatformAdministratorInvitation,
   type CreateFacility,
   type Facility,
+  type FacilityPerformance,
   type Organization,
   type OrganizationDetails,
   type OrganizationUser,
@@ -262,6 +264,11 @@ export async function listPatients(organizationId: string): Promise<Patient[]> {
 export async function listAssessments(organizationId: string): Promise<AssessmentSummary[]> {
   const response = await fetch(`/api/v1/organizations/${organizationId}/assessments`, { credentials: "include" });
   return assessmentListResponseSchema.parse(await responseBody(response)).items;
+}
+
+export async function getFacilityPerformance(organizationId: string, facilityId: string): Promise<FacilityPerformance> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/facilities/${facilityId}/performance`, { credentials: "include" });
+  return facilityPerformanceSchema.parse(await responseBody(response));
 }
 
 export async function getPatient(organizationId: string, patientLocator: string): Promise<Patient> {

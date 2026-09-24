@@ -1,5 +1,5 @@
 import { hasPermission, membershipRoleLabels } from "@niq/application-contracts";
-import type { AssessmentSummary, AuthenticatedUser, Facility, OrganizationUser, Patient } from "@niq/application-contracts";
+import type { AssessmentSummary, AuthenticatedUser, Facility, FacilityPerformance as Performance, OrganizationUser, Patient } from "@niq/application-contracts";
 import { Pencil, Power } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
@@ -8,12 +8,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescripti
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatusBadge } from "../components/StatusBadge";
-import { listAssessments, listFacilities, listOrganizationUsers, listPatients } from "../lib/api";
+import { getFacilityPerformance, listAssessments, listFacilities, listOrganizationUsers, listPatients } from "../lib/api";
 import { updateFacility } from "../lib/facility-management";
 import { assessmentStatusLabels } from "../lib/patient-display";
 import { FacilityDialog } from "./FacilitiesPage";
+import { FacilityPerformance } from "./FacilityPerformance";
 
-type FacilityOverview = { facility: Facility; patients: Patient[]; assessments: AssessmentSummary[]; team: OrganizationUser[] | null };
+type FacilityOverview = { facility: Facility; patients: Patient[]; assessments: AssessmentSummary[]; team: OrganizationUser[] | null; performance: Performance | null };
 const openStatuses = new Set<AssessmentSummary["status"]>(["DRAFT", "READY_FOR_SCORING"]);
 const dateLabel = (date: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
 
@@ -42,7 +43,8 @@ export function FacilityDetailPage() {
     Promise.all([
       listFacilities(user.organizationId), listPatients(user.organizationId), listAssessments(user.organizationId),
       canManageUsers ? listOrganizationUsers(user.organizationId).catch(() => null) : Promise.resolve(null),
-    ]).then(([facilities, patients, assessments, users]) => {
+      canManageUsers && facilityId ? getFacilityPerformance(user.organizationId, facilityId).catch(() => null) : Promise.resolve(null),
+    ]).then(([facilities, patients, assessments, users, performance]) => {
       if (!active) return;
       const facility = facilities.find(item => item.id === facilityId);
       if (!facility) { setState("missing"); return; }
@@ -51,6 +53,7 @@ export function FacilityDetailPage() {
         patients: patients.filter(item => item.homeFacility?.id === facility.id),
         assessments: assessments.filter(item => item.facility?.id === facility.id),
         team: users?.filter(item => item.active && item.status === "ACTIVE" && (!item.facilities?.length || item.facilities.some(assigned => assigned.id === facility.id))) ?? null,
+        performance,
       });
       setState("ready");
     }).catch(() => { if (active) setState("error"); });
@@ -61,7 +64,7 @@ export function FacilityDetailPage() {
   if (state === "missing") return <Alert><AlertDescription>Facility not found or you do not have access. <Link to="/facilities">Back to facilities</Link></AlertDescription></Alert>;
   if (state === "error" || !overview) return <Alert variant="destructive"><AlertDescription>Facility overview could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button></AlertDescription></Alert>;
 
-  const { facility, patients, assessments, team } = overview;
+  const { facility, patients, assessments, team, performance } = overview;
   const open = assessments.filter(item => openStatuses.has(item.status));
   const underReview = assessments.filter(item => item.status === "UNDER_REVIEW");
   const needsAttention = assessments.filter(item => item.status === "SCORING_UNAVAILABLE");
@@ -86,6 +89,8 @@ export function FacilityDetailPage() {
       <Metric label="Open assessments" value={open.length} detail="Draft or ready for scoring" />
       {canManageUsers && <Metric label="Enabled team members" value={team?.length ?? "—"} detail={team ? "Members with access to this facility" : "Team information unavailable"} />}
     </section>
+
+    {canManageUsers && (performance ? <FacilityPerformance performance={performance} facilityId={facility.id} /> : <section className="surface mt-6 p-5" aria-label="Facility performance"><h2 className="font-semibold">This month</h2><p className="mt-2 text-sm text-muted-foreground">Performance data could not be loaded. Refresh this page to try again.</p></section>)}
 
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
       <section className="surface p-5" aria-label="Facility assessment work">
