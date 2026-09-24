@@ -19,7 +19,7 @@ function ResultGroup({ title, availability, children }: { title: string; availab
 function MetricRows({ metrics, context }: { metrics: Metric[]; context: FaceScanSession["context"] }) {
   return <dl className="grid gap-x-8 @min-[40rem]:grid-cols-2">{metrics.map(metric => {
     const assessment = metric.key ? assessFaceScanRange(metric.key, metric.value, context) : null;
-    return <div key={metric.label} className={`flex min-w-0 items-baseline justify-between gap-4 py-2 text-sm ${assessment?.outside ? "rounded-lg bg-warning-soft px-2 text-warning" : ""}`}>
+    return <div key={metric.label} className={`flex min-w-0 items-baseline justify-between gap-4 py-2 text-sm ${assessment?.outside ? "rounded-lg bg-warning-soft text-warning" : ""}`}>
       <dt className={`min-w-0 ${assessment?.outside ? "" : "text-muted-foreground"}`}>{metric.label}</dt>
       <dd className="min-w-0 shrink-0 text-right font-medium tabular-nums" aria-label={metric.value === null ? "Not available" : undefined}>
         {display(metric)}
