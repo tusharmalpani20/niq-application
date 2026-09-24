@@ -11,7 +11,8 @@ const date = "2026-09-20T00:00:00Z";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Example Patient", homeFacility: null, dateOfBirth: null, gender: "UNKNOWN", createdAt: date, updatedAt: date };
 const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: null, status: "SCORING_UNAVAILABLE", createdAt: date, completedAt: null };
 
-async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, requests: string[]) => void) {
+type Scenario = { reviewTotal?: number; assessmentStatus?: string; userLimit?: number | null };
+async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, requests: string[]) => void, scenario: Scenario = {}) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -21,10 +22,10 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
     const url = String(input); requests.push(url);
     if (url.endsWith("/patients")) return Response.json({ items: [patient] });
     if (url.endsWith("/facilities")) return Response.json({ items: [] });
-    if (url.endsWith("/assessments")) return Response.json({ items: [assessment] });
+    if (url.endsWith("/assessments")) return Response.json({ items: [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status }] });
     if (url.endsWith("/users")) return Response.json({ items: [{ membershipId: id, userId: id, email: "admin@example.test", displayName: "Admin", status: "ACTIVE", role, active: true, createdAt: date }] });
-    if (url.includes("/clinical-reviews?")) return Response.json({ items: [], total: 2, page: 1, pageSize: 3 });
-    if (url.endsWith(`/organizations/${id}`)) return Response.json({ organization: { id, legalName: "Example Health", displayName: "Example Health", slug: "example-health", logoObjectKey: null, primaryColor: "#006B5F", secondaryColor: "#FFFFFF", patientReferencePrefix: "PAT", status: "ACTIVE", createdAt: date, updatedAt: date }, entitlement: { userLimit: 5, effectiveFrom: date }, invitations: [], scoringConnection: null });
+    if (url.includes("/clinical-reviews?")) return Response.json({ items: [], total: scenario.reviewTotal ?? 2, page: 1, pageSize: 3 });
+    if (url.endsWith(`/organizations/${id}`)) return Response.json({ organization: { id, legalName: "Example Health", displayName: "Example Health", slug: "example-health", logoObjectKey: null, primaryColor: "#006B5F", secondaryColor: "#FFFFFF", patientReferencePrefix: "PAT", status: "ACTIVE", createdAt: date, updatedAt: date }, entitlement: { userLimit: scenario.userLimit === undefined ? 5 : scenario.userLimit, effectiveFrom: date }, invitations: [], scoringConnection: null });
     return Response.json({ error: { code: "UNAVAILABLE", message: "Scoring unavailable" } }, { status: 503 });
   }) as typeof fetch;
   const user = { userId: id, organizationId: id, membershipId: id, email: "user@example.test", displayName: "Example User", role, platformRole: "USER" };
@@ -42,11 +43,14 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
 test("clinician overview shows review work without administrator operations", async () => {
   await renderOverview("DOCTOR", (body, requests) => {
     expect(body.textContent).toContain("Clinical work");
+    expect(body.textContent).toContain("Open assessments in your facilities");
+    expect(body.querySelector('a[href="/assessments?status=OPEN"]')).not.toBeNull();
+    expect(body.querySelector('a[href="/assessments/ASM-000001"]')).not.toBeNull();
     expect(body.textContent).toContain("My reviews in progress");
     expect(body.querySelector('a[href="/assessments?tab=clinical-reviews&review=mine-active"]')).not.toBeNull();
     expect(body.textContent).not.toContain("Organization operations");
     expect(requests.some(url => url.endsWith("/users"))).toBe(false);
-  });
+  }, { assessmentStatus: "DRAFT" });
 });
 
 test("organization admin sees actionable operations but no clinician review card", async () => {
@@ -55,7 +59,26 @@ test("organization admin sees actionable operations but no clinician review card
     expect(body.textContent).toContain("Scoring unavailable");
     expect(body.querySelector('a[href="/assessments?status=SCORING_UNAVAILABLE"]')).not.toBeNull();
     expect(body.textContent).not.toContain("My reviews in progress");
+    expect(body.textContent).toContain("Team and user seats");
+    expect(body.textContent).toContain("1 of 5 seats reserved");
+    expect(body.textContent).not.toContain("Enabled users");
   });
+});
+
+test("empty clinician review work becomes a short message", async () => {
+  await renderOverview("DOCTOR", body => {
+    expect(body.textContent).toContain("No reviews are waiting or assigned to you.");
+    expect(body.textContent).not.toContain("My reviews in progress");
+  }, { reviewTotal: 0, assessmentStatus: "DRAFT" });
+});
+
+test("zero admin alerts collapse and unlimited seats stay compact", async () => {
+  await renderOverview("ORGANIZATION_ADMIN", body => {
+    expect(body.textContent).toContain("All clear");
+    expect(body.textContent).toContain("Unlimited seats");
+    expect(body.textContent).not.toContain("Awaiting review assignment");
+    expect(body.querySelectorAll('[aria-label="Workspace summary"] > a')).toHaveLength(4);
+  }, { reviewTotal: 0, assessmentStatus: "DRAFT", userLimit: null });
 });
 
 test("support overview stays focused on patient registration", async () => {
