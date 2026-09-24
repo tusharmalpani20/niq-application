@@ -1,34 +1,22 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { getAssessmentAnswerCoverage, isAssessmentFieldApplicable, calculateAssessmentBmi, calculateAssessmentWeightChange, type AssessmentWorkflow, type AssessmentScoreReviews, type ScoreReviewInput } from "@niq/application-contracts";
-import { ChevronDown, ChevronRight, Pencil } from "lucide-react";
+import { getAssessmentAnswerCoverage, isAssessmentFieldApplicable, calculateAssessmentBmi, calculateAssessmentWeightChange, type AssessmentWorkflow, type AssessmentScoreReviews } from "@niq/application-contracts";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { assessmentResultView } from "./AssessmentResult";
-import { assessmentRequest, AssessmentRequestError } from "./workflow-api";
+import { assessmentRequest } from "./workflow-api";
 
-type Target = { targetType: "item" | "section" | "overall" | "scan"; targetId: string | null; label: string; niqPoints: number; reviewedPoints: number; overridden: boolean };
 const points = (value: number | null) => value === null ? "—" : `${value} ${value === 1 ? "pt" : "pts"}`;
 
-export function AssessmentScoreReview({ record, organizationId, renderScan, reportsContent, onDirtyChange, onSaved, canReview = true, scanStatus = "Face scan unavailable" }: {
-  onSaved?: () => Promise<unknown>; canReview?: boolean; scanStatus?: string; record: AssessmentWorkflow; organizationId: string; renderScan: (active: boolean) => ReactNode; reportsContent: ReactNode; onDirtyChange: (dirty: boolean) => void;
+export function AssessmentScoreReview({ record, organizationId, renderScan, reportsContent, onSaved, canReview = true, scanStatus = "Face scan unavailable" }: {
+  onSaved?: () => Promise<unknown>; canReview?: boolean; scanStatus?: string; record: AssessmentWorkflow; organizationId: string; renderScan: (active: boolean) => ReactNode; reportsContent: ReactNode;
 }) {
   const [data, setData] = useState<AssessmentScoreReviews | null>(null);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [target, setTarget] = useState<Target | null>(null);
-  const [value, setValue] = useState("");
-  const [reason, setReason] = useState("");
-  const [saving, setSaving] = useState(false);
   const [retryingRisk, setRetryingRisk] = useState(false);
-  const [conflict, setConflict] = useState(false);
   const [loadKey, setLoadKey] = useState(0);
   const inFlight = useRef(false);
   const priorRiskStatus = useRef<string | undefined>(undefined);
-  const editContext = useRef<{ revision: number; resultReference: string } | null>(null);
-  // Retain this key for an identical retry after a lost response.
-  const request = useRef<{ fingerprint: string; key: string } | null>(null);
   const path = `/assessments/${record.id}/score-reviews`;
   const view = assessmentResultView(record);
   const coverage = getAssessmentAnswerCoverage(record.manifest, record.answers);
@@ -42,17 +30,17 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   }, [organizationId, path, loadKey, scanStatus, view?.result.resultReference]);
   // Pending work can finish in another request/tab; refresh without resubmitting it.
   useEffect(() => {
-    if (data?.risk?.status !== "PENDING" || target || saving || retryingRisk) return;
+    if (data?.risk?.status !== "PENDING" || retryingRisk) return;
     const timer = window.setTimeout(() => setLoadKey(key => key + 1), 3000);
     return () => window.clearTimeout(timer);
-  }, [data, target, saving, retryingRisk]);
+  }, [data, retryingRisk]);
   useEffect(() => {
     const status = data?.risk?.status;
     if (priorRiskStatus.current === "PENDING" && (status === "CONFIRMED" || status === "ORIGINAL")) void onSaved?.();
     priorRiskStatus.current = status;
   }, [data?.risk?.status, onSaved]);
   async function retryRisk() {
-    if (!data?.risk?.canRetry || !view || target || inFlight.current || !canReview) return;
+    if (!data?.risk?.canRetry || !view || inFlight.current || !canReview) return;
     inFlight.current = true; setRetryingRisk(true); setError("");
     try {
       setData(await assessmentRequest<AssessmentScoreReviews>(organizationId, `${path}/classification/retry`, "POST", {
@@ -63,66 +51,16 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
       setError(cause instanceof Error ? cause.message : "Risk assessment could not be refreshed. Retry the saved request.");
     } finally { inFlight.current = false; setRetryingRisk(false); }
   }
-  useEffect(() => { onDirtyChange(!!target); return () => onDirtyChange(false); }, [target, onDirtyChange]);
-  function edit(next: Target) {
-    if (!canReview || !data?.canAdjust || !view || target || saving || retryingRisk) return;
-    // Keep the result and revision the reviewer actually saw, even if a refresh finishes while editing.
-    editContext.current = { revision: data.revision, resultReference: view.result.resultReference };
-    if (next.targetType === "section") setExpanded(next.targetId);
-    if (next.targetType === "scan") setExpanded("face_scan");
-    setTarget(next); setValue(String(next.reviewedPoints)); setReason(""); setError(""); setNotice(""); setConflict(false); request.current = null;
-  }
-  function cancel() { if (saving) return; setTarget(null); setError(""); if (conflict) { setData(null); setLoadKey(key => key + 1); } setConflict(false); }
-  async function save(reset = false) {
-    if (!target || !data || !editContext.current || !canReview || !data.canAdjust || inFlight.current || conflict || editStale) return;
-    if (!reason.trim()) { setError("Enter a reason for this score change."); return; }
-    const number = reset ? null : Number(value);
-    if (!reset && (!value.trim() || !Number.isFinite(number) || number! < 0 || number! > Number.MAX_SAFE_INTEGER)) { setError("Enter a valid, non-negative score."); return; }
-    const input: Omit<ScoreReviewInput, "requestKey"> = { expectedRevision: editContext.current.revision, expectedResultReference: editContext.current.resultReference, targetType: target.targetType, targetId: target.targetId, points: number, reason: reason.trim() };
-    const fingerprint = JSON.stringify(input);
-    if (request.current?.fingerprint !== fingerprint) request.current = { fingerprint, key: crypto.randomUUID() };
-    inFlight.current = true; setSaving(true); setError("");
-    try {
-      setData(await assessmentRequest<AssessmentScoreReviews>(organizationId, path, "POST", { ...input, requestKey: request.current.key }));
-      setTarget(null); setNotice("Score change saved."); request.current = null; await onSaved?.();
-    } catch (cause) {
-      if (cause instanceof AssessmentRequestError && cause.status === 409) {
-        setConflict(true); setError("Someone updated the scores. Cancel this edit and reload scores before making another change.");
-      } else setError(cause instanceof Error ? cause.message : "Could not save. Your change is still here. Try saving again.");
-    } finally { inFlight.current = false; setSaving(false); }
-  }
-  const editStale = !!target && editContext.current?.resultReference !== view?.result.resultReference;
-  const editBlocked = conflict || editStale || !canReview || !data?.canAdjust;
-  const adjust = (next: Target, label: string) => canReview && data?.canAdjust && <Button variant="ghost" className="size-11 shrink-0 p-0 text-brand-ink" isDisabled={!!target || saving || retryingRisk} aria-label={`Adjust ${next.label}`} onPress={() => edit(next)}><Pencil className="size-3.5" aria-hidden="true"/>{label}</Button>;
   if (!view) return <p role="alert">The saved score could not be verified.</p>;
   const { result, sections } = view;
   const overall = data?.overall;
-  const adjustmentForm = target ? <form className="my-4 rounded-xl border border-border bg-card p-4" onSubmit={event => { event.preventDefault(); void save(); }} aria-label={`Adjust ${target.label}`}>
-      <h3 className="font-semibold">Adjust {target.label}</h3>
-      {(editStale || !canReview || !data?.canAdjust) && <p role="alert" className="mt-2 text-sm text-destructive">The scoring result or your review access has changed. Cancel this edit and reload the assessment before continuing.</p>}
-      <p className="mt-1 text-sm text-muted-foreground">Original score: {points(target.niqPoints)}{target.overridden ? ` · Current reviewed: ${points(target.reviewedPoints)}` : ""}</p>
-      {(target.targetType === "section" || target.targetType === "overall") && <p className="mt-2 text-sm text-muted-foreground">This overrides the calculated {target.targetType === "overall" ? "total" : "section score"} until you restore it.</p>}
-      {target.targetType === "item" && data?.sections.some(section => section.overridden && section.items.some(item => item.id === target.targetId)) && <p className="mt-2 text-sm text-muted-foreground">This section has an override. Changing these points will not change its total until the section score is restored.</p>}
-      <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(8rem,12rem)_1fr]">
-        <label className="grid content-start gap-2 text-sm font-medium">Your score (points)<Input autoFocus type="number" min={0} max={Number.MAX_SAFE_INTEGER} step="any" required value={value} disabled={saving || editBlocked} onChange={event => setValue(event.target.value)} className="min-h-11"/></label>
-        <label className="grid gap-2 text-sm font-medium">Reason *<Textarea required value={reason} maxLength={1000} disabled={saving || editBlocked} onChange={event => setReason(event.target.value)} placeholder="Explain why you are changing this score"/></label>
-      </div>
-      <p className="mt-3 text-xs text-muted-foreground">Saved with your name and time. Previous changes stay in history.</p>
-      <div className="mt-4 flex flex-wrap justify-end gap-2">
-        {target.overridden && <Button variant="link" isDisabled={saving || editBlocked || !reason.trim()} onPress={() => { void save(true); }}>Restore {target.targetType === "item" ? "NIQ points" : "calculated score"}</Button>}
-        <Button variant="outline" isDisabled={saving} onPress={cancel}>Cancel</Button>
-        <Button type="submit" isDisabled={saving || editBlocked || !reason.trim() || !value.trim() || Number(value) === target.reviewedPoints}>{saving ? "Saving…" : "Save change"}</Button>
-      </div>
-    </form> : null;
   const scan = data?.scan;
   const scanSection = <div className="overflow-hidden rounded-xl border border-border">
     <div className={`flex flex-wrap items-center gap-2 p-3 ${expanded === "face_scan" ? "bg-muted/40" : ""}`}>
-      <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start text-left" isDisabled={!!target} aria-expanded={expanded === "face_scan"} aria-controls="score-section-face_scan" onPress={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>{expanded === "face_scan" ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}Face scan</Button>
+      <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start text-left" aria-expanded={expanded === "face_scan"} aria-controls="score-section-face_scan" onPress={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>{expanded === "face_scan" ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}Face scan</Button>
       <div className="text-right text-sm"><p className="text-xs text-muted-foreground">{scanStatus}</p>{scan?.niqPoints !== null && scan?.niqPoints !== undefined && <p>NIQ {points(scan.niqPoints)}</p>}{scan?.overridden && <p className="text-brand-ink">Reviewed {points(scan.reviewedPoints)}</p>}</div>
-      <div className="w-11 shrink-0">{scan && scan.niqPoints !== null && scan.reviewedPoints !== null && adjust({ targetType: "scan", targetId: scan.id, label: "face scan score", niqPoints: scan.niqPoints, reviewedPoints: scan.reviewedPoints, overridden: scan.overridden }, "")}</div>
     </div>
     <div id="score-section-face_scan" hidden={expanded !== "face_scan"} className="border-t border-border p-4">
-      {target?.targetType === "scan" && adjustmentForm}
       <p className="mb-3 text-xs text-muted-foreground">Face-scan points are separate from the questionnaire total.</p>
       {renderScan(expanded === "face_scan")}
     </div>
@@ -136,30 +74,25 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
           ? `${data.risk.classification.label} · NIQ${data.risk.status === "ORIGINAL" ? " (original restored)" : ""}`
           : data?.risk?.status === "UNAVAILABLE" ? "Risk assessment unavailable" : "Risk assessment pending"}</p>
       </div>}
-      {overall && overall.reviewedPoints !== null && adjust({targetType:"overall",targetId:null,label:"total score",niqPoints:result.score,reviewedPoints:overall.reviewedPoints,overridden:overall.overridden}, "")}
     </div>
     <p className="mb-5 text-sm text-muted-foreground">Answers and original NIQ scores stay unchanged.</p>
     {revised && !["ORIGINAL", "CONFIRMED"].includes(data?.risk?.status ?? "") && <div className="mb-4 rounded-lg border border-border p-3 text-sm">
       <p>{data?.risk?.failureCode === "UNMATCHED_CLASSIFICATION" ? "No NIQ risk category matches this reviewed total. Check the score before continuing." : data?.risk?.status === "UNAVAILABLE" ? "Your score changes are saved. NIQ has not confirmed the risk for this total." : "NIQ is assessing the latest reviewed total."} Clinical review can be completed once its risk is confirmed.</p>
-      {data?.risk?.canRetry && canReview && <Button variant="outline" className="mt-2" isDisabled={retryingRisk || saving || !!target} onPress={() => { void retryRisk(); }}>{retryingRisk ? "Checking risk…" : "Retry risk assessment"}</Button>}
+      {data?.risk?.canRetry && canReview && <Button variant="outline" className="mt-2" isDisabled={retryingRisk} onPress={() => { void retryRisk(); }}>{retryingRisk ? "Checking risk…" : "Retry risk assessment"}</Button>}
     </div>}
     {!result.clinicalUsePermitted && <p className="mb-4 text-sm" role="note">This NIQ result is not approved for clinical use.</p>}
-    {notice && <p role="status" className="mb-4 text-sm">{notice}</p>}
-    {error && <div className="mb-4 text-sm text-destructive" role="alert">{error}{!target && <Button variant="link" onPress={() => setLoadKey(key => key + 1)}>Reload scores</Button>}</div>}
+    {error && <div className="mb-4 text-sm text-destructive" role="alert">{error}<Button variant="link" onPress={() => setLoadKey(key => key + 1)}>Reload scores</Button></div>}
     {!data && !error && <p role="status" className="mb-4 text-sm text-muted-foreground">Loading scores…</p>}
-    {target?.targetType === "overall" && adjustmentForm}
     <div className="space-y-3">{sections.map(section => {
       const effective = data?.sections.find(item => item.id === section.id);
       const open = expanded === section.id;
       const completion = coverage.sections.find(item => item.id === section.id);
       return <Fragment key={section.id}><div className="overflow-hidden rounded-xl border border-border">
         <div className={`flex flex-wrap items-center gap-2 p-3 ${open ? "bg-muted/40" : ""}`}>
-          <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start whitespace-normal text-left" isDisabled={!!target} aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}{section.title}</Button>
+          <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start whitespace-normal text-left" aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}{section.title}</Button>
           <div className="text-right text-sm"><p className="text-xs text-muted-foreground">{completion?.answered ?? 0}/{completion?.total ?? 0} answered</p><p>{revised ? "NIQ " : ""}{points(section.points)}</p>{revised && effective?.reviewedPoints !== null && effective?.reviewedPoints !== undefined && <p className="text-brand-ink">Reviewed {points(effective.reviewedPoints)}{effective.overridden ? " · Override" : ""}</p>}</div>
-      <div className="w-11 shrink-0">{effective && section.points !== null && effective.reviewedPoints !== null && adjust({targetType:"section",targetId:section.id,label:section.title,niqPoints:section.points,reviewedPoints:effective.reviewedPoints,overridden:effective.overridden},"")}</div>
         </div>
         <div id={`score-section-${section.id}`} hidden={!open} className="border-t border-border px-4 pb-4">
-          {target?.targetType === "section" && target.targetId === section.id && adjustmentForm}
           <div className="divide-y divide-border">{section.fields.filter(field => isAssessmentFieldApplicable(field, record.answers)).map(field => {
             const item = result.components.find(item => item.id === field.id);
             const raw = record.answers[field.id];
@@ -175,9 +108,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
             return <div key={field.id} className="grid min-w-0 gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto]">
               <div><p className="text-sm font-medium">{field.label}</p><p className="break-words text-sm text-muted-foreground">{answer}</p>{item?.status === "pending" && <p className="mt-1 text-xs text-muted-foreground">{item.reason || "More information needed"}</p>}</div>
               {item && <div className="flex flex-wrap items-center gap-3 text-sm"><span>{revised ? "NIQ " : ""}{points(item.points)}</span>{revised && reviewed?.reviewedPoints !== null && reviewed?.reviewedPoints !== undefined && <span className="text-brand-ink">Reviewed {points(reviewed.reviewedPoints)}{reviewed.overridden ? " · Adjusted" : ""}</span>}
-                {item.status === "answered" && item.points !== null && reviewed?.reviewedPoints !== null && reviewed?.reviewedPoints !== undefined && adjust({targetType:"item",targetId:item.id,label:item.label,niqPoints:item.points,reviewedPoints:reviewed.reviewedPoints,overridden:reviewed.overridden},"")}
               </div>}
-              {target?.targetType === "item" && target.targetId === field.id && <div className="sm:col-span-2">{adjustmentForm}</div>}
             </div>;
           })}</div>
         </div>
@@ -187,8 +118,8 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
       const open = expanded === section.id;
       return <div key={section.id} className="mt-3 overflow-hidden rounded-xl border border-border">
         <div className={`flex flex-wrap items-center gap-2 p-3 ${open ? "bg-muted/40" : ""}`}>
-          <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start text-left" isDisabled={!!target} aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}{section.title}</Button>
-          <span className="text-sm text-muted-foreground">{section.status}</span><div className="w-11 shrink-0" aria-hidden="true" />
+          <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start text-left" aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}{section.title}</Button>
+          <span className="text-sm text-muted-foreground">{section.status}</span>
         </div>
         <div id={`score-section-${section.id}`} hidden={!open} className="border-t border-border p-4">{record.reports.length ? reportsContent : <p className="text-sm text-muted-foreground">No reports attached.</p>}</div>
       </div>;

@@ -41,7 +41,6 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const [reportBusy, setReportBusy] = useState(false);
   const [scanBusy, setScanBusy] = useState(false);
   const [scanStatus, setScanStatus] = useState("Face scan unavailable");
-  const [scoreDirty, setScoreDirty] = useState(false);
   const [showScoredAnswers, setShowScoredAnswers] = useState(false);
   const [reportDirty, setReportDirty] = useState(false);
   const [conflict, setConflict] = useState(false);
@@ -51,7 +50,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const [notice, setNotice] = useState("");
   const dirty = !!record && JSON.stringify(answers) !== JSON.stringify(record.answers);
   const editable = record?.status === "DRAFT" && hasPermission(role, "assessments.edit") && (record.canEditDraft ?? true) && clinical.review?.canEditDraft !== false && !clinical.error;
-  const navigationDialog = useDraftNavigationGuard(dirty || scoreDirty || reportDirty || reportBusy || scanBusy || reviewBusy || contactOpen && !!phone, scanBusy ? "Camera capture or upload is unfinished. Leaving may discard the local capture. Accepted uploads continue processing." : undefined);
+  const navigationDialog = useDraftNavigationGuard(dirty || reportDirty || reportBusy || scanBusy || reviewBusy || contactOpen && !!phone, scanBusy ? "Camera capture or upload is unfinished. Leaving may discard the local capture. Accepted uploads continue processing." : undefined);
   const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers); setConflict(false); if (value.result) { setShowScoredAnswers(false); requestAnimationFrame(() => document.getElementById("assessment-summary-heading")?.focus()); } }, []);
   const handleError = useCallback((cause: unknown) => {
     if (cause instanceof AssessmentRequestError && cause.status === 401) {
@@ -96,7 +95,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
     finally { operation.current = false; setBusy(false); }
   }
   async function selectSection(id: string, save = false, fieldId?: string) {
-    if (busy || reportBusy || scanBusy || scoreDirty) return;
+    if (busy || reportBusy || scanBusy) return;
     setShowScoredAnswers(true);
     if (save && editable && dirty && !await persist()) return;
     setSectionId(id); setError("");
@@ -143,7 +142,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const sectionCoverage = coverage.sections.find(item => item.id === sectionId);
   const section = record.manifest.sections.find(item => item.id === sectionId);
   const index = tabs.findIndex(tab => tab.id === sectionId);
-  const locked = busy || reportBusy || scanBusy || scoreDirty || reviewBusy || conflict;
+  const locked = busy || reportBusy || scanBusy || reviewBusy || conflict;
   return <div className="assessment-workflow @container">
     <PatientHeader compact patient={record.patient} assessmentLabel={`${record.reference} · ${record.status === "DRAFT" ? "Draft" : record.status.replaceAll("_", " ").toLowerCase()} assessment`} action={<span className="text-xs text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span>} />
     <div className={`sticky top-0 z-20 bg-background ${record.result !== null && !showScoredAnswers ? "rounded-xl" : "rounded-t-xl"}`}>
@@ -160,8 +159,8 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
       return owner && field ? <li key={issue.fieldId}><Button variant="link" className="h-auto min-h-11 whitespace-normal text-left" onPress={() => { void selectSection(owner.id, false, field.id); }}>{field.label}: {issue.message}</Button></li> : null;
     })}</ul>}</div>}
     {["SCORING_PENDING", "SCORING_UNAVAILABLE"].includes(record.status) && !record.result && <div className="mb-5 rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "Administrator review needed" : record.status === "SCORING_PENDING" ? "Scoring result pending" : "Scoring needs attention"}</h2><p className="my-2 text-sm text-muted-foreground">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "The scoring service has not confirmed this request. An organisation administrator must check it. Your submitted answers and reports remain preserved." : "The submitted assessment is preserved. Retry checks the same scoring request."}</p>{record.submission?.status === "RECONCILIATION_REQUIRED" ? hasPermission(role, "assessments.reconcile") && <Button variant="outline" isDisabled={busy} onPress={() => { void retry(true); }}>Check original scoring request</Button> : hasPermission(role, "assessments.submit") && <Button variant="outline" isDisabled={busy} onPress={() => { void retry(); }}>Retry scoring</Button>}</div>}
-    {(record.result !== null || clinical.review?.state === "RETURNED" || !!clinical.error) && <ClinicalReviewPanel organizationId={organizationId} assessmentId={internalId} review={clinical.review} error={clinical.error} loading={clinical.loading} blocked={dirty || scoreDirty || reportDirty || busy || reportBusy || scanBusy || contactOpen || conflict} onRefresh={clinical.refresh} onChanged={async () => { await reload(); await clinical.refresh(); }} onBusyChange={setReviewBusy} />}
-    {record.result !== null && !showScoredAnswers && <AssessmentScoreReview canReview={hasPermission(role, "scores.review") && clinical.review?.canAdjustScores === true && !reviewBusy && !clinical.loading && !clinical.error} onSaved={clinical.refresh} scanStatus={scanStatus} record={record} organizationId={organizationId} onDirtyChange={setScoreDirty} renderScan={active => <AssessmentFaceScan organizationId={organizationId} record={record} active={active} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onBusyChange={setScanBusy} onStatusChange={setScanStatus}/>} reportsContent={<AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!hasPermission(role, "reports.manage") || !editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />} />}
+    {(record.result !== null || clinical.review?.state === "RETURNED" || !!clinical.error) && <ClinicalReviewPanel organizationId={organizationId} assessmentId={internalId} review={clinical.review} error={clinical.error} loading={clinical.loading} blocked={dirty || reportDirty || busy || reportBusy || scanBusy || contactOpen || conflict} onRefresh={clinical.refresh} onChanged={async () => { await reload(); await clinical.refresh(); }} onBusyChange={setReviewBusy} />}
+    {record.result !== null && !showScoredAnswers && <AssessmentScoreReview canReview={hasPermission(role, "scores.review") && clinical.review?.canAdjustScores === true && !reviewBusy && !clinical.loading && !clinical.error} onSaved={clinical.refresh} scanStatus={scanStatus} record={record} organizationId={organizationId} renderScan={active => <AssessmentFaceScan organizationId={organizationId} record={record} active={active} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onBusyChange={setScanBusy} onStatusChange={setScanStatus}/>} reportsContent={<AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!hasPermission(role, "reports.manage") || !editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />} />}
     {record.result !== null && showScoredAnswers && <Button className="my-4" variant="outline" onPress={() => setShowScoredAnswers(false)}><ArrowLeft aria-hidden="true"/>Back to summary</Button>}
     <div hidden={record.result !== null && !showScoredAnswers}>
     <div className={`grid min-w-0 border-x border-border bg-card @min-[48rem]:grid-cols-[250px_minmax(0,1fr)] ${record.result !== null ? "rounded-t-xl border-t" : ""}`}>
