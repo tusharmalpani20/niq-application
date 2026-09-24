@@ -91,3 +91,19 @@ test("previously submitted review still says resend after corrections", async()=
  await click("Resend for clinical review");
  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Resend to the previous reviewer");
 },{review:{...review,state:"AWAITING_RESUBMISSION",submittedAt:"2026-09-23T00:00:00Z",allowedActions:["RESEND"]}}));
+
+test("review history explains returns without a same-person arrow and hides older events", async()=>harness(async()=>{
+  const history = document.querySelector("details");
+  expect(history?.querySelector("summary")?.textContent).toBe("Review history (2)");
+  expect(history?.querySelector("li")?.textContent).toContain("Returned for correction");
+  expect(history?.querySelector("li")?.textContent).toContain("Cycle 2");
+  expect(history?.querySelector("li")?.textContent).toContain("Corrections assigned to: Reviewer");
+  expect(history?.querySelector("li")?.textContent).toContain("Reason: Latest correction");
+  expect(history?.textContent).not.toContain("Reviewer → Reviewer");
+  const older = history?.querySelector("details");
+  expect(older?.open).toBe(false);
+  expect(older?.querySelectorAll("li")).toHaveLength(1);
+}, {review:{...review,history:[
+  {id:"first",action:"RETURN_TO_DRAFT",revision:1,cycle:1,actor:review.assignee!,assignee:review.assignee!,createdAt:"2026-09-23T00:00:00Z",reason:"Earlier correction"},
+  {id:"second",action:"RETURN_TO_DRAFT",revision:2,cycle:2,actor:review.assignee!,assignee:review.assignee!,createdAt:"2026-09-24T00:00:00Z",reason:"Latest correction"},
+]}}));

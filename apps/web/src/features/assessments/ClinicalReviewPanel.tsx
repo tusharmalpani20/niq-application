@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { membershipRoleLabels, type ClinicalReview, type ClinicalReviewAction, type ClinicalReviewer } from "@niq/application-contracts";
+import { membershipRoleLabels, type ClinicalReview, type ClinicalReviewAction, type ClinicalReviewEvent, type ClinicalReviewer } from "@niq/application-contracts";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SearchCombobox } from "@/components/ui/combobox";
@@ -17,6 +17,35 @@ function previouslySent(review: ClinicalReview) {
 function actionLabel(action: Action, review: ClinicalReview) {
   if (action === "RESEND" && !previouslySent(review)) return clinicalActionLabels.SEND;
   return action === "TRANSFER" && !review.assignee ? "Assign reviewer" : clinicalActionLabels[action];
+}
+function historyLabel(event: ClinicalReviewEvent, history: ClinicalReviewEvent[]) {
+  if (event.action === "RESEND" && !history.some(prior => prior.revision < event.revision && (prior.action === "SEND" || prior.action === "RESEND"))) return "Sent for clinical review";
+  const labels: Record<Action, string> = {
+    SEND: "Sent for clinical review", CLAIM: "Claimed review", TRANSFER: "Transferred review",
+    RELEASE: "Released to queue", RETURN_TO_DRAFT: "Returned for correction",
+    REASSIGN_CORRECTION: "Reassigned corrections", RESEND: "Resent for clinical review", COMPLETE: "Completed review",
+  };
+  return labels[event.action];
+}
+function ReviewHistoryEvent({ event, history }: { event: ClinicalReviewEvent; history: ClinicalReviewEvent[] }) {
+  const assignmentLabel = event.action === "RETURN_TO_DRAFT" || event.action === "REASSIGN_CORRECTION" ? "Corrections assigned to" : event.action === "TRANSFER" ? "Reviewer assigned" : null;
+  return <li className="relative border-l-2 border-border py-3 pl-5 text-sm first:pt-1 last:pb-1">
+    <span aria-hidden className="absolute -left-[5px] top-4 size-2 rounded-full bg-primary" />
+    <p className="font-medium">{historyLabel(event, history)}</p>
+    <p className="mt-1 text-xs text-muted-foreground"><time dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</time><span className="mx-1.5">·</span>Cycle {event.cycle}<span className="mx-1.5">·</span>by {event.actor.displayName}</p>
+    {assignmentLabel && event.assignee && <p className="mt-1 text-muted-foreground">{assignmentLabel}: {event.assignee.displayName}</p>}
+    {event.reason && <p className="mt-2 whitespace-pre-wrap break-words"><span className="font-medium">Reason:</span> {event.reason}</p>}
+    {event.remark && <p className="mt-2 whitespace-pre-wrap break-words"><span className="font-medium">Final remark:</span> {event.remark}</p>}
+  </li>;
+}
+function ReviewHistory({ history }: { history: ClinicalReviewEvent[] }) {
+  const [latest, ...older] = [...history].reverse();
+  if (!latest) return null;
+  return <details className="mt-4 border-t border-border pt-3">
+    <summary className="min-h-11 cursor-pointer font-medium">Review history ({history.length})</summary>
+    <ol className="mt-2"><ReviewHistoryEvent event={latest} history={history} /></ol>
+    {older.length > 0 && <details className="mt-2 pl-5"><summary className="min-h-9 cursor-pointer text-sm text-muted-foreground">Show {older.length} older {older.length === 1 ? "event" : "events"}</summary><ol className="mt-2">{older.map(event => <ReviewHistoryEvent key={event.id} event={event} history={history} />)}</ol></details>}
+  </details>;
 }
 export function ClinicalReviewPanel({ organizationId, assessmentId, review, error, loading, blocked, onRefresh, onChanged, onBusyChange }: {
   organizationId: string; assessmentId: string; review: ClinicalReview | null; error: string; loading: boolean; blocked: boolean;
@@ -39,7 +68,7 @@ export function ClinicalReviewPanel({ organizationId, assessmentId, review, erro
       {review.riskClassificationPending && <p className="mt-3 text-sm text-muted-foreground">NIQ must confirm the current reviewed risk before this review can be completed. Check the assessment summary below.</p>}
       {blocked && !!review.allowedActions?.length && <p className="mt-3 text-sm text-muted-foreground">Finish or cancel your current changes before changing the review workflow.</p>}
       <div className="mt-4 flex flex-wrap gap-2">{review.allowedActions?.map(next => <Button key={next} variant={["SEND", "CLAIM", "RESEND", "COMPLETE"].includes(next) ? "default" : "outline"} isDisabled={blocked || loading || !!error || !!action || (next === "COMPLETE" && review.riskClassificationPending === true)} onPress={() => setAction(next)}>{actionLabel(next, review)}</Button>)}</div>
-      {!!review.history?.length && <details className="mt-4 border-t border-border pt-3"><summary className="min-h-11 cursor-pointer">Review history</summary><ol className="divide-y divide-border">{[...review.history].reverse().map(event => <li className="py-3 text-sm" key={event.id}><p>{event.action === "RESEND" && !review.history.some(prior => prior.revision < event.revision && (prior.action === "SEND" || prior.action === "RESEND")) ? clinicalActionLabels.SEND : clinicalActionLabels[event.action]} · {event.actor.displayName}{event.assignee ? ` → ${event.assignee.displayName}` : ""}</p><time className="text-xs text-muted-foreground" dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString("en-GB")}</time><span className="ml-2 text-xs text-muted-foreground">Cycle {event.cycle}</span>{(event.reason || event.remark) && <p className="mt-1 whitespace-pre-wrap break-words">{event.reason || event.remark}</p>}</li>)}</ol></details>}
+      {!!review.history?.length && <ReviewHistory history={review.history} />}
       {action && <ClinicalReviewCommandDialog key={action} action={action} review={review} organizationId={organizationId} assessmentId={assessmentId} blocked={blocked || loading || !!error || (action === "COMPLETE" && review.riskClassificationPending === true)} onClose={() => setAction(null)} onChanged={onChanged} onRefresh={onRefresh} onBusyChange={onBusyChange} />}
     </>}
   </section>;
