@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { FileText, Plus, Trash2, X } from "lucide-react";
+import { FileText, Plus, Trash2 } from "lucide-react";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ReportMutationError, mutateReport, reportBase, uploadReportFile, type ReportInput } from "./report-api";
@@ -176,10 +176,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
       </dl>}
       <h4 className="mt-5 text-sm font-medium">Files ({report.files.length})</h4>
       {!report.files.length && <p className="mt-2 text-sm text-muted-foreground">No files yet. Choose files below, then upload them.</p>}
-      <ul className="mt-3 flex flex-col gap-3">{report.files.map(file => <li key={file.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 px-3 py-1">
-        <div className="flex min-w-0 flex-1 items-center gap-2"><FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/><div className="min-w-0">{file.status === "READY" ? <a className="break-all text-sm text-brand-ink underline underline-offset-2" href={`${base}/${report.id}/files/${file.id}`} download>{file.originalFilename}</a> : <span className="break-all text-sm">{file.originalFilename}</span>}<p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(1)} MB · {file.status === "READY" ? "Saved" : file.status}</p>{file.status === "READY" && <SavedReportFilePreview file={file} url={`${base}/${report.id}/files/${file.id}`} />}</div></div>
-        {!readOnly && <Button variant="ghost" size="icon" className="size-11" isDisabled={busy || !!editor} aria-label={`Remove ${file.originalFilename}`} onPress={() => setRemove({ reportId: report.id, fileId: file.id, label: file.originalFilename })}><X aria-hidden="true"/></Button>}
-      </li>)}</ul>
+      <ul className="mt-3 flex flex-col gap-3">{report.files.map(file => <SavedReportFilePreview key={file.id} file={file} url={`${base}/${report.id}/files/${file.id}`} busy={busy || !!editor} onRemove={readOnly ? undefined : () => setRemove({ reportId: report.id, fileId: file.id, label: file.originalFilename })} />)}</ul>
       {!readOnly && <label className={`relative mt-3 flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-brand-ink hover:bg-muted focus-within:ring-2 focus-within:ring-ring ${busy || editor ? "opacity-50" : ""}`}>
         <Plus className="size-4" aria-hidden="true"/>{report.files.length ? "Add more files" : "Choose files"}
         <input className="absolute inset-0 w-full cursor-pointer opacity-0" aria-label={`Add files to report ${index + 1}`} type="file" multiple accept="application/pdf,image/jpeg,image/png" disabled={busy || !!editor} onChange={event => { selectFiles(report, event.target.files); event.target.value = ""; }}/>
