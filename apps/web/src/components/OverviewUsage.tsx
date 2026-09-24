@@ -35,7 +35,6 @@ export function OverviewUsage({ organizationId }: { organizationId: string }) {
         <CapacityCard title="Scores" used={data.usage.scores} limit={data.limits.scoresPerMonth} detail={data.services.scoring.enabled ? "Scores used this month" : "Scoring is disabled"} to="/settings/scoring" />
         <CapacityCard title="Face scans" used={data.usage.faceScans} limit={data.limits.faceScansPerMonth} detail={data.services.faceScan.enabled ? "Face scans used this month" : "Face scans are disabled"} to="/settings/scoring" />
       </div>
-      <p className="text-xs text-muted-foreground">NIQ Scoring counts score and scan usage events. One assessment can use either service more than once, so these totals can exceed assessments started. Usage follows a UTC month; the patient and assessment cards above use your local month.</p>
       {loadedAt && <p className="text-xs text-muted-foreground">Last refreshed {loadedAt.toLocaleString()}. Monthly limits reset at the start of each UTC month.</p>}
     </>}
   </section>;
