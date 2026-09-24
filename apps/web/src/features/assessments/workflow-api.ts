@@ -17,6 +17,6 @@ export const initializeAssessment = (org: string, patientId: string, requestKey:
 export const retryInitialization = (org: string, id: string) => assessmentRequest<AssessmentInitialization>(org, `/assessment-initializations/${id}/retry`, "POST");
 export const getAssessment = (org: string, id: string) => assessmentRequest<AssessmentWorkflow>(org, `/assessments/${id}`);
 export const saveAssessment = (org: string, id: string, revision: number, answers: FormAnswers) => assessmentRequest<AssessmentWorkflow>(org, `/assessments/${id}`, "PATCH", { revision, answers });
-export const submitAssessment = (org: string, id: string, revision: number) => assessmentRequest<AssessmentWorkflow>(org, `/assessments/${id}/submit`, "POST", { revision });
+export const submitAssessment = (org: string, id: string, input: { revision: number; reviewToken: string; attestation: { statementVersion: 1 | 2; reviewedSectionIds: string[]; confirmed: true } }) => assessmentRequest<AssessmentWorkflow>(org, `/assessments/${id}/submit`, "POST", input);
 export const retryAssessmentScoring = (org: string, id: string) => assessmentRequest<AssessmentWorkflow>(org, `/assessments/${id}/submission/retry`, "POST");
 export const reconcileAssessmentScoring = (org: string, id: string) => assessmentRequest<AssessmentWorkflow>(org, `/assessments/${id}/submission/reconcile`, "POST");

@@ -11,7 +11,7 @@ function recordFixture(): AssessmentWorkflow {
   const manifest = buildAssessmentForm(assessmentQuestionnaireFixture());
   const answers = { patient_name: "Test patient", age: 20, gender: "FEMALE", contact: "1234567890", height_cm: 165, current_weight_kg: 60 };
   return { id: "assessment-a", reference: "ASM-000001", serialNumber: 1, organizationId: "org-a", patientId: "patient-a", facilityId: "facility-a", status: "DRAFT", revision: 3, answers, manifest,
-    progress: getAssessmentCompletion(manifest, answers), reports: [], binding: { version: "version-a", checksum: "checksum" }, result: null, submission: null, heightSource: null,
+    progress: getAssessmentCompletion(manifest, answers), reports: [], binding: { version: "version-a", checksum: "checksum" }, result: null, submission: null, reviewToken: "review-token-a", attestations: [], heightSource: null,
     patient: { id: "patient-a", reference: "PAT-1", displayName: "Test patient", dateOfBirth: "2006-01-01", gender: "FEMALE", phone: "1234567890", homeFacility: { id: "facility-a", name: "Chennai" } },
     createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 }
@@ -214,12 +214,40 @@ test("changing stage clears hidden site and details even after saving", async ()
 }, { answers: { ...recordFixture().answers, stage: "stage_metastatic", metastasis_site: "others", metastasis_other: "Old detail" } }));
 
 
-test("submission opens summary immediately without refreshing", async () => {
+test("submission requires every section review and final confirmation", async () => {
   const result: AssessmentScoreResult = { formatVersion: 2, profile: "NIQ_FINAL_ASSESSMENT", complete: true, score: 3, classification: { id: "low", label: "Low", interpretation: "" }, components: recordFixture().manifest.sections.flatMap(section => section.fields.filter(field => field.owner === "scoring").map(field => ({ id: field.id, sectionId: section.id, label: field.label, points: field.id === "stage" ? 3 : null, status: field.id === "stage" ? "answered" as const : "unanswered" as const }))), version: "version-a", checksum: "a".repeat(64), resultReference: "result-a", calculatedAt: "2026-09-22T00:00:00Z", clinicalUsePermitted: true };
   await harness(async ({ click, requests }) => {
     await click("Review & score");
     await click("Submit and request score");
+    expect(document.querySelector('[aria-label="Verify assessment before scoring"]')).not.toBeNull();
+    expect(requests.some(request => request.method === "POST" && request.url.endsWith("/submit"))).toBe(false);
+    const stepCount = recordFixture().manifest.sections.length + 2;
+    for (let index = 0; index < stepCount; index++) {
+      expect([...document.querySelectorAll('[aria-label="Verify assessment before scoring"] button')].some(button => button.textContent?.trim() === "Cancel")).toBe(true);
+      if (index === 1) {
+        expect(document.body.textContent).toContain("Open face scan");
+        expect(document.body.textContent).not.toContain("Edit face scan");
+        const dialog = document.querySelector('[aria-label="Verify assessment before scoring"]')!;
+        const back = [...dialog.querySelectorAll("button")].find(button => button.textContent?.trim() === "Back");
+        const next = [...dialog.querySelectorAll("button")].find(button => button.textContent?.trim() === "Next");
+        expect(back?.parentElement).toBe(next?.parentElement);
+      }
+      const reviewCheckbox = document.querySelector<HTMLInputElement>('[aria-label="Verify assessment before scoring"] input[type="checkbox"]')!;
+      expect(reviewCheckbox.checked).toBe(false);
+      await act(async () => reviewCheckbox.click());
+      await click("Next");
+    }
+    expect(requests.some(request => request.method === "POST" && request.url.endsWith("/submit"))).toBe(false);
+    expect([...document.querySelectorAll('[aria-label="Verify assessment before scoring"] button')].some(button => button.textContent?.trim() === "Cancel")).toBe(true);
+    expect(document.body.textContent).toContain(`All ${stepCount} sections reviewed. Your confirmation will be saved with this scoring request.`);
+    expect(document.body.textContent).toContain("I have reviewed every section and confirm the information is accurate.");
+    expect(document.body.textContent).not.toContain("Review each section before requesting a score.");
+    await act(async () => document.querySelector<HTMLInputElement>('[aria-label="Verify assessment before scoring"] input[type="checkbox"]')!.click());
+    await click("Confirm and request score");
     expect(requests.some(request => request.method === "POST" && request.url.endsWith("/submit"))).toBe(true);
+    const payload = requests.find(request => request.method === "POST" && request.url.endsWith("/submit"))!.body;
+    expect(payload.reviewToken).toBe("review-token-a");
+    expect(payload.attestation).toEqual({ statementVersion: 2, reviewedSectionIds: ["personal_details", "face-scan", ...recordFixture().manifest.sections.slice(1).map(section => section.id), "attachments"], confirmed: true });
     expect(document.querySelector('[aria-label="Assessment score review"]')).not.toBeNull();
     expect(document.body.textContent).toContain("Assessment summary");
     expect(document.body.textContent).not.toContain("Back to summary");
@@ -234,6 +262,21 @@ test("an incomplete saved report is identified before submission", async () => h
   expect(document.body.textContent).toContain("Report 1 needs a date before submission");
   expect(document.querySelector("#assessment-section-heading")?.textContent).toContain("Attachments");
 }, { reports: [{ ...reportFixture, year: null, month: null, files: [{ id: "file-a", reportId: "report-a", originalFilename: "results.pdf", mediaType: "application/pdf", size: 100, status: "READY", createdAt: "2026-09-24" }] }] }));
+
+test("verification stops when saved answers change before the dialog opens", async () => harness(async ({ click, remoteAnswers, requests }) => {
+  await click("Review & score");
+  remoteAnswers({ ...recordFixture().answers, current_weight_kg: 72 });
+  await click("Submit and request score");
+  expect(document.querySelector('[aria-label="Verify assessment before scoring"]')).toBeNull();
+  expect(document.body.textContent).toContain("The assessment changed before verification");
+  expect(requests.some(request => request.method === "POST" && request.url.endsWith("/submit"))).toBe(false);
+}));
+
+test("returned scoring confirmations remain visible in review history", async () => harness(async ({ click }) => {
+  await click("Review & score");
+  expect(document.body.textContent).toContain("Submission verification history");
+  expect(document.body.textContent).toContain("Verification 1 · Example Doc");
+}, { attestations: [{ submissionId: "old-submission", cycle: 1, revision: 3, confirmedAt: "2026-09-22T20:41:33.104Z", actorMembershipId: "doctor-a", actorDisplayName: "Example Doc", statementVersion: 1, reviewedSectionIds: ["personal_details", "face-scan", "attachments"] }] }));
 
 test("clearing a controlling answer clears dependent answers in the saved draft", async () => harness(async ({ click, requests }) => {
   await click("Disease status");

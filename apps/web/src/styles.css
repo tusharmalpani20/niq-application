@@ -448,6 +448,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .clinical-form [data-slot="date-input"] input { padding-right:3rem; }
 .clinical-form [data-slot="search-combobox"] input { border:0;background:transparent;box-shadow:none; }
 .facility-dialog.patient-registration-dialog { width:min(760px,calc(100vw - 2rem)); }
+.facility-dialog.assessment-verification-dialog { width:min(760px,calc(100vw - 2rem)); }
+.assessment-verification-body { min-height:0;overflow-y:auto;overscroll-behavior:contain; }
+.assessment-verification-dialog .assessment-verification-footer { justify-content:space-between;flex-shrink:0;flex-wrap:wrap; }
+.assessment-verification-footer > div:last-child { margin-left:auto; }
 
 /* Cover native and shared fields, including grouped password/search inputs.
    Keep saved-field suggestions enabled; only replace the browser's autofill tint. */

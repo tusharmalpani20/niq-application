@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { AssessmentFields } from "./AssessmentFields";
 import { AssessmentSectionNavigation } from "./AssessmentSectionNavigation";
 import { AssessmentReview } from "./AssessmentReview";
+import { AssessmentSubmissionDialog } from "./AssessmentSubmissionDialog";
 import { assessmentResultView, sectionScoreLabel } from "./AssessmentResult";
 import { ClinicalReviewPanel } from "./ClinicalReviewPanel";
 import { useClinicalReview } from "./useClinicalReview";
@@ -49,6 +50,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const [contactOpen, setContactOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [verificationRecord, setVerificationRecord] = useState<AssessmentWorkflow | null>(null);
   const dirty = !!record && JSON.stringify(answers) !== JSON.stringify(record.answers);
   const editable = record?.status === "DRAFT" && hasPermission(role, "assessments.edit") && (record.canEditDraft ?? true) && clinical.review?.canEditDraft !== false && !clinical.error;
   const navigationDialog = useDraftNavigationGuard(dirty || reportDirty || reportBusy || scanBusy || reviewBusy || contactOpen && !!phone, scanBusy ? "Camera capture or upload is unfinished. Leaving may discard the local capture. Accepted uploads continue processing." : undefined);
@@ -102,7 +104,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
     setSectionId(id); setError("");
     requestAnimationFrame(() => (document.getElementById(fieldId ? `assessment-field-${fieldId}` : "assessment-section-heading") ?? document.getElementById("assessment-section-heading"))?.focus());
   }
-  async function submit() {
+  async function openVerification() {
     if (!hasPermission(role, "assessments.submit")) return;
     if (!record || busy || reportBusy || scanBusy || reportDirty || conflict) return;
     const invalid = validateAssessmentAnswers(record.manifest, answers, { requireComplete: true });
@@ -118,11 +120,36 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
       return;
     }
     const saved = await persist(); if (!saved) return;
+    setBusy(true); setError("");
+    try {
+      const fresh = await getAssessment(organizationId, internalId);
+      if (fresh.status !== "DRAFT" || fresh.revision !== saved.revision || JSON.stringify(fresh.answers) !== JSON.stringify(saved.answers) || JSON.stringify(fresh.reports) !== JSON.stringify(saved.reports)) {
+        setConflict(true);
+        setError("The assessment changed before verification. Load the saved version and review it again.");
+        return;
+      }
+      accept(fresh);
+      setVerificationRecord(fresh);
+    } catch (cause) { handleError(cause); }
+    finally { setBusy(false); }
+  }
+  async function submit(reviewedSectionIds: string[]) {
+    if (!verificationRecord || operation.current) return;
     operation.current = true; setBusy(true); setError("");
-    try { const submitted = await submitAssessment(organizationId, internalId, saved.revision); accept(submitted); setNotice(submitted.status === "DRAFT" ? "Scoring needs corrected answers" : "Assessment submitted"); }
+    try {
+      const submitted = await submitAssessment(organizationId, internalId, {
+        revision: verificationRecord.revision,
+        reviewToken: verificationRecord.reviewToken,
+        attestation: { statementVersion: 2, reviewedSectionIds: reviewedSectionIds.map(id => id === "face_scan" ? "face-scan" : id === "reports" ? "attachments" : id), confirmed: true },
+      });
+      setVerificationRecord(null);
+      accept(submitted);
+      setNotice(submitted.status === "DRAFT" ? "Scoring needs corrected answers" : "Assessment submitted");
+    }
     catch (cause) {
       handleError(cause);
       // Submission can be accepted before the response is lost. Reload the durable state before allowing another action.
+      setVerificationRecord(null);
       try { await reload(); } catch { setConflict(true); }
     } finally { operation.current = false; setBusy(false); }
   }
@@ -184,10 +211,11 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
     </div>
     <footer className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border border-border bg-card px-4 py-3 sm:px-5">
       <Button variant="outline" className="h-10" isDisabled={index <= 0 || locked} onPress={() => { void selectSection(tabs[index - 1]!.id); }}><ArrowLeft aria-hidden="true"/>Back</Button>
-      <div className="flex flex-wrap gap-2">{editable && <Button variant="outline" className="h-10" isDisabled={locked || !dirty} onPress={() => { void persist(); }}>{busy ? "Saving…" : "Save draft"}</Button>}{index < tabs.length - 1 ? <Button className="h-10" isDisabled={locked} onPress={() => { void selectSection(tabs[index + 1]!.id, true); }}>Continue<ArrowRight aria-hidden="true"/></Button> : editable && hasPermission(role, "assessments.submit") && <Button className="h-10" isDisabled={locked || reportDirty || progress.percent !== 100} onPress={submit}>Submit and request score<ArrowRight aria-hidden="true"/></Button>}</div>
+      <div className="flex flex-wrap gap-2">{editable && <Button variant="outline" className="h-10" isDisabled={locked || !dirty} onPress={() => { void persist(); }}>{busy ? "Saving…" : "Save draft"}</Button>}{index < tabs.length - 1 ? <Button className="h-10" isDisabled={locked} onPress={() => { void selectSection(tabs[index + 1]!.id, true); }}>Continue<ArrowRight aria-hidden="true"/></Button> : editable && hasPermission(role, "assessments.submit") && <Button className="h-10" isDisabled={locked || reportDirty || progress.percent !== 100} onPress={() => { void openVerification(); }}>Submit and request score<ArrowRight aria-hidden="true"/></Button>}</div>
     </footer>
     </div>
     {contactOpen && <Dialog isOpen isDismissable={!busy} showCloseButton={!busy} ariaLabel="Update patient contact" onOpenChange={open => { if (!busy) setContactOpen(open); }}><DialogTitle>Patient contact</DialogTitle><p className="text-sm text-muted-foreground">This number is saved to the patient's profile.</p><form className="mt-4 grid gap-4" onSubmit={event => { event.preventDefault(); void updateContact(); }}><label className="grid gap-2 text-sm font-medium">Phone number<Input autoFocus type="tel" value={phone} onChange={event => setPhone(event.target.value)} disabled={busy}/></label>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<div className="flex justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => setContactOpen(false)}>Cancel</Button><Button type="submit" isDisabled={busy || !phone.trim()}>Save contact</Button></div></form></Dialog>}
+    {verificationRecord && <AssessmentSubmissionDialog key={verificationRecord.reviewToken} record={verificationRecord} scanStatus={scanStepStatus} scanSession={scanSession} busy={busy} onClose={() => setVerificationRecord(null)} onEdit={id => { setVerificationRecord(null); void selectSection(id); }} onSubmit={submit} />}
     {navigationDialog}
     {discardOpen && <Dialog isOpen ariaLabel="Load saved assessment" onOpenChange={setDiscardOpen}><DialogTitle>Load saved assessment?</DialogTitle><p className="text-sm text-muted-foreground">Your local changes will be replaced with the saved answers.</p><div className="flex justify-end gap-2"><Button variant="outline" onPress={() => setDiscardOpen(false)}>Keep editing</Button><Button variant="destructive" onPress={() => { setDiscardOpen(false); setError(""); void reload().catch(handleError); }}>Load saved answers</Button></div></Dialog>}
   </div>;
