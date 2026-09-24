@@ -1,4 +1,5 @@
 import { editPatient, editOrganizationUser } from "./profile-edits";
+import { faceScanSessionSchema } from "../../../../packages/contracts/src/face-scan";
 import { formatAssessmentReference, hasPermission, type Permission } from "@niq/application-contracts";
 import type { ApplicationConfig } from "@niq/application-config";
 import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
@@ -8,6 +9,7 @@ import { z } from "zod";
 import type { Database } from "../db/client";
 import {
   auditEvents,
+  assessmentFaceScans,
   assessments,
   authenticationFailures,
   authSessions,
@@ -32,6 +34,7 @@ import { hashPassword, keyedHash, randomToken, secureEqual, verifyPassword } fro
 import type { ApplicationService, MfaChallengeResult, OtpDelivery, Principal, RequestContext, SessionResult, SignInResult } from "./application";
 import { ServiceError } from "./application";
 import { facilityAccessCondition } from "./facility-access";
+import { facilityTrend } from "./facility-performance";
 import { requestScoringOrganizationInfo, ScoringOrganizationInfoRequestError } from "./scoring-organization-info";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -708,6 +711,33 @@ export class PostgresApplicationService implements ApplicationService {
   async listFacilities(actor: Principal, organizationId: string) {
     this.ensureOrganizationAccess(actor, organizationId, "facilities.read");
     return this.db.select().from(facilities).where(and(eq(facilities.organizationId, organizationId), facilityAccessCondition(actor, organizationId, facilities.id))).orderBy(facilities.name);
+  }
+  async getFacilityPerformance(actor: Principal, organizationId: string, facilityId: string) {
+    this.ensureOrganizationAccess(actor, organizationId, "users.manage");
+    const [facility] = await this.db.select({ id: facilities.id, timezone: facilities.timezone }).from(facilities)
+      .where(and(eq(facilities.organizationId, organizationId), eq(facilities.id, facilityId), facilityAccessCondition(actor, organizationId, facilities.id))).limit(1);
+    if (!facility) throw new ServiceError("NOT_FOUND", "Facility not found.");
+    const [completed, scans] = await Promise.all([
+      this.db.select({ completedAt: assessments.completedAt }).from(assessments)
+        .where(and(eq(assessments.organizationId, organizationId), eq(assessments.facilityId, facilityId), eq(assessments.status, "COMPLETED"))),
+      this.db.select({ projection: assessmentFaceScans.projection }).from(assessmentFaceScans)
+        .innerJoin(assessments, and(eq(assessments.organizationId, assessmentFaceScans.organizationId), eq(assessments.id, assessmentFaceScans.assessmentId)))
+        .where(and(eq(assessmentFaceScans.organizationId, organizationId), eq(assessments.facilityId, facilityId), eq(assessmentFaceScans.state, "COMPLETED"))),
+    ]);
+    const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
+    const scanDates = scans.flatMap(({ projection }) => {
+      const encrypted = (projection as { encrypted?: string } | null)?.encrypted;
+      if (!encrypted) throw new ServiceError("CONFLICT", "Scan completion data could not be read.");
+      const session = faceScanSessionSchema.parse(JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key)));
+      if (!session.completedAt) throw new ServiceError("CONFLICT", "Scan completion date could not be read.");
+      return [new Date(session.completedAt)];
+    });
+    const now = new Date();
+    return {
+      timezone: facility.timezone,
+      assessments: facilityTrend(completed.flatMap(row => row.completedAt ? [row.completedAt] : []), now, facility.timezone),
+      faceScans: facilityTrend(scanDates, now, facility.timezone),
+    };
   }
   async updateFacility(actor: Principal, organizationId: string, facilityId: string, input: UpdateFacility, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, "facilities.manage");

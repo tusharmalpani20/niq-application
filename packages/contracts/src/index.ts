@@ -211,6 +211,13 @@ export const facilitySchema = z.object({
 
 export const facilityListResponseSchema = z.object({ items: z.array(facilitySchema) });
 
+const facilityTrendSchema = z.object({
+  months: z.array(z.object({ month: z.string().regex(/^\d{4}-\d{2}$/), count: z.number().int().nonnegative() })).length(6),
+  previous: z.object({ count: z.number().int().nonnegative(), through: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).nullable(),
+});
+export const facilityPerformanceSchema = z.object({ timezone: z.string(), assessments: facilityTrendSchema, faceScans: facilityTrendSchema });
+export type FacilityPerformance = z.infer<typeof facilityPerformanceSchema>;
+
 export const createInvitationSchema = z.object({
   email: z.email().max(320),
   role: membershipRoleSchema.default("OTHER_MEDICAL"),

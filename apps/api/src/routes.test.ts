@@ -26,7 +26,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     activateScoring: async () => ({ connection: {} }),
     disconnectScoring: async () => {},
     getScoringOrganizationInfo: async () => ({}),
-    createFacility: async () => ({}), listFacilities: async () => [], updateFacility: async () => ({}),
+    createFacility: async () => ({}), listFacilities: async () => [], getFacilityPerformance: async () => ({}), updateFacility: async () => ({}),
     updatePatient: async () => ({}), updateOrganizationUser: async () => ({}),
     createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [],
     invitationAccess: async () => ({ allFacilities: true }), manageUserInvitation: async () => ({ invitation: {}, token: "replacement-token" }),
@@ -126,6 +126,21 @@ describe("local authentication routes", () => {
     const response = await app.request(`/v1/organizations/${principal.organizationId}/facilities`, { headers: { cookie: "niq_session=valid-session" } });
     expect(response.status).toBe(200);
     expect(observedOrganization).toBe(principal.organizationId);
+  });
+
+  test("routes facility performance through the authenticated tenant boundary", async () => {
+    const facilityId = "01J00000000000000000000004";
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService({
+      getFacilityPerformance: async (actor, organizationId, requestedFacilityId) => {
+        expect(actor).toEqual(principal);
+        expect(organizationId).toBe(principal.organizationId);
+        expect(requestedFacilityId).toBe(facilityId);
+        return { timezone: "UTC", assessments: { months: [], previous: null }, faceScans: { months: [], previous: null } };
+      },
+    }) });
+    const path = `/v1/organizations/${principal.organizationId}/facilities/${facilityId}/performance`;
+    expect((await app.request(path, { headers: { cookie: "niq_session=valid-session" } })).status).toBe(200);
+    expect((await app.request(path)).status).toBe(401);
   });
 
   test("creates facilities through the tenant boundary", async () => {
