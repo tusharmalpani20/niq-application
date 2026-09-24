@@ -172,20 +172,28 @@ describe("local authentication routes", () => {
         listPatients: async () => [patient],
       }),
     });
+    const patientInput = {
+      medicalRecordNumber: "MRN-1001",
+      homeFacilityId: "01J00000000000000000000004",
+      dateOfBirth: "1980-01-02",
+      gender: "FEMALE",
+      name: "Test Patient",
+      phone: "9012345678",
+    };
     const response = await app.request(`/v1/organizations/${principal.organizationId}/patients`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: "niq_session=valid-session" },
-      body: JSON.stringify({
-        medicalRecordNumber: "MRN-1001",
-        homeFacilityId: "01J00000000000000000000004",
-        dateOfBirth: "1980-01-02",
-        gender: "FEMALE",
-        name: "Test Patient",
-      }),
+      body: JSON.stringify(patientInput),
     });
     expect(response.status).toBe(201);
     expect(observedOrganization).toBe(principal.organizationId);
     expect(observedMedicalRecordNumber).toBe("MRN-1001");
+    const withoutPhone = await app.request(`/v1/organizations/${principal.organizationId}/patients`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: "niq_session=valid-session" },
+      body: JSON.stringify({ ...patientInput, phone: "" }),
+    });
+    expect(withoutPhone.status).toBe(400);
 
     const listResponse = await app.request(`/v1/organizations/${principal.organizationId}/patients`, { headers: { cookie: "niq_session=valid-session" } });
     expect(listResponse.status).toBe(200);

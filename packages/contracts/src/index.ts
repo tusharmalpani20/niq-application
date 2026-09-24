@@ -321,7 +321,7 @@ export const registerPatientSchema = z.object({
   ),
   gender: patientGenderSchema,
   name: z.string().trim().min(1).max(200),
-  phone: patientPhoneSchema.optional(),
+  phone: patientPhoneSchema.min(1, "Mobile number is required."),
   email: z.email().max(320).optional(),
 }).strict();
 

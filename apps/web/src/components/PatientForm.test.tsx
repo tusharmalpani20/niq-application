@@ -23,6 +23,18 @@ test("patient edit prefills demographics, keeps current inactive facility and us
   expect(html).not.toContain("Add an active facility");
 });
 
+test("registration marks mobile number required while existing patients may leave it empty", () => {
+  const registration = renderToStaticMarkup(<PatientForm organizationId={facility.organizationId} facilities={[facility]} onCancel={() => {}} onSaved={() => {}} />);
+  const editing = renderToStaticMarkup(<PatientForm organizationId={facility.organizationId} facilities={[facility]} patient={patient} onCancel={() => {}} onSaved={() => {}} />);
+  const registrationPhone = registration.match(/<input[^>]*id="patient-phone"[^>]*>/)?.[0];
+  const editingPhone = editing.match(/<input[^>]*id="patient-phone"[^>]*>/)?.[0];
+  expect(registrationPhone).toContain('name="phone"');
+  expect(registrationPhone).toContain('required=""');
+  expect(registration).not.toContain("Mobile number (optional)");
+  expect(editing).toContain("Mobile number (optional)");
+  expect(editingPhone).not.toContain('required=""');
+});
+
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";

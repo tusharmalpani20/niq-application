@@ -7,6 +7,7 @@ describe("patient registration birth date", () => {
     homeFacilityId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     gender: "FEMALE",
     name: "Test patient",
+    phone: "9012345678",
   };
 
   test("accepts today and past dates", () => {

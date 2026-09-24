@@ -46,7 +46,7 @@ describe.skipIf(!process.env.FACILITY_TEST_SOCKET)("facility access against Post
     await expect(service.getPatient(actor, "other", "patient-c")).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
   test("rejects registration at an unassigned facility before inserting", async () => {
-    await expect(service.createPatient(actor, "org", { medicalRecordNumber: "TEST", name: "Fixture", homeFacilityId: "b", dateOfBirth: "2000-01-01", gender: "UNKNOWN" }, { requestId: "test" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(service.createPatient(actor, "org", { medicalRecordNumber: "TEST", name: "Fixture", homeFacilityId: "b", dateOfBirth: "2000-01-01", gender: "UNKNOWN", phone: "9012345678" }, { requestId: "test" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     const [count] = await client`select count(*)::int as total from patients`;
     expect(count?.total).toBe(4);
   });

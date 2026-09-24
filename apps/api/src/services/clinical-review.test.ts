@@ -35,7 +35,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   await db.insert(t.organizations).values({id:org,legalName:"Clinical test",displayName:"Clinical test",slug:`clinical-${org.toLowerCase()}`});
   for(const a of [creator,colleague,nurse,admin,support]){await db.insert(t.users).values({id:a.userId,email:a.email,displayName:a.displayName,status:"ACTIVE"});await db.insert(t.organizationMemberships).values({id:a.membershipId,organizationId:org,userId:a.userId,role:a.role});}
   await db.insert(t.facilities).values([{id:facility,organizationId:org,name:"A",code:"A"},{id:otherFacility,organizationId:org,name:"B",code:"B"}]);
-  patient=(await app.createPatient(admin,org,{name:"Synthetic patient",medicalRecordNumber:`MRN-${org}`,homeFacilityId:facility,dateOfBirth:"2000-01-01",gender:"UNKNOWN"},context)).id;
+  patient=(await app.createPatient(admin,org,{name:"Synthetic patient",medicalRecordNumber:`MRN-${org}`,homeFacilityId:facility,dateOfBirth:"2000-01-01",gender:"UNKNOWN",phone:"9012345678"},context)).id;
   await db.insert(t.questionnaireDefinitions).values({id:definition,organizationId:org,scopeKey:org,key:"clinical-test",version:"1",schema:{},checksum:"test"});
  });
  afterAll(async()=>{await client.end();});
