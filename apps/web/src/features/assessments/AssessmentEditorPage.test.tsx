@@ -214,6 +214,15 @@ test("submission opens summary immediately without refreshing", async () => {
   }, { binding: { version: "version-a", checksum: "a".repeat(64) } }, "assessment-a", result);
 });
 
+test("an incomplete saved report is identified before submission", async () => harness(async ({ click, requests }) => {
+  await click("Review & score");
+  expect(document.body.textContent).toContain("Report 1 needs a date");
+  await click("Submit and request score");
+  expect(requests.some(request => request.method === "POST" && request.url.endsWith("/submit"))).toBe(false);
+  expect(document.body.textContent).toContain("Report 1 needs a date before submission");
+  expect(document.querySelector("#assessment-section-heading")?.textContent).toContain("Attachments");
+}, { reports: [{ ...reportFixture, year: null, month: null, files: [{ id: "file-a", reportId: "report-a", originalFilename: "results.pdf", mediaType: "application/pdf", size: 100, status: "READY", createdAt: "2026-09-24" }] }] }));
+
 test("clearing a controlling answer clears dependent answers in the saved draft", async () => harness(async ({ click, requests }) => {
   await click("Disease status");
   await click("Clear Stage");

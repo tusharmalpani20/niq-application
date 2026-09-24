@@ -1,4 +1,4 @@
-import { assessmentFieldError, getAssessmentAnswerCoverage, isAssessmentFieldApplicable, type AssessmentWorkflow, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
+import { assessmentFieldError, getAssessmentAnswerCoverage, getReportSubmissionIssues, isAssessmentFieldApplicable, type AssessmentWorkflow, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
 import { Fragment } from "react";
 import { assessmentResultView, sectionScoreLabel } from "./AssessmentResult";
 import { FaceScanResults } from "./FaceScanResults";
@@ -10,9 +10,15 @@ export function AssessmentReview({ record, answers, scanStatus, scanSession, org
   const completion = getAssessmentAnswerCoverage(record.manifest, answers);
   const missing = record.manifest.sections.flatMap(section => section.fields.filter(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers) && assessmentFieldError(field, answers[field.id])).map(field => ({ sectionId: section.id, field, error: assessmentFieldError(field, answers[field.id]) })));
   const readyFiles = record.reports.reduce((total, report) => total + report.files.filter(file => file.status === "READY").length, 0);
+  const incompleteReports = record.reports.flatMap((report, index) => {
+    const issues = getReportSubmissionIssues(report);
+    return issues.length ? [{ index: index + 1, issues }] : [];
+  });
   return <div className="grid min-w-0 gap-4">
     {!scored && <section className="rounded-xl border border-border bg-card p-4"><h3 className="font-semibold">Submission readiness</h3>
-      {missing.length > 0 ? <><p className="mt-2 text-sm text-muted-foreground">Check these answers before submitting.</p><ul className="mt-3 grid gap-1">{missing.map(({ sectionId, field, error }) => <li key={field.id}><Button className="h-auto min-h-11 whitespace-normal text-left" variant="link" onPress={() => onSection(sectionId, field.id)}>{field.label}: {error === "Required" ? "Not answered" : error}</Button></li>)}</ul></> : <p className="mt-2 text-sm text-muted-foreground">Required answers are complete.</p>}
+      {missing.length > 0 ? <><p className="mt-2 text-sm text-muted-foreground">Check these answers before submitting.</p><ul className="mt-3 grid gap-1">{missing.map(({ sectionId, field, error }) => <li key={field.id}><Button className="h-auto min-h-11 whitespace-normal text-left" variant="link" onPress={() => onSection(sectionId, field.id)}>{field.label}: {error === "Required" ? "Not answered" : error}</Button></li>)}</ul></> : <p className="mt-2 text-sm text-muted-foreground">Questionnaire answers are complete.</p>}
+      {incompleteReports.length > 0 && <><p className="mt-3 text-sm text-muted-foreground">Complete these attachments before submitting:</p><ul className="mt-2 grid gap-1">{incompleteReports.map(({ index, issues }) => <li key={index}><Button className="h-auto min-h-11 whitespace-normal text-left" variant="link" onPress={() => onSection("reports")}>Report {index} needs {issues.map(issue => issue === "name" ? "a report name" : issue === "date" ? "a date" : "an uploaded file").join(" and ")}</Button></li>)}</ul></>}
+      {!incompleteReports.length && !record.reports.length && <p className="mt-2 text-sm text-muted-foreground">Attachments are optional when no report has been created.</p>}
     </section>}
     <div className="overflow-hidden rounded-xl border border-border bg-card">{record.manifest.sections.map(section => {
       const progress = completion.sections.find(item => item.id === section.id)!;

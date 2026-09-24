@@ -39,6 +39,13 @@ test("read-only report cards have no mutation controls", () => {
   expect(html).not.toContain('type="file"');
 });
 
+test("incomplete report stays visibly marked when its card is collapsed", () => {
+  const html = renderToStaticMarkup(<AssessmentReports organizationId="org" assessmentId="assessment" revision={0} onChanged={async () => {}} reports={[{
+    id: "report-1", label: "Blood test", purpose: "", datePrecision: "DAY", year: null, month: null, day: null, files: [],
+  }]}/>);
+  expect(html).toContain("Needs date and file to submit");
+});
+
 test("creating a report uploads selected files using each saved revision", async () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/", pretendToBeVisual: true });
   const keys = ["FocusEvent", "window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch", "XMLHttpRequest"];

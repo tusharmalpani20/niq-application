@@ -1,5 +1,5 @@
 import { hasPermission, type MembershipRole } from "@niq/application-contracts";
-import { clearInactiveAssessmentAnswers, getAssessmentCompletion, getAssessmentAnswerCoverage, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
+import { clearInactiveAssessmentAnswers, getAssessmentCompletion, getAssessmentAnswerCoverage, getReportSubmissionIssues, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Link, useOutletContext, useParams } from "react-router-dom";
 import { PatientHeader } from "@/components/PatientHeader";
@@ -108,6 +108,15 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
     const invalid = validateAssessmentAnswers(record.manifest, answers, { requireComplete: true });
     setErrors(invalid);
     if (Object.keys(invalid).length) { setError("Complete required fields before requesting a score."); return; }
+    const incompleteIndex = record.reports.findIndex(report => getReportSubmissionIssues(report).length > 0);
+    if (incompleteIndex !== -1) {
+      const issues = getReportSubmissionIssues(record.reports[incompleteIndex]!);
+      const descriptions = issues.map(issue => issue === "name" ? "a report name" : issue === "date" ? "a date" : "an uploaded file");
+      setSectionId("reports");
+      setError(`Report ${incompleteIndex + 1} needs ${descriptions.join(" and ")} before submission. Edit it or remove the report.`);
+      requestAnimationFrame(() => document.getElementById("assessment-section-heading")?.focus());
+      return;
+    }
     const saved = await persist(); if (!saved) return;
     operation.current = true; setBusy(true); setError("");
     try { const submitted = await submitAssessment(organizationId, internalId, saved.revision); accept(submitted); setNotice(submitted.status === "DRAFT" ? "Scoring needs corrected answers" : "Assessment submitted"); }
