@@ -40,6 +40,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
   useEffect(() => { onDirtyChange?.(dirty || uploads.length > 0); }, [dirty, uploads.length, onDirtyChange]);
   useEffect(() => () => { controller.current?.abort(); }, []);
   const currentBytes = reports.flatMap(report => report.files).reduce((sum, file) => sum + file.size, 0);
+  const beginAddReport = () => { setMessage(""); setEditor({ label: "", purpose: "", datePrecision: "DAY", date: "" }); };
 
   async function refresh() {
     try { await onChanged(); } catch { setMessage("Changes may be saved. Refresh this assessment before continuing."); }
@@ -111,10 +112,10 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
       </div></form>
   );
   return <section className="flex min-w-0 flex-col gap-5" aria-label="Attachments">
-    <p className="text-sm text-muted-foreground">Attach reports with a label, purpose and date. PDF, JPEG or PNG · Up to {formatReportMegabytes(limits.fileBytes)} MB per file</p>
+    <p className="text-sm text-muted-foreground">Add supporting documents to this assessment. PDF, JPEG or PNG · Up to {formatReportMegabytes(limits.fileBytes)} MB per file</p>
     {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
     {unconfirmed && <Alert><AlertDescription><p>Check whether this report was saved before adding it again.</p><dl className="mt-2 grid gap-1"><div><dt className="font-medium">Label</dt><dd className="break-words">{unconfirmed.label || "Not entered"}</dd></div><div><dt className="font-medium">Report for</dt><dd className="break-words">{unconfirmed.purpose || "Not entered"}</dd></div><div><dt className="font-medium">Date</dt><dd>{unconfirmed.date || "Not entered"}</dd></div></dl><Button className="mt-2" variant="outline" onPress={() => setUnconfirmed(null)}>Dismiss</Button></AlertDescription></Alert>}
-    {!reports.length && !editor && <div className="rounded-xl border border-border bg-card px-5 py-8 text-center"><FileText className="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true"/><h3 className="font-semibold">Add supporting reports</h3><p className="mt-2 text-sm text-muted-foreground">Group related files under one report.</p></div>}
+    {!reports.length && !editor && <div className="rounded-xl border border-border bg-card px-5 py-8 text-center"><FileText className="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true"/><h3 className="font-semibold">No attachments yet</h3><p className="mt-2 text-sm text-muted-foreground">Create a report entry, then add its files.</p>{!readOnly && <Button variant="outline" className="mt-5 min-h-11 border-primary/30 text-brand-ink" isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={beginAddReport}><Plus aria-hidden="true"/>Add report</Button>}</div>}
     {reports.map((report, index) => <article key={report.id} className="min-w-0 rounded-xl border border-border bg-card p-4 text-card-foreground">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Report {index + 1}</h3>
         {!readOnly && <div className="flex gap-2"><Button variant="ghost" isDisabled={busy || !!editor} onPress={() => { setMessage(""); setEditor({ id: report.id, label: report.label, purpose: report.purpose, datePrecision: report.datePrecision, date: dateValue(report) }); }}>Edit details</Button><Button variant="ghost" className="text-destructive" isDisabled={busy || !!editor} onPress={() => setRemove({ reportId: report.id, label: report.label || "this report" })}><Trash2 aria-hidden="true"/>Remove report</Button></div>}
@@ -126,12 +127,13 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
         <div><dt className="mb-1 text-muted-foreground">Report date</dt><dd>{dateValue(report) || "Not specified"}</dd></div>
       </dl>}
       <h4 className="mt-5 text-sm font-medium">Files ({report.files.length})</h4>
+      {!report.files.length && <p className="mt-2 text-sm text-muted-foreground">No files yet. Choose files below, then upload them.</p>}
       <ul className="mt-3 flex flex-col gap-3">{report.files.map(file => <li key={file.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 px-3 py-1">
         <div className="flex min-w-0 flex-1 items-center gap-2"><FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/><div className="min-w-0">{file.status === "READY" ? <a className="break-all text-sm text-brand-ink underline underline-offset-2" href={`${base}/${report.id}/files/${file.id}`} download>{file.originalFilename}</a> : <span className="break-all text-sm">{file.originalFilename}</span>}<p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(1)} MB · {file.status === "READY" ? "Saved" : file.status}</p></div></div>
         {!readOnly && <Button variant="ghost" size="icon" className="size-11" isDisabled={busy || !!editor} aria-label={`Remove ${file.originalFilename}`} onPress={() => setRemove({ reportId: report.id, fileId: file.id, label: file.originalFilename })}><X aria-hidden="true"/></Button>}
       </li>)}</ul>
       {!readOnly && <label className={`relative mt-3 flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-brand-ink hover:bg-muted focus-within:ring-2 focus-within:ring-ring ${busy || editor ? "opacity-50" : ""}`}>
-        <Plus className="size-4" aria-hidden="true"/>Add files
+        <Plus className="size-4" aria-hidden="true"/>{report.files.length ? "Add more files" : "Choose files"}
         <input className="absolute inset-0 w-full cursor-pointer opacity-0" aria-label={`Add files to report ${index + 1}`} type="file" multiple accept="application/pdf,image/jpeg,image/png" disabled={busy || !!editor} onChange={event => { selectFiles(report, event.target.files); event.target.value = ""; }}/>
       </label>}
       {uploads.filter(upload => upload.reportId === report.id).map(upload => <div className="mt-3 rounded-lg border border-border p-3" key={upload.key}>
@@ -141,7 +143,7 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
       </div>)}
     </article>)}
     {editor && !editor.id && <article className="rounded-xl border border-border bg-card p-4"><h3 className="mb-4 font-semibold">Report {reports.length + 1}</h3>{reportEditor}<p className="mt-3 text-xs text-muted-foreground">Save report details to attach files.</p></article>}
-    {!readOnly && !editor && <Button variant="outline" className="min-h-11 w-full border-primary/30 text-brand-ink" isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={() => { setMessage(""); setEditor({ label: "", purpose: "", datePrecision: "DAY", date: "" }); }}><Plus aria-hidden="true"/>{reports.length ? "Add another report" : "Add report"}</Button>}
+    {!readOnly && !editor && reports.length > 0 && <Button variant="outline" className="min-h-11 w-full border-primary/30 text-brand-ink" isDisabled={busy || reports.length >= limits.reportsPerAssessment} onPress={beginAddReport}><Plus aria-hidden="true"/>Add another report</Button>}
     {remove && <Dialog ariaLabel="Remove report attachment" isOpen isDismissable={!busy} showCloseButton={!busy} onOpenChange={open => { if (!open && !busy) setRemove(null); }}><DialogTitle>Remove {remove.fileId ? "file" : "report"}?</DialogTitle><p className="break-words">{remove.fileId ? `Remove ${remove.label}?` : `Remove ${remove.label} and all its files?`}</p><div className="flex justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => setRemove(null)}>Cancel</Button><Button variant="destructive" isDisabled={busy} onPress={() => void removeItem()}>Remove</Button></div></Dialog>}
   </section>;
 }
