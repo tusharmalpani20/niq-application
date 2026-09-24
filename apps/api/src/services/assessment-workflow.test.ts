@@ -140,7 +140,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   expect(record.attestations).toMatchObject([{submissionId:record.submission!.id,cycle:0,actorMembershipId:actor.membershipId,statementVersion:1,reviewedSectionIds:sections}]);
   const [storedAttestation]=await db.select({attestation:tables.assessmentSubmissions.attestation}).from(tables.assessmentSubmissions).where(eq(tables.assessmentSubmissions.id,record.submission!.id));
   expect(JSON.stringify(storedAttestation!.attestation)).not.toContain(actor.displayName);
-  await expect(db.update(tables.assessmentSubmissions).set({attestation:null}).where(eq(tables.assessmentSubmissions.id,record.submission!.id))).rejects.toThrow("Assessment submission attestation is immutable");
+  await expect(db.update(tables.assessmentSubmissions).set({attestation:null}).where(eq(tables.assessmentSubmissions.id,record.submission!.id)).execute()).rejects.toMatchObject({cause:{message:"Assessment submission attestation is immutable"}});
   const firstAttestation=record.attestations[0]!;
   await expect(service.save(actor,org,id,{revision:record.revision,answers:{}},context)).rejects.toMatchObject({code:"CONFLICT"});await expect(service.retrySubmission(actor,org,id,context)).rejects.toMatchObject({code:"CONFLICT"});await db.update(tables.assessmentSubmissions).set({nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,id));record=await service.retrySubmission(actor,org,id,context);expect(keys).toHaveLength(2);expect(new Set(keys).size).toBe(1);expect(record.attestations).toEqual([firstAttestation]);
  });

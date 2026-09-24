@@ -77,7 +77,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
  });
  test("correction cycles retain completed scan evidence and freeze it into the completed review",async()=>{
   const id=await assessment(),scanId=createEntityId();
-  const projection={id:scanId,state:"COMPLETED",context:{heightCm:170,weightKg:65},completedAt:"2026-09-20T00:00:00Z",score:{status:"SCORED",points:8}};
+  const projection={id:scanId,state:"COMPLETED",context:{dob:"2000-01-01",gender:"female",heightCm:170,weightKg:65,posture:"resting",employeeId:"operator"},createdAt:"2026-09-20T00:00:00Z",updatedAt:"2026-09-20T00:00:00Z",completedAt:"2026-09-20T00:00:00Z",failureCode:null,result:{schemaVersion:1,providerScanId:scanId,wellnessScore:85,healthRiskScore:15,physiologicalScore:null,mentalWellbeingScore:null,vitals:{heartRate:82,oxygenSaturation:99,respiratoryRate:16,systolic:124,diastolic:79}},score:{status:"SCORED",points:8}};
   await db.insert(t.assessmentFaceScans).values({id:scanId,organizationId:org,assessmentId:id,revision:0,cycle:0,requestKey:createEntityId(),connection:{},snapshot:workflow.seal(projection.context),projection:workflow.seal(projection),state:"COMPLETED",isCurrent:true,active:false});
   await command(creator,id,"RETURN_TO_DRAFT",{assigneeId:creator.membershipId,reason:"Correct unrelated answers"});
   expect((await new AssessmentFaceScanService(workflow).list(creator,org,id)).currentSessionId).toBe(scanId);
