@@ -94,6 +94,10 @@ test("review missing-answer link focuses its field after changing section", asyn
 }, { answers: { ...recordFixture().answers, height_cm: null } }));
 
 const reportFixture = { id: "report-a", label: "Blood report", purpose: "", datePrecision: "MONTH" as const, year: 2026, month: 8, day: null, files: [] };
+test("attachments heading shows the total uploaded files", async () => harness(async ({ click }) => {
+  await click("Attachments");
+  expect(document.getElementById("assessment-section-heading")?.parentElement?.textContent).toContain("1 file uploaded");
+}, { reports: [{ ...reportFixture, files: [{ id: "file-a", reportId: "report-a", originalFilename: "blood-test.pdf", mediaType: "application/pdf", size: 1000, status: "READY", createdAt: "2026-09-24" }] }] }));
 test("report cards collapse and expand without leaving attachments", async () => harness(async ({ click }) => {
   await click("Attachments");
   const content = document.getElementById("report-content-report-a")!;
