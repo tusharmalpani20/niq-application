@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { uploadReportFile } from "./report-api";
+import { mutateReport, uploadReportFile } from "./report-api";
 const originalXHR = globalThis.XMLHttpRequest;
 class FakeXHR {
   static requests: FakeXHR[] = [];
@@ -50,7 +50,6 @@ test("bytes sent is not presented as upload completion until server confirms", a
 });
 
 test("lost create response differs from a validation rejection and is never retried", async () => {
-  const { mutateReport } = await import("./report-api");
   const originalFetch = globalThis.fetch;
   let calls = 0;
   try {
@@ -59,6 +58,15 @@ test("lost create response differs from a validation rejection and is never retr
     expect(calls).toBe(1);
     globalThis.fetch = (async () => new Response("{}", { status: 400 })) as typeof fetch;
     await expect(mutateReport("/reports", "POST")).rejects.toMatchObject({ uncertain: false });
+  } finally { globalThis.fetch = originalFetch; }
+});
+test("report creation returns the saved report ID and revision for immediate uploads", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async () => Response.json({ revision: 5, reports: [{ id: "created-report" }] })) as typeof fetch;
+    const saved = await mutateReport("/reports", "POST");
+    expect(saved.revision).toBe(5);
+    expect(saved.reports[0]?.id).toBe("created-report");
   } finally { globalThis.fetch = originalFetch; }
 });
 

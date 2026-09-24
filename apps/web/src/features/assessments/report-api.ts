@@ -10,12 +10,14 @@ function failure(body: unknown) {
 export class ReportMutationError extends Error {
   constructor(readonly uncertain: boolean, message: string) { super(message); }
 }
-export async function mutateReport(url: string, method: "POST" | "PATCH" | "DELETE", input?: ReportInput): Promise<void> {
+export async function mutateReport(url: string, method: "POST" | "PATCH" | "DELETE", input?: ReportInput): Promise<AssessmentWorkflow> {
   const body = input ? JSON.stringify(reportInputSchema.parse(input)) : undefined;
   let response: Response;
   try { response = await fetch(url, { method, credentials: "include", headers: input ? { "content-type": "application/json" } : undefined, body }); }
   catch { throw new ReportMutationError(true, "The save could not be confirmed. Check the saved reports before adding another."); }
   if (!response.ok) throw new ReportMutationError(response.status >= 500, failure(await response.json().catch(() => null)).message);
+  try { return await response.json() as AssessmentWorkflow; }
+  catch { throw new ReportMutationError(true, "The save may have completed. Refresh the assessment before trying again."); }
 }
 export async function uploadReportFile(input: {
   url: string; file: File; requestKey: string; revision: number; maxFileBytes?: number; signal: AbortSignal; onProgress: (percent: number) => void;
