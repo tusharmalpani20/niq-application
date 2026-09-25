@@ -267,7 +267,7 @@ export async function listAssessments(organizationId: string): Promise<Assessmen
   return assessmentListResponseSchema.parse(await responseBody(response)).items;
 }
 
-export async function getOverviewRisk(organizationId: string): Promise<{ highRiskPatients: number; assessedPatients: number }> {
+export async function getOverviewRisk(organizationId: string): Promise<{ highRiskPatients: number; highRiskPatients30DaysAgo: number; assessedPatients: number }> {
   const response = await fetch(`/api/v1/organizations/${organizationId}/overview-risk`, { credentials: "include" });
   return overviewRiskSchema.parse(await responseBody(response));
 }

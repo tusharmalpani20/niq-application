@@ -15,25 +15,41 @@ type FinalSnapshot = {
 export function countOverviewRisk(
   rows: CompletedAssessment[],
   unseal: (value: unknown) => FinalSnapshot,
-): { highRiskPatients: number; assessedPatients: number } {
+  now: Date = new Date(),
+): { highRiskPatients: number; assessedPatients: number; highRiskPatients30DaysAgo: number } {
   const latest = new Map<string, CompletedAssessment>();
-  for (const row of rows) {
-    const prior = latest.get(row.patientId);
+  const latest30DaysAgo = new Map<string, CompletedAssessment>();
+  const cutoff = now.getTime() - 30 * 24 * 60 * 60 * 1000;
+  const recordLatest = (byPatient: Map<string, CompletedAssessment>, row: CompletedAssessment) => {
+    const prior = byPatient.get(row.patientId);
     if (!prior || (row.completedAt?.getTime() ?? 0) > (prior.completedAt?.getTime() ?? 0)
       || (row.completedAt?.getTime() ?? 0) === (prior.completedAt?.getTime() ?? 0) && row.id > prior.id) {
-      latest.set(row.patientId, row);
+      byPatient.set(row.patientId, row);
     }
+  };
+  for (const row of rows) {
+    recordLatest(latest, row);
+    if (row.completedAt && row.completedAt.getTime() <= cutoff) recordLatest(latest30DaysAgo, row);
   }
+  const isHighRisk = (row: CompletedAssessment): boolean | null => {
+    if (!row.clinicalReview) return null;
+    const risk = unseal(row.clinicalReview).finalSnapshot?.score?.risk;
+    if (!risk || !["ORIGINAL", "CONFIRMED"].includes(risk.status ?? "") || !risk.classification) return null;
+    const id = risk.classification.id?.toLowerCase();
+    const label = risk.classification.label?.toLowerCase();
+    return id === "high" || id === "high_risk" || label === "high risk";
+  };
   let highRiskPatients = 0;
   let assessedPatients = 0;
   for (const row of latest.values()) {
-    if (!row.clinicalReview) continue;
-    const risk = unseal(row.clinicalReview).finalSnapshot?.score?.risk;
-    if (!risk || !["ORIGINAL", "CONFIRMED"].includes(risk.status ?? "") || !risk.classification) continue;
+    const highRisk = isHighRisk(row);
+    if (highRisk === null) continue;
     assessedPatients++;
-    const id = risk.classification.id?.toLowerCase();
-    const label = risk.classification.label?.toLowerCase();
-    if (id === "high" || id === "high_risk" || label === "high risk") highRiskPatients++;
+    if (highRisk) highRiskPatients++;
   }
-  return { highRiskPatients, assessedPatients };
+  let highRiskPatients30DaysAgo = 0;
+  for (const row of latest30DaysAgo.values()) {
+    if (isHighRisk(row)) highRiskPatients30DaysAgo++;
+  }
+  return { highRiskPatients, assessedPatients, highRiskPatients30DaysAgo };
 }

@@ -44,6 +44,7 @@ export const apiErrorSchema = z.object({
 
 export const overviewRiskSchema = z.object({
   highRiskPatients: z.number().int().nonnegative(),
+  highRiskPatients30DaysAgo: z.number().int().nonnegative(),
   assessedPatients: z.number().int().nonnegative(),
 });
 

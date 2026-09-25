@@ -28,7 +28,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     getScoringOrganizationInfo: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], getFacilityPerformance: async () => ({}), updateFacility: async () => ({}),
     updatePatient: async () => ({}), correctPatientMrn: async () => ({}), correctPatientDob: async () => ({}), updateOrganizationUser: async () => ({}),
-    createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [], getOverviewRisk: async () => ({ highRiskPatients: 0, assessedPatients: 0 }),
+    createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [], getOverviewRisk: async () => ({ highRiskPatients: 0, highRiskPatients30DaysAgo: 0, assessedPatients: 0 }),
     invitationAccess: async () => ({ allFacilities: true }), manageUserInvitation: async () => ({ invitation: {}, token: "replacement-token" }),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
     ...overrides,
@@ -307,7 +307,7 @@ describe("local authentication routes", () => {
       service: fakeService({ getOverviewRisk: async (actor, organizationId) => {
         expect(actor).toEqual(principal);
         expect(organizationId).toBe(principal.organizationId);
-        return { highRiskPatients: 2, assessedPatients: 5 };
+        return { highRiskPatients: 2, highRiskPatients30DaysAgo: 3, assessedPatients: 5 };
       } }),
     });
     const url = `/v1/organizations/${principal.organizationId}/overview-risk`;
@@ -315,7 +315,7 @@ describe("local authentication routes", () => {
     const response = await app.request(url, { headers: { cookie: "niq_session=valid-session" } });
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(await response.json()).toEqual({ highRiskPatients: 2, assessedPatients: 5 });
+    expect(await response.json()).toEqual({ highRiskPatients: 2, highRiskPatients30DaysAgo: 3, assessedPatients: 5 });
   });
 
   test("resolves an organization detail by its URL name", async () => {

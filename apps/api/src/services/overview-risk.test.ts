@@ -15,5 +15,30 @@ test("counts one confirmed high risk category per patient from the latest comple
     row("06", "four", "2026-09-06", "ORIGINAL", null),
     row("07", "five", "2026-09-07", "CONFIRMED", { id: "moderate", label: "Moderate Risk" }),
   ];
-  expect(countOverviewRisk(rows, value => value as any)).toEqual({ highRiskPatients: 1, assessedPatients: 3 });
+  expect(countOverviewRisk(rows, value => value as any, new Date("2026-09-30"))).toEqual({
+    highRiskPatients: 1,
+    assessedPatients: 3,
+    highRiskPatients30DaysAgo: 0,
+  });
+});
+
+test("uses each accessible patient's latest completed assessment at the 30-day cutoff", () => {
+  const now = new Date("2026-09-30T12:00:00.000Z");
+  const rows = [
+    row("01", "improved", "2026-08-30T12:00:00.000Z", "CONFIRMED", { id: "high", label: "High Risk" }),
+    row("02", "improved", "2026-08-31T12:00:00.000Z", "CONFIRMED", { id: "low", label: "Low Risk" }),
+    row("03", "improved", "2026-09-15T12:00:00.000Z", "CONFIRMED", { id: "moderate", label: "Moderate Risk" }),
+    row("04", "worsened", "2026-08-31T12:00:00.000Z", "CONFIRMED", { id: "low", label: "Low Risk" }),
+    row("05", "worsened", "2026-09-15T12:00:00.000Z", "CONFIRMED", { id: "high", label: "High Risk" }),
+    row("06", "new", "2026-09-01T12:00:00.001Z", "CONFIRMED", { id: "high", label: "High Risk" }),
+    row("07", "missing", "2026-08-31T12:00:00.000Z", "UNAVAILABLE", null),
+    row("08", "missing", "2026-09-15T12:00:00.000Z", "CONFIRMED", { id: "high", label: "High Risk" }),
+    row("09", "tie", "2026-08-31T12:00:00.000Z", "CONFIRMED", { id: "low", label: "Low Risk" }),
+    row("10", "tie", "2026-08-31T12:00:00.000Z", "CONFIRMED", { id: "high_risk", label: "High Risk" }),
+  ];
+  expect(countOverviewRisk(rows, value => value as any, now)).toEqual({
+    highRiskPatients: 4,
+    assessedPatients: 5,
+    highRiskPatients30DaysAgo: 1,
+  });
 });
