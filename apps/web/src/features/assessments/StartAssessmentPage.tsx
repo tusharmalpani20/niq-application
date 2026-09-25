@@ -63,6 +63,7 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
       if (!active) return;
       setPatients(patient && !rows.some(item => item.id === patient.id) ? [patient, ...rows] : rows);
       setFacilities(branches);
+      if (branches.length <= 1) setFacility("");
       setSelected(patient);
       setInitialization(saved);
       if (saved?.assessmentId) { navigate(`/assessments/${saved.assessmentReference ?? saved.assessmentId}`, { replace: true }); return; }
@@ -73,6 +74,7 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
   }, [user.organizationId, entry.patient, entry.initialization, loadKey, navigate]);
 
   const filtered = useMemo(() => filterAssessmentPatients(patients, facility, ""), [patients, facility]);
+  const onlyFacility = facilities.length === 1 ? facilities[0] : null;
   async function start(patient: Patient) {
     if (inFlight.current) return;
     const activeLifecycle = lifecycle.current;
@@ -119,7 +121,7 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
             : <>
               <div className="clinical-form grid gap-5 p-5">
                 {committed && selected ? <div><p className="text-sm text-muted-foreground">Patient for this assessment</p><p className="mt-1 font-medium">{selected.displayName} · {selected.reference}</p><p className="text-sm text-muted-foreground">{selected.homeFacility?.name ?? "No facility"}</p></div> : <>
-                  <Field><FieldLabel>Facility</FieldLabel><Select aria-label="Facility" selectedKey={facility || "all"} isDisabled={busy} onSelectionChange={key => { setFacility(key === "all" ? "" : String(key)); setSelected(null); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All accessible facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field>
+                  {onlyFacility ? <Field><FieldLabel>Facility</FieldLabel><p className="rounded-lg border border-input bg-muted/30 px-3 py-2 text-sm">{onlyFacility.name}</p></Field> : <Field><FieldLabel>Facility</FieldLabel><Select aria-label="Facility" selectedKey={facility || "all"} isDisabled={busy} onSelectionChange={key => { setFacility(key === "all" ? "" : String(key)); setSelected(null); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All accessible facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field>}
                   <Field><FieldLabel htmlFor="assessment-patient">Patient</FieldLabel><SearchCombobox id="assessment-patient" label="Patient" value={selected?.id ?? null} disabled={busy} placeholder="Search name, patient reference or MRN" options={filtered.map(patient => ({ id: patient.id, label: `${patient.displayName} · ${patient.reference}${patient.medicalRecordNumber ? ` · MRN ${patient.medicalRecordNumber}` : ""} · ${patient.homeFacility?.name ?? "No facility"}` }))} onChange={id => setSelected(filtered.find(patient => patient.id === id) ?? null)} /></Field>
                   {canCreatePatient && <Button variant="outline" className="w-fit" onPress={() => setMode("create")}>Create new patient</Button>}
                 </>}

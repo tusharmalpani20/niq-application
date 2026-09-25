@@ -79,10 +79,12 @@ test("empty registration closes without confirmation", async () => withDialog(as
 
 test("empty registration shows application field errors instead of native validation", async () => withDialog(async ({ click }) => {
   expect(document.querySelector("form")?.hasAttribute("novalidate")).toBe(true);
+  expect(document.body.textContent).toContain("Central");
+  expect(document.body.textContent).not.toContain("Select facility");
   await click("Register patient");
   expect(document.body.textContent).toContain("Enter a patient name.");
   expect(document.body.textContent).toContain("Enter a medical record number.");
-  expect(document.body.textContent).toContain("Select a facility.");
+  expect(document.body.textContent).not.toContain("Select a facility.");
   expect(document.body.textContent).toContain("Enter a mobile number.");
   expect(document.querySelector("#patient-phone")?.getAttribute("aria-invalid")).toBe("true");
 }));

@@ -29,7 +29,9 @@ type Props = {
 };
 
 export function PatientForm({ organizationId, facilities, patient, onCancel, onSaved, onBusyChange, focusField, submitLabel, cancelLabel = "Cancel", ref }: Props) {
-  const [facilityId, setFacilityId] = useState<string | null>(patient?.homeFacility?.id ?? null);
+  const activeFacilities = facilities.filter(item => item.status === "ACTIVE");
+  const initialFacilityId = useRef(patient?.homeFacility?.id ?? (activeFacilities.length === 1 ? activeFacilities[0]!.id : null)).current;
+  const [facilityId, setFacilityId] = useState<string | null>(initialFacilityId);
   const [gender, setGender] = useState<Patient["gender"] | null>(patient?.gender ?? null);
   const [birth, setBirth] = useState(patient?.dateOfBirth ?? "");
   const formRef = useRef<HTMLFormElement>(null);
@@ -46,7 +48,7 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
       return input && input.value !== input.defaultValue;
     });
     const changedBirth = form?.querySelector<HTMLInputElement>("#patient-birth")?.value !== displayDate(patient?.dateOfBirth ?? "");
-    const dirty = changedText || changedBirth || facilityId !== (patient?.homeFacility?.id ?? null) || gender !== (patient?.gender ?? null);
+    const dirty = changedText || changedBirth || facilityId !== initialFacilityId || gender !== (patient?.gender ?? null);
     return !!dirty;
   }
   const { requestClose, confirmation } = useUnsavedFormClose({ subject: "patient", onClose: onCancel, isBusy: () => submitting.current, isDirty });

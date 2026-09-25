@@ -8,7 +8,7 @@ import type { MembershipRole } from "@niq/application-contracts";
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Real selected patient", dateOfBirth: "2000-01-01", gender: "FEMALE", homeFacility: null, createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 const facility = { id, organizationId: id, name: "Main facility", code: "MAIN", timezone: "Asia/Kolkata", status: "ACTIVE", createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
-async function harness(path: string, handler: (url: string, init?: RequestInit) => Promise<Response>, callback: (router: ReturnType<typeof createMemoryRouter>, click: () => Promise<void>, switchScope: () => Promise<void>) => Promise<void>, role: MembershipRole = "OTHER_MEDICAL") {
+async function harness(path: string, handler: (url: string, init?: RequestInit) => Promise<Response>, callback: (router: ReturnType<typeof createMemoryRouter>, click: () => Promise<void>, switchScope: () => Promise<void>) => Promise<void>, role: MembershipRole = "OTHER_MEDICAL", accessibleFacilities = [facility]) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "Event", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "HTMLTextAreaElement", "HTMLSelectElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "ResizeObserver", "CSS", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -17,7 +17,7 @@ async function harness(path: string, handler: (url: string, init?: RequestInit) 
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {}, scrollIntoView() {} });
   globalThis.fetch = ((url: unknown, init?: RequestInit) => {
     if (String(url).endsWith("/patients") && init?.method !== "POST") return Promise.resolve(Response.json({ items: [patient] }));
-    if (String(url).endsWith("/facilities")) return Promise.resolve(Response.json({ items: [facility] }));
+    if (String(url).endsWith("/facilities")) return Promise.resolve(Response.json({ items: accessibleFacilities }));
     return handler(String(url), init);
   }) as typeof fetch;
   let updateScope: (() => void) | undefined;
@@ -84,6 +84,20 @@ test("picker MRN search preserves facility restriction and supports older respon
   const legacy = { ...first, id: "patient-c", medicalRecordNumber: undefined };
   expect(filterAssessmentPatients([first, second, legacy] as any, "facility-a", " hosp-42 ").map(item => item.id)).toEqual([id]);
   expect(filterAssessmentPatients([legacy] as any, "", "PAT-1")).toHaveLength(1);
+});
+
+test("one accessible facility is shown without an unnecessary facility selector", async () => {
+  await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async () => {
+    expect(document.body.textContent).toContain("Main facility");
+    expect(document.body.textContent).not.toContain("All accessible facilities");
+    expect(document.querySelector<HTMLInputElement>("#assessment-patient")).not.toBeNull();
+  });
+});
+
+test("multiple accessible facilities keep the facility selector", async () => {
+  await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async () => {
+    expect(document.body.textContent).toContain("All accessible facilities");
+  }, "OTHER_MEDICAL", [facility, { ...facility, id: "01ARZ3NDEKTSV4RRFFQ69G5FAW", name: "Second facility" }]);
 });
 
 test("new assessment switches to inline patient registration without opening the questionnaire", async () => {
