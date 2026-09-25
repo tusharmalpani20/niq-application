@@ -17,10 +17,14 @@ test("invitation shows an inline email error instead of browser validation", asy
     await act(async () => root.render(<UserInvitationDialog user={user} facilities={[] as Facility[]} allFacilities onClose={() => {}} onCreated={() => {}} />));
     const form = document.querySelector("form")!;
     expect(form.noValidate).toBe(true);
+    expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+    await act(async () => form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })));
+    expect(document.querySelector("#user-invite-role-error")?.textContent).toBe("Select a role.");
     await act(async () => document.querySelector<HTMLElement>('[aria-label="Role"]')!.click());
     const role = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent === "Organization admin");
     expect(role).toBeDefined();
     await act(async () => role!.click());
+    expect(document.querySelector("#user-invite-role-error")).toBeNull();
     await act(async () => form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })));
     expect(document.querySelector("#user-invite-email-error")?.textContent).toBe("Enter a valid email address.");
     expect(document.querySelector("#user-invite-email")?.getAttribute("aria-invalid")).toBe("true");

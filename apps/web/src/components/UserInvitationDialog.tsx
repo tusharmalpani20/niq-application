@@ -20,6 +20,8 @@ export function UserInvitationDialog({ user, facilities, allFacilities, onClose,
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [emailError, setEmailError] = useState("");
+  const [roleError, setRoleError] = useState("");
+  const [facilityError, setFacilityError] = useState("");
   const submitting = useRef(false);
   const [done, setDone] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -29,14 +31,17 @@ export function UserInvitationDialog({ user, facilities, allFacilities, onClose,
     isDirty: () => !done && (hasChangedInputs(formRef.current) || role !== null || unrestricted !== allFacilities || !unrestricted && ids.length > 0) });
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || !role || !unrestricted && !ids.length) return;
+    if (submitting.current) return;
     const email = String(new FormData(event.currentTarget).get("email") ?? "").trim();
-    const parsed = createInvitationSchema.safeParse({ email, role, facilityIds: unrestricted ? [] : ids });
-    if (!parsed.success) { setEmailError("Enter a valid email address."); return; }
-    setEmailError("");
+    const validEmail = createInvitationSchema.shape.email.safeParse(email).success;
+    const hasFacilityAccess = unrestricted || ids.length > 0;
+    setEmailError(validEmail ? "" : "Enter a valid email address.");
+    setRoleError(role ? "" : "Select a role.");
+    setFacilityError(hasFacilityAccess ? "" : "Select at least one facility.");
+    if (!validEmail || !role || !hasFacilityAccess) return;
     submitting.current = true; setBusy(true); setMessage("");
     try {
-      const result = await inviteOrganizationUser(user.organizationId, parsed.data);
+      const result = await inviteOrganizationUser(user.organizationId, { email, role, facilityIds: unrestricted ? [] : ids });
       onCreated();
       if (result.activationToken) setLink(window.location.origin + "/invite/" + result.activationToken);
       setDone(true);
@@ -48,11 +53,11 @@ export function UserInvitationDialog({ user, facilities, allFacilities, onClose,
     {done ? <div className="clinical-form"><div className="form-fields facility-dialog-fields"><p role="status">{link ? "Share this link with your colleague." : "The invitation is ready."}</p>{link && <Field><FieldLabel htmlFor="user-invitation-link">Invitation link</FieldLabel><Input id="user-invitation-link" value={link} readOnly onFocus={(event) => event.currentTarget.select()} /></Field>}{message && <p role="alert" className="text-sm text-destructive">{message}</p>}</div><div className="form-footer">{link && <Button variant="outline" onPress={async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setMessage(""); } catch { setMessage("Select the link and copy it manually."); } }}><Copy aria-hidden="true" />{copied ? "Copied" : "Copy link"}</Button>}<Button onPress={onClose}>Done</Button></div></div> :
       <form ref={formRef} className="clinical-form" noValidate onSubmit={submit}><fieldset disabled={busy} className="form-fields facility-dialog-fields m-0 min-w-0 border-0">
         <Field data-invalid={!!emailError || undefined}><FieldLabel htmlFor="user-invite-email" className="required-field-label">Email <span aria-hidden="true">*</span></FieldLabel><Input id="user-invite-email" name="email" type="email" autoComplete="email" required autoFocus disabled={busy} aria-invalid={!!emailError} aria-describedby={emailError ? "user-invite-email-error" : undefined} onChange={() => setEmailError("")} />{emailError && <FieldError id="user-invite-email-error">{emailError}</FieldError>}</Field>
-        <Field><FieldLabel className="required-field-label">Role <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Role" placeholder="Select role" isRequired selectedKey={role} isDisabled={busy} onSelectionChange={(key) => setRole(key === null ? null : String(key) as CreateInvitation["role"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(userRoleLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>{role && <p className="text-sm text-muted-foreground">{role === "ORGANIZATION_ADMIN" ? "Manages organization users and settings." : hasPermission(role, "assessments.edit") ? "Works with patients and assessments." : "Provides support with the access allowed for this role."}</p>}</Field>
-        <Field><FieldLabel className="required-field-label">Facility access <span aria-hidden="true">*</span></FieldLabel><FacilityAccessPicker idPrefix="invite-user" facilities={facilities} selectedIds={ids} allSelected={unrestricted} allowAll={allFacilities} disabled={busy} onSelectedIdsChange={setIds} onAllChange={setUnrestricted} /></Field>
+        <Field data-invalid={!!roleError || undefined}><FieldLabel className="required-field-label">Role <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Role" placeholder="Select role" isRequired isInvalid={!!roleError} aria-describedby={roleError ? "user-invite-role-error" : undefined} selectedKey={role} isDisabled={busy} onSelectionChange={(key) => { setRole(key === null ? null : String(key) as CreateInvitation["role"]); setRoleError(""); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(userRoleLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>{roleError && <FieldError id="user-invite-role-error">{roleError}</FieldError>}{role && <p className="text-sm text-muted-foreground">{role === "ORGANIZATION_ADMIN" ? "Manages organization users and settings." : hasPermission(role, "assessments.edit") ? "Works with patients and assessments." : "Provides support with the access allowed for this role."}</p>}</Field>
+        <Field data-invalid={!!facilityError || undefined}><FieldLabel className="required-field-label">Facility access <span aria-hidden="true">*</span></FieldLabel><FacilityAccessPicker idPrefix="invite-user" facilities={facilities} selectedIds={ids} allSelected={unrestricted} allowAll={allFacilities} disabled={busy} invalid={!!facilityError} errorId={facilityError ? "user-invite-facility-error" : undefined} onSelectedIdsChange={next => { setIds(next); if (next.length) setFacilityError(""); }} onAllChange={selected => { setUnrestricted(selected); if (selected) setFacilityError(""); }} />{facilityError && <FieldError id="user-invite-facility-error">{facilityError}</FieldError>}</Field>
         {!allFacilities && <p className="text-sm text-muted-foreground">Choose one or more of your assigned facilities.</p>}
         {message && <p role="alert" className="text-sm text-destructive">{message}</p>}
-        </fieldset><div className="form-footer"><Button type="button" variant="outline" isDisabled={busy} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={busy || !role || !unrestricted && !ids.length}>{busy ? "Creating…" : "Create invitation"}</Button></div>
+        </fieldset><div className="form-footer"><Button type="button" variant="outline" isDisabled={busy} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={busy}>{busy ? "Creating…" : "Create invitation"}</Button></div>
       </form>}
   </Dialog>{confirmation}</>;
 }

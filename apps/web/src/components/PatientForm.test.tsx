@@ -172,11 +172,13 @@ for (const [variant, selector, subject] of [["invite", "#user-invite-email", "us
   }, variant));
 }
 
-test("invitation requires an explicit role and starts clean", async () => withDialog(async ({ click, closeCount }) => {
+test("invitation shows a role error and remains clean until edited", async () => withDialog(async ({ click, closeCount }) => {
   expect(document.body.textContent).toContain("Select role");
   expect(document.body.textContent).not.toContain("Works with patients and assessments.");
   const submit = [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Create invitation")!;
-  expect(submit.disabled).toBe(true);
+  expect(submit.disabled).toBe(false);
+  await click("Create invitation");
+  expect(document.body.textContent).toContain("Select a role.");
   await click("Cancel");
   expect(closeCount()).toBe(1);
 }, "invite"));
