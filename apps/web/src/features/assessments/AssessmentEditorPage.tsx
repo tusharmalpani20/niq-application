@@ -200,7 +200,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const scanStepStatus = scanStatus === "Scan complete" ? "Done" : scanStatus === "Face scan ready" ? "Pending" : scanStatus.replace(/^Face scan |^Scan /, "");
   const attachmentCounts = { reports: record.reports.length, files: record.reports.reduce((total, report) => total + report.files.filter(file => file.status === "READY").length, 0) };
   const separatedEditor = record.result !== null || clinical.review?.state === "RETURNED" || !!clinical.error
-    || !!error || Object.keys(errors).length > 0
+    || !!error || (!scanCorrection && Object.keys(errors).length > 0)
     || (["SCORING_PENDING", "SCORING_UNAVAILABLE"].includes(record.status) && !record.result);
   return <div className="assessment-workflow @container">
     <PatientHeader compact patient={record.patient} assessmentLabel={`${record.reference} · ${record.status === "DRAFT" ? "Draft" : record.status.replaceAll("_", " ").toLowerCase()} assessment`} action={<span className="text-xs text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span>} />

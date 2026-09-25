@@ -110,6 +110,7 @@ test("scan prerequisites open the missing inputs with inline errors and no summa
   expect(document.getElementById("assessment-field-current_weight_kg-error")?.textContent).toContain("Enter a valid current weight");
   expect(document.activeElement?.id).toBe("assessment-field-height_cm");
   expect(document.body.textContent).not.toContain("Check these fields");
+  expect(document.querySelector('nav[aria-label="Assessment sections"]')?.parentElement?.className).not.toContain("rounded-t-xl");
   expect(requests.some(request => request.method === "POST" && request.url.endsWith("/face-scans"))).toBe(false);
 }, { answers: { ...recordFixture().answers, height_cm: null, current_weight_kg: null } }, "assessment-a", undefined, "OTHER_MEDICAL", true));
 
