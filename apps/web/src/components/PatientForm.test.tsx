@@ -9,14 +9,16 @@ import { PatientForm, PatientFormDialog } from "./PatientForm";
 const facility = { id: "01ARZ3NDEKTSV4RRFFQ69G5FAV", organizationId: "01ARZ3NDEKTSV4RRFFQ69G5FAX", name: "Central", code: "CTR", status: "INACTIVE" as const, timezone: "Asia/Kolkata", createdAt: new Date(), updatedAt: new Date() };
 const patient = { id: "01ARZ3NDEKTSV4RRFFQ69G5FAW", organizationId: facility.organizationId, reference: "PAT-2", displayName: "Patient Name", medicalRecordNumber: "MRN-2", homeFacility: { id: facility.id, name: facility.name }, dateOfBirth: "1999-03-20", gender: "MALE" as const, phone: "9012345678", email: "patient@example.com", createdAt: new Date(), updatedAt: new Date() };
 
-test("patient edit prefills demographics, keeps current inactive facility and uses the shared day-first date field", () => {
+test("patient edit prefills demographics, keeps current inactive facility and locks identity fields", () => {
   const html = renderToStaticMarkup(<PatientForm organizationId={facility.organizationId} facilities={[facility]} patient={patient} onCancel={() => {}} onSaved={() => {}} />);
   expect(html).toContain('value="Patient Name"');
   expect(html).toContain('value="MRN-2"');
   const mrn = html.match(/<input[^>]*id="patient-mrn"[^>]*>/)?.[0];
-  expect(mrn).toContain('readOnly=""');
+  expect(mrn).toContain('disabled=""');
   expect(mrn).not.toContain('name="mrn"');
   expect(html).toContain('value="20/03/1999"');
+  expect(html.match(/<input[^>]*id="patient-birth"[^>]*>/)?.[0]).toContain('disabled=""');
+  expect(html).toContain("Ask an organization admin to correct this.");
   expect(html).toContain('placeholder="dd/mm/yyyy"');
   expect(html).toContain('value="patient@example.com"');
   expect(html).toContain('inputMode="numeric"');
@@ -24,6 +26,13 @@ test("patient edit prefills demographics, keeps current inactive facility and us
   expect(html).toContain("Save changes");
   expect(html).not.toContain('type="date"');
   expect(html).not.toContain("Add an active facility");
+});
+
+test("admin edit guidance points to the correction actions", () => {
+  const html = renderToStaticMarkup(<PatientForm organizationId={facility.organizationId} facilities={[facility]} patient={patient} canCorrectIdentity onCancel={() => {}} onSaved={() => {}} />);
+  expect(html).toContain("Use Correct MRN on the patient record to change this.");
+  expect(html).toContain("Use Correct DOB on the patient record to change this.");
+  expect(html).not.toContain("Ask an organization admin");
 });
 
 test("registration and editing both mark mobile number required", () => {

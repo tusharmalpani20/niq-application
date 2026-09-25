@@ -49,7 +49,7 @@ test("clinician sees the latest assessment and actions without switching tabs", 
 test("organization admin can open the MRN correction action", async () => {
   await renderDetail("ORGANIZATION_ADMIN", async body => {
     expect(body.textContent).toContain("MRN-2");
-    const action = [...body.querySelectorAll("button")].find(button => button.textContent?.trim() === "Correct MRN");
+    const action = body.querySelector<HTMLButtonElement>('button[aria-label="Correct medical record number"]');
     expect(action).toBeDefined();
     await act(async () => { action!.click(); });
     expect(body.textContent).toContain("Reason for correction");
@@ -67,11 +67,17 @@ test("support can edit patient details but cannot open a clinical assessment", a
     expect(body.querySelector('button[aria-label="Edit patient"] svg')).not.toBeNull();
   });
 });
-test("scan correction link opens the patient's date of birth editor", async () => {
+test("DOB correction link opens the admin correction dialog", async () => {
+  await renderDetail("ORGANIZATION_ADMIN", async body => {
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+    expect(body.textContent).toContain("Correct date of birth");
+    expect(body.textContent).toContain("Reason for correction");
+  }, "/patients/PAT-2?edit=dateOfBirth");
+});
+test("clinicians cannot open the DOB correction dialog", async () => {
   await renderDetail("DOCTOR", async body => {
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
-    expect(body.querySelector('[aria-label="Edit patient"]')).not.toBeNull();
-    expect(document.activeElement?.id).toBe("patient-birth");
+    expect(body.textContent).not.toContain("Correct date of birth");
   }, "/patients/PAT-2?edit=dateOfBirth");
 });
 test("scan correction link focuses the patient's gender field", async () => {

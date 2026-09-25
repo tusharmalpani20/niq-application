@@ -12,7 +12,7 @@ import { Link } from "react-router-dom";
 export type AssessmentFieldsProps = {
   section: AssessmentFormManifest["sections"][number]; answers: FormAnswers;
   onChange: (id: string, value: FormAnswer) => void; errors: Record<string, string>; readOnly: boolean; heightSourceDate?: string; onEditContact?: () => void;
-  patientReference?: string; canEditPatient?: boolean;
+  patientReference?: string; canEditPatient?: boolean; canCorrectDob?: boolean;
 };
 /** Invalid and intermediate number text stays in draft state; empty input never becomes zero. */
 export function assessmentNumericInput(raw: string): FormAnswer {
@@ -56,7 +56,7 @@ export function assessmentFieldGroups(fields: FormField[], answers: FormAnswers)
   for (const field of visible) { const id = root(field); groups.set(id, [...(groups.get(id) ?? []), field]); }
   return [...groups.values()].map(group => group[0]?.id === "weight_loss" ? [...group.filter(field => field.id !== "weight_loss"), ...group.filter(field => field.id === "weight_loss")] : group);
 }
-export function AssessmentFields({ section, answers, onChange, errors, readOnly, heightSourceDate, onEditContact, patientReference, canEditPatient }: AssessmentFieldsProps) {
+export function AssessmentFields({ section, answers, onChange, errors, readOnly, heightSourceDate, onEditContact, patientReference, canEditPatient, canCorrectDob }: AssessmentFieldsProps) {
   const renderField = (field: FormField) => {
     const id = `assessment-field-${field.id}`; const errorId = `${id}-error`;
     const value = answers[field.id]; const error = errors[field.id];
@@ -88,7 +88,8 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
     }
     if (field.readOnly || field.kind === "calculated") return <div key={field.id} id={id} tabIndex={-1} className="space-y-1.5">
       <p className="text-sm text-muted-foreground">{label}</p><p className="min-h-8 font-medium">{field.kind === "calculated" ? calculated(field, answers) : value === undefined || value === null || value === "" ? "Not provided" : String(value)}</p>{field.id === "contact" && !value && onEditContact && !readOnly && <Button variant="link" className="px-0" onPress={onEditContact}>Add contact</Button>}{errorMarkup}
-      {error && (field.id === "age" || field.id === "gender") && patientReference && (canEditPatient ? <Link className="text-sm text-brand-ink underline" to={`/patients/${encodeURIComponent(patientReference)}?edit=${field.id === "age" ? "dateOfBirth" : "gender"}`}>Edit {field.id === "age" ? "date of birth" : "gender"} in patient details</Link> : <p className="text-sm text-muted-foreground">Ask someone with patient editing access to update this detail.</p>)}
+      {error && field.id === "age" && patientReference && (canCorrectDob ? <Link className="text-sm text-brand-ink underline" to={`/patients/${encodeURIComponent(patientReference)}?edit=dateOfBirth`}>Correct date of birth in patient details</Link> : <p className="text-sm text-muted-foreground">Ask an organization admin to correct the date of birth.</p>)}
+      {error && field.id === "gender" && patientReference && (canEditPatient ? <Link className="text-sm text-brand-ink underline" to={`/patients/${encodeURIComponent(patientReference)}?edit=gender`}>Edit gender in patient details</Link> : <p className="text-sm text-muted-foreground">Ask someone with patient editing access to update this detail.</p>)}
     </div>;
     const other = otherFields[field.id];
     return <div key={field.id} className={`min-w-0 space-y-2 ${field.kind === "select" && (field.options?.length || 0) <= 6 ? "col-[1/-1]" : ""}`}>

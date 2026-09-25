@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { PatientForm, PatientFormDialog } from "../components/PatientForm";
 import { CorrectPatientMrnDialog } from "../components/CorrectPatientMrnDialog";
+import { CorrectPatientDobDialog } from "../components/CorrectPatientDobDialog";
 import { PatientHeader } from "../components/PatientHeader";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
@@ -119,7 +120,7 @@ export function PatientsPage() {
       <div className="desktop-table p-5"><DataTable columns={columns} data={visiblePatients} label="Patients" emptyContent={emptyContent} /></div>
     </section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Patients pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
-    {editingPatient && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={editingPatient} onClose={() => setEditingPatient(null)} onSaved={updated => { setPatients(current => current.map(item => item.id === updated.id ? updated : item)); setEditingPatient(null); }} />}
+    {editingPatient && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={editingPatient} canCorrectIdentity={user.role === "ORGANIZATION_ADMIN"} onClose={() => setEditingPatient(null)} onSaved={updated => { setPatients(current => current.map(item => item.id === updated.id ? updated : item)); setEditingPatient(null); }} />}
     {showRegistration && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions.filter(item => item.status === "ACTIVE")} onClose={() => setShowRegistration(false)} onSaved={(patient) => { setPatients((current) => [patient, ...current]); setShowRegistration(false); }} />}
   </>;
 }
@@ -163,7 +164,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
   const [searchParams] = useSearchParams();
   const requestedEdit = searchParams.get("edit");
   const requestedEditHandled = useRef(false);
-  const [focusEditField, setFocusEditField] = useState<"dateOfBirth" | "gender" | undefined>();
+  const [focusEditField, setFocusEditField] = useState<"gender" | undefined>();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [failed, setFailed] = useState(false);
   const [reload, setReload] = useState(0);
@@ -172,14 +173,20 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
   const [historyState, setHistoryState] = useState<"loading" | "ready" | "error">("loading");
   const [editing, setEditing] = useState(false);
   const [correctingMrn, setCorrectingMrn] = useState(false);
+  const [correctingDob, setCorrectingDob] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState(false);
   const [facilityOptions, setFacilityOptions] = useState<Facility[]>([]);
   useEffect(() => {
-    if (!patient || requestedEditHandled.current || !hasPermission(user.role, "patients.edit") || (requestedEdit !== "dateOfBirth" && requestedEdit !== "gender")) return;
+    if (!patient || requestedEditHandled.current || (requestedEdit !== "dateOfBirth" && requestedEdit !== "gender")) return;
+    if (requestedEdit === "dateOfBirth") {
+      if (user.role === "ORGANIZATION_ADMIN") { requestedEditHandled.current = true; setCorrectingDob(true); }
+      return;
+    }
+    if (!hasPermission(user.role, "patients.edit")) return;
     requestedEditHandled.current = true;
     let active = true;
-    setFocusEditField(requestedEdit);
+    setFocusEditField("gender");
     setEditLoading(true);
     setEditError(false);
     listFacilities(user.organizationId).then(options => {
@@ -223,7 +230,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
       <TabsContent id="details">
         <LatestAssessment history={history} state={historyState} canRead={canReadAssessment} canEdit={canEditAssessment} />
         <div className="admin-detail-grid">
-          <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Patient information</h2><dl className="patient-definition"><div><dt>Medical record number</dt><dd className="flex flex-wrap items-center gap-3">{patient.medicalRecordNumber}{user.role === "ORGANIZATION_ADMIN" && <Button variant="outline" size="sm" onPress={() => setCorrectingMrn(true)}>Correct MRN</Button>}</dd></div><div><dt>Date of birth</dt><dd>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</dd></div><div><dt>Gender</dt><dd>{genderLabel(patient.gender)}</dd></div><div><dt>Registered</dt><dd>{formatPatientDate(patient.createdAt)}</dd></div></dl></Card>
+          <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Patient information</h2><dl className="patient-definition"><div><dt>Medical record number</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span className="min-w-0 break-all">{patient.medicalRecordNumber}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct medical record number" onPress={() => setCorrectingMrn(true)}><Pencil className="size-4" /></Button><Tooltip>Correct MRN</Tooltip></TooltipTrigger>}</dd></div><div><dt>Date of birth</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct date of birth" onPress={() => setCorrectingDob(true)}><Pencil className="size-4" /></Button><Tooltip>Correct DOB</Tooltip></TooltipTrigger>}</dd></div><div><dt>Gender</dt><dd>{genderLabel(patient.gender)}</dd></div><div><dt>Registered</dt><dd>{formatPatientDate(patient.createdAt)}</dd></div></dl></Card>
           <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Care and contact</h2><dl className="patient-definition"><div><dt>Home facility</dt><dd>{patient.homeFacility?.name ?? "—"}</dd></div><div><dt>Mobile number</dt><dd>{patient.phone || "Not provided"}</dd></div><div><dt>Email address</dt><dd>{patient.email || "Not provided"}</dd></div></dl></Card>
         </div>
       </TabsContent>
@@ -238,7 +245,8 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
         </Card>
       </TabsContent>
     </Tabs>
-    {editing && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={patient} focusField={focusEditField} onClose={() => setEditing(false)} onSaved={updated => { setPatient(updated); setEditing(false); }} />}
+    {editing && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={patient} canCorrectIdentity={user.role === "ORGANIZATION_ADMIN"} focusField={focusEditField} onClose={() => setEditing(false)} onSaved={updated => { setPatient(updated); setEditing(false); }} />}
     {correctingMrn && <CorrectPatientMrnDialog organizationId={user.organizationId} patient={patient} onClose={() => setCorrectingMrn(false)} onSaved={updated => { setPatient(updated); setCorrectingMrn(false); }} />}
+    {correctingDob && <CorrectPatientDobDialog organizationId={user.organizationId} patient={patient} onClose={() => setCorrectingDob(false)} onSaved={updated => { setPatient(updated); setCorrectingDob(false); }} />}
   </>;
 }
