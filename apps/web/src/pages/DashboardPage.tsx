@@ -14,7 +14,7 @@ import { assessmentStatusLabels } from "../lib/patient-display";
 import { overviewGrowth } from "./overview-growth";
 import { OverviewStatCard } from "./OverviewStatCard";
 
-type Overview = { patients: Patient[]; assessments: AssessmentSummary[]; highRiskPatients: number | null; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
+type Overview = { patients: Patient[]; assessments: AssessmentSummary[]; highRiskPatients: number | null; highRiskPatients30DaysAgo: number | null; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
 
 export function greetingForHour(hour: number): "Good morning" | "Good afternoon" | "Good evening" {
   if (hour >= 6 && hour < 12) return "Good morning";
@@ -104,7 +104,7 @@ export function DashboardPage() {
     ]).then(([patients, assessments, overviewRisk, members, organization, queuedReviews, myReviews]) => {
       if (!active) return;
       setData({
-        patients, assessments, highRiskPatients: overviewRisk?.highRiskPatients ?? null, queuedReviews, myReviews,
+        patients, assessments, highRiskPatients: overviewRisk?.highRiskPatients ?? null, highRiskPatients30DaysAgo: overviewRisk?.highRiskPatients30DaysAgo ?? null, queuedReviews, myReviews,
         seats: members?.filter((item) => item.active).length ?? 0,
         userLimit: organization?.entitlement?.userLimit ?? null,
         enabledUsers: members ? members.filter((item) => item.active && item.status === "ACTIVE").length : null,
@@ -117,6 +117,9 @@ export function DashboardPage() {
   const now = new Date();
   const patientGrowth = data ? overviewGrowth(data.patients.map(item => item.createdAt), now) : null;
   const completedGrowth = data ? overviewGrowth(data.assessments.flatMap(item => item.status === "COMPLETED" && item.completedAt ? [item.completedAt] : []), now) : null;
+  const highRiskTrend = data?.highRiskPatients != null && data.highRiskPatients30DaysAgo != null
+    ? { change: data.highRiskPatients - data.highRiskPatients30DaysAgo, percent: null, increaseIsGood: false }
+    : undefined;
   const openAssessments = data?.assessments.filter(item => item.status === "DRAFT" || item.status === "READY_FOR_SCORING") ?? [];
   const scoringIssues = data?.assessments.filter(item => item.status === "SCORING_UNAVAILABLE").length ?? 0;
   return <>
@@ -125,10 +128,10 @@ export function DashboardPage() {
     </header>
     {error ? <Card className="surface p-6"><p role="alert">Overview could not be loaded.</p><Button className="w-fit" variant="outline" onPress={() => setAttempt((value) => value + 1)}>Retry</Button></Card> : <>
       <section aria-label="Overview statistics" aria-busy={!data} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <OverviewStatCard label="Total patients" value={patientGrowth?.total ?? null} icon={UsersRound} growth={patientGrowth ?? undefined} detail="vs 30 days ago" to="/patients" />
+        <OverviewStatCard label="Total patients" value={patientGrowth?.total ?? null} icon={UsersRound} trend={patientGrowth ? { change: patientGrowth.added, percent: patientGrowth.percent, increaseIsGood: true } : undefined} detail="vs 30 days ago" to="/patients" />
         {(isClinician || isAdmin) && <>
-          <OverviewStatCard label="Assessments completed" value={completedGrowth?.total ?? null} icon={ClipboardCheck} growth={completedGrowth ?? undefined} detail="vs 30 days ago" to="/assessments?status=COMPLETED" />
-          <OverviewStatCard label="High Risk patients" value={data?.highRiskPatients ?? null} icon={TriangleAlert} tone="alert" detail="Latest completed NIQ category" />
+          <OverviewStatCard label="Assessments completed" value={completedGrowth?.total ?? null} icon={ClipboardCheck} trend={completedGrowth ? { change: completedGrowth.added, percent: completedGrowth.percent, increaseIsGood: true } : undefined} detail="vs 30 days ago" to="/assessments?status=COMPLETED" />
+          <OverviewStatCard label="High Risk patients" value={data?.highRiskPatients ?? null} icon={TriangleAlert} tone="alert" trend={highRiskTrend} detail="vs 30 days ago" />
           <OverviewStatCard label="Open assessments" value={data ? openAssessments.length : null} icon={ClipboardList} detail="Draft or ready to score" to="/assessments?status=OPEN" />
         </>}
       </section>

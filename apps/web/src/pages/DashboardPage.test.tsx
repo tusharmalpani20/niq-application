@@ -11,7 +11,7 @@ const date = "2026-09-20T00:00:00Z";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Example Patient", homeFacility: null, dateOfBirth: null, gender: "UNKNOWN", createdAt: date, updatedAt: date };
 const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: null, status: "SCORING_UNAVAILABLE", createdAt: date, completedAt: null };
 
-type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; userLimit?: number | null };
+type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number };
 
 test("overview greeting follows the local hour", () => {
   expect(greetingForHour(0)).toBe("Good evening");
@@ -34,7 +34,7 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
     if (url.endsWith("/patients")) return Response.json({ items: [patient] });
     if (url.endsWith("/facilities")) return Response.json({ items: [] });
     if (url.endsWith("/assessments")) return Response.json({ items: [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status, createdAt: scenario.assessmentCreatedAt ?? date, completedAt: scenario.completedAt ?? null }] });
-    if (url.endsWith("/overview-risk")) return Response.json({ highRiskPatients: 1, assessedPatients: 1 });
+    if (url.endsWith("/overview-risk")) return Response.json({ highRiskPatients: scenario.highRiskPatients ?? 1, highRiskPatients30DaysAgo: scenario.highRiskPatients30DaysAgo ?? 0, assessedPatients: 1 });
     if (url.endsWith("/users")) return Response.json({ items: [{ membershipId: id, userId: id, email: "admin@example.test", displayName: "Admin", status: "ACTIVE", role, active: true, createdAt: date }] });
     if (url.includes("/clinical-reviews?")) return Response.json({ items: [], total: scenario.reviewTotal ?? 2, page: 1, pageSize: 3 });
     if (url.endsWith(`/organizations/${id}`)) return Response.json({ organization: { id, legalName: "Example Health", displayName: "Example Health", slug: "example-health", logoObjectKey: null, primaryColor: "#006B5F", secondaryColor: "#FFFFFF", patientReferencePrefix: "PAT", status: "ACTIVE", createdAt: date, updatedAt: date }, entitlement: { userLimit: scenario.userLimit === undefined ? 5 : scenario.userLimit, effectiveFrom: date }, invitations: [], scoringConnection: null });
@@ -85,6 +85,21 @@ test("overview cards show accessible patients, completed assessments, high risk 
   await renderOverview("DOCTOR", body => {
     expect(body.querySelector('a[href="/assessments?status=COMPLETED"] strong')?.textContent).toBe("1");
   }, { assessmentStatus: "COMPLETED", assessmentCreatedAt: now.toISOString(), completedAt: lastMonth });
+});
+
+test("high-risk direction is red when more patients are high risk and green when fewer are", async () => {
+  const highRiskTrend = (body: HTMLElement) => Array.from(body.querySelectorAll('[aria-label="Overview statistics"] > *'))
+    .find(card => card.textContent?.includes("High Risk patients"))?.querySelector('[aria-label^="Up"], [aria-label^="Down"]');
+  await renderOverview("DOCTOR", body => {
+    const trend = highRiskTrend(body);
+    expect(trend?.getAttribute("aria-label")).toBe("Up 2");
+    expect(trend?.className).toContain("text-destructive");
+  }, { highRiskPatients: 3, highRiskPatients30DaysAgo: 1 });
+  await renderOverview("DOCTOR", body => {
+    const trend = highRiskTrend(body);
+    expect(trend?.getAttribute("aria-label")).toBe("Down 2");
+    expect(trend?.className).toContain("text-success");
+  }, { highRiskPatients: 1, highRiskPatients30DaysAgo: 3 });
 });
 
 test("organization admin sees actionable operations but no clinician review card", async () => {
