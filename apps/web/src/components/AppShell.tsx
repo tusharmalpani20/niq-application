@@ -79,7 +79,7 @@ function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignO
           <span className="workspace-account-name">{user.displayName}</span>
           <Icon name="chevron" size={16} />
         </summary>
-        <div className="workspace-account-menu">
+        <div className="workspace-account-menu" data-has-management={managementItems.length > 0}>
           <div className="workspace-account-identity">
             <span><strong>{branding.displayName}</strong><small>{user.displayName} · {membershipRoleLabels[user.role]}</small></span>
           </div>
