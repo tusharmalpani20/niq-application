@@ -688,7 +688,7 @@ export class PostgresApplicationService implements ApplicationService {
       throw error;
     }
     return this.db.transaction(async (tx) => {
-      // Lock the organization so concurrent logo replacements remain consistent with its cache key.
+      // Lock the organization so concurrent logo changes remain consistent with its cache key.
       const [existing] = await tx.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, organizationId)).for("update");
       if (!existing) throw new ServiceError("NOT_FOUND", "Organization not found.");
       if (logo) {
@@ -697,6 +697,8 @@ export class PostgresApplicationService implements ApplicationService {
         await tx.insert(organizationBrandAssets).values({ id: assetId, organizationId, ...values })
           .onConflictDoUpdate({ target: organizationBrandAssets.organizationId, set: { ...values, id: assetId } });
         settings.logoObjectKey = `database:${assetId}`;
+      } else if (settings.logoObjectKey === null) {
+        await tx.delete(organizationBrandAssets).where(eq(organizationBrandAssets.organizationId, organizationId));
       }
       const [result] = await tx.update(organizations).set({ ...settings, updatedAt: new Date() }).where(eq(organizations.id, organizationId)).returning();
       await this.audit(tx, organizationId, context, "ORGANIZATION_UPDATED", "organization", organizationId, actor, { fields: Object.keys(input) });

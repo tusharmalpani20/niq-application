@@ -81,6 +81,21 @@ describe("local authentication routes", () => {
     expect((await request("image/png", "")).status).toBe(401);
     expect(updates).toBe(1);
   });
+  test("passes logo removal through authenticated organization updates", async () => {
+    let removed = false;
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService({
+      updateOrganization: async (_actor, _organizationId, input) => {
+        removed = input.logoObjectKey === null;
+        return {};
+      },
+    }) });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}`, {
+      method: "PATCH", headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      body: JSON.stringify({ logoObjectKey: null }),
+    });
+    expect(response.status).toBe(200);
+    expect(removed).toBe(true);
+  });
   test("issues an HttpOnly SameSite cookie after successful sign-in", async () => {
     const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService() });
     const response = await app.request("/v1/auth/sign-in", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "admin@example.com", password: "a secure password" }) });
