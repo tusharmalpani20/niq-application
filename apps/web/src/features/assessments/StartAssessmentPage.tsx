@@ -69,6 +69,8 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
       if (saved?.assessmentId) { navigate(`/assessments/${saved.assessmentReference ?? saved.assessmentId}`, { replace: true }); return; }
       if (saved) setError(preparationMessage(saved));
       setLoaded(true);
+      // A patient-page entry already identifies the patient; the request key makes replay safe.
+      if (entry.patient && patient && !entry.initialization) void start(patient);
     }).catch(() => { if (active) { setError("The patient or assessment request could not be loaded. Check your access and try again."); setLoadFailed(true); setLoaded(true); } });
     return () => { active = false; };
   }, [user.organizationId, entry.patient, entry.initialization, loadKey, navigate]);
@@ -105,6 +107,16 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
 
   const canCreatePatient = hasPermission(user.role, "patients.create");
   const exitPath = entry.patient && selected ? `/patients/${selected.reference}` : "/assessments";
+  if (entry.patient) return <div className="assessment-workflow @container">
+    <header className="mb-5"><h1 className="text-2xl font-semibold">Preparing assessment</h1><p className="mt-1 text-sm text-muted-foreground">{selected ? `${selected.displayName} · ${selected.reference}` : "Loading patient information…"}</p></header>
+    <section className="overflow-hidden rounded-xl border border-border bg-card" aria-label="Assessment preparation">
+      <div className="p-5 text-sm">{error ? <p role="alert" className="text-destructive">{error}</p> : <p className="text-muted-foreground">Preparing the questionnaire…</p>}</div>
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
+        <Button variant="outline" isDisabled={busy} onPress={() => navigate(exitPath, { replace: true })}>Exit</Button>
+        {loadFailed ? <Button variant="outline" onPress={() => setLoadKey(key => key + 1)}>Retry loading</Button> : error && selected && <Button isDisabled={busy} onPress={() => void start(selected)}>Retry preparation</Button>}
+      </footer>
+    </section>
+  </div>;
   return <div className="assessment-workflow @container">
     <header className="mb-5"><h1 className="text-2xl font-semibold">New assessment</h1><p className="mt-1 text-sm text-muted-foreground">Select a patient and press Continue, or create one to open the questionnaire.</p></header>
     <section className="overflow-hidden rounded-xl border border-border bg-card" aria-label="Patient selection">

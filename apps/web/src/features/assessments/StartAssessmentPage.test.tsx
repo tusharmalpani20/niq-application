@@ -36,25 +36,38 @@ async function harness(path: string, handler: (url: string, init?: RequestInit) 
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key]; }
   }
 }
-test("patient entry waits for Continue and preserves creation key before uncertain request", async () => {
+test("patient entry starts directly and preserves creation key before uncertain request", async () => {
   const keys: string[] = [];
   await harness(`/assessments/new?patient=${id}`, async (url, init) => {
     if (url.includes("/patients/")) return Response.json(patient);
     if (init?.method === "POST") { keys.push(JSON.parse(String(init.body)).requestKey); throw new Error("Network response lost"); }
     throw new Error(`Unexpected ${url}`);
-  }, async (router, click) => {
-    expect(document.querySelector<HTMLInputElement>("#assessment-patient")?.value).toContain("Real selected patient");
+  }, async router => {
+    expect(document.body.textContent).toContain("Preparing assessment");
+    expect(document.body.textContent).toContain("Real selected patient");
+    expect(document.querySelector<HTMLInputElement>("#assessment-patient")).toBeNull();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.querySelector('nav[aria-label="Assessment sections"]')).toBeNull();
-    expect(keys).toHaveLength(0);
-    await click();
     expect(keys).toHaveLength(1);
     const query = new URLSearchParams(router.state.location.search);
     expect(query.get("patient")).toBe(id);
     expect(query.get("requestKey")).toBe(keys[0]);
-    await click();
+    const retry = [...document.querySelectorAll("button")].find(button => button.textContent === "Retry preparation")!;
+    await act(async () => { retry.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(keys).toHaveLength(2);
     expect(keys[1]).toBe(keys[0]);
+  });
+});
+test("patient entry opens the questionnaire as soon as preparation succeeds", async () => {
+  let starts = 0;
+  await harness(`/assessments/new?patient=${id}`, async (url, init) => {
+    if (url.includes("/patients/")) return Response.json(patient);
+    if (init?.method === "POST") { starts++; return Response.json({ id, status: "READY", assessmentId: id, assessmentReference: "ASM-000009", failureCode: null }); }
+    throw new Error(`Unexpected ${url}`);
+  }, async router => {
+    expect(starts).toBe(1);
+    expect(router.state.location.pathname).toBe("/assessments/ASM-000009");
+    expect(document.querySelector("#assessment-patient")).toBeNull();
   });
 });
 test("refresh replays existing creation key and resumes returned initialization", async () => {
@@ -62,7 +75,7 @@ test("refresh replays existing creation key and resumes returned initialization"
     if (url.includes("/patients/")) return Response.json(patient);
     if (init?.method === "POST") { expect(JSON.parse(String(init.body)).requestKey).toBe("persisted-creation-key"); return Response.json({ id, status: "PENDING", assessmentId: null, failureCode: null }); }
     return Response.json({ id, status: "PENDING", assessmentId: null, failureCode: null });
-  }, async (router, click) => { expect(new URLSearchParams(router.state.location.search).get("initialization")).toBeNull(); await click(); expect(new URLSearchParams(router.state.location.search).get("initialization")).toBe(id); });
+  }, async router => { expect(new URLSearchParams(router.state.location.search).get("initialization")).toBe(id); });
   await harness(`/assessments/new?patient=${id}&requestKey=persisted-creation-key&initialization=${id}`, async (url, init) => {
     expect(init?.method ?? "GET").toBe("GET");
     return Response.json(url.includes("/patients/") ? patient : { id, status: "READY", assessmentId: id, assessmentReference: "ASM-000001", failureCode: null });
@@ -181,8 +194,7 @@ test("late initialization does not navigate after leaving the creation route", a
     if (url.includes("/patients/")) return Response.json(patient);
     if (init?.method === "POST") return new Promise(resolve => { finish = resolve; });
     throw new Error(`Unexpected ${url}`);
-  }, async (router, click) => {
-    await click();
+  }, async router => {
     expect(finish).toBeDefined();
     await act(async () => { await router.navigate("/away"); });
     await act(async () => { finish(Response.json({ id, status: "READY", assessmentId: id, failureCode: null })); await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -198,8 +210,7 @@ test("scope switch clears patient state and ignores the previous user's pending 
     if (url.includes("/patients/")) return Response.json({ ...patient, displayName: second ? "New scope patient" : patient.displayName });
     if (init?.method === "POST") return new Promise(resolve => { if (!second) finish = resolve; });
     throw new Error(`Unexpected ${url}`);
-  }, async (router, click, switchScope) => {
-    await click();
+  }, async (router, _click, switchScope) => {
     expect(finish).toBeDefined();
     await switchScope();
     expect(document.body.textContent).toContain("New scope patient");
