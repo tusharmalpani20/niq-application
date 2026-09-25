@@ -15,12 +15,16 @@ function recordFixture(): AssessmentWorkflow {
     patient: { id: "patient-a", reference: "PAT-1", displayName: "Test patient", dateOfBirth: "2006-01-01", gender: "FEMALE", phone: "1234567890", homeFacility: { id: "facility-a", name: "Chennai" } },
     createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 }
-async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{url: string; method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}, locator = "assessment-a", submittedResult?: AssessmentScoreResult, role: MembershipRole = "OTHER_MEDICAL") {
+async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{url: string; method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}, locator = "assessment-a", submittedResult?: AssessmentScoreResult, role: MembershipRole = "OTHER_MEDICAL", scanEnabled = false) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["FocusEvent", "window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   const values = { FocusEvent: dom.window.FocusEvent, window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, NodeFilter: dom.window.NodeFilter, DocumentFragment: dom.window.DocumentFragment, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true };
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable: true });
+  if (scanEnabled) {
+    Object.defineProperty(dom.window, "isSecureContext", { value: true });
+    Object.defineProperty(dom.window.navigator, "mediaDevices", { value: { getUserMedia: () => { throw new Error("Camera must not start for incomplete scan inputs"); } } });
+  }
   // React is imported before JSDOM; provide its legacy input-focus event hooks.
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {} });
   dom.window.confirm = () => false;
@@ -29,6 +33,7 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
   globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
     const method = init?.method ?? "GET"; const body = init?.body ? JSON.parse(String(init.body)) : null;
     requests.push({ url: String(_url), method, body });
+    if (scanEnabled && String(_url).endsWith("/face-scans")) return Response.json({ enabled: true, currentSessionId: null, sessions: [] });
     if (String(_url).endsWith("/clinical-review")) return Response.json({ assessmentId:record.id, revision:0, scoreRevision:0, cycle:0, state:"NOT_SUBMITTED", allowedActions:[], history:[], canAdjustScores:role !== "ORGANIZATION_ADMIN", canEditDraft:record.canEditDraft ?? true });
     if (String(_url).endsWith("/score-reviews") && record.result) return Response.json(projectScoreReviews(record.result, []));
     if (method === "POST" && String(_url).endsWith("/submit") && submittedResult) record = { ...record, status: "SCORED", result: submittedResult };
@@ -92,6 +97,21 @@ test("review missing-answer link focuses its field after changing section", asyn
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
   expect(document.activeElement?.id).toBe("assessment-field-height_cm");
 }, { answers: { ...recordFixture().answers, height_cm: null } }));
+test("scan prerequisites open the missing inputs with inline errors and no summary box", async () => harness(async ({ click, requests }) => {
+  await click("Face scan");
+  await act(async () => {
+    document.querySelector<HTMLInputElement>('input[type="radio"][value="resting"]')!.click();
+    document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+  });
+  await click("Start face scan");
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+  expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Personal details");
+  expect(document.getElementById("assessment-field-height_cm-error")?.textContent).toContain("Enter a valid height");
+  expect(document.getElementById("assessment-field-current_weight_kg-error")?.textContent).toContain("Enter a valid current weight");
+  expect(document.activeElement?.id).toBe("assessment-field-height_cm");
+  expect(document.body.textContent).not.toContain("Check these fields");
+  expect(requests.some(request => request.method === "POST" && request.url.endsWith("/face-scans"))).toBe(false);
+}, { answers: { ...recordFixture().answers, height_cm: null, current_weight_kg: null } }, "assessment-a", undefined, "OTHER_MEDICAL", true));
 
 const reportFixture = { id: "report-a", label: "Blood report", purpose: "", datePrecision: "MONTH" as const, year: 2026, month: 8, day: null, files: [] };
 test("attachments heading shows the total uploaded files", async () => harness(async ({ click }) => {

@@ -1,6 +1,6 @@
 import { useUnsavedFormClose } from "./useUnsavedFormClose";
 import { registerPatientSchema, updatePatientSchema, type Facility, type Patient } from "@niq/application-contracts";
-import { useImperativeHandle, useRef, useState, type FormEvent, type Ref } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type FormEvent, type Ref } from "react";
 import { Alert, AlertDescription } from "./ui/alert";
 import { Button } from "./ui/button";
 import { DateInput, displayDate } from "./ui/date-input";
@@ -23,13 +23,17 @@ type Props = {
   onCancel: () => void;
   onSaved: (patient: Patient) => void;
   onBusyChange?: (busy: boolean) => void;
+  focusField?: "dateOfBirth" | "gender";
 };
 
-export function PatientForm({ organizationId, facilities, patient, onCancel, onSaved, onBusyChange, ref }: Props) {
+export function PatientForm({ organizationId, facilities, patient, onCancel, onSaved, onBusyChange, focusField, ref }: Props) {
   const [facilityId, setFacilityId] = useState<string | null>(patient?.homeFacility?.id ?? null);
   const [gender, setGender] = useState<Patient["gender"] | null>(patient?.gender ?? null);
   const [birth, setBirth] = useState(patient?.dateOfBirth ?? "");
   const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (focusField) requestAnimationFrame(() => document.getElementById(focusField === "dateOfBirth" ? "patient-birth" : "patient-gender")?.focus());
+  }, [focusField]);
   const submitting = useRef(false);
 
   function isDirty() {
@@ -98,11 +102,11 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
       <div className="grid gap-4">
         <h3 className="font-semibold">Patient details</h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field data-invalid={!!fieldErrors.name || undefined}><FieldLabel htmlFor="patient-name" className="required-field-label">Patient name <span aria-hidden="true">*</span></FieldLabel><Input id="patient-name" name="name" defaultValue={patient?.displayName} autoComplete="name" required maxLength={200} autoFocus aria-invalid={!!fieldErrors.name} aria-describedby={fieldErrors.name ? "patient-name-error" : undefined} onChange={() => clearFieldError("name")} />{fieldErrors.name && <FieldError id="patient-name-error">{fieldErrors.name}</FieldError>}</Field>
+          <Field data-invalid={!!fieldErrors.name || undefined}><FieldLabel htmlFor="patient-name" className="required-field-label">Patient name <span aria-hidden="true">*</span></FieldLabel><Input id="patient-name" name="name" defaultValue={patient?.displayName} autoComplete="name" required maxLength={200} autoFocus={!focusField} aria-invalid={!!fieldErrors.name} aria-describedby={fieldErrors.name ? "patient-name-error" : undefined} onChange={() => clearFieldError("name")} />{fieldErrors.name && <FieldError id="patient-name-error">{fieldErrors.name}</FieldError>}</Field>
           <Field data-invalid={!!fieldErrors.medicalRecordNumber || undefined}><FieldLabel htmlFor="patient-mrn" className="required-field-label">Medical record number <span aria-hidden="true">*</span></FieldLabel><Input id="patient-mrn" name="mrn" defaultValue={patient?.medicalRecordNumber} placeholder="Hospital MRN" maxLength={120} required aria-invalid={!!fieldErrors.medicalRecordNumber} aria-describedby={fieldErrors.medicalRecordNumber ? "patient-mrn-error" : undefined} onChange={() => clearFieldError("medicalRecordNumber")} />{fieldErrors.medicalRecordNumber && <FieldError id="patient-mrn-error">{fieldErrors.medicalRecordNumber}</FieldError>}</Field>
           <Field data-invalid={!!fieldErrors.homeFacilityId || undefined}><FieldLabel className="required-field-label">Facility <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Facility" placeholder="Select facility" selectedKey={facilityId} onSelectionChange={key => { setFacilityId(String(key)); clearFieldError("homeFacilityId"); }} isRequired isInvalid={!!fieldErrors.homeFacilityId} aria-describedby={fieldErrors.homeFacilityId ? "patient-facility-error" : undefined} isDisabled={isSubmitting}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{options.map(item => <SelectItem id={item.id} key={item.id}>{item.name}{item.status !== "ACTIVE" ? " (inactive)" : ""}</SelectItem>)}{missingCurrent && <SelectItem id={currentFacility.id}>{currentFacility.name} (current)</SelectItem>}</SelectContent></Select>{fieldErrors.homeFacilityId && <FieldError id="patient-facility-error">{fieldErrors.homeFacilityId}</FieldError>}</Field>
           <Field data-invalid={!!fieldErrors.dateOfBirth || undefined}><FieldLabel htmlFor="patient-birth" className="required-field-label">Date of birth <span aria-hidden="true">*</span></FieldLabel><DateInput id="patient-birth" label="Date of birth" value={birth} disabled={isSubmitting} required invalid={!!fieldErrors.dateOfBirth} describedBy={fieldErrors.dateOfBirth ? "patient-birth-error" : undefined} max={todayDate()} onChange={value => { setBirth(value ?? ""); clearFieldError("dateOfBirth"); }} />{fieldErrors.dateOfBirth && <FieldError id="patient-birth-error">{fieldErrors.dateOfBirth}</FieldError>}</Field>
-          <Field data-invalid={!!fieldErrors.gender || undefined}><FieldLabel className="required-field-label">Gender <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Gender" placeholder="Select gender" selectedKey={gender} onSelectionChange={key => { setGender(String(key) as Patient["gender"]); clearFieldError("gender"); }} isRequired isInvalid={!!fieldErrors.gender} aria-describedby={fieldErrors.gender ? "patient-gender-error" : undefined} isDisabled={isSubmitting}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(["FEMALE", "MALE", "OTHER", "UNKNOWN"] as const).map(value => <SelectItem id={value} key={value}>{value[0] + value.slice(1).toLowerCase()}</SelectItem>)}</SelectContent></Select>{fieldErrors.gender && <FieldError id="patient-gender-error">{fieldErrors.gender}</FieldError>}</Field>
+          <Field data-invalid={!!fieldErrors.gender || undefined}><FieldLabel className="required-field-label">Gender <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Gender" placeholder="Select gender" selectedKey={gender} onSelectionChange={key => { setGender(String(key) as Patient["gender"]); clearFieldError("gender"); }} isRequired isInvalid={!!fieldErrors.gender} aria-describedby={fieldErrors.gender ? "patient-gender-error" : undefined} isDisabled={isSubmitting}><SelectTrigger id="patient-gender"><SelectValue /></SelectTrigger><SelectContent>{(["FEMALE", "MALE", "OTHER", "UNKNOWN"] as const).map(value => <SelectItem id={value} key={value}>{value[0] + value.slice(1).toLowerCase()}</SelectItem>)}</SelectContent></Select>{fieldErrors.gender && <FieldError id="patient-gender-error">{fieldErrors.gender}</FieldError>}</Field>
         </div>
       </div>
       <div className="border-t pt-4 grid gap-4"><h3 className="font-semibold">Contact details</h3><div className="grid gap-4 sm:grid-cols-2">

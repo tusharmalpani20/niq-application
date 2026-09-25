@@ -16,7 +16,7 @@ import { ClinicalReviewPanel } from "./ClinicalReviewPanel";
 import { useClinicalReview } from "./useClinicalReview";
 import { AssessmentScoreReview } from "./AssessmentScoreReview";
 import { AssessmentReports } from "./AssessmentReports";
-import { AssessmentFaceScan } from "./AssessmentFaceScan";
+import { AssessmentFaceScan, type MissingScanInput } from "./AssessmentFaceScan";
 import { useDraftNavigationGuard } from "./useDraftNavigationGuard";
 import { assessmentRequest, AssessmentRequestError, getAssessment, reconcileAssessmentScoring, retryAssessmentScoring, saveAssessment, submitAssessment } from "./workflow-api";
 
@@ -36,6 +36,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const [sectionId, setSectionId] = useState("personal_details");
   const [error, setError] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [scanCorrection, setScanCorrection] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const operation = useRef(false);
@@ -87,6 +88,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   async function persist(): Promise<AssessmentWorkflow | null> {
     if (!record || !editable || conflict || operation.current) return null;
     const invalid = validateAssessmentAnswers(record.manifest, answers);
+    setScanCorrection(false);
     setErrors(invalid);
     if (Object.keys(invalid).length) { setError("Correct invalid values before saving. Incomplete fields can be saved in a draft."); return null; }
     if (!dirty) return record;
@@ -103,6 +105,21 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
     if (save && editable && dirty && !await persist()) return;
     setSectionId(id); setError("");
     requestAnimationFrame(() => (document.getElementById(fieldId ? `assessment-field-${fieldId}` : "assessment-section-heading") ?? document.getElementById("assessment-section-heading"))?.focus());
+  }
+  function showMissingScanInputs(fields: MissingScanInput[]) {
+    const fieldIds: Record<MissingScanInput, string> = { dob: "age", gender: "gender", heightCm: "height_cm", weightKg: "current_weight_kg" };
+    const messages: Record<MissingScanInput, string> = {
+      dob: "Save a valid date of birth in the patient's profile before starting a face scan.",
+      gender: "Save male or female gender in the patient's profile before starting a face scan.",
+      heightCm: "Enter a valid height before starting a face scan.",
+      weightKg: "Enter a valid current weight before starting a face scan."
+    };
+    setErrors(Object.fromEntries(fields.map(field => [fieldIds[field], messages[field]])));
+    setScanCorrection(true);
+    setError("");
+    setShowScoredAnswers(true);
+    setSectionId("personal_details");
+    requestAnimationFrame(() => document.getElementById(`assessment-field-${fieldIds[fields[0]!]}`)?.focus());
   }
   async function openVerification() {
     if (!hasPermission(role, "assessments.submit")) return;
@@ -194,7 +211,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
     </div>
     </div>
     {error && <div role="alert" className="mb-4 rounded-lg border border-destructive/30 p-4"><p>{error}</p>{conflict && <Button className="mt-2" variant="outline" onPress={() => setDiscardOpen(true)}>Load saved version</Button>}</div>}
-    {Object.keys(errors).length > 0 && <div className="mb-4 rounded-lg border border-destructive/30 p-4"><strong>Check these fields</strong><ul className="mt-2 list-inside list-disc">{Object.entries(errors).map(([id, message]) => { const owner = record.manifest.sections.find(item => item.fields.some(field => field.id === id)); const field = owner?.fields.find(item => item.id === id); return <li key={id}><button className="text-brand-ink underline" onClick={() => { if (owner) void selectSection(owner.id, false, id); }}>{field?.label ?? "Questionnaire"}: {message}</button></li>; })}</ul></div>}
+    {!scanCorrection && Object.keys(errors).length > 0 && <div className="mb-4 rounded-lg border border-destructive/30 p-4"><strong>Check these fields</strong><ul className="mt-2 list-inside list-disc">{Object.entries(errors).map(([id, message]) => { const owner = record.manifest.sections.find(item => item.fields.some(field => field.id === id)); const field = owner?.fields.find(item => item.id === id); return <li key={id}><button className="text-brand-ink underline" onClick={() => { if (owner) void selectSection(owner.id, false, id); }}>{field?.label ?? "Questionnaire"}: {message}</button></li>; })}</ul></div>}
     {["SCORING_PENDING", "SCORING_UNAVAILABLE"].includes(record.status) && !record.result && <div className="mb-5 rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "Administrator review needed" : record.status === "SCORING_PENDING" ? "Scoring result pending" : "Scoring needs attention"}</h2><p className="my-2 text-sm text-muted-foreground">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "The scoring service has not confirmed this request. An organisation administrator must check it. Your submitted answers and reports remain preserved." : "The submitted assessment is preserved. Retry checks the same scoring request."}</p>{record.submission?.status === "RECONCILIATION_REQUIRED" ? hasPermission(role, "assessments.reconcile") && <Button variant="outline" isDisabled={busy} onPress={() => { void retry(true); }}>Check original scoring request</Button> : hasPermission(role, "assessments.submit") && <Button variant="outline" isDisabled={busy} onPress={() => { void retry(); }}>Retry scoring</Button>}</div>}
     {(record.result !== null || clinical.review?.state === "RETURNED" || !!clinical.error) && <ClinicalReviewPanel organizationId={organizationId} assessmentId={internalId} review={clinical.review} error={clinical.error} loading={clinical.loading} blocked={dirty || reportDirty || busy || reportBusy || scanBusy || contactOpen || conflict} onRefresh={clinical.refresh} onChanged={async () => { await reload(); await clinical.refresh(); }} onBusyChange={setReviewBusy} />}
     {record.result !== null && !showScoredAnswers && <AssessmentScoreReview canReview={hasPermission(role, "scores.review") && clinical.review?.canAdjustScores === true && !reviewBusy && !clinical.loading && !clinical.error} onSaved={clinical.refresh} scanStatus={scanStatus} record={record} organizationId={organizationId} renderScan={active => <AssessmentFaceScan organizationId={organizationId} record={record} active={active} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onBusyChange={setScanBusy} onStatusChange={setScanStatus}/>} reportsContent={<AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!hasPermission(role, "reports.manage") || !editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />} />}
@@ -203,8 +220,8 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
     <div className={`grid min-w-0 border-x border-border bg-card @min-[48rem]:grid-cols-[250px_minmax(0,1fr)] ${separatedEditor ? "rounded-t-xl border-t" : ""}`}>
       <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} scores={sectionScores} scanStatus={scanStepStatus} attachmentCounts={attachmentCounts} disabled={locked} onSelect={id => { void selectSection(id); }} />
       <div className="min-w-0 p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 id="assessment-section-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>{sectionId === "reports" && <span className="text-xs text-muted-foreground tabular-nums">{attachmentCounts.files} {attachmentCounts.files === 1 ? "file" : "files"} uploaded</span>}{sectionCoverage && <span className="text-xs text-muted-foreground">{sectionCoverage.answered}/{sectionCoverage.total} answered · {sectionCoverage.percent ?? 0}%</span>}</div>
-        {(record.result === null || showScoredAnswers) && <AssessmentFaceScan organizationId={organizationId} record={{ ...record, answers }} active={sectionId === "face_scan"} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onBusyChange={setScanBusy} onStatusChange={setScanStatus} onSessionChange={setScanSession}/>}
-        {section && <section><AssessmentFields heightSourceDate={record.heightSource?.recordedAt} section={section} answers={answers} errors={errors} readOnly={!editable || locked} onEditContact={editable ? () => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); } : undefined} onChange={(id, value) => { setAnswers(current => clearInactiveAssessmentAnswers(record.manifest, { ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
+        {(record.result === null || showScoredAnswers) && <AssessmentFaceScan organizationId={organizationId} record={{ ...record, answers }} active={sectionId === "face_scan"} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onMissingInputs={showMissingScanInputs} onBusyChange={setScanBusy} onStatusChange={setScanStatus} onSessionChange={setScanSession}/>}
+        {section && <section><AssessmentFields heightSourceDate={record.heightSource?.recordedAt} section={section} answers={answers} errors={errors} readOnly={!editable || locked} patientReference={record.patient.reference} canEditPatient={hasPermission(role, "patients.edit")} onEditContact={editable ? () => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); } : undefined} onChange={(id, value) => { setAnswers(current => clearInactiveAssessmentAnswers(record.manifest, { ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
         <div hidden={sectionId !== "reports"}>{(record.result === null || showScoredAnswers) && <AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!hasPermission(role, "reports.manage") || !editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />}</div>
         {sectionId === "review" && <AssessmentReview record={record} answers={answers} scanStatus={scanStepStatus} scanSession={scanSession} organizationId={organizationId} assessmentId={internalId} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}
       </div>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AssessmentWorkflow, FaceScanList, FaceScanSession, FaceScanSignal } from "@niq/application-contracts";
+import { faceScanContextSchema, type AssessmentWorkflow, type FaceScanList, type FaceScanSession, type FaceScanSignal } from "@niq/application-contracts";
 import { ScanFace } from "lucide-react";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -17,9 +17,22 @@ const labels: Record<FaceScanSession["state"], string> = {
 };
 const terminal = new Set(["COMPLETED", "FAILED", "EXPIRED", "CANCELLED"]);
 const cancellable = new Set(["REQUESTED", "UPLOAD_ACCEPTED", "PAUSED"]);
-export function AssessmentFaceScan({ organizationId, record, active, disabled, beforeStart, onBusyChange, onStatusChange, onSessionChange, captureFactory = createCaptureController }: {
+export type MissingScanInput = "dob" | "gender" | "heightCm" | "weightKg";
+export function missingScanInputs(record: AssessmentWorkflow): MissingScanInput[] {
+  const parsed = faceScanContextSchema.safeParse({
+    dob: record.patient.dateOfBirth,
+    gender: record.patient.gender === "MALE" ? "male" : record.patient.gender === "FEMALE" ? "female" : null,
+    heightCm: record.answers.height_cm,
+    weightKg: record.answers.current_weight_kg,
+    posture: "resting",
+    employeeId: "scan"
+  });
+  return parsed.success ? [] : parsed.error.issues.map(issue => issue.path[0]).filter((field): field is MissingScanInput => field === "dob" || field === "gender" || field === "heightCm" || field === "weightKg");
+}
+export function AssessmentFaceScan({ organizationId, record, active, disabled, beforeStart, onMissingInputs, onBusyChange, onStatusChange, onSessionChange, captureFactory = createCaptureController }: {
   organizationId: string; record: AssessmentWorkflow; active: boolean; disabled: boolean;
   beforeStart: () => Promise<AssessmentWorkflow | null>; onBusyChange: (value: boolean) => void; onStatusChange: (value: string) => void;
+  onMissingInputs?: (fields: MissingScanInput[]) => void;
   onSessionChange?: (session: FaceScanSession | null) => void;
   captureFactory?: typeof createCaptureController;
 }) {
@@ -135,6 +148,10 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
       if (window.isSecureContext === false || !navigator.mediaDevices?.getUserMedia) throw new Error("Camera capture needs a supported browser on HTTPS (or localhost).");
       const saved = await beforeStart();
       if (!saved || !alive.current) { if (alive.current) setPhase("idle"); return; }
+      if (session?.state !== "REQUESTED") {
+        const missing = missingScanInputs(saved);
+        if (missing.length) { setPhase("idle"); onMissingInputs?.(missing); return; }
+      }
       // A terminal attempt is history. Only an explicit new start gets a new key;
       // uncertain setup retries retain their original intent identity.
       if (session && terminal.has(session.state)) startKey.current = null;

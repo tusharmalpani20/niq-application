@@ -1,6 +1,6 @@
 import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility, Patient } from "@niq/application-contracts";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { Pencil, Search } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -159,6 +159,10 @@ function LatestAssessment({ history, state, canRead, canEdit }: { history: Asses
 
 function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; patientLocator: string }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedEdit = searchParams.get("edit");
+  const requestedEditHandled = useRef(false);
+  const [focusEditField, setFocusEditField] = useState<"dateOfBirth" | "gender" | undefined>();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [failed, setFailed] = useState(false);
   const [reload, setReload] = useState(0);
@@ -170,6 +174,18 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
   const [editError, setEditError] = useState(false);
   const [facilityOptions, setFacilityOptions] = useState<Facility[]>([]);
   useEffect(() => {
+    if (!patient || requestedEditHandled.current || !hasPermission(user.role, "patients.edit") || (requestedEdit !== "dateOfBirth" && requestedEdit !== "gender")) return;
+    requestedEditHandled.current = true;
+    let active = true;
+    setFocusEditField(requestedEdit);
+    setEditLoading(true);
+    setEditError(false);
+    listFacilities(user.organizationId).then(options => {
+      if (active) { setFacilityOptions(options); setEditing(true); }
+    }).catch(() => { if (active) setEditError(true); }).finally(() => { if (active) setEditLoading(false); });
+    return () => { active = false; };
+  }, [patient, requestedEdit, user.organizationId, user.role]);
+  useEffect(() => {
     let active = true;
     setPatient(null);
     setFailed(false);
@@ -178,10 +194,10 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
       setPatient(value);
       setHistoryState("loading");
       listAssessments(user.organizationId).then(items => { if (active) { setHistory(items.filter(item => item.patient.id === value.id).sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime())); setHistoryState("ready"); } }).catch(() => { if (active) setHistoryState("error"); });
-      if (patientLocator !== value.reference) navigate(`/patients/${value.reference}`, { replace: true });
+      if (patientLocator !== value.reference) navigate(`/patients/${value.reference}${requestedEdit ? `?edit=${requestedEdit}` : ""}`, { replace: true });
     }).catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
-  }, [navigate, patientLocator, user.organizationId, reload]);
+  }, [navigate, patientLocator, user.organizationId, reload, requestedEdit]);
   if (failed) return <Alert variant="destructive"><AlertDescription>This patient could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button> <Link to="/patients">Back to patients</Link></AlertDescription></Alert>;
   if (!patient) return <p className="muted">Loading patient…</p>;
   const canEditPatient = hasPermission(user.role, "patients.edit");
@@ -220,6 +236,6 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
         </Card>
       </TabsContent>
     </Tabs>
-    {editing && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={patient} onClose={() => setEditing(false)} onSaved={updated => { setPatient(updated); setEditing(false); }} />}
+    {editing && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={patient} focusField={focusEditField} onClose={() => setEditing(false)} onSaved={updated => { setPatient(updated); setEditing(false); }} />}
   </>;
 }

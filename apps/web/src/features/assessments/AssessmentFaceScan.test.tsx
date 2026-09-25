@@ -3,18 +3,18 @@ import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { AssessmentWorkflow, FaceScanList, FaceScanSession } from "@niq/application-contracts";
-import { AssessmentFaceScan } from "./AssessmentFaceScan";
+import { AssessmentFaceScan, type MissingScanInput } from "./AssessmentFaceScan";
 import { createCaptureController, type CaptureSDK } from "./careplix-capture";
 
 const session: FaceScanSession = { id: "session", state: "REQUESTED", context: { dob: "1990-01-01", gender: "female", heightCm: 170, weightKg: 70, posture: "resting", employeeId: "employee" }, createdAt: "2026-09-20T12:00:00.000Z", updatedAt: "2026-09-20T12:00:00.000Z", completedAt: null, failureCode: null, result: null, score: null };
-async function harness(run: (ctx: { click: (text: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number } = {}) {
+async function harness(run: (ctx: { click: (text: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "https://niq.test", pretendToBeVisual: true });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   const values: Record<string, unknown> = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, NodeFilter: dom.window.NodeFilter, DocumentFragment: dom.window.DocumentFragment, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true };
   Object.defineProperty(dom.window.navigator, "mediaDevices", { value: { getUserMedia: () => { throw new Error("Real camera must not be used in this test"); } } });
   const requests: Array<{ path: string; body: any }> = [];
-  let current = options.existing ?? null, starts = 0, saves = 0, busy = false, reads = 0;
+  let current = options.existing ?? null, starts = 0, saves = 0, busy = false, reads = 0, missing: MissingScanInput[] = [];
   let releaseStatus: () => void = () => {};
   let finish: Parameters<CaptureSDK["facescan"]["onScanFinish"]>[0] = () => {};
   let onFrame: Parameters<CaptureSDK["facescan"]["onFrame"]>[0] = () => {};
@@ -32,13 +32,13 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; cons
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable: true });
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {} });
   const root = createRoot(document.getElementById("root")!);
-  const record = { id: "assessment", revision: 3, status: "DRAFT", patient: { dateOfBirth: "1990-01-01", gender: "FEMALE" }, answers: { height_cm: 170, current_weight_kg: options.weight ?? 70 } } as AssessmentWorkflow;
+  const record = { id: "assessment", revision: 3, status: "DRAFT", patient: { dateOfBirth: "1990-01-01", gender: "FEMALE" }, answers: { height_cm: 170, current_weight_kg: options.weight === undefined ? 70 : options.weight } } as AssessmentWorkflow;
   const flush = () => new Promise(resolve => setTimeout(resolve, 0));
   try {
-    await act(async () => { root.render(<AssessmentFaceScan organizationId="org" record={record} active disabled={false} beforeStart={async () => { saves++; if (options.hiddenDuringSave) Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true }); return { ...record, revision: 4 }; }} onBusyChange={value => { busy = value; }} onStatusChange={() => {}} captureFactory={() => createCaptureController(async () => sdk)}/>); await flush(); });
+    await act(async () => { root.render(<AssessmentFaceScan organizationId="org" record={record} active disabled={false} beforeStart={async () => { saves++; if (options.hiddenDuringSave) Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true }); return { ...record, revision: 4 }; }} onMissingInputs={fields => { missing = fields; }} onBusyChange={value => { busy = value; }} onStatusChange={() => {}} captureFactory={() => createCaptureController(async () => sdk)}/>); await flush(); });
     await run({ releaseStatus: async () => { await act(async () => { releaseStatus(); await flush(); }); },
       setCurrent: async value => { current = value; await act(async () => { document.dispatchEvent(new dom.window.Event("visibilitychange")); await flush(); }); },
-      requests, starts: () => starts, saved: () => saves, busy: () => busy,
+      requests, starts: () => starts, saved: () => saves, busy: () => busy, missing: () => missing,
       click: async text => { const button = [...document.querySelectorAll("button")].find(b => b.textContent?.trim() === text); if (!button) throw new Error(`Missing ${text}`); await act(async () => { button.click(); await flush(); }); },
       consent: async () => { await act(async () => { document.querySelector<HTMLInputElement>('input[type="radio"][value="standing"]:not(:disabled)')?.click(); document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(); }); },
       finish: async () => { await act(async () => { finish({ raw_intensity: [{ r: 1, g: 2, b: 3 }, { r: 2, g: 3, b: 4 }], ppg_time: [0, 33], average_fps: 30 }); await flush(); }); },
@@ -50,6 +50,12 @@ test("disabled feature never starts SDK or consumes a session", async () => harn
   expect(document.body.textContent).toContain("Face scan is not available yet");
   expect(starts()).toBe(0); expect(requests.every(r => r.body === null)).toBe(true);
 }, { enabled: false }));
+test("missing scan weight directs correction without creating a remote session", async () => harness(async ({ consent, click, missing, requests, starts }) => {
+  await consent(); await click("Start face scan");
+  expect(missing()).toEqual(["weightKg"]);
+  expect(requests.some(request => request.body?.requestKey)).toBe(false);
+  expect(starts()).toBe(0);
+}, { weight: null }));
 test("saves draft before capture and unlocks navigation only after upload acceptance", async () => harness(async ({ consent, click, starts, saved, requests, finish, busy }) => {
   await consent(); await click("Start face scan");
   expect(saved()).toBe(1); expect(starts()).toBe(1); expect(busy()).toBe(true);
