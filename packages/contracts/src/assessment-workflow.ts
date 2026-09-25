@@ -66,12 +66,18 @@ export type AssessmentWorkflow = {
 };
 
 /** Read-only projection of the validated NIQ Scoring result for clinical workspace display. */
+export const assessmentRiskColorSchema = z.enum(["green", "amber", "red", "neutral", "blue", "purple"]);
+export const assessmentClassificationSchema = z.object({
+  id: z.string(), label: z.string(), interpretation: z.string(),
+  // Older saved results predate category colors.
+  color: assessmentRiskColorSchema.optional(),
+});
 export const assessmentScoreResultSchema = z.object({
   formatVersion: z.literal(2), profile: z.literal("NIQ_FINAL_ASSESSMENT"), complete: z.literal(true),
   score: z.number().finite().nonnegative().nullable(),
   questionnaireScore: z.number().finite().nonnegative().nullable().optional(),
   faceScan: z.object({ sessionId: z.string(), points: z.number().finite().nonnegative() }).nullable().optional(),
-  classification: z.object({ id: z.string(), label: z.string(), interpretation: z.string() }).nullable(),
+  classification: assessmentClassificationSchema.nullable(),
   components: z.array(z.object({ id: z.string(), sectionId: z.string(), label: z.string(), points: z.number().finite().nonnegative().nullable(), status: z.enum(["answered", "unanswered", "pending"]), reason: z.string().optional() })),
   version: z.string(), checksum: z.string().regex(/^[a-f0-9]{64}$/), resultReference: z.string(), calculatedAt: z.iso.datetime(), clinicalUsePermitted: z.boolean(),
 }).superRefine((result, ctx) => {

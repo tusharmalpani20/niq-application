@@ -16,7 +16,7 @@ export type ScoreReviewEntry = {
 export type ReviewedScore = { niqPoints: number | null; reviewedPoints: number | null; overridden: boolean };
 export type ReviewedRisk = {
   status: "ORIGINAL" | "PENDING" | "CONFIRMED" | "UNAVAILABLE";
-  classification: { id: string; label: string; interpretation: string } | null;
+  classification: AssessmentScoreResult["classification"];
   resultReference: string | null; failureCode: string | null; canRetry: boolean;
 };
 export const retryReviewedRiskSchema = z.object({ expectedResultReference: z.string().min(1).max(200), expectedRevision: z.number().int().nonnegative() }).strict();

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { assessmentRiskColorSchema } from "@niq/application-contracts";
 
 const id = z.string().min(1).max(200);
 const option = z.object({ id, label: z.string(), help: z.string() }).strict();
@@ -25,9 +26,10 @@ export type AssessmentScoringStart = z.infer<typeof assessmentScoringStartSchema
 export type AssessmentScoringBinding = z.infer<typeof evidenceSchema>;
 const issue = z.object({ path: z.string().max(300), code: z.string().max(100), message: z.string().max(1000) }).strict();
 const component = z.object({ id, sectionId: id, label: z.string(), points: z.number().finite().nonnegative().nullable(), status: z.enum(["answered", "unanswered", "pending"]), reason: z.string().optional() }).strict();
+const classificationSchema = z.object({ id, label: z.string(), interpretation: z.string(), color: assessmentRiskColorSchema.optional() }).strict();
 const evaluationSchema = evidenceSchema.extend({
   formatVersion: z.literal(2), profile: z.literal("NIQ_FINAL_ASSESSMENT"), complete: z.boolean(),
-  score: z.number().finite().nonnegative().nullable(), classification: z.object({ id, label: z.string(), interpretation: z.string() }).strict().nullable(),
+  score: z.number().finite().nonnegative().nullable(), classification: classificationSchema.nullable(),
   questionnaireScore: z.number().finite().nonnegative().nullable().optional(),
   faceScan: z.object({ sessionId: id, points: z.number().finite().nonnegative() }).strict().nullable().optional(),
   components: z.array(component), answerCoverage: z.object({ totalEntries: z.literal(19), answeredEntries: z.number().int().nonnegative(), unansweredEntries: z.number().int().nonnegative(), pendingEntries: z.number().int().nonnegative(), allUnanswered: z.boolean() }).strict(),
@@ -116,7 +118,7 @@ export async function requestAssessmentScoringCalculate(input: AssessmentScoring
 }
 
 const reviewedClassificationSchema = z.object({
-  result: evidenceSchema.extend({resultReference:id,score:z.number().finite().nonnegative(),classification:z.object({id,label:z.string(),interpretation:z.string()}).strict(),calculatedAt:z.iso.datetime()}).strict(),
+  result: evidenceSchema.extend({resultReference:id,score:z.number().finite().nonnegative(),classification:classificationSchema,calculatedAt:z.iso.datetime()}).strict(),
   idempotencyKey:id,
 }).strict();
 export type ReviewedClassification = z.infer<typeof reviewedClassificationSchema>["result"];
