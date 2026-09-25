@@ -16,7 +16,7 @@ export const userRoleLabels = membershipRoleLabels;
 export function UserInvitationDialog({ user, facilities, allFacilities, onClose, onCreated }: { user: AuthenticatedUser; facilities: Facility[]; allFacilities: boolean; onClose: () => void; onCreated: () => void }) {
   const [role, setRole] = useState<CreateInvitation["role"] | null>(null);
   const [ids, setIds] = useState<string[]>([]);
-  const [unrestricted, setUnrestricted] = useState(allFacilities);
+  const [unrestricted, setUnrestricted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [emailError, setEmailError] = useState("");
@@ -28,7 +28,7 @@ export function UserInvitationDialog({ user, facilities, allFacilities, onClose,
   const [link, setLink] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
   const { requestClose, confirmation } = useUnsavedFormClose({ subject: "user", onClose, isBusy: () => submitting.current,
-    isDirty: () => !done && (hasChangedInputs(formRef.current) || role !== null || unrestricted !== allFacilities || !unrestricted && ids.length > 0) });
+    isDirty: () => !done && (hasChangedInputs(formRef.current) || role !== null || unrestricted || ids.length > 0) });
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current) return;

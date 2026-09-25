@@ -17,9 +17,17 @@ test("invitation shows an inline email error instead of browser validation", asy
     await act(async () => root.render(<UserInvitationDialog user={user} facilities={[] as Facility[]} allFacilities onClose={() => {}} onCreated={() => {}} />));
     const form = document.querySelector("form")!;
     expect(form.noValidate).toBe(true);
+    expect(document.querySelector('[aria-label="Remove All facilities"]')).toBeNull();
     expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
     await act(async () => form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })));
     expect(document.querySelector("#user-invite-role-error")?.textContent).toBe("Select a role.");
+    expect(document.querySelector("#user-invite-facility-error")?.textContent).toBe("Select at least one facility.");
+    await act(async () => document.querySelector<HTMLInputElement>('#invite-user-facility-search')!.click());
+    const all = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent === "All facilities");
+    expect(all).toBeDefined();
+    await act(async () => all!.click());
+    expect(document.querySelector('[aria-label="Remove All facilities"]')).not.toBeNull();
+    expect(document.querySelector("#user-invite-facility-error")).toBeNull();
     await act(async () => document.querySelector<HTMLElement>('[aria-label="Role"]')!.click());
     const role = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent === "Organization admin");
     expect(role).toBeDefined();
