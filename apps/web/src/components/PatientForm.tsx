@@ -12,7 +12,7 @@ import { ApiRequestError, registerPatient } from "../lib/api";
 import { updatePatient } from "../lib/patient-edit";
 import { todayDate } from "../lib/patient-display";
 
-export type PatientFormHandle = { requestClose: () => void; requestExit: () => void };
+export type PatientFormHandle = { requestClose: () => void };
 type PatientField = "name" | "medicalRecordNumber" | "homeFacilityId" | "dateOfBirth" | "gender" | "phone" | "email";
 
 type Props = {
@@ -53,7 +53,7 @@ export function PatientForm({ organizationId, facilities, patient, canCorrectIde
     return !!dirty;
   }
   const { requestClose, requestCloseWith, confirmation } = useUnsavedFormClose({ subject: "patient", onClose: onCancel, isBusy: () => submitting.current, isDirty });
-  useImperativeHandle(ref, () => ({ requestClose, requestExit: () => requestCloseWith(onExit ?? onCancel) }));
+  useImperativeHandle(ref, () => ({ requestClose }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<PatientField, string>>>({});
@@ -121,7 +121,7 @@ export function PatientForm({ organizationId, facilities, patient, canCorrectIde
       {!options.length && !missingCurrent && <Alert><AlertDescription>Add an active facility before registering a patient.</AlertDescription></Alert>}
       {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
     </fieldset>
-    <div className="form-footer"><Button type="button" variant="outline" isDisabled={isSubmitting} onPress={requestClose}>{cancelLabel}</Button><Button type="submit" isDisabled={isSubmitting || (!options.length && !missingCurrent)}>{isSubmitting ? "Saving…" : submitLabel ?? (patient ? "Save changes" : "Register patient")}</Button></div>
+    <div className="form-footer flex-wrap">{onExit && <Button type="button" variant="outline" className="mr-auto" isDisabled={isSubmitting} onPress={() => requestCloseWith(onExit)}>Exit</Button>}<Button type="button" variant="outline" isDisabled={isSubmitting} onPress={requestClose}>{cancelLabel}</Button><Button type="submit" isDisabled={isSubmitting || (!options.length && !missingCurrent)}>{isSubmitting ? "Saving…" : submitLabel ?? (patient ? "Save changes" : "Register patient")}</Button></div>
   </form>
     {confirmation}
   </>;

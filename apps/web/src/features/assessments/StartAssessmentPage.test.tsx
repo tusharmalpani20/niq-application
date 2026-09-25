@@ -73,6 +73,7 @@ test("inaccessible patient has no fallback and cannot initialize", async () => {
   await harness(`/assessments/new?patient=${id}`, async (_url, init) => { if (init?.method === "POST") initializations++; return Response.json({ error: { code: "FORBIDDEN", message: "No access" } }, { status: 403 }); }, async () => {
     expect(document.body.textContent).toContain("could not be loaded");
     expect([...document.querySelectorAll("button")].some(button => button.textContent === "Continue")).toBe(false);
+    expect([...document.querySelectorAll("button")].some(button => button.textContent === "Exit")).toBe(true);
     expect(document.body.textContent).not.toContain("NIQ-1042");
   });
   expect(initializations).toBe(0);
@@ -119,6 +120,8 @@ test("new assessment switches to inline patient registration without opening the
 
 test("Exit leaves patient selection without creating an assessment", async () => {
   await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async router => {
+    expect(document.querySelector(".assessment-workflow > header button")).toBeNull();
+    expect(document.querySelector('section[aria-label="Patient selection"] > footer button')?.textContent).toBe("Exit");
     const exit = [...document.querySelectorAll("button")].find(button => button.textContent === "Exit")!;
     await act(async () => { exit.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(router.state.location.pathname).toBe("/assessments");
@@ -132,6 +135,7 @@ test("Exit from patient creation confirms dirty fields and stays distinct from c
       await act(async () => { button.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     };
     await press("Create new patient");
+    expect(document.querySelector(".form-footer button")?.textContent).toBe("Exit");
     document.querySelector<HTMLInputElement>("#patient-name")!.value = "Unsaved patient";
     await press("Exit");
     expect(router.state.location.pathname).toBe("/assessments/new");
