@@ -1,7 +1,7 @@
 import { ClinicalReviewQueue } from "../features/assessments/ClinicalReviewQueue";
 import { listClinicalReviews } from "../features/assessments/clinical-review-api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { hasPermission } from "@niq/application-contracts";
+import { assessmentStatusSchema, hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility } from "@niq/application-contracts";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
@@ -26,7 +26,7 @@ const assessmentPageSize = 10;
 const assessmentDate = (date: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
 const initialStatus = (params: URLSearchParams) => {
   const value = params.get("status");
-  return value === "WORK" || value === "OPEN" || value === "SCORING_UNAVAILABLE" || value === "COMPLETED_THIS_MONTH" ? value : "all";
+  return value === "WORK" || value === "OPEN" || value === "COMPLETED_THIS_MONTH" || assessmentStatusSchema.safeParse(value).success ? value! : "all";
 };
 const matchesStatus = (record: AssessmentSummary, status: string, now: Date) => {
   if (status === "all") return true;

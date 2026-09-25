@@ -77,6 +77,18 @@ test("completed-this-month link excludes older completions and unfinished assess
   });
 });
 
+test("completed overview card opens all completed assessments", async () => {
+  const items = [
+    { ...records[0], status: "COMPLETED", completedAt: date },
+    { ...records[1], status: "DRAFT" },
+  ];
+  await renderAssessments("/assessments?status=COMPLETED", items, () => {
+    const table = document.querySelector('[aria-label="Assessments"]');
+    expect(table?.textContent).toContain("ASM-000001");
+    expect(table?.textContent).not.toContain("ASM-000002");
+  });
+});
+
 test("clinical reviews tab shows its unfiltered total", async () => {
   await renderAssessments("/assessments?tab=clinical-reviews&review=QUEUED", records, () => {
     expect(document.querySelector('[data-slot="tabs-list"]')?.textContent).toMatch(/Clinical reviews\s*2/);
