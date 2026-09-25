@@ -6,8 +6,9 @@ import type { AuthenticatedUser, Facility, OrganizationUser } from "@niq/applica
 import { UserEditDialog, canEditOrganizationUser } from "./UserEditDialog";
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const second = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
+const third = "01ARZ3NDEKTSV4RRFFQ69G5FAX";
 const target = { membershipId: id, userId: id, email: "user@example.com", displayName: "Name", status: "ACTIVE", role: "DOCTOR", active: true, facilities: [{ id, name: "One" }, { id: second, name: "Two" }], createdAt: new Date() } as OrganizationUser;
-const facilities = [{ id, name: "One", status: "ACTIVE" }, { id: second, name: "Two", status: "INACTIVE" }] as Facility[];
+const facilities = [{ id, name: "One", status: "ACTIVE" }, { id: second, name: "Two", status: "INACTIVE" }, { id: third, name: "Three", status: "ACTIVE" }] as Facility[];
 test("restricted admins cannot edit all-facility or out-of-scope memberships", () => {
   expect(canEditOrganizationUser(target, facilities, false)).toBe(true);
   expect(canEditOrganizationUser(target, facilities.slice(0,1), false)).toBe(false);
@@ -16,7 +17,7 @@ test("restricted admins cannot edit all-facility or out-of-scope memberships", (
 });
 async function render(self: boolean, callback: (requests: any[]) => Promise<void>) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
-  const values = { Event: dom.window.Event, window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, NodeFilter: dom.window.NodeFilter, DocumentFragment: dom.window.DocumentFragment, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} } };
+  const values = { Event: dom.window.Event, CSS: { escape: (value: string) => value }, window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, NodeFilter: dom.window.NodeFilter, DocumentFragment: dom.window.DocumentFragment, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} } };
   const previous = Object.fromEntries([...Object.keys(values), "fetch"].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key,value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable:true, writable:true });
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {}, scrollIntoView() {} });
@@ -37,6 +38,17 @@ test("profile edit preserves assigned inactive facilities and keeps email read-o
   expect(document.body.textContent).toContain("Two (inactive)");
   await act(async () => { document.querySelector("form")!.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })); await new Promise(r => setTimeout(r, 0)); });
   expect(requests[0].facilityIds).toEqual([id, second]);
+}));
+test("facility picker can add and remove assignments before saving", async () => render(false, async requests => {
+  const search = document.querySelector<HTMLInputElement>('#edit-user-facility-search')!;
+  await act(async () => search.click());
+  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent === "Three");
+  expect(option).toBeDefined();
+  await act(async () => option!.click());
+  expect(document.querySelector('[aria-label="Remove Three"]')).not.toBeNull();
+  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Remove One"]')!.click());
+  await act(async () => { document.querySelector("form")!.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })); await new Promise(r => setTimeout(r, 0)); });
+  expect(requests[0].facilityIds).toEqual([second, third]);
 }));
 test("self profile locks permissions but can save name", async () => render(true, async requests => {
   expect(document.querySelector('[aria-label="Role"]')?.getAttribute("data-disabled")).not.toBeNull();

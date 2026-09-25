@@ -2,12 +2,12 @@ import { useUnsavedFormClose } from "./useUnsavedFormClose";
 import { hasPermission, membershipRoleLabels, type AuthenticatedUser, type Facility, type MembershipRole, type OrganizationUser } from "@niq/application-contracts";
 import { useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { updateOrganizationUser } from "../lib/user-edit";
+import { FacilityAccessPicker } from "./FacilityAccessPicker";
 
 export function canEditOrganizationUser(target: OrganizationUser, facilities: Facility[], allFacilities: boolean): boolean {
   return target.facilities !== undefined && (allFacilities || target.facilities.length > 0 && target.facilities.every(item => facilities.some(facility => facility.id === item.id)));
@@ -53,9 +53,7 @@ export function UserEditDialog({ user, target, facilities, allFacilities, onClos
         <Field><FieldLabel htmlFor="edit-user-email">Email</FieldLabel><Input id="edit-user-email" value={target.email} readOnly /></Field>
         <Field><FieldLabel className="required-field-label">Role <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Role" selectedKey={role} isDisabled={busy || self || !allowed} onSelectionChange={key => setRole(String(key) as MembershipRole)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(membershipRoleLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select></Field>
         <Field><FieldLabel className="required-field-label">Facility access <span aria-hidden="true">*</span></FieldLabel>
-          {(allFacilities || unrestricted) && <div className="flex items-center gap-3"><Checkbox id="edit-user-all-facilities" aria-label="All facilities" isSelected={unrestricted} isDisabled={busy || self || !allowed || !allFacilities} onChange={setUnrestricted} /><label htmlFor="edit-user-all-facilities">All facilities</label></div>}
-          {!unrestricted && <div className="grid gap-3">{options.map(facility => <div key={facility.id} className="flex items-center gap-3"><Checkbox id={`edit-user-facility-${facility.id}`} aria-label={facility.name} isSelected={ids.includes(facility.id)} isDisabled={busy || self || !allowed} onChange={selected => setIds(current => selected ? [...current, facility.id] : current.filter(id => id !== facility.id))} /><label htmlFor={`edit-user-facility-${facility.id}`}>{facility.name}{"status" in facility && facility.status !== "ACTIVE" ? " (inactive)" : ""}</label></div>)}</div>}
-          {!unrestricted && !ids.length && <p className="text-sm text-muted-foreground">Select at least one facility.</p>}
+          <FacilityAccessPicker idPrefix="edit-user" facilities={options} selectedIds={ids} allSelected={unrestricted} allowAll={allFacilities} disabled={busy || self || !allowed} onSelectedIdsChange={setIds} onAllChange={setUnrestricted} />
           {self && <p className="text-sm text-muted-foreground">Another administrator can change your role or facility access.</p>}
         </Field>
         {!allowed && <p role="alert" className="text-destructive">This user’s facility access is outside your assigned facilities.</p>}

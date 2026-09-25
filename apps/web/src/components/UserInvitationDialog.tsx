@@ -9,12 +9,14 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { inviteOrganizationUser } from "../lib/user-invitations";
+import { FacilityAccessPicker } from "./FacilityAccessPicker";
 
 export const userRoleLabels = membershipRoleLabels;
 
 export function UserInvitationDialog({ user, facilities, allFacilities, onClose, onCreated }: { user: AuthenticatedUser; facilities: Facility[]; allFacilities: boolean; onClose: () => void; onCreated: () => void }) {
   const [role, setRole] = useState<CreateInvitation["role"] | null>(null);
-  const [facility, setFacility] = useState(allFacilities ? "all" : facilities[0]?.id ?? "");
+  const [ids, setIds] = useState<string[]>([]);
+  const [unrestricted, setUnrestricted] = useState(allFacilities);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const submitting = useRef(false);
@@ -22,16 +24,15 @@ export function UserInvitationDialog({ user, facilities, allFacilities, onClose,
   const [copied, setCopied] = useState(false);
   const [link, setLink] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
-  const initialFacility = useRef(facility);
   const { requestClose, confirmation } = useUnsavedFormClose({ subject: "user", onClose, isBusy: () => submitting.current,
-    isDirty: () => !done && (hasChangedInputs(formRef.current) || role !== null || facility !== initialFacility.current) });
+    isDirty: () => !done && (hasChangedInputs(formRef.current) || role !== null || unrestricted !== allFacilities || !unrestricted && ids.length > 0) });
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || !facility || !role) return;
+    if (submitting.current || !role || !unrestricted && !ids.length) return;
     submitting.current = true; setBusy(true); setMessage("");
     const email = String(new FormData(event.currentTarget).get("email") ?? "").trim();
     try {
-      const result = await inviteOrganizationUser(user.organizationId, { email, role, facilityIds: facility === "all" ? [] : [facility] });
+      const result = await inviteOrganizationUser(user.organizationId, { email, role, facilityIds: unrestricted ? [] : ids });
       onCreated();
       if (result.activationToken) setLink(window.location.origin + "/invite/" + result.activationToken);
       setDone(true);
@@ -44,10 +45,10 @@ export function UserInvitationDialog({ user, facilities, allFacilities, onClose,
       <form ref={formRef} className="clinical-form" onSubmit={submit}><fieldset disabled={busy} className="form-fields facility-dialog-fields m-0 min-w-0 border-0">
         <Field><FieldLabel htmlFor="user-invite-email" className="required-field-label">Email <span aria-hidden="true">*</span></FieldLabel><Input id="user-invite-email" name="email" type="email" required autoFocus disabled={busy} /></Field>
         <Field><FieldLabel className="required-field-label">Role <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Role" placeholder="Select role" isRequired selectedKey={role} isDisabled={busy} onSelectionChange={(key) => setRole(key === null ? null : String(key) as CreateInvitation["role"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(userRoleLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>{role && <p className="text-sm text-muted-foreground">{role === "ORGANIZATION_ADMIN" ? "Manages organization users and settings." : hasPermission(role, "assessments.edit") ? "Works with patients and assessments." : "Provides support with the access allowed for this role."}</p>}</Field>
-        <Field><FieldLabel>Facility</FieldLabel><Select aria-label="Facility" selectedKey={facility} isDisabled={busy} onSelectionChange={(key) => setFacility(String(key))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{allFacilities && <SelectItem id="all">All facilities</SelectItem>}{facilities.map((item) => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field>
-        {!allFacilities && <p className="text-sm text-muted-foreground">Choose one of your assigned facilities.</p>}
+        <Field><FieldLabel className="required-field-label">Facility access <span aria-hidden="true">*</span></FieldLabel><FacilityAccessPicker idPrefix="invite-user" facilities={facilities} selectedIds={ids} allSelected={unrestricted} allowAll={allFacilities} disabled={busy} onSelectedIdsChange={setIds} onAllChange={setUnrestricted} /></Field>
+        {!allFacilities && <p className="text-sm text-muted-foreground">Choose one or more of your assigned facilities.</p>}
         {message && <p role="alert" className="text-sm text-destructive">{message}</p>}
-        </fieldset><div className="form-footer"><Button type="button" variant="outline" isDisabled={busy} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={busy || !facility || !role}>{busy ? "Creating…" : "Create invitation"}</Button></div>
+        </fieldset><div className="form-footer"><Button type="button" variant="outline" isDisabled={busy} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={busy || !role || !unrestricted && !ids.length}>{busy ? "Creating…" : "Create invitation"}</Button></div>
       </form>}
   </Dialog>{confirmation}</>;
 }
