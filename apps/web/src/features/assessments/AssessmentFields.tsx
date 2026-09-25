@@ -1,6 +1,7 @@
 import { AssessmentDateInput } from "./AssessmentDateInput";
-import { ASSESSMENT_ANSWER_TEXT_LIMIT, calculateAssessmentBmi, calculateAssessmentWeightChange, isAssessmentFieldApplicable, type AssessmentFormManifest, type FormAnswer, type FormAnswers, type FormField } from "@niq/application-contracts";
+import { ASSESSMENT_ANSWER_TEXT_LIMIT, calculateAssessmentWeightChange, isAssessmentFieldApplicable, type AssessmentFormManifest, type FormAnswer, type FormAnswers, type FormField } from "@niq/application-contracts";
 import { AssessmentWeightComparison } from "./AssessmentWeightComparison";
+import { AssessmentBmiCard } from "./AssessmentBmiCard";
 import { Tooltip, TooltipTrigger } from "../../components/ui/tooltip";
 import { X } from "lucide-react";
 import { SearchCombobox } from "../../components/ui/combobox";
@@ -21,11 +22,7 @@ export type AssessmentFieldsProps = {
 };
 function calculated(field: FormField, answers: FormAnswers): string {
   if (field.id === "protein_intake") return "Derived from dietary intake when you submit for scoring";
-  const height = answers.height_cm; const current = answers.current_weight_kg; const previous = answers.previous_weight_kg;
-  if (field.id === "bmi") {
-    const bmi = typeof height === "number" && typeof current === "number" ? calculateAssessmentBmi(height, current) : null;
-    return bmi === null ? "Enter height and weight" : bmi.toFixed(1);
-  }
+  const current = answers.current_weight_kg; const previous = answers.previous_weight_kg;
   if (field.id === "weight_loss") {
     const loss = typeof previous === "number" && typeof current === "number" ? calculateAssessmentWeightChange(previous, current) : null;
     if (loss === null) return "Enter previous and current weight";
@@ -84,6 +81,7 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
         {errorMarkup}
       </fieldset>;
     }
+    if (field.id === "bmi") return <AssessmentBmiCard key={field.id} answers={answers} />;
     if (field.readOnly || field.kind === "calculated") return <div key={field.id} id={id} tabIndex={-1} className="space-y-1.5">
       <p className="text-sm text-muted-foreground">{label}</p><p className="min-h-8 font-medium">{field.kind === "calculated" ? calculated(field, answers) : value === undefined || value === null || value === "" ? "Not provided" : String(value)}</p>{field.id === "contact" && !value && onEditContact && !readOnly && <Button variant="link" className="px-0" onPress={onEditContact}>Add contact</Button>}{errorMarkup}
       {error && field.id === "age" && patientReference && (canCorrectDob ? <Link className="text-sm text-brand-ink underline" to={`/patients/${encodeURIComponent(patientReference)}?edit=dateOfBirth`}>Correct date of birth in patient details</Link> : <p className="text-sm text-muted-foreground">Ask an organization admin to correct the date of birth.</p>)}
