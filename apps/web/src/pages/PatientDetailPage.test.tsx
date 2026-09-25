@@ -7,7 +7,7 @@ import type { MembershipRole } from "@niq/application-contracts";
 import { PatientDetailPage } from "./PatientsPage";
 
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
-const patient = { id, organizationId: id, reference: "PAT-2", displayName: "Example Patient", homeFacility: { id, name: "Hyderabad" }, dateOfBirth: "1999-03-20", gender: "UNKNOWN", phone: "9014936881", createdAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z" };
+const patient = { id, organizationId: id, reference: "PAT-2", displayName: "Example Patient", medicalRecordNumber: "MRN-2", homeFacility: { id, name: "Hyderabad" }, dateOfBirth: "1999-03-20", gender: "UNKNOWN", phone: "9014936881", createdAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z" };
 const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: patient.homeFacility, status: "DRAFT", createdAt: "2026-09-22T00:00:00Z", completedAt: null };
 
 async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) => Promise<void> | void, entry = "/patients/PAT-2") {
@@ -41,7 +41,21 @@ test("clinician sees the latest assessment and actions without switching tabs", 
     expect(body.querySelector('button[aria-label="Continue assessment"] svg')).not.toBeNull();
     expect(body.querySelector('button[aria-label="New assessment"] svg')).not.toBeNull();
     expect(body.querySelector('button[aria-label="Edit patient"] svg')).not.toBeNull();
+    expect(body.textContent).not.toContain("Correct MRN");
     expect(body.textContent).not.toContain("Patient reference");
+  });
+});
+
+test("organization admin can open the MRN correction action", async () => {
+  await renderDetail("ORGANIZATION_ADMIN", async body => {
+    expect(body.textContent).toContain("MRN-2");
+    const action = [...body.querySelectorAll("button")].find(button => button.textContent?.trim() === "Correct MRN");
+    expect(action).toBeDefined();
+    await act(async () => { action!.click(); });
+    expect(body.textContent).toContain("Reason for correction");
+    const save = [...body.querySelectorAll("button")].find(button => button.textContent?.trim() === "Save correction");
+    await act(async () => { save!.click(); });
+    expect(body.textContent).toContain("Enter a reason with at least 3 characters.");
   });
 });
 

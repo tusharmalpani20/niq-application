@@ -13,6 +13,9 @@ test("patient edit prefills demographics, keeps current inactive facility and us
   const html = renderToStaticMarkup(<PatientForm organizationId={facility.organizationId} facilities={[facility]} patient={patient} onCancel={() => {}} onSaved={() => {}} />);
   expect(html).toContain('value="Patient Name"');
   expect(html).toContain('value="MRN-2"');
+  const mrn = html.match(/<input[^>]*id="patient-mrn"[^>]*>/)?.[0];
+  expect(mrn).toContain('readOnly=""');
+  expect(mrn).not.toContain('name="mrn"');
   expect(html).toContain('value="20/03/1999"');
   expect(html).toContain('placeholder="dd/mm/yyyy"');
   expect(html).toContain('value="patient@example.com"');

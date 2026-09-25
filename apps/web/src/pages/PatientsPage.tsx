@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { PatientForm, PatientFormDialog } from "../components/PatientForm";
+import { CorrectPatientMrnDialog } from "../components/CorrectPatientMrnDialog";
 import { PatientHeader } from "../components/PatientHeader";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
@@ -170,6 +171,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
   const [patientTab, setPatientTab] = useState("details");
   const [historyState, setHistoryState] = useState<"loading" | "ready" | "error">("loading");
   const [editing, setEditing] = useState(false);
+  const [correctingMrn, setCorrectingMrn] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState(false);
   const [facilityOptions, setFacilityOptions] = useState<Facility[]>([]);
@@ -221,7 +223,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
       <TabsContent id="details">
         <LatestAssessment history={history} state={historyState} canRead={canReadAssessment} canEdit={canEditAssessment} />
         <div className="admin-detail-grid">
-          <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Patient information</h2><dl className="patient-definition"><div><dt>Date of birth</dt><dd>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</dd></div><div><dt>Gender</dt><dd>{genderLabel(patient.gender)}</dd></div><div><dt>Registered</dt><dd>{formatPatientDate(patient.createdAt)}</dd></div></dl></Card>
+          <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Patient information</h2><dl className="patient-definition"><div><dt>Medical record number</dt><dd className="flex flex-wrap items-center gap-3">{patient.medicalRecordNumber}{user.role === "ORGANIZATION_ADMIN" && <Button variant="outline" size="sm" onPress={() => setCorrectingMrn(true)}>Correct MRN</Button>}</dd></div><div><dt>Date of birth</dt><dd>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</dd></div><div><dt>Gender</dt><dd>{genderLabel(patient.gender)}</dd></div><div><dt>Registered</dt><dd>{formatPatientDate(patient.createdAt)}</dd></div></dl></Card>
           <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Care and contact</h2><dl className="patient-definition"><div><dt>Home facility</dt><dd>{patient.homeFacility?.name ?? "—"}</dd></div><div><dt>Mobile number</dt><dd>{patient.phone || "Not provided"}</dd></div><div><dt>Email address</dt><dd>{patient.email || "Not provided"}</dd></div></dl></Card>
         </div>
       </TabsContent>
@@ -237,5 +239,6 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
       </TabsContent>
     </Tabs>
     {editing && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={patient} focusField={focusEditField} onClose={() => setEditing(false)} onSaved={updated => { setPatient(updated); setEditing(false); }} />}
+    {correctingMrn && <CorrectPatientMrnDialog organizationId={user.organizationId} patient={patient} onClose={() => setCorrectingMrn(false)} onSaved={updated => { setPatient(updated); setCorrectingMrn(false); }} />}
   </>;
 }
