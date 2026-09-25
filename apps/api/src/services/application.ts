@@ -6,6 +6,7 @@ import type {
   CreateFacility,
   CreateInvitation,
   CreateOrganization,
+  CorrectPatientMrn,
   CreatePlatformAdministratorInvitation,
   ErrorCode,
   OnboardOrganization,
@@ -84,6 +85,7 @@ export interface ApplicationService {
   getFacilityPerformance(actor: Principal, organizationId: string, facilityId: string): Promise<unknown>;
   updateFacility(actor: Principal, organizationId: string, facilityId: string, input: UpdateFacility, context: RequestContext): Promise<unknown>;
   updatePatient(actor: Principal, organizationId: string, patientLocator: string, input: UpdatePatient, context: RequestContext): Promise<unknown>;
+  correctPatientMrn(actor: Principal, organizationId: string, patientLocator: string, input: CorrectPatientMrn, context: RequestContext): Promise<unknown>;
   updateOrganizationUser(actor: Principal, organizationId: string, membershipId: string, input: UpdateOrganizationUser, context: RequestContext): Promise<unknown>;
   createPatient(actor: Principal, organizationId: string, input: RegisterPatient, context: RequestContext): Promise<unknown>;
   listPatients(actor: Principal, organizationId: string): Promise<unknown[]>;

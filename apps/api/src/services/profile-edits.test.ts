@@ -6,18 +6,28 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as tables from "../db/schema";
+import type { Database } from "../db/client";
+import { correctPatientMrn } from "./profile-edits";
 import { PostgresApplicationService } from "./postgres-application";
 import type { Principal } from "./application";
 
 const context = { requestId: "profile-edit-test" };
 test("edit schemas require mobile, clear optional email and reject invalid dates, roles and duplicate assignments", () => {
   const input = { medicalRecordNumber: "MRN", name: "Patient", homeFacilityId: createEntityId(), dateOfBirth: "2000-01-01", gender: "UNKNOWN", phone: "1234567890", email: null };
-  expect(updatePatientSchema.safeParse({ ...input, phone: "" }).success).toBe(false);
-  expect(updatePatientSchema.parse(input).email).toBeUndefined();
-  expect(updatePatientSchema.safeParse({ ...input, dateOfBirth: "3000-01-01" }).success).toBe(false);
+  const { medicalRecordNumber: _, ...edit } = input;
+  expect(updatePatientSchema.safeParse({ ...edit, phone: "" }).success).toBe(false);
+  expect(updatePatientSchema.parse(edit).email).toBeUndefined();
+  expect(updatePatientSchema.safeParse(input).success).toBe(false);
+  expect(updatePatientSchema.safeParse({ ...edit, dateOfBirth: "3000-01-01" }).success).toBe(false);
   const id = createEntityId();
   expect(updateOrganizationUserSchema.safeParse({ displayName: "Person", role: "DOCTOR", facilityIds: [id, id] }).success).toBe(false);
   expect(updateOrganizationUserSchema.safeParse({ displayName: "Person", role: "DOCTOR", facilityIds: [], email: "changed@example.com" }).success).toBe(false);
+});
+
+test("MRN corrections reject non-admin staff before touching patient storage", async () => {
+  const config = loadApplicationConfig({ DATABASE_URL: "postgres://localhost/unused", SESSION_SECRET: "profile-test-secret-at-least-32-characters" });
+  const actor: Principal = { userId: createEntityId(), membershipId: createEntityId(), organizationId: createEntityId(), displayName: "Doctor", email: "doctor@example.test", role: "DOCTOR", platformRole: "USER" };
+  await expect(correctPatientMrn({} as Database, config, actor, actor.organizationId, "PAT-1", { medicalRecordNumber: "MRN-2", reason: "Registration error" }, context)).rejects.toMatchObject({ code: "FORBIDDEN" });
 });
 
 describe.skipIf(!process.env.PROFILE_TEST_DATABASE_URL)("profile edits PostgreSQL", () => {
@@ -42,11 +52,13 @@ describe.skipIf(!process.env.PROFILE_TEST_DATABASE_URL)("profile edits PostgreSQ
   });
   afterAll(async () => { await client.end(); });
   test("persists encrypted patient edits and clears optional email, rejects tenant/source/destination violations", async () => {
-    const edit = updatePatientSchema.parse({ ...input, name: "Corrected Patient", phone: "9876543210", email: "" });
+    const { medicalRecordNumber: _, ...profile } = input;
+    const edit = updatePatientSchema.parse({ ...profile, name: "Corrected Patient", phone: "9876543210", email: "" });
     const result = await service.updatePatient(actor, org, patientId, edit, context);
     expect((await db.select().from(tables.assessments).where(eq(tables.assessments.id, assessmentId)))[0]!.workflow).toEqual(historicalSnapshot);
     const audit = (await db.select().from(tables.auditEvents).where(eq(tables.auditEvents.resourceId, patientId))).find(item => item.action === "PATIENT_UPDATED");
     expect(JSON.stringify(audit?.metadata)).not.toContain("Corrected Patient");
+    expect(audit?.metadata).toEqual({ fields: ["name", "phone", "email"] });
     expect(result.displayName).toBe("Corrected Patient"); expect(result.phone).toBe("9876543210"); expect(result.email).toBeUndefined();
     const [raw] = await db.select().from(tables.patients).where(eq(tables.patients.id, patientId));
     expect(Buffer.from(raw!.encryptedProfile).toString()).not.toContain("Corrected Patient");
@@ -59,7 +71,16 @@ describe.skipIf(!process.env.PROFILE_TEST_DATABASE_URL)("profile edits PostgreSQ
     await db.update(tables.facilities).set({ status: "INACTIVE" }).where(eq(tables.facilities.id, a));
     expect((await service.updatePatient(actor, org, patientId, edit, context)).displayName).toBe("Corrected Patient");
     await service.createPatient(actor, org, { ...input, homeFacilityId: b, medicalRecordNumber: "SECOND" }, context);
-    await expect(service.updatePatient(actor, org, patientId, { ...edit, medicalRecordNumber: "SECOND" }, context)).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(service.correctPatientMrn({ ...actor, role: "DOCTOR" }, org, patientId, { medicalRecordNumber: "NEW", reason: "Registration error" }, context)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(service.correctPatientMrn(actor, org2, patientId, { medicalRecordNumber: "NEW", reason: "Registration error" }, context)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(service.correctPatientMrn(actor, org, patientId, { medicalRecordNumber: "SECOND", reason: "Registration error" }, context)).rejects.toMatchObject({ code: "CONFLICT" });
+    const corrected = await service.correctPatientMrn(actor, org, patientId, { medicalRecordNumber: " new ", reason: "Registration error" }, context);
+    expect(corrected.medicalRecordNumber).toBe("NEW");
+    const correction = (await db.select().from(tables.auditEvents).where(eq(tables.auditEvents.resourceId, patientId))).find(item => item.action === "PATIENT_MRN_CORRECTED");
+    expect(correction?.metadata).toEqual({ reason: "Registration error" });
+    expect(correction?.actorMembershipId).toBe(member);
+    const [correctedRaw] = await db.select().from(tables.patients).where(eq(tables.patients.id, patientId));
+    expect(Buffer.from(correctedRaw!.encryptedExternalReference).toString()).not.toContain("NEW");
   });
   test("updates role, name and assignments, revokes sessions, and protects self and last administrator", async () => {
     const edit = { displayName: "Edited Colleague", role: "NUTRITIONIST" as const, facilityIds: [b] };

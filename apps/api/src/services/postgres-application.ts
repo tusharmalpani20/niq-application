@@ -1,8 +1,8 @@
-import { editPatient, editOrganizationUser } from "./profile-edits";
+import { correctPatientMrn as correctMrn, editPatient, editOrganizationUser } from "./profile-edits";
 import { faceScanSessionSchema } from "../../../../packages/contracts/src/face-scan";
 import { formatAssessmentReference, hasPermission, type Permission } from "@niq/application-contracts";
 import type { ApplicationConfig } from "@niq/application-config";
-import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
+import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
 import { and, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -751,6 +751,10 @@ export class PostgresApplicationService implements ApplicationService {
   async updatePatient(actor: Principal, organizationId: string, patientLocator: string, input: UpdatePatient, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, "patients.edit");
     return this.presentPatient(await editPatient(this.db, this.config, actor, organizationId, patientLocator, input, context));
+  }
+  async correctPatientMrn(actor: Principal, organizationId: string, patientLocator: string, input: CorrectPatientMrn, context: RequestContext) {
+    this.ensureOrganizationAccess(actor, organizationId, "patients.edit");
+    return this.presentPatient(await correctMrn(this.db, this.config, actor, organizationId, patientLocator, input, context));
   }
   async updateOrganizationUser(actor: Principal, organizationId: string, membershipId: string, input: UpdateOrganizationUser, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, "users.manage");

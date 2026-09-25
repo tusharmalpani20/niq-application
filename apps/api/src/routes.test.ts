@@ -27,7 +27,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     disconnectScoring: async () => {},
     getScoringOrganizationInfo: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], getFacilityPerformance: async () => ({}), updateFacility: async () => ({}),
-    updatePatient: async () => ({}), updateOrganizationUser: async () => ({}),
+    updatePatient: async () => ({}), correctPatientMrn: async () => ({}), updateOrganizationUser: async () => ({}),
     createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [],
     invitationAccess: async () => ({ allFacilities: true }), manageUserInvitation: async () => ({ invitation: {}, token: "replacement-token" }),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
@@ -37,27 +37,33 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
 
 describe("local authentication routes", () => {
   test("patient and user profile edits validate input and require authentication", async () => {
-    let patientCalls = 0, userCalls = 0;
+    let patientCalls = 0, correctionCalls = 0, userCalls = 0;
     const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService({
       updatePatient: async (actor, organizationId, locator, input) => {
         expect(actor).toEqual(principal); expect(organizationId).toBe(principal.organizationId); expect(locator).toBe("PAT-2"); expect(input.email).toBeUndefined(); patientCalls++; return {};
+      },
+      correctPatientMrn: async (actor, organizationId, locator, input) => {
+        expect(actor).toEqual(principal); expect(organizationId).toBe(principal.organizationId); expect(locator).toBe("PAT-2"); expect(input.reason).toBe("Registration error"); correctionCalls++; return {};
       },
       updateOrganizationUser: async (_actor, organizationId, membershipId, input) => {
         expect(organizationId).toBe(principal.organizationId); expect(membershipId).toBe(principal.membershipId); expect(input.role).toBe("DOCTOR"); userCalls++; return {};
       },
     }) });
     const request = (path: string, method: string, input: unknown, cookie = "niq_session=valid-session") => app.request(`/v1/organizations/${principal.organizationId}/${path}`, { method, headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(input) });
-    const patient = { medicalRecordNumber: "TEST", name: "Patient", homeFacilityId: principal.organizationId, dateOfBirth: "2000-01-01", gender: "UNKNOWN", phone: "9012345678", email: "" };
+    const patient = { name: "Patient", homeFacilityId: principal.organizationId, dateOfBirth: "2000-01-01", gender: "UNKNOWN", phone: "9012345678", email: "" };
     expect((await request("patients/PAT-2", "PATCH", patient)).status).toBe(200);
+    expect((await request("patients/PAT-2", "PATCH", { ...patient, medicalRecordNumber: "CHANGED" })).status).toBe(400);
     expect((await request("patients/PAT-2", "PATCH", { ...patient, phone: "" })).status).toBe(400);
     expect((await request("patients/PAT-2", "PATCH", patient, "")).status).toBe(401);
     expect((await request("patients/PAT-2", "PATCH", { ...patient, dateOfBirth: "01/01/2000" })).status).toBe(400);
+    expect((await request("patients/PAT-2/correct-mrn", "POST", { medicalRecordNumber: "NEW", reason: "Registration error" })).status).toBe(200);
+    expect((await request("patients/PAT-2/correct-mrn", "POST", { medicalRecordNumber: "NEW", reason: "" })).status).toBe(400);
     const user = { displayName: "Colleague", role: "DOCTOR", facilityIds: [] };
     const path = `users/${principal.membershipId}/profile`;
     expect((await request(path, "PUT", user)).status).toBe(200);
     expect((await request(path, "PUT", user, "")).status).toBe(401);
     expect((await request(path, "PUT", { ...user, email: "new@example.com" })).status).toBe(400);
-    expect(patientCalls).toBe(1); expect(userCalls).toBe(1);
+    expect(patientCalls).toBe(1); expect(correctionCalls).toBe(1); expect(userCalls).toBe(1);
   });
 
   test("passes logo replacement through authenticated organization updates and rejects SVG", async () => {
