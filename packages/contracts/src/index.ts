@@ -42,6 +42,11 @@ export const apiErrorSchema = z.object({
   }),
 });
 
+export const overviewRiskSchema = z.object({
+  highRiskPatients: z.number().int().nonnegative(),
+  assessedPatients: z.number().int().nonnegative(),
+});
+
 export const signInRequestSchema = z.object({
   email: z.email().max(320),
   password: z.string().min(8).max(256),

@@ -36,6 +36,7 @@ import { ServiceError } from "./application";
 import { facilityAccessCondition } from "./facility-access";
 import { facilityTrend } from "./facility-performance";
 import { requestScoringOrganizationInfo, ScoringOrganizationInfoRequestError } from "./scoring-organization-info";
+import { countOverviewRisk } from "./overview-risk";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Executor = Database | Transaction;
@@ -877,6 +878,29 @@ export class PostgresApplicationService implements ApplicationService {
       createdAt: row.createdAt,
       completedAt: row.completedAt,
     }));
+  }
+  async getOverviewRisk(actor: Principal, organizationId: string) {
+    this.ensureOrganizationAccess(actor, organizationId, "assessments.read");
+    const rows = await this.db.select({
+      id: assessments.id,
+      patientId: assessments.patientId,
+      completedAt: assessments.completedAt,
+      clinicalReview: assessments.clinicalReview,
+    }).from(assessments)
+      .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
+      .where(and(
+        eq(assessments.organizationId, organizationId),
+        eq(assessments.status, "COMPLETED"),
+        eq(patients.isArchived, false),
+        facilityAccessCondition(actor, organizationId, patients.homeFacilityId),
+        facilityAccessCondition(actor, organizationId, assessments.facilityId),
+      ));
+    const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
+    return countOverviewRisk(rows, value => {
+      const encrypted = (value as { encrypted?: string })?.encrypted;
+      if (!encrypted) throw new ServiceError("CONFLICT", "Assessment review data could not be read.");
+      return JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key));
+    });
   }
   async invitationAccess(actor: Principal, organizationId: string) {
     this.ensureOrganizationAccess(actor, organizationId, "users.manage");
