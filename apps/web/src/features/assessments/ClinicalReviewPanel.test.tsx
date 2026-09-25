@@ -26,6 +26,14 @@ test("clinical actions follow server permissions and block while another edit is
  const buttons=[...document.querySelectorAll("button")];expect(buttons.some(button=>button.textContent==="Claim review")).toBe(false);
  expect(buttons.find(button=>button.textContent==="Complete review")?.disabled).toBe(true);
 }, {blocked:true}));
+test("a scored assessment not yet sent uses the pre-review correction label", async()=>harness(async({click,posts})=>{
+ expect(document.body.textContent).toContain("Not sent for clinical review");
+ expect(document.body.textContent).toContain("Reopen for corrections");
+ expect(document.body.textContent).not.toContain("Return to draft");
+ await click("Reopen for corrections");
+ expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Reopen this scored assessment for corrections");
+ expect(posts).toHaveLength(0);
+},{review:{...review,state:"NOT_SUBMITTED",allowedActions:["RETURN_TO_DRAFT"]}}));
 test("completed review has no mutation actions and displays final remark",async()=>harness(async()=>{
  expect(document.body.textContent).toContain("Final clinical remark");expect(document.body.textContent).toContain("cannot be reopened");expect(document.querySelectorAll("button").length).toBe(0);
 },{review:{...review,state:"COMPLETED",allowedActions:[],finalRemark:"Final clinical remark"}}));
@@ -109,7 +117,7 @@ test("one review history disclosure shows every event without a same-person arro
   expect(history?.open).toBe(true);
   const events = history?.querySelectorAll("li");
   expect(events).toHaveLength(2);
-  expect(events?.[0]?.textContent).toContain("Returned for correction");
+  expect(events?.[0]?.textContent).toContain("Reopened for corrections");
   expect(events?.[0]?.textContent).toContain("Cycle 2");
   expect(events?.[0]?.textContent).toContain("Corrections assigned to: Reviewer");
   expect(events?.[0]?.textContent).toContain("Reason: Latest correction");
