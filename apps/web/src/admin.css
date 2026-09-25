@@ -133,6 +133,7 @@
   text-align: left;
   cursor: pointer;
 }
+.workspace-app-logo { width: 4.6rem; height: 2.75rem; flex: 0 0 auto; object-fit: contain; }
 .workspace-brand-text { display: grid; min-width: 0; }
 .workspace-brand-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
 .workspace-brand-text small { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; font-size: .72rem; }
@@ -165,9 +166,10 @@
   background: var(--background);
   box-shadow: 0 16px 40px rgb(17 41 50 / 14%);
 }
-.workspace-account-identity { display: grid; gap: .1rem; padding: .45rem .65rem .6rem; border-bottom: 1px solid var(--border); }
+.workspace-account-identity { display: flex; align-items: center; gap: .55rem; padding: .45rem .65rem .6rem; border-bottom: 1px solid var(--border); }
+.workspace-account-identity > span { display: grid; min-width: 0; }
 .workspace-account-identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
-.workspace-account-identity span { color: var(--muted-foreground); font-size: .72rem; }
+.workspace-account-identity small { color: var(--muted-foreground); font-size: .72rem; }
 .workspace-account-menu > button {
   display: flex;
   width: 100%;
@@ -229,6 +231,7 @@
   .workspace-header { left: .65rem; right: .65rem; top: calc(.5rem + env(safe-area-inset-top)); }
   .workspace-header-inner { height: 4rem; padding: .4rem .5rem .4rem .65rem; border-radius: 1.25rem; }
   .workspace-brand { gap: .45rem; }
+  .workspace-app-logo { width: 3.8rem; height: 2.5rem; }
   .workspace-brand-text strong { font-size: .78rem; }
   .workspace-brand-text small { font-size: .65rem; }
   .workspace-account-name { display: none; }

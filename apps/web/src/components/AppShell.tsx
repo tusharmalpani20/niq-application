@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { ApplicationLogo } from "./ApplicationLogo";
 import { signOut } from "../lib/api";
 import { useBranding } from "../lib/branding-context";
 import { Icon } from "../lib/icons";
@@ -69,7 +70,7 @@ function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignO
   return <header className="workspace-header" aria-label="Workspace header">
     <div className="workspace-header-inner">
       <button type="button" className="workspace-brand" aria-label={`${branding.displayName} home`} onClick={() => go("/")}>
-        <OrganizationMark key={branding.logoUrl} url={branding.logoUrl} />
+        <ApplicationLogo className="workspace-app-logo" decorative />
         <span className="workspace-brand-text"><strong>{branding.displayName}</strong><small>Nutrition intelligence</small></span>
       </button>
       <details className="workspace-account" ref={menuRef}>
@@ -79,7 +80,10 @@ function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignO
           <Icon name="chevron" size={16} />
         </summary>
         <div className="workspace-account-menu">
-          <div className="workspace-account-identity"><strong>{user.displayName}</strong><span>{membershipRoleLabels[user.role]}</span></div>
+          <div className="workspace-account-identity">
+            {branding.logoUrl && <OrganizationMark key={branding.logoUrl} url={branding.logoUrl} />}
+            <span><strong>{branding.displayName}</strong><small>{user.displayName} · {membershipRoleLabels[user.role]}</small></span>
+          </div>
           {managementItems.map((item) => <button type="button" key={item.to} onClick={() => go(item.to)}>
             <Icon name={item.icon} size={18} />{item.label}
           </button>)}

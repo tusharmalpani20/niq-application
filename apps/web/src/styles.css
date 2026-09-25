@@ -35,7 +35,9 @@ button, input { font: inherit; }
   border-radius: 50%;
   box-shadow: 0 0 0 4rem color-mix(in srgb, var(--primary-foreground) 3%, transparent), 0 0 0 8rem color-mix(in srgb, var(--primary-foreground) 2%, transparent);
 }
-.brand-lockup { position: absolute; top: clamp(2rem, 5vw, 5rem); left: clamp(2rem, 5vw, 5rem); z-index: 1; display: flex; align-items: center; gap: 0.75rem; font-size: 1.3rem; font-weight: 750; letter-spacing: 0.04em; }
+.brand-lockup { position: absolute; top: clamp(2rem, 5vw, 5rem); left: clamp(2rem, 5vw, 5rem); z-index: 1; display: flex; align-items: center; padding: .45rem .8rem; border-radius: 1rem; background: white; box-shadow: 0 10px 24px rgb(0 0 0 / 10%); }
+.sign-in-app-logo { width: 7.5rem; height: 4.5rem; object-fit: contain; }
+.auth-app-logo { display: block; width: 6.5rem; height: 4.2rem; margin-bottom: 1rem; object-fit: contain; object-position: left center; }
 .brand-mark {
   display: grid;
   width: 2.5rem;
@@ -62,7 +64,7 @@ form { display: flex; flex-direction: column; }
 
 @media (max-width: 760px) {
   .sign-in-shell { height: auto; min-height: 100dvh; overflow: visible; grid-template-columns: 1fr; }
-  .welcome-panel { min-height: 15rem; padding: 1.5rem; }
+  .welcome-panel { min-height: 17rem; padding: 1.5rem; }
   .brand-lockup { top: 1.5rem; left: 1.5rem; }
   .welcome-copy h1 { font-size: 2.3rem; }
   .welcome-copy > p:last-child, .privacy-note { display: none; }

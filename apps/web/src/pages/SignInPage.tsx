@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { CircleAlert, Eye, EyeOff } from "lucide-react";
 import { ApiRequestError, signIn } from "../lib/api";
 import { authenticatedLandingPath } from "../lib/auth-routing";
+import { ApplicationLogo } from "../components/ApplicationLogo";
 
 export function SignInPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -48,9 +49,7 @@ export function SignInPage() {
   return (
     <main className="sign-in-shell">
       <section className="welcome-panel" aria-labelledby="welcome-heading">
-        <div className="brand-lockup" role="img" aria-label="NIQ">
-          <span className="brand-mark">N</span>
-        </div>
+        <div className="brand-lockup"><ApplicationLogo className="sign-in-app-logo" /></div>
         <div className="welcome-copy">
           <p className="eyebrow">NIQ · Clinical nutrition intelligence</p>
           <h1 id="welcome-heading">Clearer assessment.<br />More thoughtful care.</h1>

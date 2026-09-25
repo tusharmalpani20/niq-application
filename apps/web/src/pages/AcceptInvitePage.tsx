@@ -8,6 +8,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "
 import { Input } from "@/components/ui/input";
 import { Eye, EyeOff } from "lucide-react";
 import { acceptInvitation, ApiRequestError } from "../lib/api";
+import { ApplicationLogo } from "../components/ApplicationLogo";
 
 export function AcceptInvitePage() {
   const [done, setDone] = useState(false);
@@ -33,7 +34,7 @@ export function AcceptInvitePage() {
     } finally { setBusy(false); }
   }
   return <main className="auth-page"><section className="auth-card auth-card-wide" aria-labelledby="invite-title">
-    <div className="brand-logo auth-logo">N</div><p className="page-eyebrow">NIQ invitation</p><h1 id="invite-title">Create your NIQ account</h1>
+    <ApplicationLogo className="auth-app-logo" /><p className="page-eyebrow">NIQ invitation</p><h1 id="invite-title">Create your NIQ account</h1>
     {done ? <div className="success-panel"><span className="success-icon">✓</span><h2>Account ready</h2><p>Your password has been saved. Sign in to finish setting up multi-factor authentication.</p><Link className={buttonVariants()} to="/sign-in">Continue to sign in</Link></div> : <>
       <form onSubmit={submit}><FieldGroup>
         <Field><FieldLabel htmlFor="name">Full name</FieldLabel><Input className="h-11" id="name" name="name" autoComplete="name" required /></Field>

@@ -7,6 +7,7 @@ import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/comp
 import { cn } from "@/lib/utils";
 import { ApiRequestError, resendMfa, verifyMfa } from "../lib/api";
 import { authenticatedLandingPath } from "../lib/auth-routing";
+import { ApplicationLogo } from "../components/ApplicationLogo";
 
 type ChallengeState = {
   email: string;
@@ -105,7 +106,7 @@ export function VerifyMfaPage() {
   }
 
   return <main className="auth-page"><section className="auth-card" aria-labelledby="verify-title">
-    <div className="brand-logo auth-logo">N</div><h1 id="verify-title">Verify it’s you</h1>
+    <ApplicationLogo className="auth-app-logo" /><h1 id="verify-title">Verify it’s you</h1>
     <p className="auth-intro">Enter the six-digit code sent to <strong>{challenge?.email ?? "your email"}</strong>.</p>
     <form onSubmit={submit}>
       <Field><FieldLabel>Verification code</FieldLabel><InputOTP aria-label="Six-digit verification code" autoFocus maxLength={6} pattern="[0-9]*" value={otp} onChange={(value) => { setOtp(value.replace(/\D/g, "")); setMessage(null); }} containerClassName="justify-center py-1">
