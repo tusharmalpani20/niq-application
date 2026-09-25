@@ -29,7 +29,8 @@ export function heightAsFeetInches(cm: number): { feet: number; inches: number }
 }
 
 export function poundsToKg(pounds: number): number {
-  return roundTo(pounds * KG_PER_POUND, 2);
+  // A third decimal of kg keeps a hundredth of a pound stable after saving and reopening.
+  return roundTo(pounds * KG_PER_POUND, 3);
 }
 
 export function kgToPounds(kg: number): number {

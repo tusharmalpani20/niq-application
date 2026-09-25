@@ -9,7 +9,7 @@ import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Link } from "react-router-dom";
 import { assessmentNumericInput } from "./assessmentNumericInput";
-import { AssessmentMeasurementInput } from "./AssessmentMeasurementInput";
+import { AssessmentMeasurementInput, AssessmentMeasurementUnitControl } from "./AssessmentMeasurementInput";
 import { metricUnits, type MeasurementUnits } from "./measurement-units";
 export { assessmentNumericInput } from "./assessmentNumericInput";
 
@@ -91,9 +91,10 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
     </div>;
     if (field.id === "height_cm" || field.id === "current_weight_kg" || field.id === "previous_weight_kg") {
       const isHeight = field.id === "height_cm";
+      const unit = isHeight ? measurementUnits.height : measurementUnits.weight;
       return <div key={field.id} className="min-w-0 space-y-2">
-        <div className="flex min-h-8 items-center justify-between gap-2"><label htmlFor={id} className="block text-sm font-medium">{field.label}{required}</label>{reset}</div>
-        <AssessmentMeasurementInput key={`${id}-${isHeight ? measurementUnits.height : measurementUnits.weight}`} id={id} label={field.label} kind={isHeight ? "height" : "weight"} value={value} unit={isHeight ? measurementUnits.height : measurementUnits.weight} onUnitChange={unit => onMeasurementUnitsChange?.({ ...measurementUnits, [isHeight ? "height" : "weight"]: unit })} onChange={next => onChange(field.id, next)} disabled={readOnly} invalid={Boolean(error)} describedBy={error ? errorId : undefined} required={field.required} />
+        <div className="flex min-h-9 flex-wrap items-center justify-between gap-2"><label htmlFor={id} className="block text-sm font-medium">{field.label}{required}</label><div className="flex items-center gap-1">{reset}<AssessmentMeasurementUnitControl label={field.label} kind={isHeight ? "height" : "weight"} unit={unit} onUnitChange={next => onMeasurementUnitsChange?.({ ...measurementUnits, [isHeight ? "height" : "weight"]: next })} disabled={typeof value === "string"} /></div></div>
+        <AssessmentMeasurementInput key={`${id}-${unit}`} id={id} label={field.label} kind={isHeight ? "height" : "weight"} value={value} unit={unit} showQuickValues={field.id !== "previous_weight_kg"} onChange={next => onChange(field.id, next)} disabled={readOnly} invalid={Boolean(error)} describedBy={error ? errorId : undefined} required={field.required} />
         {isHeight && heightSourceDate && <p className="text-xs text-muted-foreground">Height from assessment on {new Date(heightSourceDate).toLocaleDateString()}</p>}
         {errorMarkup}
       </div>;

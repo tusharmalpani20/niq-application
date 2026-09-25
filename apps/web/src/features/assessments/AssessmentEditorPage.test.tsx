@@ -87,6 +87,19 @@ test("unit choices stay in this browser without changing saved assessment measur
   expect(document.body.textContent).not.toContain("Unsaved changes");
   expect(requests.some(request => request.method === "PATCH")).toBe(false);
 }));
+test("quick measurements disappear after selection and save canonical units", async () => harness(async ({ requests, click }) => {
+  expect(document.body.textContent).toContain("160 cm");
+  await click("160 cm");
+  expect(document.body.textContent).not.toContain("160 cm");
+  await click("lb");
+  expect(document.body.textContent).toContain("150 lb");
+  await click("150 lb");
+  expect(document.body.textContent).not.toContain("150 lb");
+  await click("Save draft");
+  const saved = requests.find(request => request.method === "PATCH");
+  expect(saved?.body.answers.height_cm).toBe(160);
+  expect(saved?.body.answers.current_weight_kg).toBe(68.039);
+}, { answers: { ...recordFixture().answers, height_cm: null, current_weight_kg: null } }));
 test("save conflict preserves local input and dirty navigation can be cancelled", async () => harness(async ({ click, conflict, router }) => {
   await click("Disease status");
   await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
