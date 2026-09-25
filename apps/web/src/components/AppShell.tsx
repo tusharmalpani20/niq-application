@@ -2,26 +2,24 @@ import { canVisitOrganizationRoute } from "../lib/route-permissions";
 import { membershipRoleLabels } from "@niq/application-contracts";
 import type { AuthenticatedUser } from "@niq/application-contracts";
 import { LogOut } from "lucide-react";
-import { useLayoutEffect, useState } from "react";
-import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import {
-  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
-  SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
-  SidebarProvider, SidebarTrigger, useSidebar,
-} from "@/components/ui/sidebar";
 import { signOut } from "../lib/api";
 import { useBranding } from "../lib/branding-context";
 import { Icon } from "../lib/icons";
 
 const canVisit = (user: AuthenticatedUser, path: string) => canVisitOrganizationRoute(user.role, path);
 
-const navigation = [
+const primaryNavigation = [
   { to: "/", label: "Overview", icon: "dashboard", end: true },
   { to: "/patients", label: "Patients", icon: "patient" },
   { to: "/assessments", label: "Assessments", icon: "clipboard" },
   { to: "/facilities", label: "Facilities", icon: "building" },
+];
+
+const managementNavigation = [
   { to: "/users", label: "Users", icon: "users" },
   { to: "/settings/branding", label: "Branding", icon: "palette" },
   { to: "/settings/scoring", label: "Scoring connection", icon: "link" },
@@ -34,67 +32,94 @@ function OrganizationMark({ url }: { url: string | null }) {
     : <span className="grid size-10 place-items-center rounded-xl rounded-bl-sm bg-primary font-bold text-primary-foreground">N</span>;
 }
 
-function OrganizationSidebar({ user, onSignOut }: { user: AuthenticatedUser; onSignOut: () => void }) {
-  const { branding } = useBranding();
-  const { isMobile, state, setOpen, setOpenMobile } = useSidebar();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const collapsed = state === "collapsed" && !isMobile;
-  const initials = user.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+function navigateWithGuard(to: string, navigate: ReturnType<typeof useNavigate>) {
+  const proceed = () => navigate(to);
+  if (window.dispatchEvent(new CustomEvent("niq:before-navigation", { cancelable: true, detail: { to, proceed } }))) proceed();
+}
 
-  function isActive(to: string, end?: boolean) { return end ? location.pathname === to : location.pathname.startsWith(to); }
+function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignOut: () => void }) {
+  const { branding } = useBranding();
+  const navigate = useNavigate();
+  const menuRef = useRef<HTMLDetailsElement>(null);
+  const initials = user.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+  const managementItems = managementNavigation.filter((item) => canVisit(user, item.to));
+  useEffect(() => {
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) menuRef.current.open = false;
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && menuRef.current?.open) {
+        menuRef.current.open = false;
+        menuRef.current.querySelector("summary")?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
+
   function go(to: string) {
-    const proceed = () => { navigate(to); setOpenMobile(false); };
-    if (window.dispatchEvent(new CustomEvent("niq:before-navigation", { cancelable: true, detail: { to, proceed } }))) proceed();
+    if (menuRef.current) menuRef.current.open = false;
+    navigateWithGuard(to, navigate);
   }
 
-  return <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-    <SidebarHeader className="p-3 group-data-[collapsible=icon]:p-1">
-      <div className="flex h-11 items-center gap-2 group-data-[collapsible=icon]:justify-center">
-        {collapsed
-          ? <Button variant="ghost" size="icon" className="size-10 bg-transparent p-0 hover:bg-transparent" aria-label="Expand navigation" onPress={() => setOpen(true)}><OrganizationMark key={branding.logoUrl} url={branding.logoUrl} /></Button>
-          : <><Link className="grid size-10 shrink-0 place-items-center" to="/" aria-label={`${branding.displayName} home`}><OrganizationMark key={branding.logoUrl} url={branding.logoUrl} /></Link><div className="grid min-w-0 flex-1"><strong className="truncate text-sm">{branding.displayName}</strong><span className="truncate text-xs text-muted-foreground">Nutrition intelligence</span></div><SidebarTrigger aria-label="Collapse navigation" /></>}
-      </div>
-    </SidebarHeader>
-    <SidebarContent><SidebarGroup><SidebarGroupContent><SidebarMenu className="gap-1">
-      {navigation.filter((item) => canVisit(user, item.to)).map((item) => <SidebarMenuItem key={item.to}>
-        <SidebarMenuButton isActive={isActive(item.to, item.end)} tooltip={item.label} onPress={() => go(item.to)} className="h-10 text-sm">
-          <Icon name={item.icon} /><span>{item.label}</span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>)}
-    </SidebarMenu></SidebarGroupContent></SidebarGroup></SidebarContent>
-    <SidebarFooter className="border-t border-sidebar-border p-3 group-data-[collapsible=icon]:p-1">
-      <div className="flex items-center gap-2 overflow-hidden group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-1">
-        <Avatar className="size-7 shrink-0"><AvatarFallback className="text-xs">{initials}</AvatarFallback></Avatar>
-        <div className="grid min-w-0 flex-1 group-data-[collapsible=icon]:hidden"><strong className="truncate text-xs">{user.displayName}</strong><span className="truncate text-[.68rem] text-muted-foreground">{membershipRoleLabels[user.role]}</span></div>
-        <Button variant="ghost" size="icon-sm" aria-label="Sign out" onPress={onSignOut}><LogOut /></Button>
-      </div>
-    </SidebarFooter>
-  </Sidebar>;
+  return <header className="workspace-header" aria-label="Workspace header">
+    <div className="workspace-header-inner">
+      <button type="button" className="workspace-brand" aria-label={`${branding.displayName} home`} onClick={() => go("/")}>
+        <OrganizationMark key={branding.logoUrl} url={branding.logoUrl} />
+        <span className="workspace-brand-text"><strong>{branding.displayName}</strong><small>Nutrition intelligence</small></span>
+      </button>
+      <details className="workspace-account" ref={menuRef}>
+        <summary aria-label={`Account menu for ${user.displayName}`}>
+          <Avatar className="size-9 shrink-0"><AvatarFallback className="text-xs">{initials}</AvatarFallback></Avatar>
+          <span className="workspace-account-name">{user.displayName}</span>
+          <Icon name="chevron" size={16} />
+        </summary>
+        <div className="workspace-account-menu">
+          <div className="workspace-account-identity"><strong>{user.displayName}</strong><span>{membershipRoleLabels[user.role]}</span></div>
+          {managementItems.map((item) => <button type="button" key={item.to} onClick={() => go(item.to)}>
+            <Icon name={item.icon} size={18} />{item.label}
+          </button>)}
+          <Button variant="ghost" className="workspace-sign-out" onPress={onSignOut}><LogOut className="size-4" />Sign out</Button>
+        </div>
+      </details>
+    </div>
+  </header>;
+}
+
+function WorkspaceDock({ user }: { user: AuthenticatedUser }) {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  return <nav className="workspace-dock" aria-label="Main navigation">
+    {primaryNavigation.filter((item) => canVisit(user, item.to)).map((item) => {
+      const active = item.end ? pathname === item.to : pathname === item.to || pathname.startsWith(`${item.to}/`);
+      return <button type="button" key={item.to} className="workspace-dock-item" aria-current={active ? "page" : undefined} onClick={() => navigateWithGuard(item.to, navigate)}>
+        <Icon name={item.icon} size={20} /><span>{item.label}</span>
+      </button>;
+    })}
+  </nav>;
 }
 
 export function AppShell({ user }: { user: AuthenticatedUser }) {
   const { resetBranding } = useBranding();
   const { pathname } = useLocation();
-  // All clinical routes use the central organisation theme.
-  const refreshedLayout = true;
   const allowed = canVisit(user, pathname);
   useLayoutEffect(() => {
-    if (refreshedLayout) document.documentElement.dataset.appArea = "client";
-    else delete document.documentElement.dataset.appArea;
+    document.documentElement.dataset.appArea = "client";
     return () => { delete document.documentElement.dataset.appArea; };
-  }, [refreshedLayout]);
+  }, []);
   const navigate = useNavigate();
   function handleSignOut() {
     const proceed = async () => { await signOut().catch(() => undefined); resetBranding(); navigate("/sign-in", { replace: true }); };
     if (window.dispatchEvent(new CustomEvent("niq:before-navigation", { cancelable: true, detail: { proceed } }))) void proceed();
   }
 
-  return <SidebarProvider className={refreshedLayout ? "client-workspace" : undefined}>
-    <OrganizationSidebar user={user} onSignOut={handleSignOut} />
-    <SidebarInset className="min-w-0">
-      <header className="client-mobile-nav"><SidebarTrigger aria-label="Toggle navigation" /></header>
-      <main className="content">{!allowed ? <Navigate to="/" replace /> : <Outlet context={user} />}</main>
-    </SidebarInset>
-  </SidebarProvider>;
+  return <div className="client-workspace min-h-svh min-w-0">
+    <WorkspaceHeader user={user} onSignOut={handleSignOut} />
+    <main className="content">{!allowed ? <Navigate to="/" replace /> : <Outlet context={user} />}</main>
+    <WorkspaceDock user={user} />
+  </div>;
 }
