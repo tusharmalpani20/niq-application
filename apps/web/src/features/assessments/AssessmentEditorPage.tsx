@@ -19,20 +19,22 @@ import { AssessmentReports } from "./AssessmentReports";
 import { AssessmentFaceScan, type MissingScanInput } from "./AssessmentFaceScan";
 import { useDraftNavigationGuard } from "./useDraftNavigationGuard";
 import { assessmentRequest, AssessmentRequestError, getAssessment, reconcileAssessmentScoring, retryAssessmentScoring, saveAssessment, submitAssessment } from "./workflow-api";
+import { metricUnits, readMeasurementUnits, rememberMeasurementUnits, type MeasurementUnits } from "./measurement-units";
 
 export function AssessmentEditorPage() {
   const user = useOutletContext<AuthenticatedUser>();
   const { assessmentId = "" } = useParams();
   if (!hasPermission(user.role, "assessments.read")) return <Navigate to="/assessments" replace />;
   // Remounting prevents a patient/org switch from retaining another patient's in-memory answers.
-  return <AssessmentEditor key={`${user.userId}:${user.organizationId}:${assessmentId}`} organizationId={user.organizationId} assessmentId={assessmentId} role={user.role} />;
+  return <AssessmentEditor key={`${user.userId}:${user.organizationId}:${assessmentId}`} organizationId={user.organizationId} userId={user.userId} assessmentId={assessmentId} role={user.role} />;
 }
-function AssessmentEditor({ organizationId, assessmentId, role }: { organizationId: string; assessmentId: string; role: MembershipRole }) {
+function AssessmentEditor({ organizationId, userId, assessmentId, role }: { organizationId: string; userId: string; assessmentId: string; role: MembershipRole }) {
   const [record, setRecord] = useState<AssessmentWorkflow | null>(null);
   const clinical = useClinicalReview(organizationId, record?.id);
   const [reviewBusy, setReviewBusy] = useState(false);
   useEffect(() => { if (record) void clinical.refresh(); }, [record?.status, record?.revision, clinical.refresh]);
   const [answers, setAnswers] = useState<FormAnswers>({});
+  const [measurementUnits, setMeasurementUnits] = useState<MeasurementUnits>(metricUnits);
   const [sectionId, setSectionId] = useState("personal_details");
   const [error, setError] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -55,7 +57,8 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
   const dirty = !!record && JSON.stringify(answers) !== JSON.stringify(record.answers);
   const editable = record?.status === "DRAFT" && hasPermission(role, "assessments.edit") && (record.canEditDraft ?? true) && clinical.review?.canEditDraft !== false && !clinical.error;
   const navigationDialog = useDraftNavigationGuard(dirty || reportDirty || reportBusy || scanBusy || reviewBusy || contactOpen && !!phone, scanBusy ? "Camera capture or upload is unfinished. Leaving may discard the local capture. Accepted uploads continue processing." : undefined);
-  const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers); setConflict(false); if (value.result) { setShowScoredAnswers(false); requestAnimationFrame(() => document.getElementById("assessment-summary-heading")?.focus()); } }, []);
+  const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers); setMeasurementUnits(readMeasurementUnits(organizationId, userId, value.id)); setConflict(false); if (value.result) { setShowScoredAnswers(false); requestAnimationFrame(() => document.getElementById("assessment-summary-heading")?.focus()); } }, [organizationId, userId]);
+  const changeMeasurementUnits = (units: MeasurementUnits) => { setMeasurementUnits(units); if (record) rememberMeasurementUnits(organizationId, userId, record.id, units); };
   const handleError = useCallback((cause: unknown) => {
     if (cause instanceof AssessmentRequestError && cause.status === 401) {
       setAnswers({}); setRecord(null); window.location.assign("/sign-in"); return;
@@ -221,7 +224,7 @@ function AssessmentEditor({ organizationId, assessmentId, role }: { organization
       <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} scores={sectionScores} scanStatus={scanStepStatus} attachmentCounts={attachmentCounts} disabled={locked} onSelect={id => { void selectSection(id); }} />
       <div className="min-w-0 p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 id="assessment-section-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>{sectionId === "reports" && <span className="text-xs text-muted-foreground tabular-nums">{attachmentCounts.files} {attachmentCounts.files === 1 ? "file" : "files"} uploaded</span>}{sectionCoverage && <span className="text-xs text-muted-foreground">{sectionCoverage.answered}/{sectionCoverage.total} answered · {sectionCoverage.percent ?? 0}%</span>}</div>
         {(record.result === null || showScoredAnswers) && <AssessmentFaceScan organizationId={organizationId} record={{ ...record, answers }} active={sectionId === "face_scan"} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onMissingInputs={showMissingScanInputs} onBusyChange={setScanBusy} onStatusChange={setScanStatus} onSessionChange={setScanSession}/>}
-        {section && <section><AssessmentFields heightSourceDate={record.heightSource?.recordedAt} section={section} answers={answers} errors={errors} readOnly={!editable || locked} patientReference={record.patient.reference} canEditPatient={hasPermission(role, "patients.edit")} canCorrectDob={role === "ORGANIZATION_ADMIN"} onEditContact={editable ? () => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); } : undefined} onChange={(id, value) => { setAnswers(current => clearInactiveAssessmentAnswers(record.manifest, { ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
+        {section && <section><AssessmentFields heightSourceDate={record.heightSource?.recordedAt} section={section} answers={answers} errors={errors} readOnly={!editable || locked} measurementUnits={measurementUnits} onMeasurementUnitsChange={changeMeasurementUnits} patientReference={record.patient.reference} canEditPatient={hasPermission(role, "patients.edit")} canCorrectDob={role === "ORGANIZATION_ADMIN"} onEditContact={editable ? () => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); } : undefined} onChange={(id, value) => { setAnswers(current => clearInactiveAssessmentAnswers(record.manifest, { ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
         <div hidden={sectionId !== "reports"}>{(record.result === null || showScoredAnswers) && <AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!hasPermission(role, "reports.manage") || !editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />}</div>
         {sectionId === "review" && <AssessmentReview record={record} answers={answers} scanStatus={scanStepStatus} scanSession={scanSession} organizationId={organizationId} assessmentId={internalId} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}
       </div>

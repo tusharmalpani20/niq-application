@@ -77,6 +77,16 @@ test("resumed real draft shows profile context read-only and saves dirty choices
   expect(saved?.body.answers.stage).toBe(recordFixture().manifest.sections.find(section => section.id === "disease_status")!.fields.find(field => field.id === "stage")!.options![0]!.id);
   expect(document.body.textContent).toContain("Draft saved");
 }));
+test("unit choices stay in this browser without changing saved assessment measurements", async () => harness(async ({ dom, requests, click }) => {
+  await click("ft / in");
+  expect(document.querySelector<HTMLInputElement>("#assessment-field-height_cm")?.value).toBe("5");
+  expect(document.querySelector<HTMLInputElement>("#assessment-field-height_cm-inches")?.value).toBe("4.96");
+  await click("lb");
+  expect(document.querySelector<HTMLInputElement>("#assessment-field-current_weight_kg")?.value).toBe("132.28");
+  expect(JSON.parse(dom.window.localStorage.getItem("niq:measurement-units:org-a:user-a:assessment-a") ?? "null")).toEqual({ height: "ft-in", weight: "lb" });
+  expect(document.body.textContent).not.toContain("Unsaved changes");
+  expect(requests.some(request => request.method === "PATCH")).toBe(false);
+}));
 test("save conflict preserves local input and dirty navigation can be cancelled", async () => harness(async ({ click, conflict, router }) => {
   await click("Disease status");
   await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());

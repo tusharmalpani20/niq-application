@@ -8,19 +8,17 @@ import { ChoiceGroup, MultipleChoiceGroup } from "../../components/ui/choice-gro
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Link } from "react-router-dom";
+import { assessmentNumericInput } from "./assessmentNumericInput";
+import { AssessmentMeasurementInput } from "./AssessmentMeasurementInput";
+import { metricUnits, type MeasurementUnits } from "./measurement-units";
+export { assessmentNumericInput } from "./assessmentNumericInput";
 
 export type AssessmentFieldsProps = {
   section: AssessmentFormManifest["sections"][number]; answers: FormAnswers;
   onChange: (id: string, value: FormAnswer) => void; errors: Record<string, string>; readOnly: boolean; heightSourceDate?: string; onEditContact?: () => void;
   patientReference?: string; canEditPatient?: boolean; canCorrectDob?: boolean;
+  measurementUnits?: MeasurementUnits; onMeasurementUnitsChange?: (units: MeasurementUnits) => void;
 };
-/** Invalid and intermediate number text stays in draft state; empty input never becomes zero. */
-export function assessmentNumericInput(raw: string): FormAnswer {
-  if (!raw.trim()) return null;
-  if (!/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw)) return raw;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : raw;
-}
 function calculated(field: FormField, answers: FormAnswers): string {
   if (field.id === "protein_intake") return "Derived from dietary intake when you submit for scoring";
   const height = answers.height_cm; const current = answers.current_weight_kg; const previous = answers.previous_weight_kg;
@@ -56,7 +54,7 @@ export function assessmentFieldGroups(fields: FormField[], answers: FormAnswers)
   for (const field of visible) { const id = root(field); groups.set(id, [...(groups.get(id) ?? []), field]); }
   return [...groups.values()].map(group => group[0]?.id === "weight_loss" ? [...group.filter(field => field.id !== "weight_loss"), ...group.filter(field => field.id === "weight_loss")] : group);
 }
-export function AssessmentFields({ section, answers, onChange, errors, readOnly, heightSourceDate, onEditContact, patientReference, canEditPatient, canCorrectDob }: AssessmentFieldsProps) {
+export function AssessmentFields({ section, answers, onChange, errors, readOnly, heightSourceDate, onEditContact, patientReference, canEditPatient, canCorrectDob, measurementUnits = metricUnits, onMeasurementUnitsChange }: AssessmentFieldsProps) {
   const renderField = (field: FormField) => {
     const id = `assessment-field-${field.id}`; const errorId = `${id}-error`;
     const value = answers[field.id]; const error = errors[field.id];
@@ -91,6 +89,15 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
       {error && field.id === "age" && patientReference && (canCorrectDob ? <Link className="text-sm text-brand-ink underline" to={`/patients/${encodeURIComponent(patientReference)}?edit=dateOfBirth`}>Correct date of birth in patient details</Link> : <p className="text-sm text-muted-foreground">Ask an organization admin to correct the date of birth.</p>)}
       {error && field.id === "gender" && patientReference && (canEditPatient ? <Link className="text-sm text-brand-ink underline" to={`/patients/${encodeURIComponent(patientReference)}?edit=gender`}>Edit gender in patient details</Link> : <p className="text-sm text-muted-foreground">Ask someone with patient editing access to update this detail.</p>)}
     </div>;
+    if (field.id === "height_cm" || field.id === "current_weight_kg" || field.id === "previous_weight_kg") {
+      const isHeight = field.id === "height_cm";
+      return <div key={field.id} className="min-w-0 space-y-2">
+        <div className="flex min-h-8 items-center justify-between gap-2"><label htmlFor={id} className="block text-sm font-medium">{field.label}{required}</label>{reset}</div>
+        <AssessmentMeasurementInput key={`${id}-${isHeight ? measurementUnits.height : measurementUnits.weight}`} id={id} label={field.label} kind={isHeight ? "height" : "weight"} value={value} unit={isHeight ? measurementUnits.height : measurementUnits.weight} onUnitChange={unit => onMeasurementUnitsChange?.({ ...measurementUnits, [isHeight ? "height" : "weight"]: unit })} onChange={next => onChange(field.id, next)} disabled={readOnly} invalid={Boolean(error)} describedBy={error ? errorId : undefined} required={field.required} />
+        {isHeight && heightSourceDate && <p className="text-xs text-muted-foreground">Height from assessment on {new Date(heightSourceDate).toLocaleDateString()}</p>}
+        {errorMarkup}
+      </div>;
+    }
     const other = otherFields[field.id];
     return <div key={field.id} className={`min-w-0 space-y-2 ${field.kind === "select" && (field.options?.length || 0) <= 6 ? "col-[1/-1]" : ""}`}>
       <div className="flex min-h-8 items-center justify-between gap-2"><label htmlFor={id} className="block text-sm font-medium">{label}{required}</label>{reset}</div>
@@ -103,5 +110,5 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
       {errorMarkup}
     </div>;
   };
-  return <div className="@container space-y-6">{assessmentFieldGroups(section.fields, answers).map(group => <div key={group[0]!.id} data-question-group={group[0]!.id} className={`grid ${(section.id === "personal_details" || group[0]!.id === "current_cancer_treatment") ? "grid-cols-1 @min-[30rem]:grid-cols-2" : "grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))]"} items-start gap-x-6 gap-y-4 border-b border-border pb-6 last:border-b-0 last:pb-0`}>{group.some(field => field.id === "weight_loss") && group.some(field => field.id === "previous_weight_kg") ? <AssessmentWeightComparison answers={answers}>{group.filter(field => field.id !== "weight_loss").map(renderField)}</AssessmentWeightComparison> : group.map(renderField)}</div>)}</div>;
+  return <div className="@container space-y-6">{assessmentFieldGroups(section.fields, answers).map(group => <div key={group[0]!.id} data-question-group={group[0]!.id} className={`grid ${(section.id === "personal_details" || group[0]!.id === "current_cancer_treatment") ? "grid-cols-1 @min-[30rem]:grid-cols-2" : "grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))]"} items-start gap-x-6 gap-y-4 border-b border-border pb-6 last:border-b-0 last:pb-0`}>{group.some(field => field.id === "weight_loss") && group.some(field => field.id === "previous_weight_kg") ? <AssessmentWeightComparison answers={answers} unit={measurementUnits.weight}>{group.filter(field => field.id !== "weight_loss").map(renderField)}</AssessmentWeightComparison> : group.map(renderField)}</div>)}</div>;
 }

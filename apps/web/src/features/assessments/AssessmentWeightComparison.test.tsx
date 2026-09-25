@@ -14,3 +14,9 @@ test("missing or invalid measurements are not presented as zero change", () => {
   expect(render(66, null)).toContain("Enter current weight in Personal details");
   expect(render(0, 70)).not.toContain("gain (");
 });
+test("weight comparison follows the selected display unit", () => {
+  const html = renderToStaticMarkup(<AssessmentWeightComparison answers={{ previous_weight_kg: 66, current_weight_kg: 70 }} unit="lb"><input aria-label="Previous weight" /></AssessmentWeightComparison>);
+  expect(html).toContain("Current weight (lb)");
+  expect(html).toContain("154.32 lb");
+  expect(html).toContain("8.82 lb gain (6.1%)");
+});
