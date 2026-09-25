@@ -2,7 +2,7 @@ import { hasPermission } from "@niq/application-contracts";
 import type { AuthenticatedUser, Facility, Patient, AssessmentInitialization } from "@niq/application-contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchCombobox } from "@/components/ui/combobox";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -132,7 +132,7 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
             {committed && selected ? <div><p className="text-sm text-muted-foreground">Patient for this assessment</p><p className="mt-1 font-medium">{selected.displayName} · {selected.reference}</p><p className="text-sm text-muted-foreground">{selected.homeFacility?.name ?? "No facility"}</p></div> : <>
               {onlyFacility ? <Field><FieldLabel>Facility</FieldLabel><p className="rounded-lg border border-input bg-muted/30 px-3 py-2 text-sm">{onlyFacility.name}</p></Field> : <Field><FieldLabel>Facility</FieldLabel><Select aria-label="Facility" selectedKey={facility || "all"} isDisabled={busy} onSelectionChange={key => { setFacility(key === "all" ? "" : String(key)); setSelected(null); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All accessible facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field>}
               <Field><FieldLabel htmlFor="assessment-patient">Patient</FieldLabel><SearchCombobox id="assessment-patient" label="Patient" value={selected?.id ?? null} disabled={busy} placeholder="Search name, patient reference or MRN" options={filtered.map(patient => ({ id: patient.id, label: `${patient.displayName} · ${patient.reference}${patient.medicalRecordNumber ? ` · MRN ${patient.medicalRecordNumber}` : ""} · ${patient.homeFacility?.name ?? "No facility"}` }))} onChange={id => setSelected(filtered.find(patient => patient.id === id) ?? null)} /></Field>
-              {canCreatePatient && <Button variant="outline" className="w-fit" onPress={() => setMode("create")}>Create new patient</Button>}
+              {canCreatePatient && <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5"><span className="text-sm text-muted-foreground">Patient not found?</span><Button variant="outline" size="sm" className="border-primary/40 text-brand-ink hover:border-primary hover:bg-primary/10" onPress={() => setMode("create")}><Plus aria-hidden="true" data-icon="inline-start" />Create new patient</Button></div>}
             </>}
           </div>
           <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">

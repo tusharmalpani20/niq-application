@@ -122,6 +122,9 @@ test("new assessment switches to inline patient registration without opening the
     expect(document.body.textContent).toContain("Select a patient and press Continue, or create one to open the questionnaire.");
     expect(document.body.textContent).not.toContain("Personal details, including height and current weight");
     const create = [...document.querySelectorAll("button")].find(button => button.textContent === "Create new patient")!;
+    expect(create.parentElement?.textContent).toContain("Patient not found?");
+    expect(create.className).toContain("border-primary/40");
+    expect(create.querySelector("svg")).not.toBeNull();
     await act(async () => { create.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(document.querySelector("#patient-name")).not.toBeNull();
     expect(document.querySelector("#patient-birth")).not.toBeNull();
