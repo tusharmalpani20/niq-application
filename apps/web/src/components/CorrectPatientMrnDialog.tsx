@@ -5,7 +5,7 @@ import { correctPatientMrn } from "../lib/patient-edit";
 import { useUnsavedFormClose } from "./useUnsavedFormClose";
 import { Alert, AlertDescription } from "./ui/alert";
 import { Button } from "./ui/button";
-import { Dialog, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Field, FieldDescription, FieldError, FieldLabel } from "./ui/field";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -49,9 +49,9 @@ export function CorrectPatientMrnDialog({ organizationId, patient, onClose, onSa
   }
 
   return <><Dialog ariaLabel="Correct medical record number" className="facility-dialog" isOpen isDismissable={!busy} isKeyboardDismissDisabled={busy} showCloseButton={!busy} onOpenChange={open => { if (!open) requestClose(); }}>
-    <DialogHeader><DialogTitle>Correct medical record number</DialogTitle><DialogDescription>Use this only to correct a registration error. The change and your reason will be recorded in the audit trail.</DialogDescription></DialogHeader>
+    <DialogHeader><DialogTitle>Correct medical record number</DialogTitle></DialogHeader>
     <form className="clinical-form" noValidate onSubmit={submit}>
-      <div className="form-fields grid gap-4">
+      <div className="form-fields facility-dialog-fields grid gap-4">
         <Field data-invalid={!!errors.medicalRecordNumber || undefined}><FieldLabel htmlFor="correct-patient-mrn">Medical record number</FieldLabel><Input id="correct-patient-mrn" value={mrn} maxLength={120} autoComplete="off" autoFocus aria-invalid={!!errors.medicalRecordNumber} onChange={event => { setMrn(event.target.value); setErrors(current => ({ ...current, medicalRecordNumber: undefined })); }} />{errors.medicalRecordNumber && <FieldError>{errors.medicalRecordNumber}</FieldError>}</Field>
         <Field data-invalid={!!errors.reason || undefined}><FieldLabel htmlFor="correct-patient-mrn-reason">Reason for correction</FieldLabel><Textarea id="correct-patient-mrn-reason" value={reason} maxLength={500} aria-invalid={!!errors.reason} onChange={event => { setReason(event.target.value); setErrors(current => ({ ...current, reason: undefined })); }} /><FieldDescription>Describe the error briefly. Avoid entering patient identifiers in the reason.</FieldDescription>{errors.reason && <FieldError>{errors.reason}</FieldError>}</Field>
         {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
