@@ -7,8 +7,8 @@ export * from "./assessment-answer-coverage";
 export * from "./assessment-workflow";
 
 export const DEFAULT_ORGANIZATION_BRANDING = {
-  primaryColor: "#0E9384",
-  secondaryColor: "#175CD3",
+  primaryColor: "#3BB9BD",
+  secondaryColor: "#4F5052",
 } as const;
 
 // Entity identifiers are canonical ULIDs. Lowercase input is rejected rather

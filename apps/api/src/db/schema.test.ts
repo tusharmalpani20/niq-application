@@ -25,8 +25,8 @@ function foreignKeyNames(table: Parameters<typeof getTableConfig>[0]): string[] 
 
 describe("tenant data invariants", () => {
   test("organization color defaults follow the canonical branding palette", () => {
-    expect(organizations.primaryColor.default).toBe("#0E9384");
-    expect(organizations.secondaryColor.default).toBe("#175CD3");
+    expect(organizations.primaryColor.default).toBe("#3BB9BD");
+    expect(organizations.secondaryColor.default).toBe("#4F5052");
   });
 
   test("assessment ownership is constrained through organization-scoped foreign keys", () => {
@@ -133,6 +133,13 @@ describe("migration-only safeguards", () => {
     const migration = await Bun.file("./drizzle/0011_lowly_shooting_star.sql").text();
     expect(migration).toContain('"primary_color" SET DEFAULT \'#0E9384\'');
     expect(migration).toContain('"secondary_color" SET DEFAULT \'#175CD3\'');
+  });
+
+  test("Nutra-IQ branding migration preserves custom organization colours", async () => {
+    const migration = await Bun.file("./drizzle/0028_eminent_mysterio.sql").text();
+    expect(migration).toContain('"primary_color" SET DEFAULT \'#3BB9BD\'');
+    expect(migration).toContain('"secondary_color" SET DEFAULT \'#4F5052\'');
+    expect(migration).toContain('upper("primary_color") = \'#0E9384\' AND upper("secondary_color") = \'#175CD3\'');
   });
 
   test("initial migration enforces seat limits and append-only audit storage", async () => {

@@ -6,8 +6,8 @@ const patientId = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
 const questionnaireDefinitionId = "01ARZ3NDEKTSV4RRFFQ69G5FAX";
 
 describe("application contracts", () => {
-  test("defaults organization branding to teal primary and blue secondary", () => {
-    expect(DEFAULT_ORGANIZATION_BRANDING).toEqual({ primaryColor: "#0E9384", secondaryColor: "#175CD3" });
+  test("defaults organization branding to Nutra-IQ teal and charcoal", () => {
+    expect(DEFAULT_ORGANIZATION_BRANDING).toEqual({ primaryColor: "#3BB9BD", secondaryColor: "#4F5052" });
   });
 
   test("rejects unsafe organization slugs", () => {

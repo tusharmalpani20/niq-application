@@ -5,8 +5,8 @@
   font-family: var(--font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --primary: var(--brand-primary, #0E9384);
-  --secondary: var(--brand-secondary, #175CD3);
+  --primary: var(--brand-primary, #3BB9BD);
+  --secondary: var(--brand-secondary, #4F5052);
   --ink-muted: #68696b;
   --background: var(--canvas);
   --foreground: var(--ink);
@@ -42,9 +42,9 @@
   --primary-soft: color-mix(in srgb, var(--primary) 10%, white);
   --brand-panel-start: color-mix(in srgb, var(--primary) 76%, var(--foreground));
   --brand-panel-end: color-mix(in srgb, var(--primary) 62%, var(--secondary));
-  --ink: #3f4042;
-  --ink-soft: #58595b;
-  --canvas: #f4f7f9;
+  --ink: #4f5052;
+  --ink-soft: #4f5052;
+  --canvas: #f7f9fa;
   --surface: #fff;
   --surface-subtle: #fafcfc;
   --danger: #a83333;
@@ -160,8 +160,8 @@
   --primary: var(--admin-primary);
   --secondary: var(--admin-secondary);
   --secondary-foreground: var(--admin-ink);
-  --ink: var(--admin-ink);
-  --ink-soft: var(--admin-ink);
+  --ink: #4f5052;
+  --ink-soft: #4f5052;
   --ink-muted: var(--admin-muted);
   --canvas: var(--admin-canvas);
   --border: var(--admin-border);

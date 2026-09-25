@@ -18,7 +18,7 @@ export function contrastingForeground(hex: string): "#000000" | "#ffffff" {
 }
 /** Keep the brand hue while finding readable text on the light client surfaces. Does not alter button fills. */
 export function accessibleBrandInk(hex: string, surfaces: readonly string[] = ["#f6f8fb", "#eef2f6", "#ffffff"]): string {
-  const brand = isHex(hex) ? hex : "#0e9384";
+  const brand = isHex(hex) ? hex : "#3bb9bd";
   const backgrounds = surfaces.length && surfaces.every(isHex) ? surfaces : ["#f6f8fb", "#eef2f6", "#ffffff"];
   const channels = [1, 3, 5].map(offset => parseInt(brand.slice(offset, offset + 2), 16));
   // Selected links use a 10% brand tint over the same surfaces. Validate that actual
