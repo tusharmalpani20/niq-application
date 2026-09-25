@@ -29,8 +29,8 @@ const managementNavigation = [
 function OrganizationMark({ url }: { url: string | null }) {
   const [failed, setFailed] = useState(false);
   return url && !failed
-    ? <img src={url} alt="" className="size-10 object-contain" onError={() => setFailed(true)} />
-    : <span className="grid size-10 place-items-center rounded-xl rounded-bl-sm bg-primary font-bold text-primary-foreground">N</span>;
+    ? <img src={url} alt="" className="workspace-brand-logo" onError={() => setFailed(true)} />
+    : <ApplicationLogo className="workspace-brand-logo" decorative />;
 }
 
 function navigateWithGuard(to: string, navigate: ReturnType<typeof useNavigate>) {
@@ -70,7 +70,7 @@ function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignO
   return <header className="workspace-header" aria-label="Workspace header">
     <div className="workspace-header-inner">
       <button type="button" className="workspace-brand" aria-label={`${branding.displayName} home`} onClick={() => go("/")}>
-        <ApplicationLogo className="workspace-app-logo" decorative />
+        <OrganizationMark key={branding.logoUrl} url={branding.logoUrl} />
         <span className="workspace-brand-text"><strong>{branding.displayName}</strong><small>Nutrition intelligence</small></span>
       </button>
       <details className="workspace-account" ref={menuRef}>
@@ -81,7 +81,6 @@ function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignO
         </summary>
         <div className="workspace-account-menu">
           <div className="workspace-account-identity">
-            {branding.logoUrl && <OrganizationMark key={branding.logoUrl} url={branding.logoUrl} />}
             <span><strong>{branding.displayName}</strong><small>{user.displayName} · {membershipRoleLabels[user.role]}</small></span>
           </div>
           {managementItems.map((item) => <button type="button" key={item.to} onClick={() => go(item.to)}>
