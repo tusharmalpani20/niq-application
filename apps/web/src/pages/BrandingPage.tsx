@@ -173,11 +173,11 @@ export function BrandingPage() {
             <h2 className="m-0 text-sm font-semibold">Preview</h2>
             <p className="text-sm text-muted-foreground">Primary is used for buttons and navigation. Secondary is used for accents.</p>
             <div className="flex flex-wrap items-center gap-3">
-              <span className="rounded-lg px-4 py-2 font-medium" style={{ backgroundColor: draft.primaryColor, color: contrastingForeground(draft.primaryColor) }}>Primary button</span>
+              <span className="rounded-lg px-4 py-2 font-medium" style={{ backgroundColor: draft.primaryColor, color: "#ffffff" }}>Primary button</span>
               <span className="rounded-lg border px-4 py-2" style={{ borderColor: draft.primaryColor, color: draft.primaryColor }}>Selected navigation</span>
               <span className="rounded-lg px-4 py-2" style={{ backgroundColor: draft.secondaryColor, color: contrastingForeground(draft.secondaryColor) }}>Accent</span>
             </div>
-            <p className="text-xs text-muted-foreground">Button text adjusts for readability. Choose a darker primary colour for clear navigation links.</p>
+            <p className="text-xs text-muted-foreground">Primary buttons and selected navigation use white text.</p>
           </section>
           <section className="grid gap-3 border-t pt-5">
             <h2 className="m-0 text-sm font-semibold">Patient numbering</h2>

@@ -191,7 +191,7 @@
   --radius: var(--admin-radius);
 }
 
-:root[data-app-area="client"] { --primary-foreground: var(--brand-primary-foreground, white); --secondary-foreground: var(--brand-secondary-foreground, white); }
+:root[data-app-area="client"] { --primary-foreground: white; --secondary-foreground: var(--brand-secondary-foreground, white); }
 
 /* Text-only tenant ink; the original primary token continues to color branded fills. */
 :root[data-app-area="client"] .text-brand-ink { color: var(--brand-ink, #0b7468); }
