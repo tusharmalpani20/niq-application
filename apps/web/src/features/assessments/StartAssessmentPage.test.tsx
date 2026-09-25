@@ -45,7 +45,7 @@ test("patient entry waits for Continue and preserves creation key before uncerta
   }, async (router, click) => {
     expect(document.querySelector<HTMLInputElement>("#assessment-patient")?.value).toContain("Real selected patient");
     expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(document.querySelector('nav[aria-label="Assessment sections"] button')).toBeNull();
+    expect(document.querySelector('nav[aria-label="Assessment sections"]')).toBeNull();
     expect(keys).toHaveLength(0);
     await click();
     expect(keys).toHaveLength(1);
@@ -103,14 +103,16 @@ test("multiple accessible facilities keep the facility selector", async () => {
 test("new assessment switches to inline patient registration without opening the questionnaire", async () => {
   await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(document.querySelector('nav[aria-label="Assessment sections"] button')).toBeNull();
+    expect(document.querySelector('nav[aria-label="Assessment sections"]')).toBeNull();
+    expect(document.body.textContent).toContain("Select a patient and press Continue, or create one to open the questionnaire.");
+    expect(document.body.textContent).not.toContain("Personal details, including height and current weight");
     const create = [...document.querySelectorAll("button")].find(button => button.textContent === "Create new patient")!;
     await act(async () => { create.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(document.querySelector("#patient-name")).not.toBeNull();
     expect(document.querySelector("#patient-birth")).not.toBeNull();
     expect(document.body.textContent).toContain("Create patient & continue");
     expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(document.querySelector('nav[aria-label="Assessment sections"] button')).toBeNull();
+    expect(document.querySelector('nav[aria-label="Assessment sections"]')).toBeNull();
   });
 });
 

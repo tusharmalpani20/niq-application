@@ -2,7 +2,7 @@ import { hasPermission } from "@niq/application-contracts";
 import type { AuthenticatedUser, Facility, Patient, AssessmentInitialization } from "@niq/application-contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
-import { ArrowRight, UserRound } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchCombobox } from "@/components/ui/combobox";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -104,36 +104,26 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
   }
 
   const canCreatePatient = hasPermission(user.role, "patients.create");
-  return <div className="assessment-workflow @container">
-    <header className="mb-5"><h1 className="text-2xl font-semibold">New assessment</h1><p className="mt-1 text-sm text-muted-foreground">Choose a patient before opening the questionnaire.</p></header>
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="border-b border-border px-4 py-3 text-sm"><strong>Patient</strong><span className="ml-2 text-muted-foreground">First step · Questionnaire follows</span></div>
-      <div className="grid min-w-0 @min-[48rem]:grid-cols-[15rem_minmax(0,1fr)]">
-        <nav aria-label="Assessment sections" className="border-b border-border p-3 @min-[48rem]:border-b-0 @min-[48rem]:border-r @min-[48rem]:bg-muted/20">
-          <div aria-current="step" className="assessment-active-step flex items-center gap-2.5 rounded-lg px-3 py-3 text-sm font-semibold"><UserRound className="size-4" aria-hidden="true"/>Patient</div>
-          <div aria-disabled="true" className="px-3 py-3 text-sm text-muted-foreground">Questionnaire sections available after Continue</div>
-        </nav>
-        <div className="min-w-0">
-          <div className="border-b border-border px-5 py-4"><h2 className="font-semibold">{mode === "create" ? "Create patient" : "Select patient"}</h2><p className="mt-1 text-sm text-muted-foreground">{mode === "create" ? "Add the patient record before starting the assessment." : "Search for a patient or create a new one."}</p></div>
-          {error && <div role="alert" className="m-5 rounded-lg border border-destructive/30 p-3 text-sm text-destructive">{error}</div>}
-          {!loaded ? <div className="p-5 text-sm text-muted-foreground">Loading patient information…</div> : loadFailed ? <div className="p-5"><Button variant="outline" onPress={() => setLoadKey(key => key + 1)}>Retry loading</Button></div> : mode === "create" ?
-            <PatientForm organizationId={user.organizationId} facilities={facilities} submitLabel="Create patient & continue" cancelLabel="Choose existing patient" onCancel={() => setMode("select")} onSaved={patient => { setPatients(current => [patient, ...current]); void start(patient); }} />
-            : <>
-              <div className="clinical-form grid gap-5 p-5">
-                {committed && selected ? <div><p className="text-sm text-muted-foreground">Patient for this assessment</p><p className="mt-1 font-medium">{selected.displayName} · {selected.reference}</p><p className="text-sm text-muted-foreground">{selected.homeFacility?.name ?? "No facility"}</p></div> : <>
-                  {onlyFacility ? <Field><FieldLabel>Facility</FieldLabel><p className="rounded-lg border border-input bg-muted/30 px-3 py-2 text-sm">{onlyFacility.name}</p></Field> : <Field><FieldLabel>Facility</FieldLabel><Select aria-label="Facility" selectedKey={facility || "all"} isDisabled={busy} onSelectionChange={key => { setFacility(key === "all" ? "" : String(key)); setSelected(null); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All accessible facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field>}
-                  <Field><FieldLabel htmlFor="assessment-patient">Patient</FieldLabel><SearchCombobox id="assessment-patient" label="Patient" value={selected?.id ?? null} disabled={busy} placeholder="Search name, patient reference or MRN" options={filtered.map(patient => ({ id: patient.id, label: `${patient.displayName} · ${patient.reference}${patient.medicalRecordNumber ? ` · MRN ${patient.medicalRecordNumber}` : ""} · ${patient.homeFacility?.name ?? "No facility"}` }))} onChange={id => setSelected(filtered.find(patient => patient.id === id) ?? null)} /></Field>
-                  {canCreatePatient && <Button variant="outline" className="w-fit" onPress={() => setMode("create")}>Create new patient</Button>}
-                </>}
-                <p className="text-sm text-muted-foreground">Personal details, including height and current weight, open after this step.</p>
-              </div>
-              <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
-                <Button variant="outline" isDisabled={busy} onPress={() => navigate(entry.patient && selected ? `/patients/${selected.reference}` : "/assessments", { replace: true })}>Back</Button>
-                <Button isDisabled={!selected || busy} onPress={() => { if (selected) void start(selected); }}>{busy ? "Preparing questionnaire…" : committed ? "Retry preparation" : "Continue"}<ArrowRight aria-hidden="true"/></Button>
-              </footer>
+  return <div className="mx-auto w-full max-w-3xl">
+    <header className="mb-5"><h1 className="text-2xl font-semibold">New assessment</h1><p className="mt-1 text-sm text-muted-foreground">Select a patient and press Continue, or create one to open the questionnaire.</p></header>
+    <section className="overflow-hidden rounded-xl border border-border bg-card" aria-label="Patient selection">
+      <div className="border-b border-border px-5 py-4"><h2 className="font-semibold">{mode === "create" ? "Create patient" : "Select patient"}</h2></div>
+      {error && <div role="alert" className="m-5 rounded-lg border border-destructive/30 p-3 text-sm text-destructive">{error}</div>}
+      {!loaded ? <div className="p-5 text-sm text-muted-foreground">Loading patient information…</div> : loadFailed ? <div className="p-5"><Button variant="outline" onPress={() => setLoadKey(key => key + 1)}>Retry loading</Button></div> : mode === "create" ?
+        <PatientForm organizationId={user.organizationId} facilities={facilities} submitLabel="Create patient & continue" cancelLabel="Choose existing patient" onCancel={() => setMode("select")} onSaved={patient => { setPatients(current => [patient, ...current]); void start(patient); }} />
+        : <>
+          <div className="clinical-form grid gap-5 p-5">
+            {committed && selected ? <div><p className="text-sm text-muted-foreground">Patient for this assessment</p><p className="mt-1 font-medium">{selected.displayName} · {selected.reference}</p><p className="text-sm text-muted-foreground">{selected.homeFacility?.name ?? "No facility"}</p></div> : <>
+              {onlyFacility ? <Field><FieldLabel>Facility</FieldLabel><p className="rounded-lg border border-input bg-muted/30 px-3 py-2 text-sm">{onlyFacility.name}</p></Field> : <Field><FieldLabel>Facility</FieldLabel><Select aria-label="Facility" selectedKey={facility || "all"} isDisabled={busy} onSelectionChange={key => { setFacility(key === "all" ? "" : String(key)); setSelected(null); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All accessible facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field>}
+              <Field><FieldLabel htmlFor="assessment-patient">Patient</FieldLabel><SearchCombobox id="assessment-patient" label="Patient" value={selected?.id ?? null} disabled={busy} placeholder="Search name, patient reference or MRN" options={filtered.map(patient => ({ id: patient.id, label: `${patient.displayName} · ${patient.reference}${patient.medicalRecordNumber ? ` · MRN ${patient.medicalRecordNumber}` : ""} · ${patient.homeFacility?.name ?? "No facility"}` }))} onChange={id => setSelected(filtered.find(patient => patient.id === id) ?? null)} /></Field>
+              {canCreatePatient && <Button variant="outline" className="w-fit" onPress={() => setMode("create")}>Create new patient</Button>}
             </>}
-        </div>
-      </div>
-    </div>
+          </div>
+          <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
+            <Button variant="outline" isDisabled={busy} onPress={() => navigate(entry.patient && selected ? `/patients/${selected.reference}` : "/assessments", { replace: true })}>Back</Button>
+            <Button isDisabled={!selected || busy} onPress={() => { if (selected) void start(selected); }}>{busy ? "Preparing questionnaire…" : committed ? "Retry preparation" : "Continue"}<ArrowRight aria-hidden="true"/></Button>
+          </footer>
+        </>}
+    </section>
   </div>;
 }
