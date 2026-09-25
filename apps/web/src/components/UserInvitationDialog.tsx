@@ -1,11 +1,11 @@
 import { hasChangedInputs, useUnsavedFormClose } from "./useUnsavedFormClose";
-import { hasPermission, membershipRoleLabels } from "@niq/application-contracts";
+import { createInvitationSchema, hasPermission, membershipRoleLabels } from "@niq/application-contracts";
 import { type AuthenticatedUser, type Facility, type CreateInvitation } from "@niq/application-contracts";
 import { type FormEvent, useRef, useState } from "react";
 import { Copy, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { inviteOrganizationUser } from "../lib/user-invitations";
@@ -19,6 +19,7 @@ export function UserInvitationDialog({ user, facilities, allFacilities, onClose,
   const [unrestricted, setUnrestricted] = useState(allFacilities);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [emailError, setEmailError] = useState("");
   const submitting = useRef(false);
   const [done, setDone] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -29,10 +30,13 @@ export function UserInvitationDialog({ user, facilities, allFacilities, onClose,
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current || !role || !unrestricted && !ids.length) return;
-    submitting.current = true; setBusy(true); setMessage("");
     const email = String(new FormData(event.currentTarget).get("email") ?? "").trim();
+    const parsed = createInvitationSchema.safeParse({ email, role, facilityIds: unrestricted ? [] : ids });
+    if (!parsed.success) { setEmailError("Enter a valid email address."); return; }
+    setEmailError("");
+    submitting.current = true; setBusy(true); setMessage("");
     try {
-      const result = await inviteOrganizationUser(user.organizationId, { email, role, facilityIds: unrestricted ? [] : ids });
+      const result = await inviteOrganizationUser(user.organizationId, parsed.data);
       onCreated();
       if (result.activationToken) setLink(window.location.origin + "/invite/" + result.activationToken);
       setDone(true);
@@ -42,8 +46,8 @@ export function UserInvitationDialog({ user, facilities, allFacilities, onClose,
   return <><Dialog ariaLabel="Invite user" isOpen isDismissable={!busy} isKeyboardDismissDisabled={busy} onOpenChange={(open) => { if (!open) requestClose(); }} showCloseButton={!busy} className="facility-dialog">
     <DialogHeader><DialogTitle className="flex items-center gap-2">{done && <CheckCircle2 aria-hidden="true" className="size-5 text-success" />}{done ? "Invitation created" : "Invite user"}</DialogTitle></DialogHeader>
     {done ? <div className="clinical-form"><div className="form-fields facility-dialog-fields"><p role="status">{link ? "Share this link with your colleague." : "The invitation is ready."}</p>{link && <Field><FieldLabel htmlFor="user-invitation-link">Invitation link</FieldLabel><Input id="user-invitation-link" value={link} readOnly onFocus={(event) => event.currentTarget.select()} /></Field>}{message && <p role="alert" className="text-sm text-destructive">{message}</p>}</div><div className="form-footer">{link && <Button variant="outline" onPress={async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setMessage(""); } catch { setMessage("Select the link and copy it manually."); } }}><Copy aria-hidden="true" />{copied ? "Copied" : "Copy link"}</Button>}<Button onPress={onClose}>Done</Button></div></div> :
-      <form ref={formRef} className="clinical-form" onSubmit={submit}><fieldset disabled={busy} className="form-fields facility-dialog-fields m-0 min-w-0 border-0">
-        <Field><FieldLabel htmlFor="user-invite-email" className="required-field-label">Email <span aria-hidden="true">*</span></FieldLabel><Input id="user-invite-email" name="email" type="email" required autoFocus disabled={busy} /></Field>
+      <form ref={formRef} className="clinical-form" noValidate onSubmit={submit}><fieldset disabled={busy} className="form-fields facility-dialog-fields m-0 min-w-0 border-0">
+        <Field data-invalid={!!emailError || undefined}><FieldLabel htmlFor="user-invite-email" className="required-field-label">Email <span aria-hidden="true">*</span></FieldLabel><Input id="user-invite-email" name="email" type="email" autoComplete="email" required autoFocus disabled={busy} aria-invalid={!!emailError} aria-describedby={emailError ? "user-invite-email-error" : undefined} onChange={() => setEmailError("")} />{emailError && <FieldError id="user-invite-email-error">{emailError}</FieldError>}</Field>
         <Field><FieldLabel className="required-field-label">Role <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Role" placeholder="Select role" isRequired selectedKey={role} isDisabled={busy} onSelectionChange={(key) => setRole(key === null ? null : String(key) as CreateInvitation["role"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(userRoleLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select>{role && <p className="text-sm text-muted-foreground">{role === "ORGANIZATION_ADMIN" ? "Manages organization users and settings." : hasPermission(role, "assessments.edit") ? "Works with patients and assessments." : "Provides support with the access allowed for this role."}</p>}</Field>
         <Field><FieldLabel className="required-field-label">Facility access <span aria-hidden="true">*</span></FieldLabel><FacilityAccessPicker idPrefix="invite-user" facilities={facilities} selectedIds={ids} allSelected={unrestricted} allowAll={allFacilities} disabled={busy} onSelectedIdsChange={setIds} onAllChange={setUnrestricted} /></Field>
         {!allFacilities && <p className="text-sm text-muted-foreground">Choose one or more of your assigned facilities.</p>}
