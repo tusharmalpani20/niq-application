@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { FormAnswer } from "@niq/application-contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,9 @@ const heightCmQuickValues = [150, 160, 170, 180];
 const heightFeetQuickValues = [[5, 0], [5, 3], [5, 6], [5, 9], [6, 0]] as const;
 const weightKgQuickValues = [50, 60, 70, 80, 90];
 const weightLbQuickValues = [110, 130, 150, 170, 190];
+const blockMinusKey = (event: KeyboardEvent<HTMLInputElement>) => {
+  if (event.key === "-" || event.key === "Subtract") event.preventDefault();
+};
 
 function display(value: FormAnswer | undefined, kind: Props["kind"], unit: Props["unit"]): [string, string] {
   if (value === undefined || value === null) return ["", ""];
@@ -48,7 +51,13 @@ export function AssessmentMeasurementInput({ id, label, kind, value, unit, showQ
     }
   }, [value, kind, unit]);
   const emit = (next: FormAnswer) => { lastEmitted.current = next; onChange(next); };
-  const change = (part: 0 | 1, raw: string) => {
+  const change = (part: 0 | 1, input: HTMLInputElement) => {
+    const raw = input.value;
+    // `min={0}` does not prevent typing a minus sign, so restore the last valid text.
+    if (input.validity.badInput || raw.trim().startsWith("-") || Number(raw) < 0) {
+      input.value = draft[part];
+      return;
+    }
     const next: [string, string] = [...draft];
     next[part] = raw;
     setDraft(next);
@@ -69,9 +78,9 @@ export function AssessmentMeasurementInput({ id, label, kind, value, unit, showQ
       : weightKgQuickValues.map(kg => ({ label: `${kg} kg`, value: kg, draft: [String(kg), ""] }));
   return <div className="space-y-2">
     {imperialHeight ? <div className="grid grid-cols-2 gap-3">
-      <div className="relative"><Input id={id} aria-label="Height feet" type="number" inputMode="numeric" min={0} step={1} className="min-h-11 bg-background pr-9" disabled={disabled} aria-required={required} aria-invalid={invalid || invalidInches} aria-describedby={describedBy} value={draft[0]} onChange={event => change(0, event.target.value)} /><span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">ft</span></div>
-      <div className="relative"><Input id={`${id}-inches`} aria-label="Height inches" type="number" inputMode="decimal" min={0} max={11.99} step="any" className="min-h-11 bg-background pr-9" disabled={disabled} aria-invalid={invalid || invalidInches} value={draft[1]} onChange={event => change(1, event.target.value)} /><span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">in</span></div>
-    </div> : <Input id={id} type="number" min={0} step="any" inputMode="decimal" className="min-h-11 bg-background" disabled={disabled} aria-required={required} aria-invalid={invalid} aria-describedby={describedBy} value={draft[0]} onChange={event => change(0, event.target.value)} />}
+      <div className="relative"><Input id={id} aria-label="Height feet" type="number" inputMode="numeric" min={0} step={1} className="min-h-11 bg-background pr-9" disabled={disabled} aria-required={required} aria-invalid={invalid || invalidInches} aria-describedby={describedBy} value={draft[0]} onKeyDown={blockMinusKey} onChange={event => change(0, event.currentTarget)} /><span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">ft</span></div>
+      <div className="relative"><Input id={`${id}-inches`} aria-label="Height inches" type="number" inputMode="decimal" min={0} max={11.99} step="any" className="min-h-11 bg-background pr-9" disabled={disabled} aria-invalid={invalid || invalidInches} value={draft[1]} onKeyDown={blockMinusKey} onChange={event => change(1, event.currentTarget)} /><span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">in</span></div>
+    </div> : <Input id={id} type="number" min={0} step="any" inputMode="decimal" className="min-h-11 bg-background" disabled={disabled} aria-required={required} aria-invalid={invalid} aria-describedby={describedBy} value={draft[0]} onKeyDown={blockMinusKey} onChange={event => change(0, event.currentTarget)} />}
     {showQuickValues && !disabled && empty && <div className="flex flex-wrap gap-1.5" aria-label={`Suggested ${label.toLowerCase()} values`}>
       {quickValues.map(option => <Button key={option.label} type="button" size="xs" variant="outline" className="rounded-full text-xs" onPress={() => { setDraft(option.draft); emit(option.value); }}>{option.label}</Button>)}
     </div>}
