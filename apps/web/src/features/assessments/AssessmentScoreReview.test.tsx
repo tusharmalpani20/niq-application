@@ -21,6 +21,9 @@ async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[];
 }
 test("summary keeps scored answers readable without score edit controls", async () => harness(async ({ click, posts }) => {
   expect(document.body.textContent).not.toContain("Reviewed score");
+  expect(document.body.textContent).not.toContain("Answers and original NIQ scores stay unchanged.");
+  expect(document.body.textContent).toContain("questions answered");
+  expect([...document.querySelectorAll("button")].find(button => button.textContent?.includes("Disease status"))?.querySelectorAll("svg")).toHaveLength(2);
   expect(document.querySelector('[aria-label^="Adjust "]')).toBeNull();
   await click("Disease status");
   expect(document.body.textContent).toContain("Metastatic");
@@ -34,6 +37,7 @@ test("summary keeps scored answers readable without score edit controls", async 
 
 test("all original and reviewed scores remain visible without adjustment actions", async () => harness(async ({ click, posts }) => {
   expect(document.body.textContent).toContain("Reviewed score");
+  expect(document.body.textContent).toContain("Answers and original NIQ scores stay unchanged.");
   expect(document.body.textContent).toContain("Reviewer One");
   expect(document.body.textContent).toContain("Reviewer Two");
   await click("Disease status");

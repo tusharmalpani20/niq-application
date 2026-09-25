@@ -1,11 +1,14 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { getAssessmentAnswerCoverage, isAssessmentFieldApplicable, calculateAssessmentBmi, calculateAssessmentWeightChange, type AssessmentWorkflow, type AssessmentScoreReviews } from "@niq/application-contracts";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { assessmentResultView } from "./AssessmentResult";
+import { assessmentSectionIcons } from "./AssessmentSectionNavigation";
 import { assessmentRequest } from "./workflow-api";
 
 const points = (value: number | null) => value === null ? "—" : `${value} ${value === 1 ? "pt" : "pts"}`;
+const summaryRowClass = "flex items-center gap-2 px-2 py-1 sm:px-3";
+const summaryToggleClass = "min-h-11 min-w-0 flex-1 justify-start gap-2 whitespace-normal text-left";
 
 export function AssessmentScoreReview({ record, organizationId, renderScan, reportsContent, onSaved, canReview = true, scanStatus = "Face scan unavailable" }: {
   onSaved?: () => Promise<unknown>; canReview?: boolean; scanStatus?: string; record: AssessmentWorkflow; organizationId: string; renderScan: (active: boolean) => ReactNode; reportsContent: ReactNode;
@@ -56,9 +59,9 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   const overall = data?.overall;
   const scan = data?.scan;
   const scanSection = <div className="overflow-hidden rounded-xl border border-border">
-    <div className={`flex flex-wrap items-center gap-2 p-3 ${expanded === "face_scan" ? "bg-muted/40" : ""}`}>
-      <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start text-left" aria-expanded={expanded === "face_scan"} aria-controls="score-section-face_scan" onPress={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>{expanded === "face_scan" ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}Face scan</Button>
-      <div className="text-right text-sm"><p className="text-xs text-muted-foreground">{scanStatus}</p>{scan?.niqPoints !== null && scan?.niqPoints !== undefined && <p>Vital IQ {scan.niqPoints}</p>}{scan?.overridden && <p className="text-brand-ink">Reviewed Vital IQ {scan.reviewedPoints ?? "—"}</p>}</div>
+    <div className={`${summaryRowClass} ${expanded === "face_scan" ? "bg-muted/40" : ""}`}>
+      <Button variant="ghost" className={summaryToggleClass} aria-expanded={expanded === "face_scan"} aria-controls="score-section-face_scan" onPress={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>{expanded === "face_scan" ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}<assessmentSectionIcons.face_scan className="size-4 shrink-0" aria-hidden="true" />Face scan</Button>
+      <div className="w-28 shrink-0 text-right text-sm tabular-nums sm:w-36"><p className="text-xs text-muted-foreground">{scanStatus}</p>{scan?.niqPoints !== null && scan?.niqPoints !== undefined && <p>Vital IQ {scan.niqPoints}</p>}{scan?.overridden && <p className="text-brand-ink">Reviewed Vital IQ {scan.reviewedPoints ?? "—"}</p>}</div>
     </div>
     <div id="score-section-face_scan" hidden={expanded !== "face_scan"} className="border-t border-border p-4">
       <p className="mb-3 text-xs text-muted-foreground">Vital IQ points are included in the final NIQ score when this scan was part of the scoring request.</p>
@@ -67,15 +70,16 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   </div>;
   return <section className="my-5 min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6" aria-label="Assessment score review">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="assessment-summary-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">Assessment summary</h2><span className="text-sm text-muted-foreground">{record.progress.answered}/{record.progress.required} required answers complete</span></div>
-    <div className="my-5 flex flex-wrap items-center gap-x-8 gap-y-3">
-      <div><p className="text-sm text-muted-foreground">Final NIQ score</p><p className="mt-1 text-2xl font-semibold">{points(result.score)}</p>{result.classification && <p className="text-sm text-muted-foreground">{result.classification.label} · NIQ</p>}</div>
-      {revised && overall && <div><p className="text-sm text-muted-foreground">Reviewed score</p><p className="mt-1 text-2xl font-semibold text-brand-ink">{points(overall.reviewedPoints)}</p><p className="text-xs text-muted-foreground">{overall.overridden ? "Total override" : "From section scores"}</p>
+    {record.progress.answered === record.progress.required && coverage.answered < coverage.total && <p className="mt-2 text-sm text-muted-foreground">Some optional questions remain unanswered.</p>}
+    <div className="my-5 flex flex-wrap gap-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+      <div className="min-w-44 flex-1"><p className="text-sm text-muted-foreground">Final NIQ score</p><p className="mt-1 text-3xl font-semibold tabular-nums">{points(result.score)}</p>{result.classification && <p className="mt-2 inline-flex rounded-full border border-border bg-background px-3 py-1 text-sm font-semibold">{result.classification.label} · NIQ</p>}</div>
+      {revised && overall && <div className="min-w-44 flex-1 border-t border-border pt-4 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0"><p className="text-sm text-muted-foreground">Reviewed score</p><p className="mt-1 text-3xl font-semibold tabular-nums text-brand-ink">{points(overall.reviewedPoints)}</p><p className="text-xs text-muted-foreground">{overall.overridden ? "Total override" : "From section scores"}</p>
         <p className="mt-1 text-sm" role="status">{data?.risk?.classification && ["ORIGINAL", "CONFIRMED"].includes(data.risk.status)
           ? `${data.risk.classification.label} · NIQ${data.risk.status === "ORIGINAL" ? " (original restored)" : ""}`
           : data?.risk?.status === "UNAVAILABLE" ? "Risk assessment unavailable" : "Risk assessment pending"}</p>
       </div>}
     </div>
-    <p className="mb-5 text-sm text-muted-foreground">Answers and original NIQ scores stay unchanged.</p>
+    {!!data?.entries.length && <p className="mb-5 text-sm text-muted-foreground">Answers and original NIQ scores stay unchanged.</p>}
     {revised && !["ORIGINAL", "CONFIRMED"].includes(data?.risk?.status ?? "") && <div className="mb-4 rounded-lg border border-border p-3 text-sm">
       <p>{data?.risk?.failureCode === "UNMATCHED_CLASSIFICATION" ? "No NIQ risk category matches this reviewed total. Check the score before continuing." : data?.risk?.status === "UNAVAILABLE" ? "Your score changes are saved. NIQ has not confirmed the risk for this total." : "NIQ is assessing the latest reviewed total."} Clinical review can be completed once its risk is confirmed.</p>
       {data?.risk?.canRetry && canReview && <Button variant="outline" className="mt-2" isDisabled={retryingRisk} onPress={() => { void retryRisk(); }}>{retryingRisk ? "Checking risk…" : "Retry risk assessment"}</Button>}
@@ -83,14 +87,15 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
     {!result.clinicalUsePermitted && <p className="mb-4 text-sm" role="note">This NIQ result is not approved for clinical use.</p>}
     {error && <div className="mb-4 text-sm text-destructive" role="alert">{error}<Button variant="link" onPress={() => setLoadKey(key => key + 1)}>Reload scores</Button></div>}
     {!data && !error && <p role="status" className="mb-4 text-sm text-muted-foreground">Loading scores…</p>}
-    <div className="space-y-3">{sections.map(section => {
+    <div className="space-y-2">{sections.map(section => {
       const effective = data?.sections.find(item => item.id === section.id);
       const open = expanded === section.id;
       const completion = coverage.sections.find(item => item.id === section.id);
+      const Icon = assessmentSectionIcons[section.id as keyof typeof assessmentSectionIcons] ?? ClipboardList;
       return <Fragment key={section.id}><div className="overflow-hidden rounded-xl border border-border">
-        <div className={`flex flex-wrap items-center gap-2 p-3 ${open ? "bg-muted/40" : ""}`}>
-          <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start whitespace-normal text-left" aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}{section.title}</Button>
-          <div className="text-right text-sm"><p className="text-xs text-muted-foreground">{completion?.answered ?? 0}/{completion?.total ?? 0} answered</p><p>{revised ? "NIQ " : ""}{points(section.points)}</p>{revised && effective?.reviewedPoints !== null && effective?.reviewedPoints !== undefined && <p className="text-brand-ink">Reviewed {points(effective.reviewedPoints)}{effective.overridden ? " · Override" : ""}</p>}</div>
+        <div className={`${summaryRowClass} ${open ? "bg-muted/40" : ""}`}>
+          <Button variant="ghost" className={summaryToggleClass} aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}<Icon className="size-4 shrink-0" aria-hidden="true" />{section.title}</Button>
+          <div className="w-28 shrink-0 text-right text-sm tabular-nums sm:w-36"><p className="text-xs text-muted-foreground">{completion?.answered ?? 0}/{completion?.total ?? 0} questions answered</p><p className="font-medium">{revised ? "NIQ " : ""}{points(section.points)}</p>{revised && effective?.reviewedPoints !== null && effective?.reviewedPoints !== undefined && <p className="text-brand-ink">Reviewed {points(effective.reviewedPoints)}{effective.overridden ? " · Override" : ""}</p>}</div>
         </div>
         <div id={`score-section-${section.id}`} hidden={!open} className="border-t border-border px-4 pb-4">
           <div className="divide-y divide-border">{section.fields.filter(field => isAssessmentFieldApplicable(field, record.answers)).map(field => {
@@ -116,10 +121,10 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
     })}{!sections.some(section => section.id === "personal_details") && scanSection}</div>
     {[{id: "reports", title: "Attachments", status: `${record.reports.length} reports`}].map(section => {
       const open = expanded === section.id;
-      return <div key={section.id} className="mt-3 overflow-hidden rounded-xl border border-border">
-        <div className={`flex flex-wrap items-center gap-2 p-3 ${open ? "bg-muted/40" : ""}`}>
-          <Button variant="ghost" className="min-h-11 min-w-0 flex-1 justify-start text-left" aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}{section.title}</Button>
-          <span className="text-sm text-muted-foreground">{section.status}</span>
+      return <div key={section.id} className="mt-2 overflow-hidden rounded-xl border border-border">
+        <div className={`${summaryRowClass} ${open ? "bg-muted/40" : ""}`}>
+          <Button variant="ghost" className={summaryToggleClass} aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}<assessmentSectionIcons.reports className="size-4 shrink-0" aria-hidden="true" />{section.title}</Button>
+          <span className="w-28 shrink-0 text-right text-sm text-muted-foreground tabular-nums sm:w-36">{section.status}</span>
         </div>
         <div id={`score-section-${section.id}`} hidden={!open} className="border-t border-border p-4">{record.reports.length ? reportsContent : <p className="text-sm text-muted-foreground">No reports attached.</p>}</div>
       </div>;
