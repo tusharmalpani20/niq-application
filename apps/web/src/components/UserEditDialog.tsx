@@ -3,7 +3,7 @@ import { hasPermission, membershipRoleLabels, type AuthenticatedUser, type Facil
 import { useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { updateOrganizationUser } from "../lib/user-edit";
@@ -23,6 +23,8 @@ export function UserEditDialog({ user, target, facilities, allFacilities, onClos
   const [unrestricted, setUnrestricted] = useState(target.facilities?.length === 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [nameError, setNameError] = useState("");
+  const [facilityError, setFacilityError] = useState("");
   const inFlight = useRef(false);
   const allowed = hasPermission(user.role, "users.manage") && canEditOrganizationUser(target, facilities, allFacilities);
   // Include inactive assignments so a name/role edit never silently drops access.
@@ -33,7 +35,12 @@ export function UserEditDialog({ user, target, facilities, allFacilities, onClos
       (!unrestricted && JSON.stringify([...ids].sort()) !== JSON.stringify((target.facilities?.map(item => item.id) ?? []).sort())) });
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!allowed || inFlight.current || !displayName.trim() || !unrestricted && !ids.length) return;
+    if (!allowed || inFlight.current) return;
+    const validName = Boolean(displayName.trim());
+    const hasFacilityAccess = unrestricted || ids.length > 0;
+    setNameError(validName ? "" : "Enter a name.");
+    setFacilityError(hasFacilityAccess ? "" : "Select at least one facility.");
+    if (!validName || !hasFacilityAccess) return;
     inFlight.current = true; setBusy(true); setError("");
     try {
       const saved = await updateOrganizationUser(user.organizationId, target.membershipId, {
@@ -47,19 +54,20 @@ export function UserEditDialog({ user, target, facilities, allFacilities, onClos
   }
   return <><Dialog ariaLabel="Edit user" className="facility-dialog" isOpen isDismissable={!busy} isKeyboardDismissDisabled={busy} showCloseButton={!busy} onOpenChange={open => { if (!open) requestClose(); }}>
     <DialogHeader><DialogTitle>Edit user</DialogTitle></DialogHeader>
-    <form className="clinical-form" onSubmit={submit}>
+    <form className="clinical-form" noValidate onSubmit={submit}>
       <fieldset disabled={busy || !allowed} className="form-fields facility-dialog-fields m-0 min-w-0 border-0">
-        <Field><FieldLabel htmlFor="edit-user-name" className="required-field-label">Name <span aria-hidden="true">*</span></FieldLabel><Input ref={nameRef} id="edit-user-name" value={displayName} onChange={event => setDisplayName(event.target.value)} required maxLength={120} autoFocus /></Field>
-        <Field><FieldLabel htmlFor="edit-user-email">Email</FieldLabel><Input id="edit-user-email" value={target.email} readOnly /></Field>
+        <Field data-invalid={!!nameError || undefined}><FieldLabel htmlFor="edit-user-name" className="required-field-label">Name <span aria-hidden="true">*</span></FieldLabel><Input ref={nameRef} id="edit-user-name" value={displayName} onChange={event => { setDisplayName(event.target.value); setNameError(""); }} required maxLength={120} autoFocus aria-invalid={!!nameError} aria-describedby={nameError ? "edit-user-name-error" : undefined} />{nameError && <FieldError id="edit-user-name-error">{nameError}</FieldError>}</Field>
+        <Field><FieldLabel htmlFor="edit-user-email">Email</FieldLabel><Input id="edit-user-email" value={target.email} disabled /></Field>
         <Field><FieldLabel className="required-field-label">Role <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Role" selectedKey={role} isDisabled={busy || self || !allowed} onSelectionChange={key => setRole(String(key) as MembershipRole)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(membershipRoleLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</SelectContent></Select></Field>
-        <Field><FieldLabel className="required-field-label">Facility access <span aria-hidden="true">*</span></FieldLabel>
-          <FacilityAccessPicker idPrefix="edit-user" facilities={options} selectedIds={ids} allSelected={unrestricted} allowAll={allFacilities} disabled={busy || self || !allowed} onSelectedIdsChange={setIds} onAllChange={setUnrestricted} />
+        <Field data-invalid={!!facilityError || undefined}><FieldLabel className="required-field-label">Facility access <span aria-hidden="true">*</span></FieldLabel>
+          <FacilityAccessPicker idPrefix="edit-user" facilities={options} selectedIds={ids} allSelected={unrestricted} allowAll={allFacilities} disabled={busy || self || !allowed} invalid={!!facilityError} errorId={facilityError ? "edit-user-facility-error" : undefined} onSelectedIdsChange={next => { setIds(next); if (next.length) setFacilityError(""); }} onAllChange={selected => { setUnrestricted(selected); if (selected) setFacilityError(""); }} />
+          {facilityError && <FieldError id="edit-user-facility-error">{facilityError}</FieldError>}
           {self && <p className="text-sm text-muted-foreground">Another administrator can change your role or facility access.</p>}
         </Field>
         {!allowed && <p role="alert" className="text-destructive">This user’s facility access is outside your assigned facilities.</p>}
         {error && <p role="alert" className="text-destructive">{error}</p>}
       </fieldset>
-      <div className="form-footer"><Button variant="outline" isDisabled={busy} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={busy || !allowed || !displayName.trim() || !unrestricted && !ids.length}>{busy ? "Saving…" : "Save changes"}</Button></div>
+      <div className="form-footer"><Button variant="outline" isDisabled={busy} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={busy || !allowed}>{busy ? "Saving…" : "Save changes"}</Button></div>
     </form>
   </Dialog>{confirmation}</>;
 }

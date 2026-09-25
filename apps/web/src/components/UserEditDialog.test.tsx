@@ -33,11 +33,28 @@ async function render(self: boolean, callback: (requests: any[]) => Promise<void
     for (const [key, descriptor] of Object.entries(previous)) if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key];
   }
 }
-test("profile edit preserves assigned inactive facilities and keeps email read-only", async () => render(false, async requests => {
-  expect(document.querySelector<HTMLInputElement>("#edit-user-email")!.readOnly).toBe(true);
+test("profile edit preserves assigned inactive facilities and disables email", async () => render(false, async requests => {
+  expect(document.querySelector<HTMLInputElement>("#edit-user-email")!.disabled).toBe(true);
   expect(document.body.textContent).toContain("Two (inactive)");
   await act(async () => { document.querySelector("form")!.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })); await new Promise(r => setTimeout(r, 0)); });
   expect(requests[0].facilityIds).toEqual([id, second]);
+}));
+test("save stays available and shows missing name and facility errors", async () => render(false, async requests => {
+  const name = document.querySelector<HTMLInputElement>("#edit-user-name")!;
+  await act(async () => {
+    name.focus();
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(name, "");
+    name.dispatchEvent(new window.Event("input", { bubbles: true }));
+    name.dispatchEvent(new window.KeyboardEvent("keyup", { key: "Backspace", bubbles: true }));
+  });
+  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Remove One"]')!.click());
+  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Remove Two"]')!.click());
+  expect(document.querySelector("form")!.hasAttribute("novalidate")).toBe(true);
+  expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
+  await act(async () => document.querySelector("form")!.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })));
+  expect(document.querySelector("#edit-user-name-error")?.textContent).toBe("Enter a name.");
+  expect(document.querySelector("#edit-user-facility-error")?.textContent).toBe("Select at least one facility.");
+  expect(requests).toHaveLength(0);
 }));
 test("facility picker can add and remove assignments before saving", async () => render(false, async requests => {
   const search = document.querySelector<HTMLInputElement>('#edit-user-facility-search')!;
