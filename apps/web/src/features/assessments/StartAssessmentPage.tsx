@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SearchCombobox } from "@/components/ui/combobox";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PatientForm } from "@/components/PatientForm";
+import { PatientForm, type PatientFormHandle } from "@/components/PatientForm";
 import { getPatient, listFacilities, listPatients } from "@/lib/api";
 import { assessmentRequest, initializeAssessment, retryInitialization } from "./workflow-api";
 
@@ -44,10 +44,12 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [formBusy, setFormBusy] = useState(false);
   const [error, setError] = useState("");
   const [initialization, setInitialization] = useState<AssessmentInitialization | null>(null);
   const request = useRef({ patientId: entry.patient ?? "", key: entry.requestKey ?? crypto.randomUUID() });
   const inFlight = useRef(false);
+  const patientForm = useRef<PatientFormHandle>(null);
   const lifecycle = useRef(0);
   useEffect(() => () => { lifecycle.current += 1; }, []);
   const [loadKey, setLoadKey] = useState(0);
@@ -104,13 +106,18 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
   }
 
   const canCreatePatient = hasPermission(user.role, "patients.create");
-  return <div className="mx-auto w-full max-w-3xl">
-    <header className="mb-5"><h1 className="text-2xl font-semibold">New assessment</h1><p className="mt-1 text-sm text-muted-foreground">Select a patient and press Continue, or create one to open the questionnaire.</p></header>
+  const exitPath = entry.patient && selected ? `/patients/${selected.reference}` : "/assessments";
+  function exit() {
+    if (mode === "create") patientForm.current?.requestExit();
+    else navigate(exitPath, { replace: true });
+  }
+  return <div className="assessment-workflow @container">
+    <header className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-semibold">New assessment</h1><p className="mt-1 text-sm text-muted-foreground">Select a patient and press Continue, or create one to open the questionnaire.</p></div><Button variant="outline" isDisabled={busy || formBusy} onPress={exit}>Exit</Button></header>
     <section className="overflow-hidden rounded-xl border border-border bg-card" aria-label="Patient selection">
       <div className="border-b border-border px-5 py-4"><h2 className="font-semibold">{mode === "create" ? "Create patient" : "Select patient"}</h2></div>
       {error && <div role="alert" className="m-5 rounded-lg border border-destructive/30 p-3 text-sm text-destructive">{error}</div>}
       {!loaded ? <div className="p-5 text-sm text-muted-foreground">Loading patient information…</div> : loadFailed ? <div className="p-5"><Button variant="outline" onPress={() => setLoadKey(key => key + 1)}>Retry loading</Button></div> : mode === "create" ?
-        <PatientForm organizationId={user.organizationId} facilities={facilities} submitLabel="Create patient & continue" cancelLabel="Choose existing patient" onCancel={() => setMode("select")} onSaved={patient => { setPatients(current => [patient, ...current]); void start(patient); }} />
+        <PatientForm ref={patientForm} organizationId={user.organizationId} facilities={facilities} submitLabel="Create patient & continue" cancelLabel="Choose existing patient" onCancel={() => setMode("select")} onExit={() => navigate(exitPath, { replace: true })} onBusyChange={setFormBusy} onSaved={patient => { setFormBusy(false); setPatients(current => [patient, ...current]); void start(patient); }} />
         : <>
           <div className="clinical-form grid gap-5 p-5">
             {committed && selected ? <div><p className="text-sm text-muted-foreground">Patient for this assessment</p><p className="mt-1 font-medium">{selected.displayName} · {selected.reference}</p><p className="text-sm text-muted-foreground">{selected.homeFacility?.name ?? "No facility"}</p></div> : <>
@@ -119,8 +126,7 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
               {canCreatePatient && <Button variant="outline" className="w-fit" onPress={() => setMode("create")}>Create new patient</Button>}
             </>}
           </div>
-          <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
-            <Button variant="outline" isDisabled={busy} onPress={() => navigate(entry.patient && selected ? `/patients/${selected.reference}` : "/assessments", { replace: true })}>Back</Button>
+          <footer className="flex flex-wrap items-center justify-end gap-3 border-t border-border px-5 py-3">
             <Button isDisabled={!selected || busy} onPress={() => { if (selected) void start(selected); }}>{busy ? "Preparing questionnaire…" : committed ? "Retry preparation" : "Continue"}<ArrowRight aria-hidden="true"/></Button>
           </footer>
         </>}

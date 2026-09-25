@@ -12,7 +12,7 @@ import { ApiRequestError, registerPatient } from "../lib/api";
 import { updatePatient } from "../lib/patient-edit";
 import { todayDate } from "../lib/patient-display";
 
-type PatientFormHandle = { requestClose: () => void };
+export type PatientFormHandle = { requestClose: () => void; requestExit: () => void };
 type PatientField = "name" | "medicalRecordNumber" | "homeFacilityId" | "dateOfBirth" | "gender" | "phone" | "email";
 
 type Props = {
@@ -21,6 +21,7 @@ type Props = {
   facilities: Facility[];
   patient?: Patient;
   onCancel: () => void;
+  onExit?: () => void;
   onSaved: (patient: Patient) => void;
   onBusyChange?: (busy: boolean) => void;
   focusField?: "dateOfBirth" | "gender";
@@ -28,7 +29,7 @@ type Props = {
   cancelLabel?: string;
 };
 
-export function PatientForm({ organizationId, facilities, patient, onCancel, onSaved, onBusyChange, focusField, submitLabel, cancelLabel = "Cancel", ref }: Props) {
+export function PatientForm({ organizationId, facilities, patient, onCancel, onExit, onSaved, onBusyChange, focusField, submitLabel, cancelLabel = "Cancel", ref }: Props) {
   const activeFacilities = facilities.filter(item => item.status === "ACTIVE");
   const initialFacilityId = useRef(patient?.homeFacility?.id ?? (activeFacilities.length === 1 ? activeFacilities[0]!.id : null)).current;
   const [facilityId, setFacilityId] = useState<string | null>(initialFacilityId);
@@ -51,8 +52,8 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
     const dirty = changedText || changedBirth || facilityId !== initialFacilityId || gender !== (patient?.gender ?? null);
     return !!dirty;
   }
-  const { requestClose, confirmation } = useUnsavedFormClose({ subject: "patient", onClose: onCancel, isBusy: () => submitting.current, isDirty });
-  useImperativeHandle(ref, () => ({ requestClose }));
+  const { requestClose, requestCloseWith, confirmation } = useUnsavedFormClose({ subject: "patient", onClose: onCancel, isBusy: () => submitting.current, isDirty });
+  useImperativeHandle(ref, () => ({ requestClose, requestExit: () => requestCloseWith(onExit ?? onCancel) }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<PatientField, string>>>({});

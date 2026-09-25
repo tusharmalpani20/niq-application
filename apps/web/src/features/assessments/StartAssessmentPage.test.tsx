@@ -102,6 +102,7 @@ test("multiple accessible facilities keep the facility selector", async () => {
 
 test("new assessment switches to inline patient registration without opening the questionnaire", async () => {
   await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async () => {
+    expect(document.querySelector(".assessment-workflow")).not.toBeNull();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.querySelector('nav[aria-label="Assessment sections"]')).toBeNull();
     expect(document.body.textContent).toContain("Select a patient and press Continue, or create one to open the questionnaire.");
@@ -113,6 +114,50 @@ test("new assessment switches to inline patient registration without opening the
     expect(document.body.textContent).toContain("Create patient & continue");
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.querySelector('nav[aria-label="Assessment sections"]')).toBeNull();
+  });
+});
+
+test("Exit leaves patient selection without creating an assessment", async () => {
+  await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async router => {
+    const exit = [...document.querySelectorAll("button")].find(button => button.textContent === "Exit")!;
+    await act(async () => { exit.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(router.state.location.pathname).toBe("/assessments");
+  });
+});
+
+test("Exit from patient creation confirms dirty fields and stays distinct from choosing an existing patient", async () => {
+  await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async router => {
+    const press = async (label: string) => {
+      const button = [...document.querySelectorAll("button")].find(item => item.textContent?.trim() === label)!;
+      await act(async () => { button.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    };
+    await press("Create new patient");
+    document.querySelector<HTMLInputElement>("#patient-name")!.value = "Unsaved patient";
+    await press("Exit");
+    expect(router.state.location.pathname).toBe("/assessments/new");
+    expect(document.body.textContent).toContain("Discard patient changes?");
+    await press("Keep editing");
+    await press("Choose existing patient");
+    expect(document.body.textContent).toContain("Discard patient changes?");
+    await press("Discard changes");
+    expect(router.state.location.pathname).toBe("/assessments/new");
+    expect(document.querySelector("#assessment-patient")).not.toBeNull();
+    await press("Exit");
+    expect(router.state.location.pathname).toBe("/assessments");
+  });
+});
+
+test("discarding changes from Exit leaves patient creation", async () => {
+  await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async router => {
+    const press = async (label: string) => {
+      const button = [...document.querySelectorAll("button")].find(item => item.textContent?.trim() === label)!;
+      await act(async () => { button.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    };
+    await press("Create new patient");
+    document.querySelector<HTMLInputElement>("#patient-name")!.value = "Unsaved patient";
+    await press("Exit");
+    await press("Discard changes");
+    expect(router.state.location.pathname).toBe("/assessments");
   });
 });
 
