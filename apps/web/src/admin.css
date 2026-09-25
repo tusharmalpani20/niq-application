@@ -136,7 +136,6 @@
 .workspace-brand-logo { width: 4.6rem; height: 2.75rem; flex: 0 0 auto; object-fit: contain; }
 .workspace-brand-text { display: grid; min-width: 0; }
 .workspace-brand-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
-.workspace-brand-text small { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; font-size: .72rem; }
 .workspace-account { position: relative; flex: 0 0 auto; }
 .workspace-account summary {
   display: flex;
@@ -236,7 +235,6 @@
   .workspace-brand { gap: .45rem; }
   .workspace-brand-logo { width: 3.8rem; height: 2.5rem; }
   .workspace-brand-text strong { font-size: .78rem; }
-  .workspace-brand-text small { font-size: .65rem; }
   .workspace-account-name { display: none; }
   .workspace-account summary { gap: .15rem; padding: .2rem; }
   .workspace-account summary > svg { display: none; }

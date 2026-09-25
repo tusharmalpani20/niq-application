@@ -71,7 +71,7 @@ function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignO
     <div className="workspace-header-inner">
       <button type="button" className="workspace-brand" aria-label={`${branding.displayName} home`} onClick={() => go("/")}>
         <OrganizationMark key={branding.logoUrl} url={branding.logoUrl} />
-        <span className="workspace-brand-text"><strong>{branding.displayName}</strong><small>Nutrition intelligence</small></span>
+        <span className="workspace-brand-text"><strong>{branding.displayName}</strong></span>
       </button>
       <details className="workspace-account" ref={menuRef}>
         <summary aria-label={`Account menu for ${user.displayName}`}>
