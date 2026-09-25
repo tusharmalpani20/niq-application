@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
 import type { MembershipRole } from "@niq/application-contracts";
-import { DashboardPage } from "./DashboardPage";
+import { DashboardPage, greetingForHour } from "./DashboardPage";
 
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const date = "2026-09-20T00:00:00Z";
@@ -12,6 +12,17 @@ const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Exam
 const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: null, status: "SCORING_UNAVAILABLE", createdAt: date, completedAt: null };
 
 type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; userLimit?: number | null };
+
+test("overview greeting follows the local hour", () => {
+  expect(greetingForHour(0)).toBe("Good evening");
+  expect(greetingForHour(5)).toBe("Good evening");
+  expect(greetingForHour(6)).toBe("Good morning");
+  expect(greetingForHour(11)).toBe("Good morning");
+  expect(greetingForHour(12)).toBe("Good afternoon");
+  expect(greetingForHour(17)).toBe("Good afternoon");
+  expect(greetingForHour(18)).toBe("Good evening");
+  expect(greetingForHour(23)).toBe("Good evening");
+});
 async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, requests: string[]) => void, scenario: Scenario = {}) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
@@ -42,6 +53,11 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
 
 test("clinician overview shows review work without administrator operations", async () => {
   await renderOverview("DOCTOR", (body, requests) => {
+    expect(body.querySelector('header[aria-label="Overview greeting"] h1')?.textContent).toContain("Example User!");
+    expect(body.querySelector('header[aria-label="Overview greeting"] svg.text-primary')).not.toBeNull();
+    expect(body.querySelector('[aria-label="Open assessment"]')).toBeNull();
+    expect(body.querySelector('a[href="/assessments/new"]')?.textContent).toContain("New assessment");
+    expect(body.textContent).not.toContain("Resume assessment");
     expect(body.textContent).toContain("Clinical work");
     expect(body.textContent).toContain("Open assessments in your facilities");
     expect(body.querySelector('a[href="/assessments?status=OPEN"]')).not.toBeNull();
@@ -108,6 +124,8 @@ test("zero admin alerts collapse and unlimited seats stay compact", async () => 
 
 test("support overview stays focused on patient registration", async () => {
   await renderOverview("SUPPORT", (body, requests) => {
+    expect(body.querySelector('[aria-label="Open assessment"]')).toBeNull();
+    expect(body.querySelector('a[href="/assessments/new"]')).toBeNull();
     expect(body.querySelectorAll('[aria-label="This month"] a')).toHaveLength(1);
     expect(body.textContent).toContain("Patient registration");
     expect(body.textContent).toContain("Example Patient");

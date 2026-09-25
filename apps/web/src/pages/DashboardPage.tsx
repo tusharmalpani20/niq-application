@@ -2,10 +2,12 @@ import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, ClinicalReviewQueue, Patient } from "@niq/application-contracts";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
-import { ArrowRight, Building2, ClipboardList, UserRound, CalendarDays } from "lucide-react";
+import { ArrowRight, Building2, ClipboardList, UserRound, CalendarDays, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { OverviewUsage } from "../components/OverviewUsage";
+import { GreetingIllustration } from "../components/GreetingIllustration";
+import { RouterButtonLink } from "../components/RouterButtonLink";
 import { listClinicalReviews } from "../features/assessments/clinical-review-api";
 import { getOrganization, listAssessments, listFacilities, listOrganizationUsers, listPatients } from "../lib/api";
 import { assessmentStatusLabels } from "../lib/patient-display";
@@ -13,6 +15,25 @@ import { monthlyTrend } from "./monthly-trend";
 import { MonthlyTrendCard } from "./MonthlyTrendCard";
 
 type Overview = { patients: Patient[]; assessments: AssessmentSummary[]; facilityCount: number; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
+
+export function greetingForHour(hour: number): "Good morning" | "Good afternoon" | "Good evening" {
+  if (hour >= 6 && hour < 12) return "Good morning";
+  if (hour >= 12 && hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function GreetingBanner({ hour, displayName, canCreateAssessment }: { hour: number; displayName: string; canCreateAssessment: boolean }) {
+  const greeting = greetingForHour(hour);
+  const period = greeting === "Good morning" ? "morning" : greeting === "Good afternoon" ? "afternoon" : "evening";
+  const title = `${greeting}, ${displayName}!`;
+  return <>
+    <div className="flex min-w-0 items-center gap-4">
+      <GreetingIllustration period={period} />
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
+    </div>
+    {canCreateAssessment && <RouterButtonLink to="/assessments/new" className="shrink-0"><Plus className="size-4" aria-hidden="true" />New assessment</RouterButtonLink>}
+  </>;
+}
 
 function ActionCard({ title, count, detail, to }: { title: string; count: number | string; detail: string; to: string }) {
   return <Link to={to} className="surface flex min-h-32 flex-col justify-between gap-3 p-5 no-underline transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary">
@@ -58,9 +79,15 @@ export function DashboardPage() {
   const user = useOutletContext<AuthenticatedUser>();
   const isAdmin = hasPermission(user.role, "users.manage");
   const isClinician = hasPermission(user.role, "reviews.claim");
+  const canCreateAssessment = hasPermission(user.role, "assessments.edit");
+  const [localTime, setLocalTime] = useState(() => new Date());
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setLocalTime(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   useEffect(() => {
     let active = true;
     setData(null); setError(false);
@@ -107,7 +134,9 @@ export function DashboardPage() {
     {detail && <span className="text-xs text-muted-foreground">{detail}</span>}
   </Link>;
   return <>
-    <h1 className="patient-page-title">Overview</h1>
+    <header className="mb-7 flex flex-wrap items-center justify-between gap-4" aria-label="Overview greeting">
+      <GreetingBanner hour={localTime.getHours()} displayName={user.displayName} canCreateAssessment={canCreateAssessment} />
+    </header>
     {error ? <Card className="surface p-6"><p role="alert">Overview could not be loaded.</p><Button className="w-fit" variant="outline" onPress={() => setAttempt((value) => value + 1)}>Retry</Button></Card> : <>
       <section aria-label="This month" aria-busy={!data} className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-lg font-semibold">This month</h2><span className="text-xs text-muted-foreground">{now.toLocaleDateString(undefined, { month: "long", year: "numeric" })} to date</span></div>
