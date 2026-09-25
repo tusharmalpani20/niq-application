@@ -1,5 +1,5 @@
 import type { ApplicationConfig } from "@niq/application-config";
-import type { CorrectPatientMrn, UpdatePatient, UpdateOrganizationUser } from "@niq/application-contracts";
+import type { CorrectPatientDob, CorrectPatientMrn, UpdatePatient, UpdateOrganizationUser } from "@niq/application-contracts";
 import { createEntityId } from "@niq/application-domain";
 import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { Database } from "../db/client";
@@ -26,14 +26,13 @@ export async function editPatient(db: Database, config: ApplicationConfig, actor
       const profile = JSON.parse(decryptPatientData(prior.encryptedProfile, key)) as { name: string; phone?: string; email?: string };
       const changedFields = [
         prior.homeFacilityId !== facility.id && "homeFacilityId",
-        prior.dateOfBirth !== input.dateOfBirth && "dateOfBirth",
         prior.gender !== input.gender && "gender",
         profile.name !== input.name && "name",
         (profile.phone ?? "") !== input.phone && "phone",
         (profile.email ?? "") !== (input.email ?? "") && "email",
       ].filter((field): field is string => Boolean(field));
       // Only the patient profile changes; existing assessment snapshots remain historical.
-      const [updated] = await tx.update(patients).set({ homeFacilityId: facility.id, dateOfBirth: input.dateOfBirth, gender: input.gender,
+      const [updated] = await tx.update(patients).set({ homeFacilityId: facility.id, gender: input.gender,
         encryptedProfile: encryptPatientData(JSON.stringify({ name: input.name, ...(input.phone ? { phone: input.phone } : {}), ...(input.email ? { email: input.email } : {}) }), key),
         encryptionKeyVersion: config.PATIENT_DATA_KEY_VERSION, updatedAt: new Date(),
       }).where(and(eq(patients.id, prior.id), eq(patients.organizationId, organizationId))).returning();
@@ -45,6 +44,22 @@ export async function editPatient(db: Database, config: ApplicationConfig, actor
     if (errorCode(error) === "23505") throw new ServiceError("CONFLICT", "Patient changes conflict with an existing record.");
     throw error;
   }
+}
+export async function correctPatientDob(db: Database, actor: Principal, organizationId: string, locator: string, input: CorrectPatientDob, context: RequestContext) {
+  if (actor.role !== "ORGANIZATION_ADMIN" || actor.organizationId !== organizationId) throw new ServiceError("FORBIDDEN", "Only organization administrators can correct a date of birth.");
+  const reference = /^([A-Z][A-Z0-9]{1,11})-([1-9]\d{0,9})$/.exec(locator);
+  const match = reference ? and(eq(patients.referencePrefix, reference[1]!), eq(patients.serialNumber, Number(reference[2]))) : eq(patients.id, locator);
+  return db.transaction(async tx => {
+    const [prior] = await tx.select().from(patients).where(and(eq(patients.organizationId, organizationId), match, eq(patients.isArchived, false), facilityAccessCondition(actor, organizationId, patients.homeFacilityId))).for("update");
+    if (!prior) throw new ServiceError("NOT_FOUND", "Patient not found.");
+    if (prior.dateOfBirth === input.dateOfBirth) throw new ServiceError("CONFLICT", "Enter a different date of birth.");
+    // Assessment workflows retain their historical patient snapshot. Drafts use the current patient DOB when loaded.
+    const [updated] = await tx.update(patients).set({ dateOfBirth: input.dateOfBirth, updatedAt: new Date() }).where(and(eq(patients.id, prior.id), eq(patients.organizationId, organizationId))).returning();
+    if (!updated) throw new ServiceError("NOT_FOUND", "Patient not found.");
+    await tx.insert(auditEvents).values({ id: createEntityId(), organizationId, actorType: "USER", actorMembershipId: actor.membershipId, action: "PATIENT_DOB_CORRECTED", resourceType: "patient", resourceId: prior.id, requestId: context.requestId, metadata: { reason: input.reason } });
+    const [facility] = prior.homeFacilityId ? await tx.select({ id: facilities.id, name: facilities.name }).from(facilities).where(and(eq(facilities.organizationId, organizationId), eq(facilities.id, prior.homeFacilityId))) : [];
+    return { ...updated, facilityId: facility?.id ?? null, facilityName: facility?.name ?? null };
+  });
 }
 export async function correctPatientMrn(db: Database, config: ApplicationConfig, actor: Principal, organizationId: string, locator: string, input: CorrectPatientMrn, context: RequestContext) {
   if (actor.role !== "ORGANIZATION_ADMIN" || actor.organizationId !== organizationId) throw new ServiceError("FORBIDDEN", "Only organization administrators can correct a medical record number.");

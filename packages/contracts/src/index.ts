@@ -332,7 +332,7 @@ export const registerPatientSchema = z.object({
   email: z.email().max(320).optional(),
 }).strict();
 
-export const updatePatientSchema = registerPatientSchema.omit({ medicalRecordNumber: true }).extend({
+export const updatePatientSchema = registerPatientSchema.omit({ medicalRecordNumber: true, dateOfBirth: true }).extend({
   email: z.union([z.email().max(320), z.literal("")]).nullish().transform(value => value || undefined),
 });
 export type UpdatePatient = z.infer<typeof updatePatientSchema>;
@@ -342,6 +342,12 @@ export const correctPatientMrnSchema = z.object({
   reason: z.string().trim().min(3).max(500),
 }).strict();
 export type CorrectPatientMrn = z.infer<typeof correctPatientMrnSchema>;
+
+export const correctPatientDobSchema = z.object({
+  dateOfBirth: registerPatientSchema.shape.dateOfBirth,
+  reason: z.string().trim().min(3).max(500),
+}).strict();
+export type CorrectPatientDob = z.infer<typeof correctPatientDobSchema>;
 
 export const patientSchema = z.object({
   id: idSchema,

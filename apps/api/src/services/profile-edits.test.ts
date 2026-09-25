@@ -1,24 +1,26 @@
 import { beforeAll, afterAll, describe, expect, test } from "bun:test";
 import { loadApplicationConfig } from "@niq/application-config";
-import { updatePatientSchema, updateOrganizationUserSchema } from "@niq/application-contracts";
+import { correctPatientDobSchema, updatePatientSchema, updateOrganizationUserSchema } from "@niq/application-contracts";
 import { createEntityId } from "@niq/application-domain";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as tables from "../db/schema";
 import type { Database } from "../db/client";
-import { correctPatientMrn } from "./profile-edits";
+import { correctPatientDob, correctPatientMrn } from "./profile-edits";
 import { PostgresApplicationService } from "./postgres-application";
 import type { Principal } from "./application";
 
 const context = { requestId: "profile-edit-test" };
 test("edit schemas require mobile, clear optional email and reject invalid dates, roles and duplicate assignments", () => {
   const input = { medicalRecordNumber: "MRN", name: "Patient", homeFacilityId: createEntityId(), dateOfBirth: "2000-01-01", gender: "UNKNOWN", phone: "1234567890", email: null };
-  const { medicalRecordNumber: _, ...edit } = input;
+  const { medicalRecordNumber: _, dateOfBirth: _dob, ...edit } = input;
   expect(updatePatientSchema.safeParse({ ...edit, phone: "" }).success).toBe(false);
   expect(updatePatientSchema.parse(edit).email).toBeUndefined();
   expect(updatePatientSchema.safeParse(input).success).toBe(false);
-  expect(updatePatientSchema.safeParse({ ...edit, dateOfBirth: "3000-01-01" }).success).toBe(false);
+  expect(updatePatientSchema.safeParse({ ...edit, dateOfBirth: "2000-01-01" }).success).toBe(false);
+  expect(correctPatientDobSchema.safeParse({ dateOfBirth: "2000-01-01", reason: "Registration error" }).success).toBe(true);
+  expect(correctPatientDobSchema.safeParse({ dateOfBirth: "3000-01-01", reason: "Registration error" }).success).toBe(false);
   const id = createEntityId();
   expect(updateOrganizationUserSchema.safeParse({ displayName: "Person", role: "DOCTOR", facilityIds: [id, id] }).success).toBe(false);
   expect(updateOrganizationUserSchema.safeParse({ displayName: "Person", role: "DOCTOR", facilityIds: [], email: "changed@example.com" }).success).toBe(false);
@@ -28,6 +30,7 @@ test("MRN corrections reject non-admin staff before touching patient storage", a
   const config = loadApplicationConfig({ DATABASE_URL: "postgres://localhost/unused", SESSION_SECRET: "profile-test-secret-at-least-32-characters" });
   const actor: Principal = { userId: createEntityId(), membershipId: createEntityId(), organizationId: createEntityId(), displayName: "Doctor", email: "doctor@example.test", role: "DOCTOR", platformRole: "USER" };
   await expect(correctPatientMrn({} as Database, config, actor, actor.organizationId, "PAT-1", { medicalRecordNumber: "MRN-2", reason: "Registration error" }, context)).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(correctPatientDob({} as Database, actor, actor.organizationId, "PAT-1", { dateOfBirth: "2001-01-01", reason: "Registration error" }, context)).rejects.toMatchObject({ code: "FORBIDDEN" });
 });
 
 describe.skipIf(!process.env.PROFILE_TEST_DATABASE_URL)("profile edits PostgreSQL", () => {
@@ -52,7 +55,7 @@ describe.skipIf(!process.env.PROFILE_TEST_DATABASE_URL)("profile edits PostgreSQ
   });
   afterAll(async () => { await client.end(); });
   test("persists encrypted patient edits and clears optional email, rejects tenant/source/destination violations", async () => {
-    const { medicalRecordNumber: _, ...profile } = input;
+    const { medicalRecordNumber: _, dateOfBirth: _dob, ...profile } = input;
     const edit = updatePatientSchema.parse({ ...profile, name: "Corrected Patient", phone: "9876543210", email: "" });
     const result = await service.updatePatient(actor, org, patientId, edit, context);
     expect((await db.select().from(tables.assessments).where(eq(tables.assessments.id, assessmentId)))[0]!.workflow).toEqual(historicalSnapshot);
@@ -81,6 +84,15 @@ describe.skipIf(!process.env.PROFILE_TEST_DATABASE_URL)("profile edits PostgreSQ
     expect(correction?.actorMembershipId).toBe(member);
     const [correctedRaw] = await db.select().from(tables.patients).where(eq(tables.patients.id, patientId));
     expect(Buffer.from(correctedRaw!.encryptedExternalReference).toString()).not.toContain("NEW");
+    await expect(service.correctPatientDob({ ...actor, role: "DOCTOR" }, org, patientId, { dateOfBirth: "2001-01-01", reason: "Registration error" }, context)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(service.correctPatientDob(actor, org2, patientId, { dateOfBirth: "2001-01-01", reason: "Registration error" }, context)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(service.correctPatientDob(actor, org, patientId, { dateOfBirth: "2000-01-01", reason: "Registration error" }, context)).rejects.toMatchObject({ code: "CONFLICT" });
+    const dobCorrected = await service.correctPatientDob(actor, org, patientId, { dateOfBirth: "2001-01-01", reason: "Registration error" }, context);
+    expect(dobCorrected.dateOfBirth).toBe("2001-01-01");
+    expect((await db.select().from(tables.assessments).where(eq(tables.assessments.id, assessmentId)))[0]!.workflow).toEqual(historicalSnapshot);
+    const dobAudit = (await db.select().from(tables.auditEvents).where(eq(tables.auditEvents.resourceId, patientId))).find(item => item.action === "PATIENT_DOB_CORRECTED");
+    expect(dobAudit?.metadata).toEqual({ reason: "Registration error" });
+    expect(dobAudit?.actorMembershipId).toBe(member);
   });
   test("updates role, name and assignments, revokes sessions, and protects self and last administrator", async () => {
     const edit = { displayName: "Edited Colleague", role: "NUTRITIONIST" as const, facilityIds: [b] };
