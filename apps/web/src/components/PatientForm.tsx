@@ -24,9 +24,11 @@ type Props = {
   onSaved: (patient: Patient) => void;
   onBusyChange?: (busy: boolean) => void;
   focusField?: "dateOfBirth" | "gender";
+  submitLabel?: string;
+  cancelLabel?: string;
 };
 
-export function PatientForm({ organizationId, facilities, patient, onCancel, onSaved, onBusyChange, focusField, ref }: Props) {
+export function PatientForm({ organizationId, facilities, patient, onCancel, onSaved, onBusyChange, focusField, submitLabel, cancelLabel = "Cancel", ref }: Props) {
   const [facilityId, setFacilityId] = useState<string | null>(patient?.homeFacility?.id ?? null);
   const [gender, setGender] = useState<Patient["gender"] | null>(patient?.gender ?? null);
   const [birth, setBirth] = useState(patient?.dateOfBirth ?? "");
@@ -116,7 +118,7 @@ export function PatientForm({ organizationId, facilities, patient, onCancel, onS
       {!options.length && !missingCurrent && <Alert><AlertDescription>Add an active facility before registering a patient.</AlertDescription></Alert>}
       {message && <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>}
     </fieldset>
-    <div className="form-footer"><Button type="button" variant="outline" isDisabled={isSubmitting} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={isSubmitting || (!options.length && !missingCurrent)}>{isSubmitting ? "Saving…" : patient ? "Save changes" : "Register patient"}</Button></div>
+    <div className="form-footer"><Button type="button" variant="outline" isDisabled={isSubmitting} onPress={requestClose}>{cancelLabel}</Button><Button type="submit" isDisabled={isSubmitting || (!options.length && !missingCurrent)}>{isSubmitting ? "Saving…" : submitLabel ?? (patient ? "Save changes" : "Register patient")}</Button></div>
   </form>
     {confirmation}
   </>;

@@ -2,11 +2,12 @@ import { hasPermission } from "@niq/application-contracts";
 import type { AuthenticatedUser, Facility, Patient, AssessmentInitialization } from "@niq/application-contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
+import { ArrowRight, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SearchCombobox } from "@/components/ui/combobox";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PatientForm } from "@/components/PatientForm";
 import { getPatient, listFacilities, listPatients } from "@/lib/api";
 import { assessmentRequest, initializeAssessment, retryInitialization } from "./workflow-api";
 
@@ -31,59 +32,62 @@ export function StartAssessmentPage() {
 
 function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
   const [params, setParams] = useSearchParams();
-  // A URL patient is only a candidate; the server authorizes it before creating a draft.
-  const requestedPatient = params.get("patient");
-  const recoveryId = params.get("initialization");
-  const recoveryKey = params.get("requestKey");
+  // URL changes during preparation must not reset the on-page selection or form.
+  const entry = useRef({ patient: params.get("patient"), initialization: params.get("initialization"), requestKey: params.get("requestKey") }).current;
   const navigate = useNavigate();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [selected, setSelected] = useState<Patient | null>(null);
   const [facility, setFacility] = useState("");
+  const [mode, setMode] = useState<"select" | "create">("select");
+  const [committed, setCommitted] = useState(Boolean(entry.patient && (entry.requestKey || entry.initialization)));
   const [loaded, setLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [initialization, setInitialization] = useState<AssessmentInitialization | null>(null);
-  const request = useRef({ patientId: requestedPatient ?? "", key: recoveryKey ?? crypto.randomUUID() });
+  const request = useRef({ patientId: entry.patient ?? "", key: entry.requestKey ?? crypto.randomUUID() });
   const inFlight = useRef(false);
   const lifecycle = useRef(0);
   useEffect(() => () => { lifecycle.current += 1; }, []);
-  const autoAttempted = useRef(false);
   const [loadKey, setLoadKey] = useState(0);
+
   useEffect(() => {
     let active = true;
-    setLoaded(false); setError(""); setSelected(null); setInitialization(null);
-    const load = requestedPatient
-      ? getPatient(user.organizationId, requestedPatient).then(patient => { if (active) setSelected(patient); })
-      : Promise.all([listPatients(user.organizationId), listFacilities(user.organizationId)]).then(([rows, branches]) => { if (active) { setPatients(rows); setFacilities(branches); } });
-    const recovery = recoveryId
-      ? assessmentRequest<AssessmentInitialization>(user.organizationId, `/assessment-initializations/${encodeURIComponent(recoveryId)}`).then(value => {
-        if (!active) return;
-        setInitialization(value);
-        if (!value.assessmentId) setError(preparationMessage(value));
-        if (value.assessmentId) navigate(`/assessments/${value.assessmentReference ?? value.assessmentId}`, { replace: true });
-      })
-      : Promise.resolve();
-    Promise.all([load, recovery]).then(() => { if (active) setLoaded(true); }).catch(() => { if (active) setError("The patient or assessment request could not be loaded. Check your access and try again."); });
+    setLoaded(false); setLoadFailed(false); setError("");
+    const candidate = entry.patient ? getPatient(user.organizationId, entry.patient) : Promise.resolve(null);
+    const recovery = entry.initialization
+      ? assessmentRequest<AssessmentInitialization>(user.organizationId, `/assessment-initializations/${encodeURIComponent(entry.initialization)}`)
+      : Promise.resolve(null);
+    Promise.all([listPatients(user.organizationId), listFacilities(user.organizationId), candidate, recovery]).then(([rows, branches, patient, saved]) => {
+      if (!active) return;
+      setPatients(patient && !rows.some(item => item.id === patient.id) ? [patient, ...rows] : rows);
+      setFacilities(branches);
+      setSelected(patient);
+      setInitialization(saved);
+      if (saved?.assessmentId) { navigate(`/assessments/${saved.assessmentReference ?? saved.assessmentId}`, { replace: true }); return; }
+      if (saved) setError(preparationMessage(saved));
+      setLoaded(true);
+    }).catch(() => { if (active) { setError("The patient or assessment request could not be loaded. Check your access and try again."); setLoadFailed(true); setLoaded(true); } });
     return () => { active = false; };
-  }, [user.organizationId, requestedPatient, recoveryId, loadKey, navigate]);
+  }, [user.organizationId, entry.patient, entry.initialization, loadKey, navigate]);
+
   const filtered = useMemo(() => filterAssessmentPatients(patients, facility, ""), [patients, facility]);
-  async function start() {
-    if (!selected || inFlight.current) return;
+  async function start(patient: Patient) {
+    if (inFlight.current) return;
     const activeLifecycle = lifecycle.current;
-    autoAttempted.current = true;
-    inFlight.current = true; setBusy(true); setError("");
-    if (request.current.patientId !== selected.id) request.current = { patientId: selected.id, key: crypto.randomUUID() };
-    // Store opaque recovery identifiers before I/O. A refresh/lost response must replay the same creation key.
+    inFlight.current = true;
+    setBusy(true); setError(""); setCommitted(true); setSelected(patient); setMode("select");
+    if (request.current.patientId !== patient.id) request.current = { patientId: patient.id, key: crypto.randomUUID() };
+    // Save the patient and idempotency key before I/O, so an uncertain response
+    // can be retried without creating a second assessment.
     const query = new URLSearchParams(params);
-    query.set("patient", selected.id); query.set("requestKey", request.current.key);
+    query.set("patient", patient.id); query.set("requestKey", request.current.key);
     setParams(query, { replace: true });
     try {
       const result = initialization
         ? await retryInitialization(user.organizationId, initialization.id)
-        : await initializeAssessment(user.organizationId, selected.id, request.current.key);
-      // The server may have completed after cancellation, navigation or a scope switch.
-      // Keep that persisted request recoverable without moving the user back into it.
+        : await initializeAssessment(user.organizationId, patient.id, request.current.key);
       if (lifecycle.current !== activeLifecycle) return;
       setInitialization(result);
       query.set("initialization", result.id);
@@ -96,25 +100,38 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
       if (lifecycle.current === activeLifecycle) { inFlight.current = false; setBusy(false); }
     }
   }
-  useEffect(() => {
-    // The patient-page action already expressed intent. Only the first authorized load
-    // starts automatically; a failed/pending request always requires an explicit retry.
-    if (requestedPatient && loaded && selected && !recoveryId && !autoAttempted.current && !inFlight.current) {
-      autoAttempted.current = true;
-      void start();
-    }
-  }, [requestedPatient, loaded, selected, recoveryId]);
-  const fields = <div className="form-fields facility-dialog-fields grid gap-5">
-    {error && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-destructive">{error}</div>}
-    {!loaded ? <div className="grid gap-3"><p>Loading patient information…</p>{error && <Button variant="outline" onPress={() => setLoadKey(key => key + 1)}>Retry</Button>}</div> : <>
-      {!requestedPatient && <>
-        <Field><FieldLabel>Facility</FieldLabel><Select aria-label="Facility" selectedKey={facility || "all"} isDisabled={busy || !!initialization} onSelectionChange={key => { setFacility(key === "all" ? "" : String(key)); setSelected(null); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All accessible facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field>
-        <Field><FieldLabel htmlFor="assessment-patient">Patient</FieldLabel><SearchCombobox id="assessment-patient" label="Patient" value={selected?.id ?? null} disabled={busy || !!initialization} placeholder="Search name, patient reference or MRN" options={filtered.map(patient => ({ id: patient.id, label: `${patient.displayName} · ${patient.reference}${patient.medicalRecordNumber ? ` · MRN ${patient.medicalRecordNumber}` : ""} · ${patient.homeFacility?.name ?? "No facility"}` }))} onChange={id => setSelected(filtered.find(patient => patient.id === id) ?? null)} /></Field>
-      </>}
-      {requestedPatient && selected && <div><h2 className="font-normal">{selected.displayName}</h2><p className="text-muted-foreground">{selected.reference} · {selected.homeFacility?.name}</p></div>}
-    </>}
+
+  const canCreatePatient = hasPermission(user.role, "patients.create");
+  return <div className="assessment-workflow @container">
+    <header className="mb-5"><h1 className="text-2xl font-semibold">New assessment</h1><p className="mt-1 text-sm text-muted-foreground">Choose a patient before opening the questionnaire.</p></header>
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="border-b border-border px-4 py-3 text-sm"><strong>Patient</strong><span className="ml-2 text-muted-foreground">First step · Questionnaire follows</span></div>
+      <div className="grid min-w-0 @min-[48rem]:grid-cols-[15rem_minmax(0,1fr)]">
+        <nav aria-label="Assessment sections" className="border-b border-border p-3 @min-[48rem]:border-b-0 @min-[48rem]:border-r @min-[48rem]:bg-muted/20">
+          <div aria-current="step" className="assessment-active-step flex items-center gap-2.5 rounded-lg px-3 py-3 text-sm font-semibold"><UserRound className="size-4" aria-hidden="true"/>Patient</div>
+          <div aria-disabled="true" className="px-3 py-3 text-sm text-muted-foreground">Questionnaire sections available after Continue</div>
+        </nav>
+        <div className="min-w-0">
+          <div className="border-b border-border px-5 py-4"><h2 className="font-semibold">{mode === "create" ? "Create patient" : "Select patient"}</h2><p className="mt-1 text-sm text-muted-foreground">{mode === "create" ? "Add the patient record before starting the assessment." : "Search for a patient or create a new one."}</p></div>
+          {error && <div role="alert" className="m-5 rounded-lg border border-destructive/30 p-3 text-sm text-destructive">{error}</div>}
+          {!loaded ? <div className="p-5 text-sm text-muted-foreground">Loading patient information…</div> : loadFailed ? <div className="p-5"><Button variant="outline" onPress={() => setLoadKey(key => key + 1)}>Retry loading</Button></div> : mode === "create" ?
+            <PatientForm organizationId={user.organizationId} facilities={facilities} submitLabel="Create patient & continue" cancelLabel="Choose existing patient" onCancel={() => setMode("select")} onSaved={patient => { setPatients(current => [patient, ...current]); void start(patient); }} />
+            : <>
+              <div className="clinical-form grid gap-5 p-5">
+                {committed && selected ? <div><p className="text-sm text-muted-foreground">Patient for this assessment</p><p className="mt-1 font-medium">{selected.displayName} · {selected.reference}</p><p className="text-sm text-muted-foreground">{selected.homeFacility?.name ?? "No facility"}</p></div> : <>
+                  <Field><FieldLabel>Facility</FieldLabel><Select aria-label="Facility" selectedKey={facility || "all"} isDisabled={busy} onSelectionChange={key => { setFacility(key === "all" ? "" : String(key)); setSelected(null); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All accessible facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></Field>
+                  <Field><FieldLabel htmlFor="assessment-patient">Patient</FieldLabel><SearchCombobox id="assessment-patient" label="Patient" value={selected?.id ?? null} disabled={busy} placeholder="Search name, patient reference or MRN" options={filtered.map(patient => ({ id: patient.id, label: `${patient.displayName} · ${patient.reference}${patient.medicalRecordNumber ? ` · MRN ${patient.medicalRecordNumber}` : ""} · ${patient.homeFacility?.name ?? "No facility"}` }))} onChange={id => setSelected(filtered.find(patient => patient.id === id) ?? null)} /></Field>
+                  {canCreatePatient && <Button variant="outline" className="w-fit" onPress={() => setMode("create")}>Create new patient</Button>}
+                </>}
+                <p className="text-sm text-muted-foreground">Personal details, including height and current weight, open after this step.</p>
+              </div>
+              <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
+                <Button variant="outline" isDisabled={busy} onPress={() => navigate(entry.patient && selected ? `/patients/${selected.reference}` : "/assessments", { replace: true })}>Back</Button>
+                <Button isDisabled={!selected || busy} onPress={() => { if (selected) void start(selected); }}>{busy ? "Preparing questionnaire…" : committed ? "Retry preparation" : "Continue"}<ArrowRight aria-hidden="true"/></Button>
+              </footer>
+            </>}
+        </div>
+      </div>
+    </div>
   </div>;
-  const content = <div className="clinical-form">{fields}<div className="form-footer"><Button variant="outline" isDisabled={busy} onPress={() => navigate(requestedPatient && selected ? `/patients/${selected.reference}` : "/assessments", { replace: true })}>Cancel</Button>{loaded && <Button isDisabled={!selected || busy} onPress={start}>{busy ? "Preparing questionnaire…" : initialization ? "Retry preparation" : "Start assessment"}</Button>}</div></div>;
-  if (requestedPatient) return <section className="mx-auto grid max-w-xl gap-5 rounded-xl border border-border bg-card p-6"><h1 className="text-2xl font-semibold">New assessment</h1>{content}</section>;
-  return <><h1 className="patient-page-title">New assessment</h1><Dialog isOpen isDismissable={!busy} onOpenChange={open => { if (!open && !busy) navigate("/assessments", { replace: true }); }} className="facility-dialog" ariaLabel="Select patient"><DialogHeader><DialogTitle>Select patient</DialogTitle></DialogHeader>{content}</Dialog></>;
 }
