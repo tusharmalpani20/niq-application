@@ -34,6 +34,7 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
     if (url.endsWith("/patients")) return Response.json({ items: [patient] });
     if (url.endsWith("/facilities")) return Response.json({ items: [] });
     if (url.endsWith("/assessments")) return Response.json({ items: [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status, createdAt: scenario.assessmentCreatedAt ?? date, completedAt: scenario.completedAt ?? null }] });
+    if (url.endsWith("/overview-risk")) return Response.json({ highRiskPatients: 1, assessedPatients: 1 });
     if (url.endsWith("/users")) return Response.json({ items: [{ membershipId: id, userId: id, email: "admin@example.test", displayName: "Admin", status: "ACTIVE", role, active: true, createdAt: date }] });
     if (url.includes("/clinical-reviews?")) return Response.json({ items: [], total: scenario.reviewTotal ?? 2, page: 1, pageSize: 3 });
     if (url.endsWith(`/organizations/${id}`)) return Response.json({ organization: { id, legalName: "Example Health", displayName: "Example Health", slug: "example-health", logoObjectKey: null, primaryColor: "#006B5F", secondaryColor: "#FFFFFF", patientReferencePrefix: "PAT", status: "ACTIVE", createdAt: date, updatedAt: date }, entitlement: { userLimit: scenario.userLimit === undefined ? 5 : scenario.userLimit, effectiveFrom: date }, invitations: [], scoringConnection: null });
@@ -69,27 +70,20 @@ test("clinician overview shows review work without administrator operations", as
   }, { assessmentStatus: "DRAFT" });
 });
 
-test("summary distinguishes accessible patients from assessments completed this month", async () => {
+test("overview cards show accessible patients, completed assessments, high risk and open work", async () => {
   const now = new Date();
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 15).toISOString();
   await renderOverview("DOCTOR", body => {
-    const monthly = body.querySelector('[aria-label="This month"]');
-    const snapshot = body.querySelector('[aria-label="At a glance"]');
-    expect(monthly?.textContent).toContain("Patients registered this month");
-    expect(monthly?.textContent).toContain("Assessments completed this month");
-    expect(monthly?.querySelectorAll('svg[role="img"]')).toHaveLength(2);
-    expect(monthly?.querySelector('svg[role="img"]')?.getAttribute("aria-label")).toContain("monthly totals for the last six months");
-    expect(monthly?.textContent).not.toContain("Patients in your facilities");
-    expect(snapshot?.textContent).toContain("Patients in your facilities");
-    expect(snapshot?.textContent).toContain("Active facilities");
-    expect(snapshot?.querySelector('svg[role="img"]')).toBeNull();
-    expect(body.textContent).toContain("Patients in your facilities");
-    expect(body.textContent).toContain("Patients registered this month");
-    expect(body.textContent).toContain("Assessments completed this month");
-    expect(body.querySelector('a[href="/assessments?status=COMPLETED_THIS_MONTH"] strong')?.textContent).toBe("1");
+    const cards = body.querySelector('[aria-label="Overview statistics"]');
+    expect(cards?.textContent).toContain("Total patients");
+    expect(cards?.textContent).toContain("Assessments completed");
+    expect(cards?.textContent).toContain("High Risk patients");
+    expect(cards?.textContent).toContain("Open assessments");
+    expect(cards?.querySelectorAll(":scope > *")).toHaveLength(4);
+    expect(body.querySelector('a[href="/assessments?status=COMPLETED"] strong')?.textContent).toBe("1");
   }, { assessmentStatus: "COMPLETED", assessmentCreatedAt: lastMonth, completedAt: now.toISOString() });
   await renderOverview("DOCTOR", body => {
-    expect(body.querySelector('a[href="/assessments?status=COMPLETED_THIS_MONTH"] strong')?.textContent).toBe("0");
+    expect(body.querySelector('a[href="/assessments?status=COMPLETED"] strong')?.textContent).toBe("1");
   }, { assessmentStatus: "COMPLETED", assessmentCreatedAt: now.toISOString(), completedAt: lastMonth });
 });
 
@@ -117,8 +111,7 @@ test("zero admin alerts collapse and unlimited seats stay compact", async () => 
     expect(body.textContent).toContain("All clear");
     expect(body.textContent).toContain("Unlimited seats");
     expect(body.textContent).not.toContain("Awaiting review assignment");
-    expect(body.querySelectorAll('[aria-label="This month"] a')).toHaveLength(2);
-    expect(body.querySelectorAll('[aria-label="At a glance"] a')).toHaveLength(2);
+    expect(body.querySelectorAll('[aria-label="Overview statistics"] > *')).toHaveLength(4);
   }, { reviewTotal: 0, assessmentStatus: "DRAFT", userLimit: null });
 });
 
@@ -126,7 +119,7 @@ test("support overview stays focused on patient registration", async () => {
   await renderOverview("SUPPORT", (body, requests) => {
     expect(body.querySelector('[aria-label="Open assessment"]')).toBeNull();
     expect(body.querySelector('a[href="/assessments/new"]')).toBeNull();
-    expect(body.querySelectorAll('[aria-label="This month"] a')).toHaveLength(1);
+    expect(body.querySelectorAll('[aria-label="Overview statistics"] > *')).toHaveLength(1);
     expect(body.textContent).toContain("Patient registration");
     expect(body.textContent).toContain("Example Patient");
     expect(requests.some(url => url.endsWith("/assessments") || url.includes("/clinical-reviews?"))).toBe(false);

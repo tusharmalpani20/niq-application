@@ -2,19 +2,19 @@ import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, ClinicalReviewQueue, Patient } from "@niq/application-contracts";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
-import { ArrowRight, Building2, ClipboardList, UserRound, CalendarDays, Plus } from "lucide-react";
+import { ArrowRight, ClipboardCheck, ClipboardList, Plus, TriangleAlert, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { OverviewUsage } from "../components/OverviewUsage";
 import { GreetingIllustration } from "../components/GreetingIllustration";
 import { RouterButtonLink } from "../components/RouterButtonLink";
 import { listClinicalReviews } from "../features/assessments/clinical-review-api";
-import { getOrganization, listAssessments, listFacilities, listOrganizationUsers, listPatients } from "../lib/api";
+import { getOrganization, getOverviewRisk, listAssessments, listOrganizationUsers, listPatients } from "../lib/api";
 import { assessmentStatusLabels } from "../lib/patient-display";
-import { monthlyTrend } from "./monthly-trend";
-import { MonthlyTrendCard } from "./MonthlyTrendCard";
+import { overviewGrowth } from "./overview-growth";
+import { OverviewStatCard } from "./OverviewStatCard";
 
-type Overview = { patients: Patient[]; assessments: AssessmentSummary[]; facilityCount: number; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
+type Overview = { patients: Patient[]; assessments: AssessmentSummary[]; highRiskPatients: number | null; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
 
 export function greetingForHour(hour: number): "Good morning" | "Good afternoon" | "Good evening" {
   if (hour >= 6 && hour < 12) return "Good morning";
@@ -95,19 +95,18 @@ export function DashboardPage() {
     const reviews = (params: Record<string, string>) => listClinicalReviews(org, new URLSearchParams({ page: "1", pageSize: "3", ...params }));
     Promise.all([
       listPatients(org),
-      listFacilities(org),
       isAdmin || isClinician ? listAssessments(org) : Promise.resolve([] as AssessmentSummary[]),
+      isAdmin || isClinician ? getOverviewRisk(org).catch(() => null) : Promise.resolve(null),
       isAdmin ? listOrganizationUsers(org) : Promise.resolve(null),
       isAdmin ? getOrganization(org) : Promise.resolve(null),
       isAdmin || isClinician ? reviews({ state: "QUEUED" }).catch(() => null) : Promise.resolve(null),
       isClinician ? reviews({ state: "IN_REVIEW", mine: "true" }).catch(() => null) : Promise.resolve(null),
-    ]).then(([patients, facilities, assessments, members, organization, queuedReviews, myReviews]) => {
+    ]).then(([patients, assessments, overviewRisk, members, organization, queuedReviews, myReviews]) => {
       if (!active) return;
       setData({
-        patients, assessments, queuedReviews, myReviews,
+        patients, assessments, highRiskPatients: overviewRisk?.highRiskPatients ?? null, queuedReviews, myReviews,
         seats: members?.filter((item) => item.active).length ?? 0,
         userLimit: organization?.entitlement?.userLimit ?? null,
-        facilityCount: facilities.filter((item) => item.status === "ACTIVE").length,
         enabledUsers: members ? members.filter((item) => item.active && item.status === "ACTIVE").length : null,
         pendingInvitations: organization?.invitations.filter((item) => item.status === "PENDING" && item.expiresAt.getTime() > Date.now()).length ?? 0,
       });
@@ -116,35 +115,22 @@ export function DashboardPage() {
   }, [user.organizationId, isAdmin, isClinician, attempt]);
 
   const now = new Date();
-  const patientTrend = data ? monthlyTrend(data.patients.map(item => item.createdAt), now) : null;
-  const completedTrend = data ? monthlyTrend(data.assessments.flatMap(item => item.status === "COMPLETED" && item.completedAt ? [item.completedAt] : []), now) : null;
+  const patientGrowth = data ? overviewGrowth(data.patients.map(item => item.createdAt), now) : null;
+  const completedGrowth = data ? overviewGrowth(data.assessments.flatMap(item => item.status === "COMPLETED" && item.completedAt ? [item.completedAt] : []), now) : null;
   const openAssessments = data?.assessments.filter(item => item.status === "DRAFT" || item.status === "READY_FOR_SCORING") ?? [];
   const scoringIssues = data?.assessments.filter(item => item.status === "SCORING_UNAVAILABLE").length ?? 0;
-  const monthlyMetrics = [
-    { label: "Patients registered this month", trend: patientTrend, to: "/patients?registered=this-month", icon: CalendarDays },
-    ...(isClinician || isAdmin ? [{ label: "Assessments completed this month", trend: completedTrend, to: "/assessments?status=COMPLETED_THIS_MONTH", icon: ClipboardList }] : []),
-  ];
-  const snapshotMetrics = [
-    { label: "Patients in your facilities", value: data?.patients.length, detail: null, to: "/patients", icon: UserRound },
-    { label: "Active facilities", value: data?.facilityCount, detail: null, to: "/facilities", icon: Building2 },
-  ];
-  const metricCard = ({ label, value, detail, to, icon: MetricIcon }: { label: string; value: number | undefined; detail: string | null; to: string; icon: typeof UserRound }) => <Link key={label} to={to} className="surface grid gap-3 p-5 no-underline transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary">
-    <div className="flex items-center justify-between gap-2"><span className="text-sm text-muted-foreground">{label}</span><MetricIcon className="size-5 text-primary" aria-hidden="true" /></div>
-    <strong className="text-3xl font-semibold tracking-tight">{value ?? "—"}</strong>
-    {detail && <span className="text-xs text-muted-foreground">{detail}</span>}
-  </Link>;
   return <>
     <header className="mb-7 flex flex-wrap items-center justify-between gap-4" aria-label="Overview greeting">
       <GreetingBanner hour={localTime.getHours()} displayName={user.displayName} canCreateAssessment={canCreateAssessment} />
     </header>
     {error ? <Card className="surface p-6"><p role="alert">Overview could not be loaded.</p><Button className="w-fit" variant="outline" onPress={() => setAttempt((value) => value + 1)}>Retry</Button></Card> : <>
-      <section aria-label="This month" aria-busy={!data} className="space-y-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-lg font-semibold">This month</h2><span className="text-xs text-muted-foreground">{now.toLocaleDateString(undefined, { month: "long", year: "numeric" })} to date</span></div>
-        <div className="grid gap-4 sm:grid-cols-2">{monthlyMetrics.map(metric => <MonthlyTrendCard key={metric.label} {...metric} />)}</div>
-      </section>
-      <section aria-label="At a glance" aria-busy={!data} className="mt-7 space-y-3">
-        <h2 className="text-lg font-semibold">At a glance</h2>
-        <div className="grid gap-4 sm:grid-cols-2">{snapshotMetrics.map(metricCard)}</div>
+      <section aria-label="Overview statistics" aria-busy={!data} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <OverviewStatCard label="Total patients" value={patientGrowth?.total ?? null} icon={UsersRound} growth={patientGrowth ?? undefined} detail="vs 30 days ago" to="/patients" />
+        {(isClinician || isAdmin) && <>
+          <OverviewStatCard label="Assessments completed" value={completedGrowth?.total ?? null} icon={ClipboardCheck} growth={completedGrowth ?? undefined} detail="vs 30 days ago" to="/assessments?status=COMPLETED" />
+          <OverviewStatCard label="High Risk patients" value={data?.highRiskPatients ?? null} icon={TriangleAlert} tone="alert" detail="Latest completed NIQ category" />
+          <OverviewStatCard label="Open assessments" value={data ? openAssessments.length : null} icon={ClipboardList} detail="Draft or ready to score" to="/assessments?status=OPEN" />
+        </>}
       </section>
     </>}
     {data && isClinician && <section className="mt-7" aria-label="Clinical work">
