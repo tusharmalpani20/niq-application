@@ -50,6 +50,21 @@ test("facility picker can add and remove assignments before saving", async () =>
   await act(async () => { document.querySelector("form")!.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })); await new Promise(r => setTimeout(r, 0)); });
   expect(requests[0].facilityIds).toEqual([second, third]);
 }));
+test("all facilities clears selections and choosing a facility clears all", async () => render(false, async requests => {
+  await act(async () => document.querySelector<HTMLInputElement>('#edit-user-all-facilities')!.click());
+  expect(document.querySelector('[aria-label="Remove One"]')).toBeNull();
+  const search = document.querySelector<HTMLInputElement>('#edit-user-facility-search')!;
+  expect(search.disabled).toBe(false);
+  await act(async () => search.click());
+  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent === "Three");
+  expect(option).toBeDefined();
+  await act(async () => option!.click());
+  expect(document.querySelector<HTMLInputElement>('#edit-user-all-facilities')!.checked).toBe(false);
+  expect(document.querySelector('[aria-label="Remove Three"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="Remove One"]')).toBeNull();
+  await act(async () => { document.querySelector("form")!.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })); await new Promise(r => setTimeout(r, 0)); });
+  expect(requests[0].facilityIds).toEqual([third]);
+}));
 test("self profile locks permissions but can save name", async () => render(true, async requests => {
   expect(document.querySelector('[aria-label="Role"]')?.getAttribute("data-disabled")).not.toBeNull();
   expect([...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].every(item => item.disabled)).toBe(true);
