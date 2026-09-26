@@ -84,7 +84,7 @@ test("priority assessments precede quick actions, which link to new care and rev
     expect(actions?.textContent).not.toContain("Continue draft");
     expect(actions?.querySelector('a[href="/assessments/ASM-000001"]')).toBeNull();
     expect(actions?.querySelector('a[href="/assessments/new"]')?.textContent).toContain("New assessment");
-    expect(actions?.querySelector('a[href="/patients/new"]')?.textContent).toContain("Add patient");
+    expect(actions?.querySelector('a[href="/patients/new"]')).toBeNull();
     expect(actions?.querySelector('a[href="/assessments?tab=clinical-reviews"]')?.textContent).toContain("Clinical reviews");
     expect(actions?.querySelector('a[href="/assessments?tab=clinical-reviews"]')?.textContent).toContain("2 waiting · 2 in progress");
   }, { assessmentStatus: "DRAFT" });

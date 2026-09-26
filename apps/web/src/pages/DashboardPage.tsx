@@ -2,7 +2,7 @@ import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, ClinicalReviewQueue, Patient } from "@niq/application-contracts";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
-import { ArrowRight, ClipboardCheck, ClipboardList, Plus, Sparkles, Star, Stethoscope, TriangleAlert, UserRoundPlus, UsersRound } from "lucide-react";
+import { ArrowRight, ClipboardCheck, ClipboardList, Plus, Sparkles, Star, Stethoscope, TriangleAlert, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { OverviewUsage } from "../components/OverviewUsage";
@@ -41,11 +41,10 @@ function ActionCard({ title, count, detail, to }: { title: string; count: number
   </Link>;
 }
 
-function QuickActions({ canAddPatient, canCreateAssessment, queuedReviews, myReviews }: { canAddPatient: boolean; canCreateAssessment: boolean; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null }) {
+function QuickActions({ canCreateAssessment, queuedReviews, myReviews }: { canCreateAssessment: boolean; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null }) {
   const reviewDetail = [queuedReviews?.total ? `${queuedReviews.total} waiting` : null, myReviews?.total ? `${myReviews.total} in progress` : null].filter(Boolean).join(" · ") || "Open review work";
   const actions = [
     ...(canCreateAssessment ? [{ label: "New assessment", detail: "Start an assessment", to: "/assessments/new", icon: Plus }] : []),
-    ...(canAddPatient ? [{ label: "Add patient", detail: "Register a new patient", to: "/patients/new", icon: UserRoundPlus }] : []),
     { label: "Clinical reviews", detail: reviewDetail, to: "/assessments?tab=clinical-reviews", icon: Stethoscope },
   ];
   return <section className="surface relative min-w-0 overflow-hidden border-primary/20 p-5 text-foreground" aria-label="Quick actions" style={{ background: "linear-gradient(135deg, color-mix(in srgb, var(--primary) 15%, white), color-mix(in srgb, var(--primary) 4%, white))" }}>
@@ -143,7 +142,7 @@ export function DashboardPage() {
       </section>
     </>}
     {data && (isClinician || isAdmin) && <>
-      <div className="mt-7 grid items-stretch gap-4 min-[860px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><PriorityAssessments assessments={data.assessments} /><QuickActions canAddPatient={hasPermission(user.role, "patients.create")} canCreateAssessment={canCreateAssessment} queuedReviews={data.queuedReviews} myReviews={data.myReviews} /></div>
+      <div className="mt-7 grid items-stretch gap-4 min-[860px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><PriorityAssessments assessments={data.assessments} /><QuickActions canCreateAssessment={canCreateAssessment} queuedReviews={data.queuedReviews} myReviews={data.myReviews} /></div>
       <AssessmentActivityCalendar organizationId={user.organizationId} assessments={data.assessments} />
       <RiskOverviewCards risk={data.risk} />
     </>}
