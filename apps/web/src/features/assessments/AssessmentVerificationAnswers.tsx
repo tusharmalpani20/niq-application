@@ -1,7 +1,9 @@
-import { assessmentFieldError, isAssessmentFieldApplicable, type FormAnswers, type FormField } from "@niq/application-contracts";
+import { assessmentFieldError, calculateAssessmentWeightChange, isAssessmentFieldApplicable, type FormAnswers, type FormField } from "@niq/application-contracts";
 import { assessmentFieldGroups } from "./AssessmentFields";
 import { assessmentOptionIcon } from "./assessmentOptionIcon";
 import { formatGenderAnswer } from "./formatGenderAnswer";
+
+const reviewCardClass = "min-w-0 rounded-xl border border-border bg-muted/20 p-4";
 
 function AnswerValue({ field, answers }: { field: FormField; answers: FormAnswers }) {
   const value = answers[field.id];
@@ -42,7 +44,7 @@ function TreatmentAnswers({ fields, answers }: { fields: FormField[]; answers: F
       const main = part.main ? byId.get(part.main) : null;
       const details = part.details.map(id => byId.get(id)).filter((field): field is FormField => Boolean(field));
       if (!main && !details.length) return null;
-      return <section key={part.title} className="min-w-0 rounded-xl border border-border bg-muted/20 p-4" data-review-treatment-part={part.title}>
+      return <section key={part.title} className={reviewCardClass} data-review-treatment-part={part.title}>
         <h4 className="mb-4 text-sm font-semibold text-foreground">{part.title}</h4>
         <dl className="grid min-w-0 gap-4">
           {main && <AnswerItem field={main} answers={answers} />}
@@ -56,8 +58,47 @@ function TreatmentAnswers({ fields, answers }: { fields: FormField[]; answers: F
   </div></div>;
 }
 
+function DietaryAnswers({ fields, answers }: { fields: FormField[]; answers: FormAnswers }) {
+  const visible = fields.filter(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers));
+  const byId = new Map(visible.map(field => [field.id, field]));
+  const previous = answers.previous_weight_kg;
+  const current = answers.current_weight_kg;
+  const change = typeof previous === "number" && typeof current === "number" ? calculateAssessmentWeightChange(previous, current) : null;
+  const difference = change !== null && typeof previous === "number" && typeof current === "number" ? current - previous : null;
+  const amount = difference === null ? null : new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(Math.abs(difference));
+  const changeLabel = difference === null ? "Add both weights to see the change" : difference === 0 ? "No weight change" : `${amount} kg ${difference > 0 ? "gain" : "loss"} (${Math.abs(change!).toFixed(1)}%)`;
+  const parts = [
+    { title: "Dietary intake", ids: ["dietary_intake"] },
+    { title: "Symptoms", ids: ["dietary_symptoms"] },
+    { title: "Daily activity", ids: ["functional_capacity"] },
+    { title: "Stress & hydration", ids: ["stress_level", "fluid_intake"] },
+  ];
+  const shown = new Set(["previous_weight_kg", ...parts.flatMap(part => part.ids)]);
+
+  return <div className="@container min-w-0"><div className="grid min-w-0 gap-3 @min-[36rem]:grid-cols-2">
+    <section className={`${reviewCardClass} @min-[36rem]:col-span-2`} data-review-dietary-part="Weight comparison">
+      <h4 className="mb-4 text-sm font-semibold text-foreground">Weight comparison</h4>
+      <dl className="grid gap-4 sm:grid-cols-2">
+        {byId.get("previous_weight_kg") && <AnswerItem field={byId.get("previous_weight_kg")!} answers={answers} />}
+        <div className="min-w-0 space-y-1.5"><dt className="text-sm text-muted-foreground">Current weight</dt><dd className="text-sm font-medium">{typeof current === "number" && current > 0 ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(current)} kg` : "Not answered"}<span className="block text-xs font-normal text-muted-foreground">From Personal details</span></dd></div>
+      </dl>
+      <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5"><p className="text-xs text-muted-foreground">Change over 1–2 months</p><p className="mt-0.5 text-base font-semibold">{changeLabel}</p></div>
+    </section>
+    {parts.map(part => {
+      const partFields = part.ids.map(id => byId.get(id)).filter((field): field is FormField => Boolean(field));
+      if (!partFields.length) return null;
+      return <section key={part.title} className={reviewCardClass} data-review-dietary-part={part.title}>
+        <h4 className="mb-4 text-sm font-semibold text-foreground">{part.title}</h4>
+        <dl className="grid gap-4">{partFields.map(field => <AnswerItem key={field.id} field={field} answers={answers} />)}</dl>
+      </section>;
+    })}
+    {visible.filter(field => !shown.has(field.id)).map(field => <dl key={field.id} className={reviewCardClass}><AnswerItem field={field} answers={answers} /></dl>)}
+  </div></div>;
+}
+
 export function AssessmentVerificationAnswers({ sectionId, fields, answers }: { sectionId: string; fields: FormField[]; answers: FormAnswers }) {
   if (sectionId === "treatment") return <TreatmentAnswers fields={fields} answers={answers} />;
+  if (sectionId === "dietary_details") return <DietaryAnswers fields={fields} answers={answers} />;
 
   return <div className="min-w-0 divide-y divide-border/70">{assessmentFieldGroups(fields, answers).map(group => {
     const visible = group.filter(field => field.kind !== "calculated");
