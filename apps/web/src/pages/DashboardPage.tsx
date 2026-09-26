@@ -2,7 +2,7 @@ import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, ClinicalReviewQueue, Patient } from "@niq/application-contracts";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
-import { ArrowRight, ClipboardCheck, ClipboardList, Plus, TriangleAlert, UsersRound } from "lucide-react";
+import { ArrowRight, ClipboardCheck, ClipboardList, Plus, Stethoscope, TriangleAlert, UserRoundPlus, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { OverviewUsage } from "../components/OverviewUsage";
@@ -41,6 +41,20 @@ function ActionCard({ title, count, detail, to }: { title: string; count: number
     <div className="flex items-start justify-between gap-3"><h3 className="font-medium text-foreground">{title}</h3><ArrowRight className="size-4 shrink-0 text-primary" aria-hidden="true" /></div>
     <div><strong className="text-2xl font-semibold">{count}</strong><p className="mt-1 text-xs text-muted-foreground">{detail}</p></div>
   </Link>;
+}
+
+function QuickActions({ assessments, canAddPatient }: { assessments: AssessmentSummary[]; canAddPatient: boolean }) {
+  const draft = assessments.filter(item => item.myAction === "EDIT_DRAFT" || item.myAction === "CORRECT_DRAFT")
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+  const actions = [
+    ...(draft ? [{ label: draft.myAction === "CORRECT_DRAFT" ? "Continue corrections" : "Continue draft", detail: `${draft.reference} · ${draft.patient.displayName}`, to: `/assessments/${draft.reference}`, icon: ClipboardList }] : []),
+    ...(canAddPatient ? [{ label: "Add patient", detail: "Register a new patient", to: "/patients/new", icon: UserRoundPlus }] : []),
+    { label: "Clinical reviews", detail: "Open review work", to: "/assessments?tab=clinical-reviews", icon: Stethoscope },
+  ];
+  return <section className="mt-7" aria-label="Quick actions">
+    <h2 className="mb-3 text-lg font-semibold">Quick actions</h2>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{actions.map(({ label, detail, to, icon: Icon }) => <Link key={label} to={to} className="surface flex min-w-0 items-center gap-3 p-4 no-underline transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><Icon className="size-5" aria-hidden="true" /></span><span className="min-w-0 flex-1"><strong className="block text-sm font-semibold text-foreground">{label}</strong><span className="block truncate text-xs text-muted-foreground">{detail}</span></span><ArrowRight className="size-4 shrink-0 text-primary" aria-hidden="true" /></Link>)}</div>
+  </section>;
 }
 
 function RecentPatients({ patients }: { patients: Patient[] }) {
@@ -139,6 +153,7 @@ export function DashboardPage() {
       </section>
     </>}
     {data && (isClinician || isAdmin) && <>
+      <QuickActions assessments={data.assessments} canAddPatient={hasPermission(user.role, "patients.create")} />
       <AssessmentActivityCalendar organizationId={user.organizationId} assessments={data.assessments} />
       <RiskOverviewCards risk={data.risk} assessments={data.assessments} />
     </>}
