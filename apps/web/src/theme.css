@@ -179,8 +179,8 @@
   --ink: var(--admin-ink);
   --ink-soft: var(--admin-ink);
   --ink-muted: var(--client-muted);
-  --ring: var(--brand-ink, #0b7468);
-  --sidebar-ring: var(--brand-ink, #0b7468);
+  --ring: var(--primary);
+  --sidebar-ring: var(--primary);
   --sidebar-accent-foreground: var(--brand-ink, #0b7468);
   --canvas: var(--admin-canvas);
   --border: var(--admin-border);
