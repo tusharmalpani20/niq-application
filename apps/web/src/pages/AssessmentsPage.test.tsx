@@ -11,7 +11,7 @@ const patient = { id, reference: "PAT-1", displayName: "Example Patient" };
 const records = ["DRAFT", "READY_FOR_SCORING", "SCORED"].map((status, index) => ({ id: `${id.slice(0, -1)}${index + 1}`, reference: `ASM-00000${index + 1}`, serialNumber: index + 1, organizationId: id, patient, facility: null, status, myAction: null as string | null, isPriority: false, createdAt: date, completedAt: null }));
 type AssessmentFixture = Omit<(typeof records)[number], "facility" | "completedAt"> & { facility: { id: string; name: string } | null; completedAt: string | null };
 
-async function renderAssessments(path: string, items: AssessmentFixture[], verify: (priorityWrites: boolean[]) => void | Promise<void>) {
+async function renderAssessments(path: string, items: AssessmentFixture[], verify: (priorityWrites: boolean[]) => void | Promise<void>, reviewItems: unknown[] = []) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -19,7 +19,7 @@ async function renderAssessments(path: string, items: AssessmentFixture[], verif
   const priorityWrites: boolean[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === "PATCH" && String(input).endsWith("/priority")) { priorityWrites.push(JSON.parse(String(init.body)).isPriority); return Response.json({ assessmentId: records[0]?.id, isPriority: priorityWrites.at(-1) }); }
-    return Response.json(String(input).includes("/clinical-reviews?") ? { items: [], total: 2, page: 1, pageSize: 1 } : String(input).endsWith("/assessments") ? { items } : { items: [] });
+    return Response.json(String(input).includes("/clinical-reviews?") ? { items: reviewItems, total: reviewItems.length || 2, page: 1, pageSize: 10 } : String(input).endsWith("/assessments") ? { items } : { items: [] });
   }) as typeof fetch;
   const user = { userId: id, organizationId: id, membershipId: id, email: "doctor@example.test", displayName: "Doctor", role: "DOCTOR", platformRole: "USER" };
   const router = createMemoryRouter([{ element: <Outlet context={user} />, children: [{ path: "/assessments", element: <AssessmentsPage /> }] }], { initialEntries: [path] });
@@ -110,6 +110,20 @@ test("clinical reviews tab shows its unfiltered total", async () => {
   await renderAssessments("/assessments?tab=clinical-reviews&review=QUEUED", records, () => {
     expect(document.querySelector('[data-slot="tabs-list"]')?.textContent).toMatch(/Clinical reviews\s*2/);
   });
+});
+
+test("clinical review rows show stage and a compact open action", async () => {
+  const reviews = [{ assessmentId: id, reference: "ASM-000001", patient, facility: null, review: { state: "QUEUED", submittedAt: date, assignee: null, correctionPerson: null } }];
+  await renderAssessments("/assessments?tab=clinical-reviews", records, async () => {
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 200)); });
+    const table = document.querySelector('[aria-label="Clinical reviews"]');
+    expect(table?.textContent).toContain("Awaiting reviewer");
+    expect(table?.textContent).toContain("20 Sept 2026");
+    const open = table?.querySelector('a[aria-label="Open clinical review ASM-000001"]');
+    expect(open?.getAttribute("href")).toBe("/assessments/ASM-000001");
+    expect(open?.querySelector("svg.lucide-chevron-right")).not.toBeNull();
+    expect(document.querySelector('.mobile-card-list a[aria-label="Open clinical review ASM-000001"]')).not.toBeNull();
+  }, reviews);
 });
 
 test("my assessment actions link shows the same assigned work as the overview", async () => {
