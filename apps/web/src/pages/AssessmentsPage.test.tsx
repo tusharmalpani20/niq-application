@@ -147,6 +147,25 @@ test("my assessment actions link shows the same assigned work as the overview", 
   });
 });
 
+test("quick-action links filter to the matching assigned assessments", async () => {
+  const items = [
+    { ...records[0], myAction: "CORRECT_DRAFT" },
+    { ...records[1], myAction: "EDIT_DRAFT" },
+    { ...records[2], myAction: "SEND_FOR_REVIEW" },
+  ];
+  await renderAssessments("/assessments?status=CORRECT_DRAFT", items, () => {
+    const table = document.querySelector('[aria-label="Assessments"]');
+    expect(table?.textContent).toContain("ASM-000001");
+    expect(table?.textContent).not.toContain("ASM-000002");
+    expect(table?.textContent).not.toContain("ASM-000003");
+  });
+  await renderAssessments("/assessments?status=SEND_FOR_REVIEW", items, () => {
+    const table = document.querySelector('[aria-label="Assessments"]');
+    expect(table?.textContent).toContain("ASM-000003");
+    expect(table?.textContent).not.toContain("ASM-000001");
+  });
+});
+
 test("assessment rows offer a status-aware action to open the assessment", async () => {
   await renderAssessments("/assessments", records, () => {
     const table = document.querySelector('[aria-label="Assessments"]');
