@@ -68,7 +68,7 @@ test("clinician overview shows review work without administrator operations", as
     expect(body.querySelector('[aria-label="Clinical work"]')).toBeNull();
     expect(body.textContent).not.toContain("Organization operations");
     expect(requests.some(url => url.endsWith("/users"))).toBe(false);
-  }, { assessmentStatus: "DRAFT" });
+  }, { assessmentStatus: "DRAFT", patients: [{ ...patient, createdAt: new Date().toISOString() }] });
 });
 
 test("priority assessments precede quick actions, which link to new care and reviews", async () => {
@@ -91,6 +91,7 @@ test("priority assessments precede quick actions, which link to new care and rev
 });
 
 test("bottom cards show recent patients and real NIQ category comparisons", async () => {
+  const now = new Date();
   await renderOverview("DOCTOR", body => {
     const cards = body.querySelector('[aria-label="Recent patients and NIQ insights"]');
     expect(cards?.textContent).toContain("Example Patient");
@@ -98,16 +99,17 @@ test("bottom cards show recent patients and real NIQ category comparisons", asyn
     expect(cards?.textContent).toContain("NIQ insights");
     expect(cards?.textContent).toContain("High Risk");
     expect(cards?.textContent).toContain("30 days ago");
-  }, { assessmentStatus: "COMPLETED", completedAt: date });
+  }, { assessmentStatus: "COMPLETED", completedAt: date, patients: [{ ...patient, createdAt: now.toISOString() }] });
 });
 
 test("recent patients paginate four at a time and keep View all", async () => {
+  const now = Date.now();
   const patients = Array.from({ length: 5 }, (_, index) => ({
     ...patient,
     id: `${id.slice(0, -1)}${index}`,
     reference: `PAT-${index + 1}`,
     displayName: `Patient ${index + 1}`,
-    createdAt: new Date(2026, 8, index + 1).toISOString(),
+    createdAt: new Date(now - (5 - index) * 60 * 60 * 1000).toISOString(),
   }));
   await renderOverview("DOCTOR", async body => {
     const cards = body.querySelector('[aria-label="Recent patients and NIQ insights"]')!;
@@ -122,6 +124,22 @@ test("recent patients paginate four at a time and keep View all", async () => {
     expect(recent.querySelector('a[href="/patients/PAT-1"]')).not.toBeNull();
     expect(recent.textContent).toContain("5–5 of 5");
   }, { patients });
+});
+
+test("recent patients includes registrations or assessments from the last three days", async () => {
+  const now = Date.now();
+  const oldDate = new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString();
+  const recentDate = new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const oldPatient = { ...patient, id, reference: "PAT-1", createdAt: oldDate };
+  const returningPatient = { ...patient, id: `${id.slice(0, -1)}B`, reference: "PAT-2", createdAt: oldDate };
+  const newPatient = { ...patient, id: `${id.slice(0, -1)}C`, reference: "PAT-3", createdAt: recentDate };
+  await renderOverview("DOCTOR", body => {
+    const recent = body.querySelector('[aria-label="Recent patients and NIQ insights"] .surface')!;
+    expect(recent.textContent).toContain("Last 3 days");
+    expect(recent.querySelector('a[href="/patients/PAT-1"]')).toBeNull();
+    expect(recent.querySelector('a[href="/patients/PAT-2"]')).not.toBeNull();
+    expect(recent.querySelector('a[href="/patients/PAT-3"]')).not.toBeNull();
+  }, { patients: [oldPatient, returningPatient, newPatient], assessments: [{ ...assessment, patient: { id: returningPatient.id, reference: returningPatient.reference, displayName: returningPatient.displayName }, createdAt: recentDate, myAction: null }] });
 });
 
 test("overview cards show accessible patients, completed assessments, high risk and my actions", async () => {
