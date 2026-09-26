@@ -92,8 +92,16 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
         const field = error.response.error.details?.field;
         if (field === "name") { setErrorField("name"); setStep(0); }
         if (field === "email") { setErrorField("email"); setStep(1); }
+        if (error.response.error.code === "INTERNAL_ERROR") {
+          setMessage(`We couldn't create the organization because of a server problem. Please try again. If it continues, share reference ${error.response.error.requestId} with support.`);
+        } else if (error.response.error.code === "AUTHENTICATION_REQUIRED") {
+          setMessage("Your session has expired. Sign in again, then retry creating the organization.");
+        } else {
+          setMessage(error.message);
+        }
+      } else {
+        setMessage(error instanceof TypeError ? "We couldn't reach the server. Check your connection and try again." : "We couldn't create the organization. Please try again.");
       }
-      setMessage(error instanceof ApiRequestError || error instanceof Error ? error.message : "The organization could not be created. Please try again.");
     } finally { setBusy(false); }
   }
 
