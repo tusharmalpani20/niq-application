@@ -371,7 +371,29 @@ test("organization admin sees actionable operations but no clinician review card
     expect(body.textContent).toContain("Team and user seats");
     expect(body.textContent).toContain("1 of 5 seats reserved");
     expect(body.textContent).not.toContain("Enabled users");
+    expect(body.querySelector('[aria-label="Priority assessments"]')).toBeNull();
+    expect(body.querySelector('[aria-label="My assessment activity"]')).toBeNull();
+    expect(body.textContent).not.toContain("My assessment actions");
+    expect(body.textContent).toContain("Reviews awaiting assignment");
+    const quickActions = body.querySelector('[aria-label="Quick actions"]');
+    expect(quickActions?.querySelector('a[href="/assessments/new"]')).toBeNull();
+    expect(quickActions?.querySelector('a[href="/patients/new"]')).toBeNull();
+    expect(quickActions?.querySelector('a[href="/facilities?add=1"]')?.textContent).toContain("Add facility");
+    for (const path of ["/facilities?add=1", "/assessments?tab=clinical-reviews&review=QUEUED", "/users", "/settings/scoring"]) {
+      expect(quickActions?.querySelector(`a[href="${path}"]`)).not.toBeNull();
+    }
   });
+});
+
+test("admin completed count includes every returned facility assessment", async () => {
+  const completed = ["1", "2"].map(suffix => ({ ...assessment, id: `${id.slice(0, -1)}${suffix}`, reference: `ASM-00000${suffix}`, status: "COMPLETED", myAction: null, completedAt: date }));
+  await renderOverview("ORGANIZATION_ADMIN", body => {
+    const card = Array.from(body.querySelectorAll('[aria-label="Overview statistics"] > *'))
+      .find(item => item.textContent?.includes("Assessments completed"));
+    expect(card?.querySelector("strong")?.textContent).toBe("2");
+    expect(card?.textContent).toContain("vs 30 days ago");
+    expect(card?.textContent).not.toContain("Accessible facilities");
+  }, { assessments: completed });
 });
 
 test("empty clinical reviews keep a quick link without a count", async () => {
@@ -380,9 +402,9 @@ test("empty clinical reviews keep a quick link without a count", async () => {
   }, { reviewTotal: 0, assessmentStatus: "DRAFT" });
 });
 
-test("zero admin alerts collapse and unlimited seats stay compact", async () => {
+test("zero admin alerts hide operations and unlimited seats stay compact", async () => {
   await renderOverview("ORGANIZATION_ADMIN", body => {
-    expect(body.textContent).toContain("All clear");
+    expect(body.querySelector('[aria-label="Organization operations"]')).toBeNull();
     expect(body.textContent).toContain("Unlimited seats");
     expect(body.textContent).not.toContain("Awaiting review assignment");
     expect(body.querySelectorAll('[aria-label="Overview statistics"] > *')).toHaveLength(4);

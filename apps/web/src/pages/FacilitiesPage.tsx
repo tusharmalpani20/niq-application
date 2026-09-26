@@ -3,7 +3,7 @@ import { hasPermission } from "@niq/application-contracts";
 import type { AuthenticatedUser, Facility } from "@niq/application-contracts";
 import { Search, Pencil, Power } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useOutletContext } from "react-router-dom";
+import { Link, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -27,6 +27,8 @@ const pageSize = 10;
 export function FacilitiesPage() {
   const user = useOutletContext<AuthenticatedUser>();
   const canManage = hasPermission(user.role, "facilities.manage");
+  const location = useLocation();
+  const navigate = useNavigate();
   const [editing, setEditing] = useState<Facility | null>(null);
   const [changingStatus, setChangingStatus] = useState<Facility | null>(null);
   const [savingStatus, setSavingStatus] = useState(false);
@@ -38,6 +40,14 @@ export function FacilitiesPage() {
   const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (!canManage || params.get("add") !== "1") return;
+    setShowForm(true);
+    params.delete("add");
+    navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+  }, [canManage, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     let active = true;

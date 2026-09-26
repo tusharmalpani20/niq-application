@@ -68,6 +68,19 @@ describe.skipIf(!process.env.FACILITY_TEST_SOCKET)("facility access against Post
     expect((await service.listAssessments({ ...actor, membershipId: "multi" }, "org")).map((row) => row.id).sort()).toEqual(["assessment-a", "assessment-b"]);
     expect((await service.listAssessments({ ...actor, membershipId: "all" }, "org")).map((row) => row.id).sort()).toEqual(["assessment-a", "assessment-b", "assessment-unassigned"]);
   });
+  test("includes all completed assessments at an admin's assigned facilities", async () => {
+    await client`update assessments set status = 'COMPLETED', completed_at = now()`;
+    try {
+      const admin = { ...actor, role: "ORGANIZATION_ADMIN" as const };
+      const completed = async (membershipId: string) => (await service.listAssessments({ ...admin, membershipId }, "org"))
+        .filter((row) => row.status === "COMPLETED" && row.completedAt).map((row) => row.id).sort();
+      expect(await completed("restricted")).toEqual(["assessment-a"]);
+      expect(await completed("multi")).toEqual(["assessment-a", "assessment-b"]);
+      expect(await completed("all")).toEqual(["assessment-a", "assessment-b", "assessment-unassigned"]);
+    } finally {
+      await client`update assessments set status = 'DRAFT', completed_at = null`;
+    }
+  });
   test("does not offer a personal action when the patient home facility is inaccessible", async () => {
     await client`update assessments set created_by_membership_id = 'restricted' where id = 'assessment-a'`;
     const [available] = await service.listAssessments(actor, "org");
