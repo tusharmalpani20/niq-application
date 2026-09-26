@@ -23,7 +23,7 @@ function ResultGroup({ title, icon: Icon, availability, outOfRangeCount = 0, chi
       <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
       <Icon className={`size-4 shrink-0 ${outOfRangeCount ? "text-warning" : "text-primary"}`} aria-hidden="true" />
       <span className="min-w-0 flex-1">
-        <span className={outOfRangeCount ? "text-warning" : undefined}>{title}</span>
+        <span>{title}</span>
         {outOfRangeCount > 0 && <span className="block text-xs font-normal text-warning tabular-nums">{outOfRangeCount} outside range</span>}
       </span>
       {availability && <span className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">{availability}</span>}
@@ -35,14 +35,14 @@ function ResultGroup({ title, icon: Icon, availability, outOfRangeCount = 0, chi
 function MetricRows({ metrics, context }: { metrics: Metric[]; context: FaceScanSession["context"] }) {
   return <dl className="grid gap-x-8 @min-[40rem]:grid-cols-2">{metrics.map(metric => {
     const assessment = metric.key ? assessFaceScanRange(metric.key, metric.value, context) : null;
-    return <div key={metric.label} className={`flex min-w-0 items-start justify-between gap-4 py-2 text-sm ${assessment?.outside ? "text-warning" : ""}`}>
-      <dt className={`flex min-w-0 items-start gap-2 ${assessment?.outside ? "" : "text-muted-foreground"}`}>
+    return <div key={metric.label} className="flex min-w-0 items-start justify-between gap-4 py-2 text-sm">
+      <dt className="flex min-w-0 items-start gap-2 text-muted-foreground">
         {metric.icon && <metric.icon className={`mt-0.5 size-4 shrink-0 ${assessment?.outside ? "text-warning" : "text-muted-foreground/70"}`} aria-hidden="true" />}
         <span>{metric.label}</span>
       </dt>
       <dd className="min-w-0 shrink-0 text-right font-medium tabular-nums" aria-label={metric.value === null ? "Not available" : undefined}>
         {display(metric)}
-        {assessment?.outside && <span className="block text-xs font-normal">Outside report range · {assessment.reference}</span>}
+        {assessment?.outside && <span className="block max-w-72 text-[11px] font-normal leading-tight text-warning">Normal range: {assessment.reference}</span>}
       </dd>
     </div>;
   })}</dl>;
@@ -92,10 +92,10 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
     </dl>
     <dl className="grid grid-cols-2 gap-3 @min-[44rem]:grid-cols-4">{vitals.map(item => {
       const assessment = item.key ? assessFaceScanRange(item.key, item.value, session.context) : null;
-      return <div key={item.label} className={`min-w-0 rounded-xl border border-border bg-card p-3 ${assessment?.outside ? "text-warning" : ""}`}>
-        <dt className={`flex items-center gap-1.5 text-xs ${assessment?.outside ? "" : "text-muted-foreground"}`}>{item.icon && <item.icon className="size-4 shrink-0" aria-hidden="true" />}{item.label}</dt>
+      return <div key={item.label} className="min-w-0 rounded-xl border border-border bg-card p-3">
+        <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">{item.icon && <item.icon className={`size-4 shrink-0 ${assessment?.outside ? "text-warning" : ""}`} aria-hidden="true" />}{item.label}</dt>
         <dd className="mt-2 flex flex-wrap items-baseline gap-x-1 font-semibold tabular-nums"><span className="text-xl">{item.value ?? "—"}</span>{item.value !== null && <span className="text-sm font-normal">{item.unit}</span>}</dd>
-        {assessment?.outside && <p className="mt-2 text-xs">Outside report range · {assessment.reference}</p>}
+        {assessment?.outside && <p className="mt-2 text-[11px] leading-tight text-warning">Normal range: {assessment.reference}</p>}
       </div>;
     })}</dl>
     {groups.map(group => {

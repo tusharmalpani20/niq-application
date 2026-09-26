@@ -14,11 +14,11 @@ test("extended scan metrics survive application validation and render missing va
   expect(html).toContain("1/9 available");
   expect(html).toContain("3/5 available");
   expect(html).toContain('aria-label="Not available">—</dd>');
-  expect(html).toContain("Outside report range · 90–120 / 60–80 mmHg");
+  expect(html).toContain("Normal range: 90–120/60–80 mmHg");
   expect(html).not.toContain("bg-warning-soft");
-  expect(html).toContain("Outside report range · 60–100 ms");
-  expect(html).toContain("Outside report range · ≥42.5 mL/kg/min (male)");
-  expect(html).not.toContain("Outside report range · 95–100%");
+  expect(html).toContain("Normal range: 60–100 ms");
+  expect(html).toContain("Normal range: ≥42.5 mL/kg/min (male)");
+  expect(html).not.toContain("95–100%");
   expect(html.match(/1 outside range/g)).toHaveLength(2);
   delete session.result!.additionalMetrics;
   expect(()=>renderToStaticMarkup(<FaceScanResults session={session}/>)).not.toThrow();

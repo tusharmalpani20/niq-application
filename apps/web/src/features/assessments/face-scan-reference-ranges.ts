@@ -67,7 +67,7 @@ export function assessFaceScanRange(
     const pressure = faceScanReferenceRanges.bloodPressure;
     return {
       outside: outside(Number(parts[1]), pressure.systolic) || outside(Number(parts[2]), pressure.diastolic),
-      reference: `${rangeLabel(pressure.systolic)} / ${rangeLabel(pressure.diastolic)}`,
+      reference: `${rangeLabel(pressure.systolic)}/${rangeLabel(pressure.diastolic)}`,
     };
   }
   const measured = numeric(value);

@@ -8,7 +8,9 @@ const context: FaceScanSession["context"] = {
 };
 
 test("blood pressure compares both values against the report ranges", () => {
-  expect(assessFaceScanRange("bloodPressure", "124/79", context)).toMatchObject({ outside: true });
+  expect(assessFaceScanRange("bloodPressure", "124/79", context)).toMatchObject({ outside: true, reference: "90–120/60–80 mmHg" });
+  expect(assessFaceScanRange("bloodPressure", "120/58", context)).toMatchObject({ outside: true });
+  expect(assessFaceScanRange("bloodPressure", "122/82", context)).toMatchObject({ outside: true });
   expect(assessFaceScanRange("bloodPressure", "120/80", context)).toMatchObject({ outside: false });
   expect(assessFaceScanRange("bloodPressure", "90/60", context)).toMatchObject({ outside: false });
   expect(assessFaceScanRange("bloodPressure", "124/—", context)).toBeNull();
@@ -23,7 +25,7 @@ test("strict and inclusive boundaries retain their report meaning", () => {
 });
 
 test("context dependent ranges are used only when their context is known", () => {
-  expect(assessFaceScanRange("vo2max", "39.98", context)).toMatchObject({ outside: true });
+  expect(assessFaceScanRange("vo2max", "39.98", context)).toMatchObject({ outside: true, reference: "≥42.5 mL/kg/min (male)" });
   expect(assessFaceScanRange("vo2max", "39.98", { ...context, gender: "female" })).toMatchObject({ outside: false });
   expect(assessFaceScanRange("heartUtilisation", 50, context)).toMatchObject({ outside: true });
   expect(assessFaceScanRange("heartUtilisation", 50, { ...context, posture: "walking" })).toBeNull();
