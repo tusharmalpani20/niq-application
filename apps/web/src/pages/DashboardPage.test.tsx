@@ -23,7 +23,7 @@ test("overview greeting follows the local hour", () => {
   expect(greetingForHour(18)).toBe("Good evening");
   expect(greetingForHour(23)).toBe("Good evening");
 });
-async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, requests: string[]) => void, scenario: Scenario = {}) {
+async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, requests: string[]) => void | Promise<void>, scenario: Scenario = {}) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -46,7 +46,7 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
   const root = createRoot(document.getElementById("root")!);
   try {
     await act(async () => { root.render(<RouterProvider router={router} />); await new Promise(resolve => setTimeout(resolve, 0)); });
-    verify(document.body, requests);
+    await verify(document.body, requests);
   } finally {
     await act(async () => root.unmount()); router.dispose(); dom.window.close();
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as Record<string, unknown>)[key]; }
@@ -124,6 +124,26 @@ test("activity calendar shows the signed-in clinician's actions and high-risk pa
       { id: `${id.slice(0, -1)}B`, assessmentId: id, action: "CLINICAL_REVIEW_COMPLETE", occurredAt: now.toISOString() },
     ],
   });
+});
+
+test("selecting a calendar date shows only activity from that local day", async () => {
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1, 10);
+  const secondDay = new Date(now.getFullYear(), now.getMonth(), 2, 10);
+  await renderOverview("DOCTOR", async body => {
+    const calendar = body.querySelector('[aria-label="My assessment activity"]')!;
+    await act(async () => { (calendar.querySelector(`[aria-label="${firstDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
+    expect(calendar.textContent).toContain("1 action");
+    expect(calendar.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("Assessment created");
+    expect(calendar.querySelectorAll('a[href="/assessments/ASM-000001"]')).toHaveLength(1);
+    await act(async () => { (calendar.querySelector(`[aria-label="${secondDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
+    expect(calendar.textContent).toContain("1 action");
+    expect(calendar.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("Clinical review completed");
+    expect(calendar.querySelectorAll('a[href="/assessments/ASM-000001"]')).toHaveLength(1);
+  }, { activity: [
+    { id, assessmentId: id, action: "ASSESSMENT_CREATED", occurredAt: firstDay.toISOString() },
+    { id: `${id.slice(0, -1)}B`, assessmentId: id, action: "CLINICAL_REVIEW_COMPLETE", occurredAt: secondDay.toISOString() },
+  ] });
 });
 
 test("high-risk direction is red when more patients are high risk and green when fewer are", async () => {

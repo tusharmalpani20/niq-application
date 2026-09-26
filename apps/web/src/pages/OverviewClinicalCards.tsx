@@ -13,21 +13,33 @@ const actions: Record<Activity["action"], { label: string; color: string }> = {
 };
 function dayKey(date: Date) { return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`; }
 
+/** Keep the most recent occurrence of an action per assessment and local day for the overview. */
+export function summarizeAssessmentActivity(items: Activity[]): Activity[] {
+  const latest = new Map<string, Activity>();
+  for (const item of items) {
+    const key = `${dayKey(item.occurredAt)}:${item.assessmentId}:${item.action}`;
+    const prior = latest.get(key);
+    if (!prior || item.occurredAt > prior.occurredAt) latest.set(key, item);
+  }
+  return [...latest.values()].sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+}
+
 export function AssessmentActivityCalendar({ organizationId, assessments }: { organizationId: string; assessments: AssessmentSummary[] }) {
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selected, setSelected] = useState(() => new Date());
   const [items, setItems] = useState<Activity[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   useEffect(() => {
     let active = true;
-    setError(false);
+    setItems([]); setLoading(true); setError(false);
     const from = new Date(month.getFullYear(), month.getMonth(), 1);
     const to = new Date(month.getFullYear(), month.getMonth() + 1, 1);
-    getOverviewActivity(organizationId, from, to).then(result => { if (active) setItems(result.items); }).catch(() => { if (active) { setItems([]); setError(true); } });
+    getOverviewActivity(organizationId, from, to).then(result => { if (active) setItems(result.items); }).catch(() => { if (active) { setItems([]); setError(true); } }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [organizationId, month]);
   const byAssessment = useMemo(() => new Map(assessments.map(item => [item.id, item])), [assessments]);
-  const visibleItems = items.filter(item => byAssessment.has(item.assessmentId));
+  const visibleItems = summarizeAssessmentActivity(items.filter(item => byAssessment.has(item.assessmentId)));
   const selectedItems = visibleItems.filter(item => dayKey(item.occurredAt) === dayKey(selected));
   const firstWeekday = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
   const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
@@ -52,8 +64,8 @@ export function AssessmentActivityCalendar({ organizationId, assessments }: { or
         })}</div>
         <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-muted-foreground">{Object.entries(actions).map(([key, value]) => <span key={key} className="flex items-center gap-1"><i className={`size-1.5 rounded-full ${value.color}`} />{value.label}</span>)}</div>
       </div>
-      <div className="min-w-0"><div className="mb-3"><h3 className="font-semibold">{selected.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</h3><p className="text-sm text-muted-foreground">{selectedItems.length} {selectedItems.length === 1 ? "action" : "actions"}</p></div>
-        {error ? <p role="alert" className="text-sm text-muted-foreground">Activity could not be loaded for this month.</p> : selectedItems.length ? <ul className="divide-y">{selectedItems.map(item => { const assessment = byAssessment.get(item.assessmentId)!; return <li key={item.id}><Link to={`/assessments/${assessment.reference}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-3 text-sm hover:bg-muted/50"><span><strong className="text-foreground">{assessment.reference}</strong><span className="ml-2 text-muted-foreground">{assessment.patient.displayName}</span><span className="mt-1 block text-xs text-muted-foreground">{actions[item.action].label}</span></span><time className="text-xs text-muted-foreground">{item.occurredAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</time></Link></li>; })}</ul> : <p className="rounded-xl bg-muted/30 p-5 text-sm text-muted-foreground">No assessment activity on this day.</p>}
+      <div className="min-w-0"><div className="mb-3"><h3 className="font-semibold">{selected.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</h3><p className="text-sm text-muted-foreground">{loading ? "Loading activity…" : `${selectedItems.length} ${selectedItems.length === 1 ? "action" : "actions"}`}</p></div>
+        {loading ? <p className="text-sm text-muted-foreground">Loading activity…</p> : error ? <p role="alert" className="text-sm text-muted-foreground">Activity could not be loaded for this month.</p> : selectedItems.length ? <ul className="divide-y">{selectedItems.map(item => { const assessment = byAssessment.get(item.assessmentId)!; return <li key={item.id}><Link to={`/assessments/${assessment.reference}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-3 text-sm hover:bg-muted/50"><span><strong className="text-foreground">{assessment.reference}</strong><span className="ml-2 text-muted-foreground">{assessment.patient.displayName}</span><span className="mt-1 block text-xs text-muted-foreground">{actions[item.action].label}</span></span><time className="text-xs text-muted-foreground">{item.occurredAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</time></Link></li>; })}</ul> : <p className="rounded-xl bg-muted/30 p-5 text-sm text-muted-foreground">No assessment activity on this day.</p>}
       </div>
     </div>
   </section>;
