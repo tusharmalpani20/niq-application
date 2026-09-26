@@ -13,8 +13,9 @@ import { getOrganization, getOverviewRisk, listAssessments, listOrganizationUser
 import { assessmentStatusLabels } from "../lib/patient-display";
 import { overviewGrowth } from "./overview-growth";
 import { OverviewStatCard } from "./OverviewStatCard";
+import { AssessmentActivityCalendar, RiskOverviewCards } from "./OverviewClinicalCards";
 
-type Overview = { patients: Patient[]; assessments: AssessmentSummary[]; highRiskPatients: number | null; highRiskPatients30DaysAgo: number | null; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
+type Overview = { patients: Patient[]; assessments: AssessmentSummary[]; risk: Awaited<ReturnType<typeof getOverviewRisk>> | null; highRiskPatients: number | null; highRiskPatients30DaysAgo: number | null; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
 
 export function greetingForHour(hour: number): "Good morning" | "Good afternoon" | "Good evening" {
   if (hour >= 6 && hour < 12) return "Good morning";
@@ -105,7 +106,7 @@ export function DashboardPage() {
     ]).then(([patients, assessments, overviewRisk, members, organization, queuedReviews, myReviews]) => {
       if (!active) return;
       setData({
-        patients, assessments, highRiskPatients: overviewRisk?.highRiskPatients ?? null, highRiskPatients30DaysAgo: overviewRisk?.highRiskPatients30DaysAgo ?? null, queuedReviews, myReviews,
+        patients, assessments, risk: overviewRisk, highRiskPatients: overviewRisk?.highRiskPatients ?? null, highRiskPatients30DaysAgo: overviewRisk?.highRiskPatients30DaysAgo ?? null, queuedReviews, myReviews,
         seats: members?.filter((item) => item.active).length ?? 0,
         userLimit: organization?.entitlement?.userLimit ?? null,
         enabledUsers: members ? members.filter((item) => item.active && item.status === "ACTIVE").length : null,
@@ -136,6 +137,10 @@ export function DashboardPage() {
           <OverviewStatCard label="My assessment actions" value={data ? myAssessmentActions.length : null} icon={ClipboardList} detail="Drafts, corrections, ready to send" to="/assessments?status=MY_ACTIONS" />
         </>}
       </section>
+    </>}
+    {data && (isClinician || isAdmin) && <>
+      <AssessmentActivityCalendar organizationId={user.organizationId} assessments={data.assessments} />
+      <RiskOverviewCards risk={data.risk} assessments={data.assessments} />
     </>}
     {data && isClinician && <section className="mt-7" aria-label="Clinical work">
       <div className="mb-4"><h2 className="text-lg font-semibold">Clinical work</h2><p className="text-sm text-muted-foreground">Assessments and reviews in your accessible facilities</p></div>

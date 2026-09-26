@@ -15,6 +15,7 @@ import {
   organizationDetailsResponseSchema,
   organizationSchema,
   overviewRiskSchema,
+  overviewActivitySchema,
   scoringOrganizationInfoSchema,
   organizationUsersResponseSchema,
   updateOrganizationSchema,
@@ -267,9 +268,15 @@ export async function listAssessments(organizationId: string): Promise<Assessmen
   return assessmentListResponseSchema.parse(await responseBody(response)).items;
 }
 
-export async function getOverviewRisk(organizationId: string): Promise<{ highRiskPatients: number; highRiskPatients30DaysAgo: number; assessedPatients: number }> {
+export async function getOverviewRisk(organizationId: string) {
   const response = await fetch(`/api/v1/organizations/${organizationId}/overview-risk`, { credentials: "include" });
   return overviewRiskSchema.parse(await responseBody(response));
+}
+
+export async function getOverviewActivity(organizationId: string, from: Date, to: Date) {
+  const query = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+  const response = await fetch(`/api/v1/organizations/${organizationId}/overview-activity?${query}`, { credentials: "include" });
+  return overviewActivitySchema.parse(await responseBody(response));
 }
 
 export async function getFacilityPerformance(organizationId: string, facilityId: string): Promise<FacilityPerformance> {
