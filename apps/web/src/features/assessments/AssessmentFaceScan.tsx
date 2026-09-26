@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { faceScanContextSchema, type AssessmentWorkflow, type FaceScanList, type FaceScanSession, type FaceScanSignal } from "@niq/application-contracts";
-import { Armchair, Info, PersonStanding, ScanFace } from "lucide-react";
+import { Armchair, FileUp, Info, PersonStanding, ScanFace, Send } from "lucide-react";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { createCaptureController } from "./careplix-capture";
@@ -29,12 +29,13 @@ export function missingScanInputs(record: AssessmentWorkflow): MissingScanInput[
   });
   return parsed.success ? [] : parsed.error.issues.map(issue => issue.path[0]).filter((field): field is MissingScanInput => field === "dob" || field === "gender" || field === "heightCm" || field === "weightKg");
 }
-export function AssessmentFaceScan({ organizationId, record, active, disabled, beforeStart, onMissingInputs, onBusyChange, onStatusChange, onSessionChange, captureFactory = createCaptureController }: {
+export function AssessmentFaceScan({ organizationId, record, active, disabled, beforeStart, onMissingInputs, onBusyChange, onStatusChange, onSessionChange, captureFactory = createCaptureController, demoConsentEnabled = import.meta.env.DEV }: {
   organizationId: string; record: AssessmentWorkflow; active: boolean; disabled: boolean;
   beforeStart: () => Promise<AssessmentWorkflow | null>; onBusyChange: (value: boolean) => void; onStatusChange: (value: string) => void;
   onMissingInputs?: (fields: MissingScanInput[]) => void;
   onSessionChange?: (session: FaceScanSession | null) => void;
   captureFactory?: typeof createCaptureController;
+  demoConsentEnabled?: boolean;
 }) {
   const [data, setData] = useState<FaceScanList | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -45,6 +46,9 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const [lowPerformance, setLowPerformance] = useState(false);
   const [rescanRequested, setRescanRequested] = useState(false);
   const [consented, setConsented] = useState(false);
+  const [demoConsentStatus, setDemoConsentStatus] = useState<"idle" | "requesting" | "approved">("idle");
+  const [demoConsentFile, setDemoConsentFile] = useState<File | null>(null);
+  const [demoConsentError, setDemoConsentError] = useState("");
   const [posture, setPosture] = useState<ScanPosture | "">("");
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -69,6 +73,13 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const rejected = session?.state === "RECONCILIATION_REQUIRED" && session.failureCode === "PROVIDER_REJECTED";
   const statusLabel = session ? rejected ? "Scan failed" : labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable";
   const selectedPosture = session?.state === "REQUESTED" ? session.context.posture : posture;
+  const consentReady = demoConsentEnabled ? demoConsentStatus === "approved" || demoConsentFile !== null : consented;
+  useEffect(() => {
+    if (demoConsentStatus !== "requesting") return;
+    const timer = window.setTimeout(() => setDemoConsentStatus("approved"), 2_000);
+    return () => window.clearTimeout(timer);
+  }, [demoConsentStatus]);
+  useEffect(() => { setConsented(false); setDemoConsentStatus("idle"); setDemoConsentFile(null); setDemoConsentError(""); }, [record.id]);
   const updateSession = useCallback((value: FaceScanSession) => {
     if (!alive.current) return;
     statusVersion.current++;
@@ -142,7 +153,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     }
   }
   async function start() {
-    if (inFlight.current || blocked || disabled || !data?.enabled || !consented || !selectedPosture || record.status !== "DRAFT") return;
+    if (inFlight.current || blocked || disabled || !data?.enabled || !consentReady || !selectedPosture || record.status !== "DRAFT") return;
     inFlight.current = true; setPhase("preparing"); setError(""); setProgress(0); setLowPerformance(false);
     statusVersion.current++;
     try {
@@ -226,7 +237,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {phase === "preparing" && <p role="status">Preparing scan…</p>}
     {phase === "uploading" && <p role="status">Uploading scan. Keep this page open until the upload is confirmed.</p>}
     {phase === "upload_failed" && <div className="flex flex-wrap gap-3"><Button onPress={() => { const pending = pendingSignal.current; if (pending) void upload(pending.sessionId, pending.signal); }}>Retry upload</Button><Button variant="outline" onPress={() => { void cancel(); }}>Discard local capture</Button></div>}
-    {data?.enabled && session?.state === "COMPLETED" && !rescanRequested && phase === "idle" && record.status === "DRAFT" && <Button variant="outline" isDisabled={disabled || stale} onPress={() => { setConsented(false); setPosture(""); setRescanRequested(true); }}>Scan again</Button>}
+    {data?.enabled && session?.state === "COMPLETED" && !rescanRequested && phase === "idle" && record.status === "DRAFT" && <Button variant="outline" isDisabled={disabled || stale} onPress={() => { setConsented(false); setDemoConsentStatus("idle"); setDemoConsentFile(null); setDemoConsentError(""); setPosture(""); setRescanRequested(true); }}>Scan again</Button>}
     {data?.enabled && canStart && (session?.state !== "COMPLETED" || rescanRequested) && phase === "idle" && record.status === "DRAFT" && <div className="space-y-4 border-t border-border pt-4">
       {session?.state === "COMPLETED" && <p className="text-sm text-muted-foreground">A new scan will replace the current result. Previous results stay saved in the assessment history.</p>}
       <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
@@ -239,8 +250,19 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
       </div>
       <div className="space-y-2"><p className="text-sm font-medium">Posture <span aria-hidden="true" className="text-destructive">*</span></p><ChoiceGroup id="face-scan-posture" label="Posture" options={scanPostureOptions} value={selectedPosture} onChange={value => { setPosture(value as ScanPosture); }} required disabled={disabled || session?.state === "REQUESTED" || (startKey.current !== null && !terminal.has(session?.state ?? ""))} iconTiles renderIcon={optionId => optionId === "resting" ? <Armchair className="size-6" strokeWidth={2} /> : <PersonStanding className="size-6" strokeWidth={2} />} /></div>
       {session?.state === "REQUESTED" && <p className="text-sm">This attempt uses {session.context.heightCm} cm and {session.context.weightKg} kg, {scanPostureLabels[session.context.posture].toLowerCase()}. Cancel it to use changed details.</p>}
-      <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={consented} onChange={event => setConsented(event.target.checked)} className="mt-1 accent-primary"/>The patient agrees to a camera scan and sharing scan data, date of birth, gender, height and weight for analysis.</label>
-      <div className="flex flex-wrap gap-3"><Button variant="outline" className="min-h-11 w-full border-dashed border-primary/40 bg-primary/5 text-foreground hover:bg-primary/10 hover:text-foreground disabled:opacity-75 data-disabled:opacity-75" isDisabled={disabled || !consented || !selectedPosture || stale} onPress={() => { void start(); }}><ScanFace className="size-4 text-primary" aria-hidden="true"/>{session?.state === "REQUESTED" ? "Resume capture" : session?.state === "FAILED" ? "Try again" : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start face scan"}</Button>{session?.state === "COMPLETED" && <Button variant="outline" onPress={() => { setRescanRequested(false); }}>Keep current results</Button>}{session?.state === "REQUESTED" && <Button variant="outline" isDisabled={disabled} onPress={() => { void cancel(); }}>Cancel attempt</Button>}</div>
+      {demoConsentEnabled ? <section aria-label="Face scan consent demo" className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+        <div><h3 className="text-sm font-semibold">Patient consent <span className="font-normal text-muted-foreground">· Demo only</span></h3><p className="mt-1 text-xs text-muted-foreground">No message is sent and no consent file is stored. Use synthetic patient data for this preview.</p></div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button type="button" variant="outline" className="min-h-11 w-full justify-center" isDisabled={disabled || demoConsentStatus === "requesting"} onPress={() => { setDemoConsentFile(null); setDemoConsentError(""); setDemoConsentStatus("requesting"); }}><Send className="size-4" aria-hidden="true"/>Simulate consent request</Button>
+          <label className="relative flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 text-sm font-medium text-foreground hover:bg-primary/10"><FileUp className="size-4 text-primary" aria-hidden="true"/>Simulate signed consent upload<input type="file" aria-label="Choose signed consent file" accept="application/pdf,image/jpeg,image/png" className="absolute inset-0 w-full cursor-pointer opacity-0" disabled={disabled} onChange={event => { const file = event.target.files?.[0] ?? null; event.target.value = ""; if (!file) return; if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type) || file.size === 0 || file.size > 10 * 1024 * 1024) { setDemoConsentStatus("idle"); setDemoConsentFile(null); setDemoConsentError("Choose a PDF, JPEG or PNG file up to 10 MB."); return; } setDemoConsentStatus("idle"); setDemoConsentError(""); setDemoConsentFile(file); }}/></label>
+        </div>
+        {demoConsentStatus === "requesting" && <p role="status" className="text-sm text-muted-foreground">Waiting for a simulated response…</p>}
+        {demoConsentStatus === "approved" && <p role="status" className="text-sm font-medium text-primary">Simulated approval received. No patient was contacted.</p>}
+        {demoConsentFile && <p role="status" className="text-sm font-medium text-primary">{demoConsentFile.name} · Simulated upload complete. The file was not stored.</p>}
+        {demoConsentError && <p role="alert" className="text-sm text-destructive">{demoConsentError}</p>}
+        {(demoConsentStatus === "approved" || demoConsentFile) && <Button type="button" variant="link" size="sm" className="h-auto p-0" onPress={() => { setDemoConsentStatus("idle"); setDemoConsentFile(null); setDemoConsentError(""); }}>Reset demo consent</Button>}
+      </section> : <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={consented} onChange={event => setConsented(event.target.checked)} className="mt-1 accent-primary"/>The patient agrees to a camera scan and sharing scan data, date of birth, gender, height and weight for analysis.</label>}
+      <div className="flex flex-wrap gap-3"><Button variant="outline" className="min-h-11 w-full border-dashed border-primary/40 bg-primary/5 text-foreground hover:bg-primary/10 hover:text-foreground disabled:opacity-75 data-disabled:opacity-75" isDisabled={disabled || !consentReady || !selectedPosture || stale} onPress={() => { void start(); }}><ScanFace className="size-4 text-primary" aria-hidden="true"/>{session?.state === "REQUESTED" ? "Resume capture" : session?.state === "FAILED" ? "Try again" : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start face scan"}</Button>{session?.state === "COMPLETED" && <Button variant="outline" onPress={() => { setRescanRequested(false); }}>Keep current results</Button>}{session?.state === "REQUESTED" && <Button variant="outline" isDisabled={disabled} onPress={() => { void cancel(); }}>Cancel attempt</Button>}</div>
     </div>}
     {data?.enabled && session && cancellable.has(session.state) && session.state !== "REQUESTED" && phase === "idle" && record.status === "DRAFT" && <div className="space-y-2"><p className="text-xs text-muted-foreground">Cancel is available until processing starts.</p><Button variant="outline" isDisabled={disabled} onPress={() => { void cancel(); }}>Cancel scan</Button></div>}
   </div>;

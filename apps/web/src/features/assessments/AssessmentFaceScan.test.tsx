@@ -7,7 +7,7 @@ import { AssessmentFaceScan, type MissingScanInput } from "./AssessmentFaceScan"
 import { createCaptureController, type CaptureSDK } from "./careplix-capture";
 
 const session: FaceScanSession = { id: "session", state: "REQUESTED", context: { dob: "1990-01-01", gender: "female", heightCm: 170, weightKg: 70, posture: "resting", employeeId: "employee" }, createdAt: "2026-09-20T12:00:00.000Z", updatedAt: "2026-09-20T12:00:00.000Z", completedAt: null, failureCode: null, result: null, score: null };
-async function harness(run: (ctx: { click: (text: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null } = {}) {
+async function harness(run: (ctx: { click: (text: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null; demoConsentEnabled?: boolean } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "https://niq.test", pretendToBeVisual: true });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -35,7 +35,7 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; cons
   const record = { id: "assessment", revision: 3, status: "DRAFT", patient: { dateOfBirth: "1990-01-01", gender: "FEMALE" }, answers: { height_cm: 170, current_weight_kg: options.weight === undefined ? 70 : options.weight } } as AssessmentWorkflow;
   const flush = () => new Promise(resolve => setTimeout(resolve, 0));
   try {
-    await act(async () => { root.render(<AssessmentFaceScan organizationId="org" record={record} active disabled={false} beforeStart={async () => { saves++; if (options.hiddenDuringSave) Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true }); return { ...record, revision: 4 }; }} onMissingInputs={fields => { missing = fields; }} onBusyChange={value => { busy = value; }} onStatusChange={() => {}} captureFactory={() => createCaptureController(async () => sdk)}/>); await flush(); });
+    await act(async () => { root.render(<AssessmentFaceScan organizationId="org" record={record} active disabled={false} beforeStart={async () => { saves++; if (options.hiddenDuringSave) Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true }); return { ...record, revision: 4 }; }} onMissingInputs={fields => { missing = fields; }} onBusyChange={value => { busy = value; }} onStatusChange={() => {}} captureFactory={() => createCaptureController(async () => sdk)} demoConsentEnabled={options.demoConsentEnabled ?? false}/>); await flush(); });
     await run({ releaseStatus: async () => { await act(async () => { releaseStatus(); await flush(); }); },
       setCurrent: async value => { current = value; await act(async () => { document.dispatchEvent(new dom.window.Event("visibilitychange")); await flush(); }); },
       requests, starts: () => starts, saved: () => saves, busy: () => busy, missing: () => missing,
@@ -50,6 +50,34 @@ test("disabled feature never starts SDK or consumes a session", async () => harn
   expect(document.body.textContent).toContain("Face scan is not available yet");
   expect(starts()).toBe(0); expect(requests.every(r => r.body === null)).toBe(true);
 }, { enabled: false }));
+test("demo consent request unlocks the scan after two seconds without sending a message", async () => harness(async ({ click, requests, starts }) => {
+  await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"][value="standing"]')!.click());
+  const scan = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Start face scan")!;
+  expect(scan.disabled).toBe(true);
+  await click("Simulate consent request");
+  expect(scan.disabled).toBe(true);
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 2_050)); });
+  expect(scan.disabled).toBe(false);
+  expect(document.body.textContent).toContain("No patient was contacted.");
+  expect(requests.every(request => request.body === null)).toBe(true);
+  expect(starts()).toBe(0);
+  await click("Reset demo consent");
+  expect(scan.disabled).toBe(true);
+}, { demoConsentEnabled: true }));
+test("demo signed consent selection starts a scan without uploading the file", async () => harness(async ({ click, requests, starts }) => {
+  await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"][value="resting"]')!.click());
+  const input = document.querySelector<HTMLInputElement>('input[aria-label="Choose signed consent file"]')!;
+  const file = new window.File(["signed consent"], "consent.pdf", { type: "application/pdf" });
+  Object.defineProperty(input, "files", { configurable: true, value: [file] });
+  await act(async () => input.dispatchEvent(new window.Event("change", { bubbles: true })));
+  const scan = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Start face scan")!;
+  expect(scan.disabled).toBe(false);
+  expect(document.body.textContent).toContain("Simulated upload complete. The file was not stored.");
+  expect(requests.every(request => request.body === null)).toBe(true);
+  await click("Start face scan");
+  expect(starts()).toBe(1);
+  expect(requests.some(request => request.body?.posture === "resting")).toBe(true);
+}, { demoConsentEnabled: true }));
 test("missing scan weight directs correction without creating a remote session", async () => harness(async ({ consent, click, missing, requests, starts }) => {
   await consent(); await click("Start face scan");
   expect(missing()).toEqual(["weightKg"]);
