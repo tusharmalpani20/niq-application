@@ -144,10 +144,16 @@ test("activity calendar shows the signed-in clinician's actions and the risk ove
   const now = new Date();
   await renderOverview("DOCTOR", body => {
     const calendar = body.querySelector('[aria-label="My assessment activity"]');
-    expect(calendar?.textContent).toContain("2 actions");
+    expect(calendar?.textContent).toContain("1 assessment · 2 milestones");
     expect(calendar?.textContent).toContain("Assessment created");
     expect(calendar?.textContent).toContain("Clinical review completed");
-    expect(calendar?.querySelectorAll('a[href="/assessments/ASM-000001"]')).toHaveLength(2);
+    expect(calendar?.querySelectorAll('a[href="/assessments/ASM-000001"]')).toHaveLength(1);
+    const milestoneText = calendar?.querySelector('a[href="/assessments/ASM-000001"]')?.textContent ?? "";
+    expect(milestoneText.indexOf("Assessment created")).toBeLessThan(milestoneText.indexOf("Clinical review completed"));
+    const markers = [...(calendar?.querySelectorAll('a[href="/assessments/ASM-000001"] i') ?? [])].map(marker => marker.className);
+    expect(markers.some(marker => marker.includes("bg-slate-400"))).toBe(true);
+    expect(markers.some(marker => marker.includes("bg-amber-500"))).toBe(true);
+    expect(calendar?.querySelector('button[aria-label*="1 assessment, 2 milestones"]')).not.toBeNull();
     const risk = body.querySelector('[aria-label="Assessment risk overview"]');
     expect(risk?.textContent).toContain("Low Risk");
     expect(risk?.textContent).toContain("Moderate Risk");
@@ -157,8 +163,8 @@ test("activity calendar shows the signed-in clinician's actions and the risk ove
     assessmentStatus: "COMPLETED", completedAt: now.toISOString(),
     highRiskAssessments: [{ patientId: id, assessmentId: id }],
     activity: [
-      { id, assessmentId: id, action: "ASSESSMENT_CREATED", occurredAt: now.toISOString() },
       { id: `${id.slice(0, -1)}B`, assessmentId: id, action: "CLINICAL_REVIEW_COMPLETE", occurredAt: now.toISOString() },
+      { id, assessmentId: id, action: "ASSESSMENT_CREATED", occurredAt: now.toISOString() },
     ],
   });
 });
@@ -179,12 +185,12 @@ test("selecting a calendar date shows only activity from that local day", async 
   const secondDay = new Date(now.getFullYear(), now.getMonth(), 2, 10);
   await renderOverview("DOCTOR", async body => {
     const calendar = body.querySelector('[aria-label="My assessment activity"]')!;
-    await act(async () => { (calendar.querySelector(`[aria-label="${firstDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
-    expect(calendar.textContent).toContain("1 action");
+    await act(async () => { (calendar.querySelector(`[aria-label^="${firstDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
+    expect(calendar.textContent).toContain("1 assessment · 1 milestone");
     expect(calendar.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("Assessment created");
     expect(calendar.querySelectorAll('a[href="/assessments/ASM-000001"]')).toHaveLength(1);
-    await act(async () => { (calendar.querySelector(`[aria-label="${secondDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
-    expect(calendar.textContent).toContain("1 action");
+    await act(async () => { (calendar.querySelector(`[aria-label^="${secondDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
+    expect(calendar.textContent).toContain("1 assessment · 1 milestone");
     expect(calendar.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("Clinical review completed");
     expect(calendar.querySelectorAll('a[href="/assessments/ASM-000001"]')).toHaveLength(1);
   }, { activity: [
@@ -193,11 +199,22 @@ test("selecting a calendar date shows only activity from that local day", async 
   ] });
 });
 
-test("activity list pages long days, shows legend colors, and resets on date change", async () => {
+test("changing month selects its latest active day instead of an empty first day", async () => {
+  const now = new Date();
+  const previousMonthActivity = new Date(now.getFullYear(), now.getMonth() - 1, 12, 10);
+  await renderOverview("DOCTOR", async body => {
+    const calendar = body.querySelector('[aria-label="My assessment activity"]')!;
+    await act(async () => { (calendar.querySelector('[aria-label="Previous month"]') as HTMLButtonElement).click(); });
+    expect(calendar.querySelector('h3')?.textContent).toBe(previousMonthActivity.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }));
+    expect(calendar.querySelector('a[href="/assessments/ASM-000001"]')).not.toBeNull();
+  }, { activity: [{ id, assessmentId: id, action: "ASSESSMENT_CREATED", occurredAt: previousMonthActivity.toISOString() }] });
+});
+
+test("activity pagination counts assessments, shows legend colors, and resets on date change", async () => {
   const now = new Date();
   const firstDay = new Date(now.getFullYear(), now.getMonth(), 1, 10);
   const secondDay = new Date(now.getFullYear(), now.getMonth(), 2, 10);
-  const records = Array.from({ length: 7 }, (_, index) => ({
+  const records = Array.from({ length: 6 }, (_, index) => ({
     ...assessment,
     id: `${id.slice(0, -1)}${index}`,
     reference: `ASM-${String(index + 1).padStart(6, "0")}`,
@@ -206,16 +223,17 @@ test("activity list pages long days, shows legend colors, and resets on date cha
   }));
   await renderOverview("DOCTOR", async body => {
     const calendar = body.querySelector('[aria-label="My assessment activity"]')!;
-    await act(async () => { (calendar.querySelector(`[aria-label="${firstDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
+    await act(async () => { (calendar.querySelector(`[aria-label^="${firstDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
     expect(calendar.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(5);
-    expect(calendar.querySelector('nav[aria-label="Activity pages"]')?.textContent).toContain("1–5 of 7");
+    expect(calendar.textContent).toContain("1–5 of 6 assessments");
     expect(calendar.querySelector('a[href^="/assessments/ASM-"] i')?.className).toContain("bg-slate-400");
-    await act(async () => { (calendar.querySelector('nav[aria-label="Activity pages"] button:last-child') as HTMLButtonElement).click(); });
-    expect(calendar.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(2);
-    expect(calendar.querySelector('nav[aria-label="Activity pages"]')?.textContent).toContain("6–7 of 7");
-    await act(async () => { (calendar.querySelector(`[aria-label="${secondDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
+    expect(calendar.textContent).toContain("Page 1 of 2");
+    await act(async () => { ([...calendar.querySelectorAll('button')].find(button => button.textContent === "Next") as HTMLButtonElement).click(); });
     expect(calendar.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(1);
-    expect(calendar.querySelector('nav[aria-label="Activity pages"]')).toBeNull();
+    expect(calendar.textContent).toContain("6–6 of 6 assessments");
+    await act(async () => { (calendar.querySelector(`[aria-label^="${secondDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
+    expect(calendar.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(1);
+    expect(calendar.querySelector('[aria-label="Activity pages"]')).toBeNull();
   }, {
     assessments: records,
     activity: [...records.map((record, index) => ({ id: `${id.slice(0, -1)}${index}`, assessmentId: record.id, action: "ASSESSMENT_CREATED", occurredAt: new Date(firstDay.getTime() + index * 60_000).toISOString() })),
