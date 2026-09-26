@@ -267,7 +267,6 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
         <DialogHeader><DialogTitle className="text-lg font-semibold">Before the face scan</DialogTitle></DialogHeader>
         <div className="facility-dialog-fields min-h-0 overflow-y-auto">
           <FaceScanConsent key={record.id} organizationId={organizationId} assessmentId={record.id} revision={record.revision} disabled={disabled} onApprovalChange={handleConsentApproval} embedded/>
-          <p className="mt-3 text-xs text-muted-foreground">{consentReady ? "Consent recorded. Ready to scan." : "Consent is required before the camera opens."}</p>
         </div>
         <div className="form-footer">
           <Button variant="outline" className="min-h-10 px-4 font-semibold text-foreground" onPress={() => setConsentOpen(false)}>Cancel</Button>

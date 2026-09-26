@@ -60,7 +60,7 @@ export function FaceScanConsent({ organizationId, assessmentId, revision, disabl
   }
 
   return <section aria-label="Patient consent" className={embedded ? "space-y-3" : "space-y-3 rounded-xl border border-border bg-muted/30 p-4"}>
-    <div><h3 className="text-sm font-semibold">Patient consent</h3><p className="mt-1 text-sm text-muted-foreground">Request consent from the patient or upload a signed form before starting the face scan.</p></div>
+    <div><h3 className="text-sm font-semibold">Patient consent</h3>{!approved && <p className="mt-1 text-sm text-muted-foreground">Request consent from the patient or upload a signed form before starting the face scan.</p>}</div>
     {summary === null && !error && <p role="status" className="text-sm text-muted-foreground">Loading consent status…</p>}
     {current?.status === "REQUESTED" && <p role="status" className="text-sm text-muted-foreground">{summary?.demoEnabled ? "Demo request recorded. No notification was sent. Waiting for consent response…" : "Waiting for consent response…"}</p>}
     {approved && <p role="status" className="text-sm font-medium text-primary">{current.method === "UPLOAD" ? `Signed consent saved: ${current.fileName}` : "Consent response recorded."}</p>}
