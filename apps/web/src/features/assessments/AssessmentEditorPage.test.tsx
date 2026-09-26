@@ -334,7 +334,7 @@ test("blank scoring answers submit through verification and show an unscored sum
     await click("Confirm and request score");
     expect(requests.some(request => request.method === "POST" && request.url.endsWith("/submit"))).toBe(true);
     expect(document.querySelector('[aria-label="Assessment score review"]')).not.toBeNull();
-    expect(document.body.textContent).toContain("NIQ score—");
+    expect(document.querySelector('[aria-label="Assessment score review"] [data-risk-circle]')?.getAttribute("aria-label")).toBe("No points, no risk category");
     expect(document.body.textContent).not.toContain("Low Risk");
     expect(document.body.textContent).toContain("Assessment submitted");
   }, { binding: { version: "version-a", checksum: "a".repeat(64) } }, "assessment-a", blank);
