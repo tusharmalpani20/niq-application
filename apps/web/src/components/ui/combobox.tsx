@@ -34,7 +34,7 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
     onSelectionChange={key => { if (key === null) return; if (key === "__custom__") { onCreate?.(query); setSearch(selectedLabel); } else { onChange(String(key)); setSearch(options.find(option => option.id === key)?.label || ""); } }}
     onBlur={() => setSearch(selectedLabel)} className="w-full min-w-0">
     <ComboBoxStateContext.Consumer>{state => <>
-    <Group className={`flex items-center rounded-lg border border-input bg-background ${primaryHighlight ? "focus-within:border-primary focus-within:bg-primary/10 focus-within:ring-1 focus-within:ring-primary" : "focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30"} ${large ? "min-h-12" : "min-h-11"}`}>
+    <Group data-slot="combobox-control" className={`flex items-center rounded-lg border border-input bg-background ${primaryHighlight ? "focus-within:bg-primary/10" : ""} ${large ? "min-h-12" : "min-h-11"}`}>
       {selectedIcon && <span className={`ml-2.5 flex size-9 shrink-0 items-center justify-center rounded-lg ${primaryHighlight ? "bg-primary text-primary-foreground shadow-sm" : "bg-primary/10 text-brand-ink"}`} aria-hidden="true">{selectedIcon}</span>}
       <Input onClick={() => state?.open()} onInput={() => state?.open()} id={id} aria-describedby={describedBy} maxLength={2000} placeholder={placeholder} onKeyDown={event => {
         // React Aria commits a highlighted option itself. Enter without one is

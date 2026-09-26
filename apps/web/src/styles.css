@@ -477,3 +477,20 @@ button, a { -webkit-tap-highlight-color: transparent; }
 [data-slot="search-combobox"] input:is(:autofill, :-webkit-autofill) {
   --autofill-focus-shadow: 0 0 #0000;
 }
+
+/* Give every editable form control the same focus treatment as the date field.
+   Composite controls draw the ring on their outer border, not their inner input. */
+:is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not([type="hidden"]):not([data-slot="input-group-control"]):not([data-slot="search-combobox"] input), textarea, select, [data-slot="select-trigger"]):not([aria-invalid="true"]):not([data-invalid]):focus,
+:is([data-slot="combobox-control"], [data-slot="input-group"]):not(:has([aria-invalid="true"])):focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+[data-slot="search-combobox"] input:focus,
+[data-slot="input-group-control"]:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+[data-slot="search-combobox"][data-invalid] [data-slot="combobox-control"]:focus-within {
+  border-color: var(--destructive);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 20%, transparent);
+}
