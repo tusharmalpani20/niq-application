@@ -65,7 +65,7 @@ export function WorkspaceSearch({ user, onNavigate }: { user: AuthenticatedUser;
     onNavigate(to);
   }
 
-  return <div className="relative mx-auto min-w-0 max-w-md flex-1" ref={rootRef}>
+  return <div className="relative min-w-0 max-w-sm flex-1" ref={rootRef}>
     <div className="flex h-9 min-w-0 items-center gap-2 rounded-full border border-border/80 bg-background/70 px-3 transition-colors focus-within:border-primary/60 focus-within:bg-background">
       <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       <input ref={inputRef} type="text" inputMode="search" aria-label="Search patients and assessments" aria-autocomplete="list" aria-expanded={showResults} aria-controls={showResults ? "workspace-search-results" : undefined} aria-activedescendant={showResults && !loading && results[activeIndex] ? `workspace-search-result-${activeIndex}` : undefined} role="combobox" value={query} onFocus={() => { if (query.trim()) setOpen(true); }} onChange={event => { setQuery(event.target.value); setActiveIndex(0); setOpen(Boolean(event.target.value.trim())); }} onKeyDown={event => {

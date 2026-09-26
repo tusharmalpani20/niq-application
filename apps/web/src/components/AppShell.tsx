@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ApplicationLogo } from "./ApplicationLogo";
 import { WorkspaceSearch } from "./WorkspaceSearch";
+import { WorkspaceNotifications } from "./WorkspaceNotifications";
 import { signOut } from "../lib/api";
 import { useBranding } from "../lib/branding-context";
 import { Icon } from "../lib/icons";
@@ -73,23 +74,26 @@ function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignO
       <button type="button" className="workspace-brand" aria-label={`${branding.displayName} home`} onClick={() => go("/")}>
         <OrganizationMark key={branding.logoUrl} url={branding.logoUrl} />
       </button>
-      <WorkspaceSearch key={`${user.organizationId}:${user.role}`} user={user} onNavigate={go} />
-      <details className="workspace-account" ref={menuRef}>
-        <summary aria-label={`Account menu for ${user.displayName}`}>
-          <Avatar className="size-9 shrink-0"><AvatarFallback className="text-xs">{initials}</AvatarFallback></Avatar>
-          <span className="workspace-account-name">{user.displayName}</span>
-          <Icon name="chevron" size={16} />
-        </summary>
-        <div className="workspace-account-menu" data-has-management={managementItems.length > 0}>
-          <div className="workspace-account-identity">
-            <span><strong>{user.displayName}</strong><small>{membershipRoleLabels[user.role]}</small></span>
+      <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
+        <WorkspaceSearch key={`${user.organizationId}:${user.role}`} user={user} onNavigate={go} />
+        <WorkspaceNotifications key={`notifications:${user.organizationId}:${user.role}`} user={user} onNavigate={go} />
+        <details className="workspace-account" ref={menuRef}>
+          <summary aria-label={`Account menu for ${user.displayName}`}>
+            <Avatar className="size-9 shrink-0"><AvatarFallback className="text-xs">{initials}</AvatarFallback></Avatar>
+            <span className="workspace-account-name">{user.displayName}</span>
+            <Icon name="chevron" size={16} />
+          </summary>
+          <div className="workspace-account-menu" data-has-management={managementItems.length > 0}>
+            <div className="workspace-account-identity">
+              <span><strong>{user.displayName}</strong><small>{membershipRoleLabels[user.role]}</small></span>
+            </div>
+            {managementItems.map((item) => <button type="button" key={item.to} onClick={() => go(item.to)}>
+              <Icon name={item.icon} size={18} />{item.label}
+            </button>)}
+            <Button variant="ghost" className="workspace-sign-out" onPress={onSignOut}><LogOut className="size-4" />Sign out</Button>
           </div>
-          {managementItems.map((item) => <button type="button" key={item.to} onClick={() => go(item.to)}>
-            <Icon name={item.icon} size={18} />{item.label}
-          </button>)}
-          <Button variant="ghost" className="workspace-sign-out" onPress={onSignOut}><LogOut className="size-4" />Sign out</Button>
-        </div>
-      </details>
+        </details>
+      </div>
     </div>
   </header>;
 }
