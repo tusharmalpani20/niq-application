@@ -71,7 +71,7 @@ test("resumed real draft shows profile context read-only and saves dirty choices
   await click("Disease status");
   await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
   expect(document.body.textContent).toContain("Unsaved changes");
-  await click("Save draft");
+  await click("Save");
   const saved = requests.find(request => request.method === "PATCH");
   expect(saved?.body.revision).toBe(3);
   expect(saved?.body.answers.stage).toBe(recordFixture().manifest.sections.find(section => section.id === "disease_status")!.fields.find(field => field.id === "stage")!.options![0]!.id);
@@ -95,7 +95,7 @@ test("quick measurements disappear after selection and save canonical units", as
   expect(document.body.textContent).toContain("150 lb");
   await click("150 lb");
   expect(document.body.textContent).not.toContain("150 lb");
-  await click("Save draft");
+  await click("Save");
   const saved = requests.find(request => request.method === "PATCH");
   expect(saved?.body.answers.height_cm).toBe(160);
   expect(saved?.body.answers.current_weight_kg).toBe(68.039);
@@ -103,7 +103,7 @@ test("quick measurements disappear after selection and save canonical units", as
 test("save conflict preserves local input and dirty navigation can be cancelled", async () => harness(async ({ click, conflict, router }) => {
   await click("Disease status");
   await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
-  conflict(); await click("Save draft");
+  conflict(); await click("Save");
   expect(document.body.textContent).toContain("Saved version changed");
   expect(document.querySelector<HTMLInputElement>('input[type="radio"]')!.checked).toBe(true);
   expect(document.body.textContent).toContain("Load saved version");
@@ -179,7 +179,7 @@ test("report refresh preserves local answers and blocks overwriting concurrent a
   await click("Remove");
   expect(document.body.textContent).toContain("Saved answers changed while updating reports");
   expect(document.body.textContent).toContain("Load saved version");
-  await click("Save draft");
+  await click("Save");
   expect(requests.filter(request => request.method === "PATCH")).toHaveLength(0);
 }, { reports: [reportFixture] }));
 
@@ -192,7 +192,7 @@ test("report refresh adopts concurrent server answers when local answers are cle
   expect(document.querySelector('button[aria-label="Attachments"]')).not.toBeNull();
   expect(document.body.textContent).not.toContain("Unsaved changes");
   expect(document.body.textContent).not.toContain("Load saved version");
-  await click("Save draft");
+  await click("Save");
   expect(requests.filter(request => request.method === "PATCH")).toHaveLength(0);
 }, { reports: [reportFixture] }));
 
@@ -254,7 +254,7 @@ test("readable assessment URL loads by reference and saves by internal ID", asyn
   expect(document.querySelector('[aria-label="Breadcrumb"]')?.textContent).toContain("ASM-000001");
   await click("Disease status");
   await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
-  await click("Save draft");
+  await click("Save");
   expect(requests.find(request => request.method === "PATCH")?.url).toContain("/assessments/assessment-a");
 }, {}, "ASM-000001"));
 
@@ -262,7 +262,7 @@ test("changing stage clears hidden site and details even after saving", async ()
   await click("Disease status");
   const choose = async (value: string) => act(async () => document.querySelector<HTMLInputElement>(`input[type="radio"][value="${value}"]`)!.click());
   await choose("stage_localized");
-  await click("Save draft");
+  await click("Save");
   const saved = requests.find(request => request.method === "PATCH")!.body.answers;
   expect(saved.metastasis_site).toBeUndefined();
   expect(saved.metastasis_other).toBeUndefined();
@@ -362,7 +362,7 @@ test("clearing a controlling answer clears dependent answers in the saved draft"
   await click("Disease status");
   await click("Clear Stage");
   expect(document.querySelector('#assessment-field-metastasis_other')).toBeNull();
-  await click("Save draft");
+  await click("Save");
   const saved = requests.find(request => request.method === "PATCH")!.body.answers;
   expect(saved.stage).toBeNull();
   expect(saved.metastasis_site).toBeUndefined();
@@ -383,7 +383,7 @@ for (const role of ["DOCTOR", "NUTRITIONIST"] as const) {
 }
 
 test("returned draft assigned to another clinician is read only",async()=>harness(async({requests})=>{
- expect([...document.querySelectorAll("button")].some(button=>button.textContent?.trim()==="Save draft")).toBe(false);
+ expect([...document.querySelectorAll("button")].some(button=>button.textContent?.trim()==="Save")).toBe(false);
  expect([...document.querySelectorAll("input")].filter(input=>!input.disabled&&!input.readOnly)).toHaveLength(0);
  expect(document.body.textContent).not.toContain("Scoring needs attention");
  expect(document.body.textContent).not.toContain("Retry scoring");
