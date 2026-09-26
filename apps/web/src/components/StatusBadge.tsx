@@ -1,21 +1,21 @@
 import { Badge } from "@/components/ui/badge";
 
-const tones: Record<string, { color: string; backgroundColor: string }> = {
-  Draft: { color: "var(--primary)", backgroundColor: "var(--primary-soft)" },
-  "Ready for scoring": { color: "var(--warning)", backgroundColor: "var(--warning-soft)" },
-  "Pending scoring": { color: "var(--warning)", backgroundColor: "var(--warning-soft)" },
-  "Scoring unavailable": { color: "var(--destructive)", backgroundColor: "var(--destructive-soft)" },
-  Scored: { color: "var(--review-foreground)", backgroundColor: "var(--review-background)" },
-  "Under review": { color: "var(--review-foreground)", backgroundColor: "var(--review-background)" },
-  Completed: { color: "var(--success)", backgroundColor: "var(--success-soft)" },
-  Voided: { color: "var(--destructive)", backgroundColor: "var(--destructive-soft)" },
-  "Awaiting reviewer": { color: "var(--primary)", backgroundColor: "var(--primary-soft)" },
-  "In review": { color: "var(--review-foreground)", backgroundColor: "var(--review-background)" },
-  "Returned for correction": { color: "var(--destructive)", backgroundColor: "var(--destructive-soft)" },
-  "Reopened for corrections": { color: "var(--review-foreground)", backgroundColor: "var(--review-background)" },
-  "Awaiting resubmission": { color: "var(--warning)", backgroundColor: "var(--warning-soft)" },
+const accents: Record<string, string> = {
+  Draft: "var(--client-muted)",
+  "Ready for scoring": "var(--primary)",
+  "Pending scoring": "var(--primary)",
+  "Scoring unavailable": "var(--danger)",
+  Scored: "var(--review-foreground)",
+  "Under review": "var(--review-foreground)",
+  Completed: "var(--success)",
+  Voided: "var(--client-muted)",
+  "Awaiting reviewer": "var(--client-muted)",
+  "In review": "var(--review-foreground)",
+  "Returned for correction": "var(--danger)",
+  "Reopened for corrections": "var(--review-foreground)",
+  "Awaiting resubmission": "var(--client-muted)",
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  return <Badge variant="outline" className="status-badge" data-status={status.toLowerCase().replaceAll(" ", "-")} style={tones[status]}><span className="status-dot" />{status}</Badge>;
+  return <Badge variant="outline" className="status-badge" data-status={status.toLowerCase().replaceAll(" ", "-")} style={{ color: "var(--foreground)", backgroundColor: "var(--surface-subtle)", borderColor: "var(--border)" }}><span className="status-dot" style={{ backgroundColor: accents[status] ?? "var(--client-muted)" }} />{status}</Badge>;
 }
