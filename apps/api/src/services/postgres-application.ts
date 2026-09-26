@@ -85,7 +85,30 @@ type PatientRecord = {
 };
 
 function databaseCode(error: unknown): string | undefined {
-  return typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined;
+  let current = error;
+  for (let depth = 0; depth < 5 && typeof current === "object" && current !== null; depth += 1) {
+    if ("code" in current && typeof current.code === "string") return current.code;
+    current = "cause" in current ? current.cause : undefined;
+  }
+  return undefined;
+}
+
+function databaseConstraint(error: unknown): string | undefined {
+  let current = error;
+  for (let depth = 0; depth < 5 && typeof current === "object" && current !== null; depth += 1) {
+    if ("constraint_name" in current && typeof current.constraint_name === "string") return current.constraint_name;
+    current = "cause" in current ? current.cause : undefined;
+  }
+  return undefined;
+}
+
+function databaseMessage(error: unknown): string {
+  let current = error;
+  for (let depth = 0; depth < 5 && typeof current === "object" && current !== null; depth += 1) {
+    if (!("cause" in current) || !current.cause) break;
+    current = current.cause;
+  }
+  return current instanceof Error ? current.message : String(current);
 }
 
 export class PostgresApplicationService implements ApplicationService {
@@ -562,8 +585,12 @@ export class PostgresApplicationService implements ApplicationService {
       });
     } catch (error) {
       if (error instanceof ServiceError) throw error;
-      if (databaseCode(error) === "23505") throw new ServiceError("CONFLICT", "The organization name or administrator email is already in use.");
-      if (databaseCode(error) === "23514" && String(error).includes("user limit")) throw new ServiceError("USER_LIMIT_REACHED", "The organization user limit must allow its first administrator.");
+      if (databaseCode(error) === "23505") {
+        if (databaseConstraint(error) === "organizations_slug_uidx") throw new ServiceError("CONFLICT", "An organization with this URL name already exists. Choose a different name.", { field: "name" });
+        if (databaseConstraint(error) === "invitations_pending_org_email_uidx") throw new ServiceError("CONFLICT", "This administrator email already has a pending invitation.", { field: "email" });
+        throw new ServiceError("CONFLICT", "The organization name or administrator email is already in use.");
+      }
+      if (databaseCode(error) === "23514" && databaseMessage(error).includes("user limit")) throw new ServiceError("USER_LIMIT_REACHED", "The organization user limit must allow its first administrator.");
       throw error;
     }
   }
@@ -1030,7 +1057,7 @@ export class PostgresApplicationService implements ApplicationService {
       });
       return { invitation, token };
     } catch (error) {
-      if (databaseCode(error) === "23514" && String(error).includes("user limit")) throw new ServiceError("USER_LIMIT_REACHED", "The organization user limit has been reached.");
+      if (databaseCode(error) === "23514" && databaseMessage(error).includes("user limit")) throw new ServiceError("USER_LIMIT_REACHED", "The organization user limit has been reached.");
       if (databaseCode(error) === "23505") throw new ServiceError("CONFLICT", "Another invitation already exists for this email.");
       throw error;
     }
@@ -1060,7 +1087,7 @@ export class PostgresApplicationService implements ApplicationService {
       });
       return { invitation, token };
     } catch (error) {
-      if (databaseCode(error) === "23514" && String(error).includes("user limit")) throw new ServiceError("USER_LIMIT_REACHED", "The organization user limit has been reached.");
+      if (databaseCode(error) === "23514" && databaseMessage(error).includes("user limit")) throw new ServiceError("USER_LIMIT_REACHED", "The organization user limit has been reached.");
       if (databaseCode(error) === "23505") throw new ServiceError("CONFLICT", "A pending invitation or account already exists."); throw error;
     }
   }
@@ -1091,7 +1118,7 @@ export class PostgresApplicationService implements ApplicationService {
         return result;
       });
     } catch (error) {
-      if (databaseCode(error) === "23514" && String(error).includes("user limit")) throw new ServiceError("USER_LIMIT_REACHED", "The organization user limit has been reached."); throw error;
+      if (databaseCode(error) === "23514" && databaseMessage(error).includes("user limit")) throw new ServiceError("USER_LIMIT_REACHED", "The organization user limit has been reached."); throw error;
     }
   }
 }

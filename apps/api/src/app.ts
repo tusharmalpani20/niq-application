@@ -39,6 +39,14 @@ function requestContext(context: { get(name: "requestId"): string; req: { header
 function validationFailure(result: { success: boolean }, context: any) {
   if (!result.success) return context.json(errorBody("VALIDATION_ERROR", "The request is invalid.", context.get("requestId")), 400);
 }
+function rootError(error: Error): Error {
+  let current = error;
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (!(current.cause instanceof Error)) break;
+    current = current.cause;
+  }
+  return current;
+}
 const jsonValue = (value: unknown): any => value;
 
 export function createApp(dependencies: AppDependencies) {
@@ -214,7 +222,13 @@ export function createApp(dependencies: AppDependencies) {
       const status = error.code === "FORBIDDEN" ? 403 : error.code === "NOT_FOUND" ? 404 : error.code === "VALIDATION_ERROR" ? 400 : error.code === "USER_LIMIT_REACHED" ? 409 : error.code === "ACCOUNT_LOCKED" ? 423 : error.code === "RATE_LIMITED" ? 429 : error.code === "INVALID_CREDENTIALS" || error.code === "INVALID_OR_EXPIRED_TOKEN" ? 401 : 409;
       return context.json(errorBody(error.code, error.message, context.get("requestId"), error.details), error.code === "SCORING_UNAVAILABLE" || error.code === "SCORING_NOT_CONFIGURED" ? 503 : status);
     }
-    console.error(JSON.stringify({ level: "error", requestId: context.get("requestId"), message: error.message }));
+    const cause = rootError(error);
+    const databaseDetails = cause as Error & { code?: string; constraint_name?: string };
+    console.error(JSON.stringify({
+      level: "error", requestId: context.get("requestId"), message: cause.message,
+      ...(databaseDetails.code ? { code: databaseDetails.code } : {}),
+      ...(databaseDetails.constraint_name ? { constraint: databaseDetails.constraint_name } : {}),
+    }));
     return context.json(errorBody("INTERNAL_ERROR", "An unexpected error occurred.", context.get("requestId")), 500);
   });
   return app;
