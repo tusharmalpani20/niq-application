@@ -151,8 +151,8 @@ export function AssessmentReports({ organizationId, assessmentId, reports, revis
         
         {!editor.id && <div className="col-span-full">
           <p className="mb-2 text-sm font-medium">Files <span aria-hidden="true" className="ml-1 text-destructive">*</span><span className="font-normal text-muted-foreground"> (at least one required to submit)</span></p>
-          <label className="relative flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-brand-ink hover:bg-muted focus-within:ring-2 focus-within:ring-ring">
-            <Plus className="size-4" aria-hidden="true"/>Choose PDF, JPEG or PNG files
+          <label className="relative flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 text-sm font-medium text-foreground transition-colors hover:bg-primary/10 focus-within:ring-2 focus-within:ring-ring">
+            <Plus className="size-4 text-primary" aria-hidden="true"/>Choose PDF, JPEG or PNG files
             <input className="absolute inset-0 w-full cursor-pointer opacity-0" aria-label="Choose files for new report" type="file" multiple accept="application/pdf,image/jpeg,image/png" disabled={busy} onChange={event => { selectStagedFiles(event.target.files); event.target.value = ""; }}/>
           </label>
           {stagedFiles.length > 0 && <ul className="mt-2 space-y-2">{stagedFiles.map(({ key, file }) => <ReportFilePreview key={key} file={file} busy={busy} onRemove={() => setStagedFiles(previous => previous.filter(item => item.key !== key))}/>)}</ul>}
