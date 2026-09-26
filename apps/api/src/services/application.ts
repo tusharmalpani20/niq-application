@@ -93,7 +93,7 @@ export interface ApplicationService {
   listPatients(actor: Principal, organizationId: string): Promise<unknown[]>;
   getPatient(actor: Principal, organizationId: string, patientLocator: string): Promise<unknown>;
   listAssessments(actor: Principal, organizationId: string): Promise<unknown[]>;
-  getOverviewRisk(actor: Principal, organizationId: string): Promise<{ highRiskPatients: number; highRiskPatients30DaysAgo: number; assessedPatients: number; categories: { low: number; moderate: number; high: number }; highRiskAssessments: { patientId: string; assessmentId: string }[] }>;
+  getOverviewRisk(actor: Principal, organizationId: string): Promise<{ highRiskPatients: number; highRiskPatients30DaysAgo: number; assessedPatients: number; categories: { low: number; moderate: number; high: number }; categories30DaysAgo: { low: number; moderate: number; high: number }; highRiskAssessments: { patientId: string; assessmentId: string }[] }>;
   getOverviewActivity(actor: Principal, organizationId: string, from: Date, to: Date): Promise<{ items: { id: string; assessmentId: string; action: "ASSESSMENT_CREATED" | "ASSESSMENT_SUBMITTED" | "CLINICAL_REVIEW_COMPLETE"; occurredAt: Date }[] }>;
   invitationAccess(actor: Principal, organizationId: string): Promise<{ allFacilities: boolean }>;
   manageUserInvitation(actor: Principal, organizationId: string, invitationId: string, action: "revoke" | "regenerate", context: RequestContext): Promise<{ invitation: unknown; token?: string }>;

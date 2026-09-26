@@ -34,7 +34,7 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
     if (url.endsWith("/patients")) return Response.json({ items: [patient] });
     if (url.endsWith("/facilities")) return Response.json({ items: [] });
     if (url.endsWith("/assessments")) return Response.json({ items: scenario.assessments ?? [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status, myAction: scenario.assessmentStatus === "DRAFT" ? "EDIT_DRAFT" : null, createdAt: scenario.assessmentCreatedAt ?? date, completedAt: scenario.completedAt ?? null }] });
-    if (url.endsWith("/overview-risk")) return Response.json({ highRiskPatients: scenario.highRiskPatients ?? 1, highRiskPatients30DaysAgo: scenario.highRiskPatients30DaysAgo ?? 0, assessedPatients: 1, categories: { low: 0, moderate: 0, high: 1 }, highRiskAssessments: scenario.highRiskAssessments ?? [] });
+    if (url.endsWith("/overview-risk")) return Response.json({ highRiskPatients: scenario.highRiskPatients ?? 1, highRiskPatients30DaysAgo: scenario.highRiskPatients30DaysAgo ?? 0, assessedPatients: 1, categories: { low: 0, moderate: 0, high: 1 }, categories30DaysAgo: { low: 0, moderate: 0, high: scenario.highRiskPatients30DaysAgo ?? 0 }, highRiskAssessments: scenario.highRiskAssessments ?? [] });
     if (url.includes("/overview-activity?")) return Response.json({ items: scenario.activity ?? [] });
     if (url.endsWith("/users")) return Response.json({ items: [{ membershipId: id, userId: id, email: "admin@example.test", displayName: "Admin", status: "ACTIVE", role, active: true, createdAt: date }] });
     if (url.includes("/clinical-reviews?")) return Response.json({ items: [], total: scenario.reviewTotal ?? 2, page: 1, pageSize: 3 });

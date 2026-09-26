@@ -20,6 +20,7 @@ test("counts one confirmed high risk category per patient from the latest comple
     assessedPatients: 3,
     highRiskPatients30DaysAgo: 0,
     categories: { low: 1, moderate: 1, high: 1 },
+    categories30DaysAgo: { low: 0, moderate: 0, high: 0 },
     highRiskAssessments: [{ patientId: "two", assessmentId: "03" }],
   });
 });
@@ -43,6 +44,7 @@ test("uses each accessible patient's latest completed assessment at the 30-day c
     assessedPatients: 5,
     highRiskPatients30DaysAgo: 1,
     categories: { low: 0, moderate: 1, high: 4 },
+    categories30DaysAgo: { low: 2, moderate: 0, high: 1 },
     highRiskAssessments: [{ patientId: "worsened", assessmentId: "05" }, { patientId: "new", assessmentId: "06" }, { patientId: "missing", assessmentId: "08" }, { patientId: "tie", assessmentId: "10" }],
   });
 });

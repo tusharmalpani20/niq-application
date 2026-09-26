@@ -47,6 +47,7 @@ export const overviewRiskSchema = z.object({
   highRiskPatients30DaysAgo: z.number().int().nonnegative(),
   assessedPatients: z.number().int().nonnegative(),
   categories: z.object({ low: z.number().int().nonnegative(), moderate: z.number().int().nonnegative(), high: z.number().int().nonnegative() }),
+  categories30DaysAgo: z.object({ low: z.number().int().nonnegative(), moderate: z.number().int().nonnegative(), high: z.number().int().nonnegative() }),
   highRiskAssessments: z.array(z.object({ patientId: idSchema, assessmentId: idSchema })),
 });
 

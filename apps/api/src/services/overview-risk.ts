@@ -16,7 +16,7 @@ export function countOverviewRisk(
   rows: CompletedAssessment[],
   unseal: (value: unknown) => FinalSnapshot,
   now: Date = new Date(),
-): { highRiskPatients: number; assessedPatients: number; highRiskPatients30DaysAgo: number; categories: { low: number; moderate: number; high: number }; highRiskAssessments: { patientId: string; assessmentId: string }[] } {
+): { highRiskPatients: number; assessedPatients: number; highRiskPatients30DaysAgo: number; categories: { low: number; moderate: number; high: number }; categories30DaysAgo: { low: number; moderate: number; high: number }; highRiskAssessments: { patientId: string; assessmentId: string }[] } {
   const latest = new Map<string, CompletedAssessment>();
   const latest30DaysAgo = new Map<string, CompletedAssessment>();
   const cutoff = now.getTime() - 30 * 24 * 60 * 60 * 1000;
@@ -52,9 +52,10 @@ export function countOverviewRisk(
     categories[riskCategory]++;
     if (riskCategory === "high") highRiskAssessments.push({ patientId: row.patientId, assessmentId: row.id });
   }
-  let highRiskPatients30DaysAgo = 0;
+  const categories30DaysAgo = { low: 0, moderate: 0, high: 0 };
   for (const row of latest30DaysAgo.values()) {
-    if (category(row) === "high") highRiskPatients30DaysAgo++;
+    const riskCategory = category(row);
+    if (riskCategory) categories30DaysAgo[riskCategory]++;
   }
-  return { highRiskPatients: categories.high, assessedPatients, highRiskPatients30DaysAgo, categories, highRiskAssessments };
+  return { highRiskPatients: categories.high, assessedPatients, highRiskPatients30DaysAgo: categories30DaysAgo.high, categories, categories30DaysAgo, highRiskAssessments };
 }
