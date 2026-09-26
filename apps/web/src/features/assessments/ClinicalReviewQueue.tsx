@@ -4,6 +4,7 @@ import type { AuthenticatedUser, ClinicalReviewQueue as Queue, ClinicalReviewQue
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/DataTable";
+import { ClinicalReviewEmptyIllustration } from "@/components/ClinicalReviewEmptyIllustration";
 import { RouterButtonLink } from "@/components/RouterButtonLink";
 import { StatusBadge } from "@/components/StatusBadge";
 import { clinicalReviewLabels, listClinicalReviews } from "./clinical-review-api";
@@ -13,7 +14,7 @@ const reviewOwner = (item: ClinicalReviewQueueItem) => item.review.correctionPer
 const reviewDate = (item: ClinicalReviewQueueItem) => item.review.submittedAt ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(item.review.submittedAt)) : "—";
 const openReview = (item: ClinicalReviewQueueItem) => <RouterButtonLink variant="ghost" size="icon" to={`/assessments/${item.reference}`} aria-label={`Open clinical review ${item.reference}`} title="Open clinical review"><ChevronRight className="size-4" aria-hidden="true" /></RouterButtonLink>;
 
-export function ClinicalReviewQueue({ user, query, state }: { user: AuthenticatedUser; query: string; state: string }) {
+export function ClinicalReviewQueue({ user, query, state, onViewAssessments }: { user: AuthenticatedUser; query: string; state: string; onViewAssessments: () => void }) {
   const [data, setData] = useState<Queue | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -40,7 +41,8 @@ export function ClinicalReviewQueue({ user, query, state }: { user: Authenticate
     { id: "sent", header: "Sent for review", cell: ({ row }) => reviewDate(row.original) },
     { id: "actions", header: () => <span className="block text-right">Action</span>, cell: ({ row }) => <div className="flex justify-end">{openReview(row.original)}</div> },
   ];
-  const empty = <div className="table-empty-content">{loading ? <p role="status">Loading clinical reviews…</p> : error ? <><p role="alert">{error}</p><Button variant="outline" onPress={() => setRetry(value => value + 1)}>Retry</Button></> : <p>No clinical reviews match these filters.</p>}</div>;
+  const unfilteredEmpty = !loading && !error && !data?.total && !query.trim() && state === "all";
+  const empty = <div className={`table-empty-content${unfilteredEmpty ? " illustrated-empty-state" : ""}`}>{loading ? <p role="status">Loading clinical reviews…</p> : error ? <><p role="alert">{error}</p><Button variant="outline" onPress={() => setRetry(value => value + 1)}>Retry</Button></> : unfilteredEmpty ? <><ClinicalReviewEmptyIllustration /><strong>No clinical reviews yet</strong><span>Reviews will appear after an assessment is sent for review.</span><Button variant="outline" onPress={onViewAssessments}>View assessments</Button></> : <p>No clinical reviews match these filters.</p>}</div>;
   return <div className="space-y-4">
     <section className="surface table-surface"><div className="mobile-card-list">{data?.items.length ? data.items.map(item => <article className="mobile-data-card" key={item.assessmentId}><div><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${item.reference}`}>{item.reference}</Link><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${item.patient.reference}`}>{item.patient.displayName}</Link><span>{item.patient.reference}</span></div><StatusBadge status={reviewStage(item)} /><span>{item.facility?.name ?? "No facility"} · {reviewOwner(item)}</span><span>Sent for review: {reviewDate(item)}</span><div className="flex justify-end">{openReview(item)}</div></article>) : empty}</div><div className="desktop-table p-5"><DataTable columns={columns} data={data?.items ?? []} label="Clinical reviews" emptyContent={empty} /></div></section>
     {!!data?.total && data.total > data.pageSize && <div className="flex items-center justify-center gap-3"><Button variant="outline" size="sm" isDisabled={loading || page <= 1} onPress={() => setPage(value => value - 1)}>Previous</Button><span className="text-sm text-muted-foreground" role="status">Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="outline" size="sm" isDisabled={loading || page * data.pageSize >= data.total} onPress={() => setPage(value => value + 1)}>Next</Button></div>}
