@@ -2,13 +2,12 @@ import type { ReactNode } from "react";
 import {
   ArrowLeftRight, CircleCheck,
   Bubbles, CalendarDays, CircleMinus, Clock3, Flame, Frown, Timer,
-  Utensils, UtensilsCrossed, Waves, type LucideIcon,
+  Utensils, Waves, type LucideIcon,
 } from "lucide-react";
 
 /** Decorative cues for appetite and gut choices; the labels carry the clinical meaning. */
 const icons: Record<string, LucideIcon> = {
   appetite_status_normal: Utensils,
-  appetite_status_no_appetite: UtensilsCrossed,
   gastrointestinal_symptoms_bloating: Bubbles,
   gastrointestinal_symptoms_acidity_reflux: Flame,
   gastrointestinal_symptoms_nausea: Frown,
@@ -23,10 +22,14 @@ const icons: Record<string, LucideIcon> = {
 
 const drawings: Record<string, ReactNode> = {
   appetite_status_reduced: <>
-    <path d="M3 3v6m3-6v6M3 9h3M4.5 9v12" />
-    <circle cx="16" cy="12" r="5" />
-    <path d="M16 7v10" />
-    <path d="M16 7a5 5 0 0 0 0 10Z" fill="currentColor" fillOpacity="0.22" stroke="none" />
+    <circle cx="9.5" cy="11" r="6.5" />
+    <circle cx="9.5" cy="11" r="3.5" />
+    <path d="M19 6v12m-3-3 3 3 3-3" />
+  </>,
+  appetite_status_no_appetite: <>
+    <circle cx="12" cy="12" r="8" />
+    <circle cx="12" cy="12" r="5" />
+    <path d="M4 20 20 4" />
   </>,
   below_3_week: <>
     <rect x="3" y="5" width="18" height="16" rx="2" />
