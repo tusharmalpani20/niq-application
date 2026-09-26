@@ -185,7 +185,6 @@
 }
 .workspace-account-menu > button:hover { background: var(--muted); }
 .workspace-account-menu > .workspace-sign-out { border-top: 1px solid var(--border); border-radius: 0 0 .65rem .65rem; }
-.workspace-account-menu[data-has-management="false"] .workspace-account-identity,
 .workspace-account-menu[data-has-management="false"] > .workspace-sign-out { border: 0; }
 .workspace-account-menu[data-has-management="false"] > .workspace-sign-out { border-radius: .65rem; }
 .workspace-dock {
