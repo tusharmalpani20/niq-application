@@ -170,6 +170,28 @@ test("priority assessments appear beside quick actions", async () => {
   }, { assessments: [{ ...assessment, isPriority: true, myAction: null }] });
 });
 
+test("priority assessments paginate three at a time", async () => {
+  const priorities = Array.from({ length: 4 }, (_, index) => ({
+    ...assessment,
+    id: `${id.slice(0, -1)}${index}`,
+    reference: `ASM-${String(index + 1).padStart(6, "0")}`,
+    isPriority: true,
+    myAction: null,
+  }));
+  await renderOverview("DOCTOR", async body => {
+    const priority = body.querySelector('[aria-label="Priority assessments"]')!;
+    const pages = priority.querySelector('[aria-label="Priority assessment pages"]')!;
+    expect(priority.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(3);
+    expect(pages.textContent).toContain("1–3 of 4");
+    await act(async () => { (Array.from(pages.querySelectorAll('button')).find(button => button.textContent === "Next") as HTMLButtonElement).click(); });
+    expect(priority.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(1);
+    expect(priority.querySelector('a[href="/assessments/ASM-000004"]')).not.toBeNull();
+    expect(pages.textContent).toContain("4–4 of 4");
+    await act(async () => { (Array.from(pages.querySelectorAll('button')).find(button => button.textContent === "Previous") as HTMLButtonElement).click(); });
+    expect(priority.querySelector('a[href="/assessments/ASM-000001"]')).not.toBeNull();
+  }, { assessments: priorities });
+});
+
 test("selecting a calendar date shows only activity from that local day", async () => {
   const now = new Date();
   const firstDay = new Date(now.getFullYear(), now.getMonth(), 1, 10);
