@@ -54,7 +54,6 @@ export function PatientsPage() {
   const [facility, setFacility] = useState(() => searchParams.get("facility") ?? "all");
   const [gender, setGender] = useState("all");
   const [page, setPage] = useState(1);
-  const [showRegistration, setShowRegistration] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
   const [assessmentState, setAssessmentState] = useState<"loading" | "ready" | "error">("loading");
@@ -103,7 +102,7 @@ export function PatientsPage() {
       : loadState === "error" ? <><strong>Patients could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></>
       : hasFilters
       ? <><strong>No matching patients</strong><span>Try changing the search or filters.</span></>
-      : <><PatientEmptyIllustration /><strong>Your patient list starts here</strong><span>Register your first patient to begin an assessment.</span><Button className="patient-empty-action" variant="outline" size="sm" onPress={() => setShowRegistration(true)}>Register patient</Button></>}
+      : <><PatientEmptyIllustration /><strong>No patients to display</strong><span>Patients will appear here when available.</span></>}
   </div>;
   return <>
     <h1 className="patient-page-title">Patients</h1>
@@ -122,7 +121,6 @@ export function PatientsPage() {
     </section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Patients pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filtered.length} total</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
     {editingPatient && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={editingPatient} canCorrectIdentity={user.role === "ORGANIZATION_ADMIN"} onClose={() => setEditingPatient(null)} onSaved={updated => { setPatients(current => current.map(item => item.id === updated.id ? updated : item)); setEditingPatient(null); }} />}
-    {showRegistration && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions.filter(item => item.status === "ACTIVE")} onClose={() => setShowRegistration(false)} onSaved={(patient) => { setPatients((current) => [patient, ...current]); setShowRegistration(false); }} />}
   </>;
 }
 
