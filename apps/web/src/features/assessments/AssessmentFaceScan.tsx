@@ -229,7 +229,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {data?.enabled && session?.state === "COMPLETED" && !rescanRequested && phase === "idle" && record.status === "DRAFT" && <Button variant="outline" isDisabled={disabled || stale} onPress={() => { setConsented(false); setPosture(""); setRescanRequested(true); }}>Scan again</Button>}
     {data?.enabled && canStart && (session?.state !== "COMPLETED" || rescanRequested) && phase === "idle" && record.status === "DRAFT" && <div className="space-y-4 border-t border-border pt-4">
       {session?.state === "COMPLETED" && <p className="text-sm text-muted-foreground">A new scan will replace the current result. Previous results stay saved in the assessment history.</p>}
-      <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+      <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
         <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground" aria-hidden="true"><Info className="size-6" strokeWidth={2.5} /></span>
         <div className="min-w-0 space-y-2 text-sm text-foreground">
           <p className="font-semibold">Before you start</p>
