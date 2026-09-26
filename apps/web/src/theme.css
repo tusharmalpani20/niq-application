@@ -68,7 +68,7 @@
   --admin-space: 1.25rem;
   --admin-shadow: 0 1px 3px color-mix(in srgb, var(--admin-ink) 7%, transparent);
   --admin-dialog-shadow: 0 16px 48px color-mix(in srgb, var(--admin-ink) 16%, transparent);
-  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Outfit Variable', ui-sans-serif, system-ui, sans-serif;
   /* Existing clinical surfaces share the token source without changing their palette. */
   --clinical-sidebar-background: #293f42;
   --clinical-sidebar-foreground: #edf8f8;
@@ -170,7 +170,7 @@
   --destructive: var(--admin-danger);
   --danger: var(--destructive);
   --radius: var(--admin-radius);
-  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Outfit Variable', ui-sans-serif, system-ui, sans-serif;
   font-family: var(--font-sans);
 }
 

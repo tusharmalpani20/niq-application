@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/outfit";
 @import "./theme.css";
 @import "./admin.css";
 
@@ -50,13 +50,13 @@ button, input { font: inherit; }
 }
 .welcome-copy { position: relative; z-index: 1; max-width: 36rem; margin-block: auto; padding-top: 2rem; }
 .eyebrow { margin: 0 0 1rem; color: inherit; font-size: 0.75rem; font-weight: 750; letter-spacing: 0.16em; text-transform: uppercase; }
-.welcome-copy h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2.5rem, 5vw, 5rem); font-weight: 500; letter-spacing: -0.045em; line-height: 0.98; }
+.welcome-copy h1 { margin: 0; font-family: inherit; font-size: clamp(2.5rem, 5vw, 5rem); font-weight: 500; letter-spacing: -0.045em; line-height: 0.98; }
 .welcome-copy > p:last-child { max-width: 31rem; margin: 1.75rem 0 0; color: color-mix(in srgb, var(--primary-foreground) 78%, transparent); font-size: 1.08rem; line-height: 1.65; }
 .privacy-note { position: relative; z-index: 1; max-width: 29rem; margin: 0; color: color-mix(in srgb, var(--primary-foreground) 66%, transparent); font-size: 0.82rem; line-height: 1.5; }
 .form-panel { display: grid; min-height: 0; align-items: center; padding: clamp(2rem, 6dvh, 4rem) clamp(2rem, 8vw, 7.5rem); background: var(--surface); }
 .form-container { width: 100%; max-width: 29rem; margin-inline: auto; }
 .form-container .eyebrow { color: var(--primary); }
-.form-container h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 2.7rem; font-weight: 500; letter-spacing: -0.035em; }
+.form-container h2 { margin: 0; font-family: inherit; font-size: 2.7rem; font-weight: 500; letter-spacing: -0.035em; }
 .form-intro { margin: 0.8rem 0 2.5rem; color: var(--ink-muted); }
 .sign-in-form { gap: 1.25rem; margin-top: 2.5rem; }
 form { display: flex; flex-direction: column; }
@@ -346,7 +346,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-sans: 'Outfit Variable', ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
