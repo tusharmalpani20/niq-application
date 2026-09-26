@@ -1,14 +1,13 @@
 import { canVisitOrganizationRoute } from "../lib/route-permissions";
 import { membershipRoleLabels } from "@niq/application-contracts";
 import type { AuthenticatedUser } from "@niq/application-contracts";
-import { LogOut } from "lucide-react";
+import { Bell, LogOut } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ApplicationLogo } from "./ApplicationLogo";
 import { WorkspaceSearch } from "./WorkspaceSearch";
-import { WorkspaceNotifications } from "./WorkspaceNotifications";
 import { signOut } from "../lib/api";
 import { useBranding } from "../lib/branding-context";
 import { Icon } from "../lib/icons";
@@ -76,7 +75,9 @@ function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignO
       </button>
       <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
         <WorkspaceSearch key={`${user.organizationId}:${user.role}`} user={user} onNavigate={go} />
-        <WorkspaceNotifications key={`notifications:${user.organizationId}:${user.role}`} user={user} onNavigate={go} />
+        <span role="img" aria-label="Notifications" className="grid size-9 shrink-0 place-items-center text-foreground">
+          <Bell className="size-[18px]" aria-hidden="true" />
+        </span>
         <details className="workspace-account" ref={menuRef}>
           <summary aria-label={`Account menu for ${user.displayName}`}>
             <Avatar className="size-9 shrink-0"><AvatarFallback className="text-xs">{initials}</AvatarFallback></Avatar>
