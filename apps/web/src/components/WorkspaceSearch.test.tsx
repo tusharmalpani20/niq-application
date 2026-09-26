@@ -8,7 +8,7 @@ import { WorkspaceSearch } from "./WorkspaceSearch";
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const date = "2026-09-26T00:00:00Z";
 const patient = { id, organizationId: id, reference: "PAT-2", displayName: "Tushar Malpani", homeFacility: null, dateOfBirth: null, gender: "UNKNOWN", createdAt: date, updatedAt: date };
-const assessment = { id, organizationId: id, reference: "ASM-000016", serialNumber: 16, patient: { id, reference: "PAT-2", displayName: "Tushar Malpani" }, facility: null, status: "DRAFT", myAction: "EDIT_DRAFT", createdAt: date, updatedAt: date, completedAt: null };
+const assessment = { id, organizationId: id, reference: "ASM-000016", serialNumber: 16, patient: { id, reference: "PAT-2", displayName: "Tushar Malpani" }, facility: null, status: "DRAFT", myAction: "EDIT_DRAFT", isPriority: false, createdAt: date, updatedAt: date, completedAt: null };
 
 async function renderSearch(role: AuthenticatedUser["role"], verify: (body: HTMLElement, requests: string[], navigation: string[]) => Promise<void>) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });

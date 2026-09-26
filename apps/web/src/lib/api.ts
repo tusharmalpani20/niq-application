@@ -268,6 +268,13 @@ export async function listAssessments(organizationId: string): Promise<Assessmen
   return assessmentListResponseSchema.parse(await responseBody(response)).items;
 }
 
+export async function setAssessmentPriority(organizationId: string, assessmentId: string, isPriority: boolean): Promise<void> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/assessments/${encodeURIComponent(assessmentId)}/priority`, {
+    method: "PATCH", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ isPriority }),
+  });
+  await responseBody(response);
+}
+
 export async function getOverviewRisk(organizationId: string) {
   const response = await fetch(`/api/v1/organizations/${organizationId}/overview-risk`, { credentials: "include" });
   return overviewRiskSchema.parse(await responseBody(response));

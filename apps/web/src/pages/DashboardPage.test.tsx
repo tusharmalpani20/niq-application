@@ -9,7 +9,7 @@ import { DashboardPage, greetingForHour } from "./DashboardPage";
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const date = "2026-09-20T00:00:00Z";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Example Patient", homeFacility: null, dateOfBirth: null, gender: "UNKNOWN", createdAt: date, updatedAt: date };
-const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: null, status: "SCORING_UNAVAILABLE", createdAt: date, completedAt: null };
+const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: null, status: "SCORING_UNAVAILABLE", isPriority: false, createdAt: date, completedAt: null };
 
 type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; assessments?: Array<typeof assessment & { myAction?: string | null; updatedAt?: string }>; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number; activity?: { id: string; assessmentId: string; action: string; occurredAt: string }[]; highRiskAssessments?: { patientId: string; assessmentId: string }[] };
 
@@ -116,7 +116,7 @@ test("overview cards show accessible patients, completed assessments, high risk 
     const cards = body.querySelector('[aria-label="Overview statistics"]');
     expect(cards?.textContent).toContain("Total patients");
     expect(cards?.textContent).toContain("Assessments completed");
-    expect(cards?.textContent).toContain("High Risk patients");
+    expect(cards?.textContent).toContain("High risk patients");
     expect(cards?.textContent).toContain("My assessment actions");
     expect(cards?.querySelectorAll(":scope > *")).toHaveLength(4);
     expect(body.querySelector('a[href="/assessments?status=COMPLETED"] strong')?.textContent).toBe("1");
@@ -140,7 +140,7 @@ test("my assessment actions counts only work assigned to the signed-in clinician
   }, { assessments: items });
 });
 
-test("activity calendar shows the signed-in clinician's actions and high-risk patients link to their final assessment", async () => {
+test("activity calendar shows the signed-in clinician's actions and the risk overview", async () => {
   const now = new Date();
   await renderOverview("DOCTOR", body => {
     const calendar = body.querySelector('[aria-label="My assessment activity"]');
@@ -148,11 +148,11 @@ test("activity calendar shows the signed-in clinician's actions and high-risk pa
     expect(calendar?.textContent).toContain("Assessment created");
     expect(calendar?.textContent).toContain("Clinical review completed");
     expect(calendar?.querySelectorAll('a[href="/assessments/ASM-000001"]')).toHaveLength(2);
-    const risk = body.querySelector('[aria-label="Assessment risk and patients needing attention"]');
+    const risk = body.querySelector('[aria-label="Assessment risk overview"]');
     expect(risk?.textContent).toContain("Low Risk");
     expect(risk?.textContent).toContain("Moderate Risk");
     expect(risk?.textContent).toContain("High Risk");
-    expect(risk?.textContent).toContain("Example Patient");
+    expect(body.textContent).not.toContain("Patients needing attention");
   }, {
     assessmentStatus: "COMPLETED", completedAt: now.toISOString(),
     highRiskAssessments: [{ patientId: id, assessmentId: id }],
@@ -161,6 +161,16 @@ test("activity calendar shows the signed-in clinician's actions and high-risk pa
       { id: `${id.slice(0, -1)}B`, assessmentId: id, action: "CLINICAL_REVIEW_COMPLETE", occurredAt: now.toISOString() },
     ],
   });
+});
+
+test("priority assessments appear beside quick actions", async () => {
+  await renderOverview("DOCTOR", body => {
+    const actions = body.querySelector('[aria-label="Quick actions"]');
+    const priority = body.querySelector('[aria-label="Priority assessments"]');
+    expect(actions?.parentElement).toBe(priority?.parentElement);
+    expect(priority?.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("Example Patient");
+    expect(priority?.textContent).not.toContain("Nothing marked yet");
+  }, { assessments: [{ ...assessment, isPriority: true, myAction: null }] });
 });
 
 test("selecting a calendar date shows only activity from that local day", async () => {
@@ -215,7 +225,7 @@ test("activity list pages long days, shows legend colors, and resets on date cha
 
 test("high-risk direction is red when more patients are high risk and green when fewer are", async () => {
   const highRiskTrend = (body: HTMLElement) => Array.from(body.querySelectorAll('[aria-label="Overview statistics"] > *'))
-    .find(card => card.textContent?.includes("High Risk patients"))?.querySelector('[aria-label^="Up"], [aria-label^="Down"]');
+    .find(card => card.textContent?.includes("High risk patients"))?.querySelector('[aria-label^="Up"], [aria-label^="Down"]');
   await renderOverview("DOCTOR", body => {
     const trend = highRiskTrend(body);
     expect(trend?.getAttribute("aria-label")).toBe("Up 2");
@@ -231,7 +241,7 @@ test("high-risk direction is red when more patients are high risk and green when
 test("high-risk card shows a single zero when the comparison is unchanged", async () => {
   await renderOverview("DOCTOR", body => {
     const card = Array.from(body.querySelectorAll('[aria-label="Overview statistics"] > *'))
-      .find(item => item.textContent?.includes("High Risk patients"));
+      .find(item => item.textContent?.includes("High risk patients"));
     expect(card?.querySelector("strong")?.textContent).toBe("0");
     expect(card?.querySelector('[aria-label="No change 0"]')).toBeNull();
     expect(card?.textContent).toContain("vs 30 days ago");

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Link, useOutletContext, useParams } from "react-router-dom";
 import { PatientHeader } from "@/components/PatientHeader";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Star } from "lucide-react";
 import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { AssessmentFields } from "./AssessmentFields";
@@ -20,6 +20,7 @@ import { AssessmentFaceScan, type MissingScanInput } from "./AssessmentFaceScan"
 import { useDraftNavigationGuard } from "./useDraftNavigationGuard";
 import { assessmentRequest, AssessmentRequestError, getAssessment, reconcileAssessmentScoring, retryAssessmentScoring, saveAssessment, submitAssessment } from "./workflow-api";
 import { metricUnits, readMeasurementUnits, rememberMeasurementUnits, type MeasurementUnits } from "./measurement-units";
+import { setAssessmentPriority } from "../../lib/api";
 
 export function AssessmentEditorPage() {
   const user = useOutletContext<AuthenticatedUser>();
@@ -54,6 +55,8 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   const [contactOpen, setContactOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [priorityBusy, setPriorityBusy] = useState(false);
+  const [priorityError, setPriorityError] = useState("");
   const [verificationRecord, setVerificationRecord] = useState<AssessmentWorkflow | null>(null);
   const dirty = !!record && JSON.stringify(answers) !== JSON.stringify(record.answers);
   const editable = record?.status === "DRAFT" && hasPermission(role, "assessments.edit") && (record.canEditDraft ?? true) && clinical.review?.canEditDraft !== false && !clinical.error;
@@ -74,6 +77,16 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     return () => { active = false; };
   }, [organizationId, assessmentId, accept, handleError]);
   const internalId = record?.id ?? assessmentId;
+  async function togglePriority() {
+    if (!record || priorityBusy) return;
+    const next = !record.isPriority;
+    setPriorityBusy(true); setPriorityError("");
+    try {
+      await setAssessmentPriority(organizationId, record.id, next);
+      setRecord(current => current?.id === record.id ? { ...current, isPriority: next } : current);
+    } catch (cause) { setPriorityError(cause instanceof Error ? cause.message : "Could not update priority. Please try again."); }
+    finally { setPriorityBusy(false); }
+  }
   async function refreshReports() {
     try {
       const value = await getAssessment(organizationId, assessmentId);
@@ -217,7 +230,8 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     || !!error || (!scanCorrection && Object.keys(errors).length > 0)
     || (["SCORING_PENDING", "SCORING_UNAVAILABLE"].includes(record.status) && !record.result);
   return <div className="assessment-workflow @container">
-    <PatientHeader compact patient={record.patient} assessmentLabel={`${record.reference} · ${record.status === "DRAFT" ? "Draft" : record.status.replaceAll("_", " ").toLowerCase()} assessment`} action={<span className="text-xs text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span>} />
+    <PatientHeader compact patient={record.patient} assessmentLabel={`${record.reference} · ${record.status === "DRAFT" ? "Draft" : record.status.replaceAll("_", " ").toLowerCase()} assessment`} action={<div className="flex flex-wrap items-center gap-3"><Button variant="outline" size="sm" className={record.isPriority ? "border-amber-300 bg-amber-50 text-amber-800" : ""} aria-pressed={record.isPriority} isDisabled={priorityBusy} onPress={() => { void togglePriority(); }}><Star className={`size-4 ${record.isPriority ? "fill-current" : ""}`} aria-hidden="true" />{record.isPriority ? "Priority" : "Mark priority"}</Button><span className="text-xs text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span></div>} />
+    {priorityError && <p role="alert" className="mb-3 text-sm text-destructive">{priorityError}</p>}
     <div className={`sticky top-0 z-20 bg-background ${separatedEditor ? "rounded-xl" : "rounded-t-xl"}`}>
     <div className={`border border-border bg-card px-4 py-3 sm:px-5 ${separatedEditor ? "rounded-xl" : "rounded-t-xl"}`}>
       <div className="min-w-0"><div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm"><span>Questionnaire <strong>{coverage.percent === 100 ? "completed" : `${coverage.percent ?? "—"}% complete`}</strong></span><span className="text-xs text-muted-foreground">{coverage.answered}/{coverage.total} answered</span></div><div className="h-2 overflow-hidden rounded-full bg-muted shadow-inner" role="progressbar" aria-label="Overall questionnaire completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={coverage.percent ?? 0}><div className="assessment-progress-fill h-full rounded-full bg-primary transition-all" style={{ width: `${coverage.percent ?? 0}%` }} /></div></div>

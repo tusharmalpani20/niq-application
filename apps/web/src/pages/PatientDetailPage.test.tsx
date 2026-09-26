@@ -8,7 +8,7 @@ import { PatientDetailPage } from "./PatientsPage";
 
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patient = { id, organizationId: id, reference: "PAT-2", displayName: "Example Patient", medicalRecordNumber: "MRN-2", homeFacility: { id, name: "Hyderabad" }, dateOfBirth: "1999-03-20", gender: "UNKNOWN", phone: "9014936881", createdAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z" };
-const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: patient.homeFacility, status: "DRAFT", myAction: null, createdAt: "2026-09-22T00:00:00Z", completedAt: null };
+const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: patient.homeFacility, status: "DRAFT", myAction: null, isPriority: false, createdAt: "2026-09-22T00:00:00Z", completedAt: null };
 
 async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) => Promise<void> | void, entry = "/patients/PAT-2") {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });

@@ -1,7 +1,7 @@
 import type { AssessmentSummary } from "@niq/application-contracts";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, CalendarDays, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, ShieldCheck } from "lucide-react";
 import { getOverviewActivity, getOverviewRisk } from "../lib/api";
 
 type Risk = Awaited<ReturnType<typeof getOverviewRisk>>;
@@ -79,19 +79,15 @@ export function AssessmentActivityCalendar({ organizationId, assessments }: { or
   </section>;
 }
 
-export function RiskOverviewCards({ risk, assessments }: { risk: Risk | null; assessments: AssessmentSummary[] }) {
+export function RiskOverviewCards({ risk }: { risk: Risk | null }) {
   const counts = risk?.categories;
   const total = risk?.assessedPatients ?? 0;
   const low = total ? (counts?.low ?? 0) / total * 100 : 0;
   const moderate = total ? (counts?.moderate ?? 0) / total * 100 : 0;
-  const highAssessments = risk?.highRiskAssessments.map(item => assessments.find(assessment => assessment.id === item.assessmentId && assessment.patient.id === item.patientId)).filter((item): item is AssessmentSummary => !!item).sort((a, b) => (b.completedAt?.getTime() ?? 0) - (a.completedAt?.getTime() ?? 0)) ?? [];
   const categories = [{ label: "Low Risk", count: counts?.low ?? 0, color: "bg-primary" }, { label: "Moderate Risk", count: counts?.moderate ?? 0, color: "bg-amber-400" }, { label: "High Risk", count: counts?.high ?? 0, color: "bg-rose-500" }];
-  return <section className="mt-4 grid gap-4 min-[720px]:grid-cols-2" aria-label="Assessment risk and patients needing attention">
+  return <section className="mt-4" aria-label="Assessment risk overview">
     <div className="surface p-5"><h2 className="flex items-center gap-2 font-semibold"><ShieldCheck className="size-5 text-primary" aria-hidden="true" />NIQ risk overview</h2><p className="mt-1 text-xs text-muted-foreground">Each patient’s latest completed assessment</p>
       {risk ? <div className="mt-5"><div role="img" aria-label={`${total} scored patients; ${categories.map(item => `${item.label}: ${item.count}`).join(", ")}`} className="mx-auto grid size-48 place-items-center rounded-full lg:size-56" style={{ background: total ? `conic-gradient(var(--primary) 0 ${low}%, #fbbf24 ${low}% ${low + moderate}%, #f43f5e ${low + moderate}% 100%)` : "var(--muted)" }}><div className="grid size-32 place-content-center rounded-full bg-background text-center lg:size-40"><strong className="text-4xl">{total}</strong><span className="text-xs text-muted-foreground">scored patients</span></div></div><ul className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">{categories.map(item => <li key={item.label} className="flex items-center gap-2 text-sm"><i className={`size-2.5 rounded-full ${item.color}`} /><span>{item.label}</span></li>)}</ul></div> : <p className="mt-5 text-sm text-muted-foreground">Risk categories are unavailable.</p>}
-    </div>
-    <div className="surface flex flex-col p-5"><h2 className="flex items-center gap-2 font-semibold"><TriangleAlert className="size-5 text-rose-500" aria-hidden="true" />Patients needing attention</h2><p className="mt-1 text-xs text-muted-foreground">Latest completed assessment: High Risk</p>
-      {!risk ? <p className="mt-5 text-sm text-muted-foreground">Patient risk information is unavailable.</p> : highAssessments.length ? <ul className="mt-4 divide-y">{highAssessments.slice(0, 4).map(item => <li key={item.id}><Link to={`/assessments/${item.reference}`} className="flex items-center justify-between gap-3 py-3 text-sm hover:text-primary"><span><strong className="block">{item.patient.displayName}</strong><span className="text-xs text-muted-foreground">{item.reference} · {item.completedAt?.toLocaleDateString() ?? "Completed"}</span></span><span className="shrink-0 rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700">High Risk</span></Link></li>)}</ul> : <div className="flex flex-1 flex-col items-center justify-center gap-3 py-8 text-center"><div className="grid size-28 place-items-center rounded-full bg-primary/10"><ShieldCheck className="size-14 text-primary" strokeWidth={1.5} aria-hidden="true" /></div><div><p className="font-semibold">{total ? "No High Risk patients" : "No patients to review yet"}</p><p className="mt-1 max-w-64 text-sm text-muted-foreground">{total ? "No patients currently have a High Risk final category." : "Patients with a High Risk final category will appear here after scoring."}</p></div></div>}
     </div>
   </section>;
 }
