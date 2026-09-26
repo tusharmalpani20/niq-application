@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ComboBox, ComboBoxStateContext, Group, ListBox, ListBoxItem, Popover } from "react-aria-components";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { Input } from "./input";
 import { Button } from "./button";
 
@@ -16,17 +16,18 @@ export type SearchComboboxProps = {
   onChange: (value: string) => void; disabled?: boolean; required?: boolean;
   invalid?: boolean; describedBy?: string; placeholder?: string;
   customValue?: string; onCreate?: (text: string) => void; large?: boolean;
+  createWhenNoMatches?: boolean; createOptionLabel?: (text: string) => string;
   renderIcon?: (optionId: string) => ReactNode; primaryHighlight?: boolean;
 };
 /** One themed, keyboard-operable search menu; custom values require an explicit Use action. */
-export function SearchCombobox({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder = "Search or select…", customValue, onCreate, large = false, renderIcon, primaryHighlight = false }: SearchComboboxProps) {
+export function SearchCombobox({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder = "Search or select…", customValue, onCreate, createWhenNoMatches = false, createOptionLabel, large = false, renderIcon, primaryHighlight = false }: SearchComboboxProps) {
   const selectedLabel = options.find(option => option.id === value)?.label || "";
   const [search, setSearch] = useState(selectedLabel);
   useEffect(() => setSearch(selectedLabel), [selectedLabel, value]);
   const query = search.trim();
   const matches = options.filter(option => matchesComboboxSearch(option.label, query));
-  const canCreate = Boolean(onCreate && query && !options.some(option => option.label.toLocaleLowerCase() === query.toLocaleLowerCase()) && query !== customValue);
-  const items = [...(search === selectedLabel ? options : matches), ...(canCreate ? [{ id: "__custom__", label: `Use “${query}” as Other` }] : [])];
+  const canCreate = Boolean(onCreate && query && (!createWhenNoMatches || matches.length === 0) && !options.some(option => option.label.toLocaleLowerCase() === query.toLocaleLowerCase()) && query !== customValue);
+  const items = [...(search === selectedLabel ? options : matches), ...(canCreate ? [{ id: "__custom__", label: createOptionLabel?.(query) ?? `Use “${query}” as Other` }] : [])];
   const selectedIcon = renderIcon && value && search === selectedLabel ? renderIcon(value) : null;
   return <ComboBox data-slot="search-combobox" aria-label={label} isDisabled={disabled} isRequired={required} isInvalid={invalid} allowsCustomValue allowsEmptyCollection menuTrigger="manual"
     selectedKey={value} inputValue={search} onInputChange={setSearch} items={items}
@@ -51,8 +52,8 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
       <ListBox<ComboboxOption> className="themed-scrollbar min-h-0 max-h-72 overflow-y-auto overscroll-contain p-1.5 outline-none" renderEmptyState={() => <p className="p-3 text-sm text-muted-foreground">No matching options</p>}>
         {option => {
           const icon = renderIcon?.(option.id);
-          return <ListBoxItem id={option.id} textValue={option.label} className={({ isSelected, isFocused, isHovered }) => `flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2 outline-none data-selected:font-medium ${primaryHighlight ? isSelected || isFocused || isHovered ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary" : "border-transparent" : "border-transparent data-focused:bg-accent data-focused:text-accent-foreground"} ${large ? "min-h-12 text-base" : "min-h-11 text-sm"}`}>
-            {({ isSelected, isFocused, isHovered }) => <><span className="flex min-w-0 items-center gap-3">{icon && <span className={`flex size-11 shrink-0 items-center justify-center rounded-xl transition-colors ${primaryHighlight ? isSelected || isFocused || isHovered ? "bg-primary text-primary-foreground shadow-sm" : "bg-primary/10 text-primary/70" : "bg-primary/10 text-brand-ink"}`} aria-hidden="true">{icon}</span>}<span className="break-words">{option.label}</span></span>{isSelected && !primaryHighlight && <Check className="size-4 shrink-0" />}</>}
+          return <ListBoxItem id={option.id} textValue={option.label} className={({ isSelected, isFocused, isHovered }) => `flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2 outline-none data-selected:font-medium ${option.id === "__custom__" && createOptionLabel ? "border-primary/25 bg-primary/5 font-medium text-brand-ink data-focused:bg-primary/10" : primaryHighlight ? isSelected || isFocused || isHovered ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary" : "border-transparent" : "border-transparent data-focused:bg-accent data-focused:text-accent-foreground"} ${large ? "min-h-12 text-base" : "min-h-11 text-sm"}`}>
+            {({ isSelected, isFocused, isHovered }) => <><span className="flex min-w-0 items-center gap-3">{option.id === "__custom__" && createOptionLabel && <Plus className="size-4 shrink-0" aria-hidden="true"/>}{icon && <span className={`flex size-11 shrink-0 items-center justify-center rounded-xl transition-colors ${primaryHighlight ? isSelected || isFocused || isHovered ? "bg-primary text-primary-foreground shadow-sm" : "bg-primary/10 text-primary/70" : "bg-primary/10 text-brand-ink"}`} aria-hidden="true">{icon}</span>}<span className="break-words">{option.label}</span></span>{isSelected && !primaryHighlight && <Check className="size-4 shrink-0" />}</>}
           </ListBoxItem>;
         }}
       </ListBox>
