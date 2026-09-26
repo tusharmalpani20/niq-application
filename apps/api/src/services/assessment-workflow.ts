@@ -2,7 +2,7 @@ import { appendAssessmentHistory, assertCorrectionOwner, reviewState } from "./c
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { ApplicationConfig } from "@niq/application-config";
 import { hasPermission, type Permission, formatAssessmentReference, clearInactiveAssessmentAnswers, buildAssessmentForm, getAssessmentCompletion, getScoringAssessmentAnswers, validateAssessmentAnswers, type FormAnswers, type AssessmentFormManifest } from "@niq/application-contracts";
-import type { AssessmentWorkflow, AssessmentPatient, AssessmentInitialization, AssessmentReport, AssessmentSubmitInput, AssessmentSubmissionAttestation } from "../../../../packages/contracts/src/assessment-workflow";
+import type { AssessmentWorkflow, AssessmentPatient, AssessmentInitialization, AssessmentReport, AssessmentSubmitInput, AssessmentSubmissionAttestation, AssessmentScoreResult } from "../../../../packages/contracts/src/assessment-workflow";
 import { createEntityId, selectAssessmentHeight } from "@niq/application-domain";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
@@ -13,7 +13,7 @@ import { LocalReportStorage } from "../storage/local-report-storage";
 import type { ApplicationService, Principal, RequestContext } from "./application";
 import { ServiceError } from "./application";
 import { facilityAccessCondition } from "./facility-access";
-import { requestAssessmentScoringStart, requestAssessmentScoringCalculate, AssessmentScoringRequestError, type AssessmentScoringStart } from "./assessment-scoring";
+import { requestAssessmentScoringStart, requestAssessmentScoringCalculate, requestAssessmentRiskCategories, AssessmentScoringRequestError, type AssessmentScoringStart } from "./assessment-scoring";
 import { AssessmentReportWorkflow } from "./assessment-workflow-reports";
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -148,11 +148,29 @@ export class AssessmentWorkflowService {
     const patient=row.status==="DRAFT"?await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient:state.patient;
     const answers=row.status==="DRAFT"?clearInactiveAssessmentAnswers(state.manifest,{...state.answers,...patientAnswers(patient,row.createdAt)}):state.answers;
     const [submission]=row.currentSubmissionId ? await this.db.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.id,row.currentSubmissionId),eq(assessmentSubmissions.assessmentId,id),eq(assessmentSubmissions.organizationId,organizationId))) : [];
+    let result: AssessmentScoreResult | null = submission?.result ? this.unseal(submission.result) : null;
+    if (result?.classification && !result.riskCategories?.length && submission) {
+      try {
+        const transport = await this.transport(organizationId,{requestId:crypto.randomUUID()},state.connection);
+        const riskCategories = await requestAssessmentRiskCategories({...transport,timeoutMs:Math.min(transport.timeoutMs,3000),binding:state.binding});
+        if (result.checksum === state.binding.checksum && riskCategories.some(category => category.id === result!.classification!.id)) {
+          const enriched = {...result,riskCategories};
+          const sealed = this.seal(enriched);
+          await this.db.transaction(async tx => {
+            await tx.update(assessmentSubmissions).set({result:sealed}).where(and(eq(assessmentSubmissions.id,submission.id),eq(assessmentSubmissions.organizationId,organizationId),eq(assessmentSubmissions.assessmentId,id)));
+            await tx.update(scoringResults).set({result:sealed}).where(and(eq(scoringResults.scoringRequestId,submission.id),eq(scoringResults.organizationId,organizationId),eq(scoringResults.assessmentId,id),eq(scoringResults.ruleChecksum,enriched.checksum)));
+          });
+          result = enriched;
+        }
+      } catch {
+        // Historical scores remain readable if the pinned scoring deployment is unavailable.
+      }
+    }
     const reports=await this.reports.list(organizationId,id);
     const scan=await this.reviewScan(organizationId,id);
     const submissions=await this.db.select({attestation:assessmentSubmissions.attestation}).from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,organizationId),eq(assessmentSubmissions.assessmentId,id))).orderBy(assessmentSubmissions.createdAt,assessmentSubmissions.id);
     const attestations=submissions.filter(item=>item.attestation).map(item=>this.unseal<AssessmentSubmissionAttestation>(item.attestation));
-    return {id:row.id,reference:formatAssessmentReference(row.serialNumber),serialNumber:row.serialNumber,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,isPriority,canEditDraft:row.status === "DRAFT" && hasPermission(actor.role,"assessments.edit") && (!reviewState(this,row).correctionPerson || reviewState(this,row).correctionPerson!.membershipId === actor.membershipId),patient,answers,manifest:state.manifest,progress:getAssessmentCompletion(state.manifest,answers),reports,reportLimits:{fileBytes:this.config.REPORT_MAX_FILE_BYTES,filesPerReport:this.config.REPORT_MAX_FILES_PER_GROUP,reportsPerAssessment:this.config.REPORT_MAX_GROUPS,assessmentBytes:this.config.REPORT_MAX_ASSESSMENT_BYTES},binding:{version:state.binding.version,checksum:state.binding.checksum},result:submission?.result?this.unseal(submission.result):null,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode,nextRetryAt:submission.nextAttemptAt?.toISOString()??null,issues:submission.failureIssues?this.unseal(submission.failureIssues):[]}:null,reviewToken:this.reviewToken(row,patient,answers,reports,scan),attestations,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
+    return {id:row.id,reference:formatAssessmentReference(row.serialNumber),serialNumber:row.serialNumber,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,isPriority,canEditDraft:row.status === "DRAFT" && hasPermission(actor.role,"assessments.edit") && (!reviewState(this,row).correctionPerson || reviewState(this,row).correctionPerson!.membershipId === actor.membershipId),patient,answers,manifest:state.manifest,progress:getAssessmentCompletion(state.manifest,answers),reports,reportLimits:{fileBytes:this.config.REPORT_MAX_FILE_BYTES,filesPerReport:this.config.REPORT_MAX_FILES_PER_GROUP,reportsPerAssessment:this.config.REPORT_MAX_GROUPS,assessmentBytes:this.config.REPORT_MAX_ASSESSMENT_BYTES},binding:{version:state.binding.version,checksum:state.binding.checksum},result,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode,nextRetryAt:submission.nextAttemptAt?.toISOString()??null,issues:submission.failureIssues?this.unseal(submission.failureIssues):[]}:null,reviewToken:this.reviewToken(row,patient,answers,reports,scan),attestations,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
   }
   async save(actor:Principal,organizationId:string,id:string,input:{revision:number;answers:FormAnswers},context:RequestContext) {
     this.clinicalActor(actor,organizationId,"assessments.edit");

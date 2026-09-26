@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { requestReviewedClassification, requestAssessmentScoringCalculate, requestAssessmentScoringStart, type AssessmentScoringStart } from "./assessment-scoring";
+import { requestReviewedClassification, requestAssessmentScoringCalculate, requestAssessmentScoringStart, requestAssessmentRiskCategories, type AssessmentScoringStart } from "./assessment-scoring";
 const binding: AssessmentScoringStart = {
   assessmentReference: "opaque-reference", bindingId: "binding", ruleVersionId: "rule", checksum: "a".repeat(64), version: "FINAL-1",
   questionnaire: { formatVersion: 2, profile: "NIQ_FINAL_ASSESSMENT", sections: [{ id: "section", title: "Section", description: "", fields: Array.from({ length: 19 }, (_, n) => ({ id: `field_${n}`, label: `Field ${n}`, type: "select", help: "", unit: "", options: [{ id: "yes", label: "Yes", help: "" }], dependencies: [] })) }], supportingInputs: [] },
@@ -11,6 +11,17 @@ const result = () => ({ ...Object.fromEntries(Object.entries(binding).filter(([k
 const calculate = (body: unknown, status = 200) => requestAssessmentScoringCalculate({ ...transport, binding, idempotencyKey: "request-key", answers: { field_0: "yes" }, fetcher: async () => Response.json(body, { status }) });
 const success = () => ({ result: { ...result(), resultReference: "usage" }, idempotencyKey: "request-key" });
 describe("assessment scoring transport", () => {
+  test("historical ranges require exact pinned binding evidence", async () => {
+    const riskCategories = [{ id: "low", label: "Low", color: "green", min: 0, max: 15, minInclusive: true, maxInclusive: true }];
+    const request = (body: unknown) => requestAssessmentRiskCategories({ ...transport, binding, fetcher: async (url, init) => {
+      expect(String(url)).toBe("https://scoring.example.test/v1/assessments/risk-categories");
+      expect(JSON.parse(String(init?.body))).toEqual({ assessmentReference: binding.assessmentReference });
+      return Response.json(body);
+    } });
+    expect(await request({ ...binding, questionnaire: undefined, riskCategories })).toEqual(riskCategories);
+    await expect(request({ ...binding, questionnaire: undefined, checksum: "b".repeat(64), riskCategories })).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+    await expect(request({ ...binding, questionnaire: undefined, riskCategories: [{ ...riskCategories[0], sources: ["private"] }] })).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+  });
   test("start only transmits opaque reference and disables credential-bearing redirects", async () => {
     const started = await requestAssessmentScoringStart({ ...transport, assessmentReference: binding.assessmentReference, fetcher: async (url, init) => {
       expect(String(url)).toBe("https://scoring.example.test/v1/assessments/start");

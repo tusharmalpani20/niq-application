@@ -53,7 +53,7 @@ function sameEvidence(actual: AssessmentScoringBinding, expected: AssessmentScor
   return (["assessmentReference", "bindingId", "ruleVersionId", "checksum", "version"] as const).every(k => actual[k] === expected[k]);
 }
 const blockedCodes = new Set(["UNAUTHORIZED", "PLATFORM_DISABLED", "CLIENT_DISABLED", "DEPLOYMENT_DISABLED", "CLIENT_NOT_ALLOWED", "CAPABILITY_DISABLED", "VERSION_UNAVAILABLE", "ASSESSMENT_NOT_FOUND", "MONTHLY_LIMIT_REACHED"]);
-async function post(input: AssessmentScoringTransport, action: "start" | "calculate" | "classify-reviewed", body: unknown) {
+async function post(input: AssessmentScoringTransport, action: "start" | "calculate" | "classify-reviewed" | "risk-categories", body: unknown) {
   try {
     const response = await (input.fetcher ?? fetch)(new URL(`/v1/assessments/${action}`, input.baseUrl), {
       method: "POST", redirect: "error", headers: { authorization: `Bearer ${input.credential}`, "content-type": "application/json", "x-request-id": input.requestId },
@@ -61,6 +61,13 @@ async function post(input: AssessmentScoringTransport, action: "start" | "calcul
     });
     return { response, body: await response.json() as unknown };
   } catch { throw new AssessmentScoringRequestError("uncertain", "TRANSPORT_OR_RESPONSE_FAILURE"); }
+}
+export async function requestAssessmentRiskCategories(input: AssessmentScoringTransport & { binding: AssessmentScoringBinding }) {
+  const reply = await post(input, "risk-categories", { assessmentReference: input.binding.assessmentReference });
+  if (!reply.response.ok) upstreamFailure(reply.response.status, reply.body);
+  const parsed = evidenceSchema.extend({ riskCategories: z.array(assessmentRiskCategorySchema).min(1) }).strict().safeParse(reply.body);
+  if (!parsed.success || !sameEvidence(parsed.data, input.binding)) throw invalid();
+  return parsed.data.riskCategories;
 }
 function upstreamFailure(status: number, body: unknown): never {
   const parsed = z.object({ error: z.string(), reason: z.string().optional() }).safeParse(body);
