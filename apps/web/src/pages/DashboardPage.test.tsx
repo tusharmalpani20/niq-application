@@ -115,35 +115,32 @@ test("bottom cards show recent patients and data-backed nutrition insights", asy
     expect(cards?.textContent).toContain("Example Patient");
     expect(cards?.textContent).toContain("ASM-000001");
     expect(cards?.textContent).toContain("Key nutrition insights");
-    expect(cards?.textContent).toContain("1 of 1 scored patient (100%) at nutritional risk");
-    expect(cards?.textContent).toContain("Protein intake results not yet available");
-    expect(cards?.textContent).toContain("Risk vs 30 days ago");
+    expect(cards?.textContent).toContain("At nutritional risk1 of 1 patient (100%) · no 30-day comparison yet");
+    expect(cards?.textContent).toContain("Low protein intakeNo protein results yet");
   }, { assessmentStatus: "COMPLETED", completedAt: date, patients: [{ ...patient, createdAt: now.toISOString() }] });
 });
 
 test("nutrition insights do not invent metrics before final categories exist", async () => {
   await renderOverview("DOCTOR", body => {
     const card = body.querySelector('[aria-label="Key nutrition insights"]');
-    expect(card?.textContent).toContain("No final NIQ categories yet");
-    expect(card?.textContent).not.toContain("scored patients (");
+    expect(card?.textContent).toContain("No completed NIQ results yet");
+    expect(card?.textContent).not.toContain("At nutritional risk");
   }, { risk: { assessedPatients: 0, categories: { low: 0, moderate: 0, high: 0 }, categories30DaysAgo: { low: 0, moderate: 0, high: 0 } } });
 });
 
 test("nutrition insights compare patient risk percentages with the prior snapshot", async () => {
   await renderOverview("DOCTOR", body => {
     const card = body.querySelector('[aria-label="Key nutrition insights"]');
-    expect(card?.textContent).toContain("1 of 2 scored patients (50%) at nutritional risk");
-    expect(card?.textContent).toContain("50 percentage points lower vs 30 days ago");
-    expect(card?.textContent).toContain("Protein intake results not yet available");
+    expect(card?.textContent).toContain("At nutritional risk1 of 2 patients (50%) · 100% 30 days ago");
+    expect(card?.textContent).toContain("No protein results yet");
   }, { risk: { assessedPatients: 2, categories: { low: 1, moderate: 0, high: 1 }, categories30DaysAgo: { low: 0, moderate: 0, high: 1 } } });
 });
 
 test("nutrition insights show protein intake and the most reported eating barrier", async () => {
   await renderOverview("DOCTOR", body => {
     const card = body.querySelector('[aria-label="Key nutrition insights"]');
-    expect(card?.textContent).toContain("2 of 3 patients had inadequate protein intake");
-    expect(card?.textContent).toContain("Most reported eating barrier: No appetite");
-    expect(card?.textContent).toContain("Reported by 2 of 3 at-risk patients who answered the dietary symptoms question");
+    expect(card?.textContent).toContain("Low protein intake2 of 3 patients with protein results");
+    expect(card?.textContent).toContain("Top eating symptomNo appetite · 2 of 3 at-risk patients");
   }, { nutrition: { protein: { assessed: 3, inadequate: 2 }, eatingBarrier: { assessed: 3, top: { id: "dietary_symptoms_no_appetite", label: "No appetite", count: 2 } } } });
 });
 

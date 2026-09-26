@@ -21,37 +21,30 @@ function insightsFor(risk: Risk): Insight[] {
   const previousAtRisk = previous.moderate + previous.high;
   const atRiskPercent = risk.assessedPatients ? Math.round(atRisk / risk.assessedPatients * 100) : 0;
   const previousAtRiskPercent = previousTotal ? Math.round(previousAtRisk / previousTotal * 100) : null;
-  const riskChange = previousAtRiskPercent === null ? null : atRiskPercent - previousAtRiskPercent;
   const protein = risk.nutrition.protein;
   const barrier = risk.nutrition.eatingBarrier;
 
   return [
     {
-      title: `${atRisk} of ${countLabel(risk.assessedPatients, "scored patient", "scored patients")} (${atRiskPercent}%) at nutritional risk`,
-      detail: riskChange === null
-        ? "Moderate or high NIQ category. No comparable scored patients 30 days ago."
-        : `Moderate or high NIQ category. ${riskChange === 0 ? "Unchanged" : `${Math.abs(riskChange)} percentage points ${riskChange > 0 ? "higher" : "lower"}`} vs 30 days ago.`,
+      title: "At nutritional risk",
+      detail: `${atRisk} of ${countLabel(risk.assessedPatients, "patient", "patients")} (${atRiskPercent}%) · ${previousAtRiskPercent === null ? "no 30-day comparison yet" : `${previousAtRiskPercent}% 30 days ago`}`,
       icon: HeartPulse,
       color: "bg-rose-50 text-rose-600",
     },
     {
-      title: protein.assessed
-        ? `${protein.inadequate} of ${protein.assessed} patients had inadequate protein intake`
-        : "Protein intake results not yet available",
+      title: "Low protein intake",
       detail: protein.assessed
-        ? `${Math.round(protein.inadequate / protein.assessed * 100)}% of patients with a protein result on their latest final assessment.`
-        : "Shown when a completed assessment has a protein adequacy result.",
+        ? `${protein.inadequate} of ${countLabel(protein.assessed, "patient", "patients")} with protein results`
+        : "No protein results yet",
       icon: Utensils,
       color: "bg-indigo-50 text-indigo-600",
     },
     {
-      title: barrier.top
-        ? `Most reported eating barrier: ${barrier.top.label}`
-        : barrier.assessed ? "No eating barriers reported by at-risk patients" : "Eating barrier data not yet available",
+      title: "Top eating symptom",
       detail: barrier.top
-        ? `Reported by ${barrier.top.count} of ${countLabel(barrier.assessed, "at-risk patient", "at-risk patients")} who answered the dietary symptoms question.`
-        : barrier.assessed ? `${countLabel(barrier.assessed, "at-risk patient answered", "at-risk patients answered")} the dietary symptoms question.`
-          : "Shown when patients with moderate or high NIQ risk report dietary symptoms.",
+        ? `${barrier.top.label} · ${barrier.top.count} of ${countLabel(barrier.assessed, "at-risk patient", "at-risk patients")}`
+        : barrier.assessed ? `None reported by ${countLabel(barrier.assessed, "at-risk patient", "at-risk patients")}`
+          : "No symptom data from at-risk patients yet",
       icon: MessageCircle,
       color: "bg-teal-50 text-teal-600",
     },
@@ -63,12 +56,11 @@ export function NutritionInsights({ risk }: { risk: Risk | null }) {
   const insights = risk && hasCurrentScores ? insightsFor(risk) : [];
 
   return <div className="surface flex min-w-0 flex-col p-5" aria-label="Key nutrition insights">
-    <div className="flex flex-wrap items-start justify-between gap-3">
+    <div>
       <div>
         <h2 className="flex items-center gap-2 font-semibold"><Lightbulb className="size-5 text-primary" aria-hidden="true" />Key nutrition insights</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Latest completed assessment for each patient</p>
+        <p className="mt-1 text-xs text-muted-foreground">Latest completed result per patient</p>
       </div>
-      <span className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">Risk vs 30 days ago</span>
     </div>
     {!risk ? <p className="mt-5 text-sm text-muted-foreground">Nutrition insights are unavailable right now.</p>
       : insights.length ? <div className="mt-4 rounded-2xl border border-border px-4">
@@ -78,7 +70,7 @@ export function NutritionInsights({ risk }: { risk: Risk | null }) {
         </li>)}</ul>
       </div> : <div className="mt-4 flex flex-1 items-center gap-3 rounded-2xl border border-border p-4">
         <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-teal-50 text-teal-600"><Lightbulb className="size-5" aria-hidden="true" /></span>
-        <div><p className="text-sm font-semibold">No final NIQ categories yet</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Complete an assessment with a final NIQ category to see patient risk insights and 30-day comparisons.</p></div>
+        <div><p className="text-sm font-semibold">No completed NIQ results yet</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Insights will appear after an assessment is completed.</p></div>
       </div>}
   </div>;
 }
