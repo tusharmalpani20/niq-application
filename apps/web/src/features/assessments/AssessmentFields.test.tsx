@@ -67,6 +67,23 @@ test("short multi-selects expose checkboxes and short Other lists expose radios"
   expect(other).toContain('role="radiogroup"');
 });
 
+test("tumour choices have distinct decorative icons without changing their labels", () => {
+  const options = [
+    { id: "tumour_type_solid", label: "Solid Tumour" },
+    { id: "tumour_type_haematological", label: "Haematological" },
+    { id: "tumour_type_metastatic_secondary", label: "Metastatic / Secondary" },
+    { id: "tumour_type_in_situ", label: "In Situ" },
+  ];
+  const html = render([{ ...field, id: "tumour_type", label: "Type of tumour", options }]);
+  for (const option of options) {
+    expect(html).toContain(`data-tumour-icon="${option.id}"`);
+    expect(html).toContain(option.label);
+  }
+  expect((html.match(/data-tumour-icon=/g) ?? []).length).toBe(4);
+  expect((html.match(/aria-hidden="true"/g) ?? []).length).toBeGreaterThanOrEqual(4);
+  expect(render([{ ...field, options }])).not.toContain("data-tumour-icon");
+});
+
 
 test("all editable answered field kinds offer clearing, including zero and explicit None", () => {
   for (const [kind, value] of [["multi_select", ["nausea"]], ["select", "nausea"], ["number", 0], ["text", "Details"], ["date", "2026-09-22"]] as const) {

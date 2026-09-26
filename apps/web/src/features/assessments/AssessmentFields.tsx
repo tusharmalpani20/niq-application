@@ -12,6 +12,7 @@ import { Link } from "react-router-dom";
 import { assessmentNumericInput } from "./assessmentNumericInput";
 import { AssessmentMeasurementInput, AssessmentMeasurementUnitControl } from "./AssessmentMeasurementInput";
 import { metricUnits, type MeasurementUnits } from "./measurement-units";
+import { TumourTypeIcon } from "./TumourTypeIcon";
 export { assessmentNumericInput } from "./assessmentNumericInput";
 
 export type AssessmentFieldsProps = {
@@ -64,7 +65,7 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
       const allOptions = [...(field.options ?? []), ...(explicitNoneFields.has(field.id) ? [{ id: "__none__", label: "None" }] : [])];
       if (allOptions.length <= 6) return <fieldset id={id} key={field.id} tabIndex={-1} aria-describedby={error ? errorId : undefined} aria-invalid={Boolean(error)} className="col-[1/-1] min-w-0 space-y-3">
         <legend className="mb-2 w-full text-sm font-medium"><span className="flex min-h-8 items-center justify-between gap-2"><span>{label}{required}</span>{reset}</span></legend>
-        <MultipleChoiceGroup label={label} options={allOptions} value={Array.isArray(value) && !selected.length && explicitNoneFields.has(field.id) ? ["__none__"] : selected} disabled={readOnly} onChange={next => {
+        <MultipleChoiceGroup label={label} options={allOptions} value={Array.isArray(value) && !selected.length && explicitNoneFields.has(field.id) ? ["__none__"] : selected} disabled={readOnly} renderIcon={field.id === "tumour_type" ? optionId => <TumourTypeIcon type={optionId} /> : undefined} onChange={next => {
           if (next.includes("__none__") && !selected.includes("__none__") && selected.length) onChange(field.id, []);
           else { const choices = next.filter(id => id !== "__none__"); onChange(field.id, choices.length ? choices : next.includes("__none__") ? [] : null); }
         }} />{errorMarkup}

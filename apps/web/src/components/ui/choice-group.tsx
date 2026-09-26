@@ -2,6 +2,7 @@ import { Check } from "lucide-react";
 import { Checkbox, Radio } from "react-aria-components";
 import { RadioGroup } from "./radio-group";
 import type { ComboboxOption } from "./combobox";
+import type { ReactNode } from "react";
 
 /** Compact radio choices share the central theme without browser-native menu styling. */
 export function ChoiceGroup({ id, label, options, value, onChange, disabled, required, invalid, describedBy }: {
@@ -16,10 +17,10 @@ export function ChoiceGroup({ id, label, options, value, onChange, disabled, req
 }
 
 /** Short multi-select lists stay visible so every choice is discoverable. */
-export function MultipleChoiceGroup({ label, options, value, onChange, disabled }: {
-  label: string; options: ComboboxOption[]; value: string[]; onChange: (value: string[]) => void; disabled?: boolean;
+export function MultipleChoiceGroup({ label, options, value, onChange, disabled, renderIcon }: {
+  label: string; options: ComboboxOption[]; value: string[]; onChange: (value: string[]) => void; disabled?: boolean; renderIcon?: (optionId: string) => ReactNode;
 }) {
   return <div role="group" aria-label={label}><p className="mb-2 text-xs text-muted-foreground">Select all that apply</p><div className="flex flex-wrap gap-2">{options.map(option => <Checkbox key={option.id} isSelected={value.includes(option.id)} isDisabled={disabled} onChange={selected => onChange(selected ? [...value, option.id] : value.filter(id => id !== option.id))} className="assessment-choice flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm outline-none data-selected:border-primary data-selected:bg-primary/5 data-focus-visible:ring-2 data-focus-visible:ring-ring data-disabled:opacity-60">
-    {({ isSelected }) => <><span aria-hidden="true" className={`flex size-4 shrink-0 items-center justify-center rounded border ${isSelected ? "assessment-selected-indicator border-primary bg-primary text-primary-foreground" : "border-current text-brand-ink"}`}>{isSelected && <Check className="size-3" strokeWidth={3} />}</span>{option.label}</>}
+    {({ isSelected }) => <><span aria-hidden="true" className={`flex size-4 shrink-0 items-center justify-center rounded border ${isSelected ? "assessment-selected-indicator border-primary bg-primary text-primary-foreground" : "border-current text-brand-ink"}`}>{isSelected && <Check className="size-3" strokeWidth={3} />}</span>{renderIcon?.(option.id)}{option.label}</>}
   </Checkbox>)}</div></div>;
 }
