@@ -49,7 +49,12 @@ export const overviewRiskSchema = z.object({
   categories: z.object({ low: z.number().int().nonnegative(), moderate: z.number().int().nonnegative(), high: z.number().int().nonnegative() }),
   categories30DaysAgo: z.object({ low: z.number().int().nonnegative(), moderate: z.number().int().nonnegative(), high: z.number().int().nonnegative() }),
   highRiskAssessments: z.array(z.object({ patientId: idSchema, assessmentId: idSchema })),
+  nutrition: z.object({
+    protein: z.object({ assessed: z.number().int().nonnegative(), inadequate: z.number().int().nonnegative() }),
+    eatingBarrier: z.object({ assessed: z.number().int().nonnegative(), top: z.object({ id: z.string(), label: z.string(), count: z.number().int().nonnegative() }).nullable() }),
+  }),
 });
+export type OverviewRisk = z.infer<typeof overviewRiskSchema>;
 
 export const overviewActivitySchema = z.object({
   items: z.array(z.object({

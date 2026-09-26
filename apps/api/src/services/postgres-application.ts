@@ -11,6 +11,7 @@ import {
   auditEvents,
   assessmentFaceScans,
   assessmentPriorities,
+  assessmentSubmissions,
   assessments,
   authenticationFailures,
   authSessions,
@@ -945,8 +946,11 @@ export class PostgresApplicationService implements ApplicationService {
       patientId: assessments.patientId,
       completedAt: assessments.completedAt,
       clinicalReview: assessments.clinicalReview,
+      submissionResult: assessmentSubmissions.result,
+      submissionSnapshot: assessmentSubmissions.snapshot,
     }).from(assessments)
       .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
+      .leftJoin(assessmentSubmissions, and(eq(assessmentSubmissions.organizationId, assessments.organizationId), eq(assessmentSubmissions.assessmentId, assessments.id), eq(assessmentSubmissions.id, assessments.currentSubmissionId)))
       .where(and(
         eq(assessments.organizationId, organizationId),
         eq(assessments.status, "COMPLETED"),
