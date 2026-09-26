@@ -73,6 +73,8 @@ describe("application contracts", () => {
       patient: { id: patientId, reference: "PAT-1", displayName: "Test Patient" },
       facility: null,
       status: "DRAFT",
+      myAction: "EDIT_DRAFT",
+      isPriority: false,
       createdAt: "2026-09-15T10:00:00.000Z",
       completedAt: null,
     };
