@@ -61,12 +61,11 @@ test("clinician overview shows review work without administrator operations", as
     expect(body.querySelector('header[aria-label="Overview greeting"] a[href="/assessments/new"]')).toBeNull();
     expect(body.querySelector('[aria-label="Quick actions"] a[href="/assessments/new"]')?.textContent).toContain("New assessment");
     expect(body.textContent).not.toContain("Resume assessment");
-    expect(body.textContent).toContain("Clinical work");
     expect(body.textContent).toContain("My assessment actions");
     expect(body.querySelector('a[href="/assessments?status=MY_ACTIONS"]')).not.toBeNull();
     expect(body.querySelector('a[href="/assessments/ASM-000001"]')).not.toBeNull();
-    expect(body.textContent).toContain("My reviews in progress");
-    expect(body.querySelector('a[href="/assessments?tab=clinical-reviews&review=mine-active"]')).not.toBeNull();
+    expect(body.querySelector('[aria-label="Quick actions"] a[href="/assessments?tab=clinical-reviews"]')?.textContent).toContain("2 waiting · 2 in progress");
+    expect(body.querySelector('[aria-label="Clinical work"]')).toBeNull();
     expect(body.textContent).not.toContain("Organization operations");
     expect(requests.some(url => url.endsWith("/users"))).toBe(false);
   }, { assessmentStatus: "DRAFT" });
@@ -84,6 +83,7 @@ test("quick actions sit above activity and link to assigned work and patient reg
     expect(actions?.querySelector('a[href="/assessments/new"]')?.textContent).toContain("New assessment");
     expect(actions?.querySelector('a[href="/patients/new"]')?.textContent).toContain("Add patient");
     expect(actions?.querySelector('a[href="/assessments?tab=clinical-reviews"]')?.textContent).toContain("Clinical reviews");
+    expect(actions?.querySelector('a[href="/assessments?tab=clinical-reviews"]')?.textContent).toContain("2 waiting · 2 in progress");
   }, { assessmentStatus: "DRAFT" });
 });
 
@@ -134,10 +134,9 @@ test("my assessment actions counts only work assigned to the signed-in clinician
   ];
   await renderOverview("DOCTOR", body => {
     expect(body.querySelector('a[href="/assessments?status=MY_ACTIONS"] strong')?.textContent).toBe("2");
-    const work = body.querySelector('[aria-label="My assessment actions"]');
-    expect(work?.textContent).toContain("ASM-000001");
-    expect(work?.textContent).toContain("ASM-000003");
-    expect(work?.textContent).not.toContain("ASM-000002");
+    const actions = body.querySelector('[aria-label="Quick actions"]');
+    expect(actions?.querySelector('a[href="/assessments/ASM-000001"]')).not.toBeNull();
+    expect(actions?.querySelector('a[href="/assessments/ASM-000002"]')).toBeNull();
   }, { assessments: items });
 });
 
@@ -241,10 +240,9 @@ test("organization admin sees actionable operations but no clinician review card
   });
 });
 
-test("empty clinician review work becomes a short message", async () => {
+test("empty clinical reviews keep a quick link without a count", async () => {
   await renderOverview("DOCTOR", body => {
-    expect(body.textContent).toContain("No reviews are waiting or assigned to you.");
-    expect(body.textContent).not.toContain("My reviews in progress");
+    expect(body.querySelector('[aria-label="Quick actions"] a[href="/assessments?tab=clinical-reviews"]')?.textContent).toContain("Open review work");
   }, { reviewTotal: 0, assessmentStatus: "DRAFT" });
 });
 
