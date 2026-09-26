@@ -5,7 +5,7 @@ import { assessmentStatusSchema, hasPermission } from "@niq/application-contract
 import type { AssessmentSummary, AuthenticatedUser, Facility } from "@niq/application-contracts";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
-import { ArrowUpRight, Search, Star } from "lucide-react";
+import { ChevronRight, Search, Star } from "lucide-react";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -82,7 +82,7 @@ export function AssessmentsPage() {
     finally { setPriorityBusy(null); }
   };
   const priorityButton = (record: AssessmentSummary) => <Button variant="ghost" size="icon" className={record.isPriority ? "text-amber-600" : "text-muted-foreground"} aria-label={`${record.isPriority ? "Remove priority from" : "Mark as priority"} ${record.reference}`} aria-pressed={record.isPriority} isDisabled={priorityBusy !== null} onPress={() => { void togglePriority(record); }}><Star className={`size-4 ${record.isPriority ? "fill-current" : ""}`} aria-hidden="true" /></Button>;
-  const openButton = (record: AssessmentSummary) => <RouterButtonLink variant="ghost" size="icon" to={`/assessments/${record.reference}`} aria-label={`${assessmentActionLabel(record)} ${record.reference}`} title={assessmentActionLabel(record)}><ArrowUpRight className="size-4" aria-hidden="true" /></RouterButtonLink>;
+  const openButton = (record: AssessmentSummary) => <RouterButtonLink variant="ghost" size="icon" to={`/assessments/${record.reference}`} aria-label={`${assessmentActionLabel(record)} ${record.reference}`} title={assessmentActionLabel(record)}><ChevronRight className="size-4" aria-hidden="true" /></RouterButtonLink>;
   useEffect(() => {
     setTab(canOpen && searchParams.get("tab") === "clinical-reviews" ? "clinical-reviews" : "assessments");
     setStatus(initialStatus(searchParams));

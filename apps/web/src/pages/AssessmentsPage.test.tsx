@@ -135,7 +135,7 @@ test("assessment rows offer a status-aware action to open the assessment", async
     expect(openDraft?.getAttribute("href")).toBe("/assessments/ASM-000001");
     expect(openDraft?.getAttribute("title")).toBe("Open draft");
     expect(openDraft?.textContent).toBe("");
-    expect(openDraft?.querySelector("svg")).not.toBeNull();
+    expect(openDraft?.querySelector("svg.lucide-chevron-right")).not.toBeNull();
     expect(table?.querySelector('a[aria-label="Review answers ASM-000002"]')).not.toBeNull();
     expect(table?.querySelector('a[aria-label="View score ASM-000003"]')).not.toBeNull();
   });
