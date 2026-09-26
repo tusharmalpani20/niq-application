@@ -118,6 +118,31 @@ test("disease status choices keep their labels alongside decorative icons", () =
   expect(metastatic).toContain("bg-primary text-primary-foreground shadow-sm");
 });
 
+test("treatment choices use icon tiles, including conditional palliative choices", () => {
+  const status: FormField = { ...field, id: "treatment_status", label: "Treatment status", kind: "select", options: [
+    { id: "treatment_status_newly_diagnosed", label: "Newly Diagnosed" },
+    { id: "treatment_status_under_treatment", label: "Under Treatment" },
+    { id: "treatment_status_post_treatment", label: "Post-Treatment" },
+    { id: "treatment_status_palliative_care", label: "Palliative Care" },
+  ] };
+  const path: FormField = { ...field, id: "palliative_status", label: "Palliative treatment path", kind: "select", visibleWhen: [{ fieldId: "treatment_status", equals: "treatment_status_palliative_care" }], options: [
+    { id: "with_cancer", label: "With Cancer any stage" }, { id: "post_treatment", label: "Post treatment" },
+  ] };
+  const timing: FormField = { ...field, id: "palliative_timing", label: "Palliative post-treatment timing", kind: "select", visibleWhen: [{ fieldId: "treatment_status", equals: "treatment_status_palliative_care" }, { fieldId: "palliative_status", equals: "post_treatment" }], options: [
+    { id: "within_6_months", label: "Within 6 months" }, { id: "within_12_months", label: "Within 12 months" }, { id: "post_12_months", label: "Post 12 months" },
+  ] };
+  const surgery: FormField = { ...field, id: "cancer_surgical_status", label: "Cancer surgical status", kind: "select", options: [
+    { id: "cancer_surgical_status_done", label: "Surgery Done" }, { id: "cancer_surgical_status_planned", label: "Planned" },
+    { id: "cancer_surgical_status_not_required", label: "Not Required" }, { id: "cancer_surgical_status_not_fit", label: "Not Fit for Surgery" },
+  ] };
+  const initial = render([status, path, timing, surgery]);
+  for (const option of [...status.options!, ...surgery.options!]) expect(initial).toContain(`data-treatment-choice-icon="${option.id}"`);
+  expect(initial).not.toContain('data-treatment-choice-icon="with_cancer"');
+  const palliative = render([status, path, timing, surgery], { treatment_status: "treatment_status_palliative_care", palliative_status: "post_treatment" });
+  for (const option of [...path.options!, ...timing.options!]) expect(palliative).toContain(`data-treatment-choice-icon="${option.id}"`);
+  expect(palliative).toContain("bg-primary text-primary-foreground shadow-sm");
+});
+
 
 test("all editable answered field kinds offer clearing, including zero and explicit None", () => {
   for (const [kind, value] of [["multi_select", ["nausea"]], ["select", "nausea"], ["number", 0], ["text", "Details"], ["date", "2026-09-22"]] as const) {
