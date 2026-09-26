@@ -21,8 +21,8 @@ function AnswerValue({ field, answers }: { field: FormField; answers: FormAnswer
   </span>;
 }
 
-function AnswerItem({ field, answers }: { field: FormField; answers: FormAnswers }) {
-  return <div className="min-w-0 space-y-1.5" data-review-answer={field.id}>
+function AnswerItem({ field, answers, spanColumns = false }: { field: FormField; answers: FormAnswers; spanColumns?: boolean }) {
+  return <div className={`min-w-0 space-y-1.5 ${spanColumns ? "sm:col-span-2" : ""}`} data-review-answer={field.id}>
     <dt className="break-words text-sm text-muted-foreground">{field.label}{field.required && " *"}</dt>
     <dd className="min-w-0 text-sm font-medium text-foreground"><AnswerValue field={field} answers={answers} /></dd>
   </div>;
@@ -73,7 +73,7 @@ export function AssessmentVerificationAnswers({ sectionId, fields, answers }: { 
     const visible = group.filter(field => field.kind !== "calculated");
     if (!visible.length) return null;
     return <dl key={group[0]!.id} data-review-question-group={group[0]!.id} className="grid min-w-0 gap-4 py-4 first:pt-0 last:pb-0 sm:grid-cols-2">
-      {visible.map(field => <AnswerItem key={field.id} field={field} answers={answers} />)}
+      {visible.map(field => <AnswerItem key={field.id} field={field} answers={answers} spanColumns={field.kind === "multi_select"} />)}
     </dl>;
   })}</div>;
 }
