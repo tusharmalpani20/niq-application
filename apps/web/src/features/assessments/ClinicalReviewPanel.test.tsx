@@ -108,7 +108,13 @@ test("return reason stays visible while corrections are needed", async()=>harnes
  expect(document.body.textContent).toContain("Returned for correction");
  expect(document.body.textContent).toContain("Return reason");
  expect(document.body.textContent).toContain("Please correct this");
-}, {review:{...review,state:"RETURNED",correctionPerson:review.assignee,returnReason:"Please correct this",allowedActions:[]}}));
+}, {review:{...review,state:"RETURNED",submittedAt:"2026-09-23T00:00:00Z",correctionPerson:review.assignee,returnReason:"Please correct this",allowedActions:[]}}));
+
+test("a correction before the first review has its own stage and reason labels", async()=>harness(async()=>{
+ expect(document.body.textContent).toContain("Reopened for corrections");
+ expect(document.body.textContent).toContain("Correction reason");
+ expect(document.body.textContent).not.toContain("Returned for correction");
+}, {review:{...review,state:"RETURNED",correctionPerson:review.assignee,returnReason:"Fix an answer",allowedActions:[]}}));
 
 test("one review history disclosure shows every event without a same-person arrow", async()=>harness(async()=>{
   const history = document.querySelector("details");

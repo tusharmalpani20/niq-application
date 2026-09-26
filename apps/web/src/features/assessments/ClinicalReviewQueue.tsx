@@ -27,7 +27,7 @@ export function ClinicalReviewQueue({ user, query, state }: { user: Authenticate
     { id: "reference", header: "Assessment", cell: ({ row }) => <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> },
     { id: "patient", header: "Patient", cell: ({ row }) => <div className="grid gap-1"><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${row.original.patient.reference}`}>{row.original.patient.displayName}</Link><span className="text-xs text-muted-foreground">{row.original.patient.reference}</span></div> },
     { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "—" },
-    { id: "stage", header: "Stage", cell: ({ row }) => clinicalReviewLabels[row.original.review.state] },
+    { id: "stage", header: "Stage", cell: ({ row }) => row.original.review.state === "RETURNED" && !row.original.review.submittedAt ? "Reopened for corrections" : clinicalReviewLabels[row.original.review.state] },
     { id: "owner", header: "Assigned to", cell: ({ row }) => row.original.review.correctionPerson ? `Corrections: ${row.original.review.correctionPerson.displayName}` : row.original.review.assignee ? `Reviewer: ${row.original.review.assignee.displayName}` : "Awaiting reviewer" },
     { id: "sent", header: "Sent for review", cell: ({ row }) => row.original.review.submittedAt ? new Date(row.original.review.submittedAt).toLocaleDateString("en-GB") : "—" },
   ];

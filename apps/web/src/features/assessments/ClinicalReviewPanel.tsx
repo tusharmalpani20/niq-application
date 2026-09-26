@@ -23,6 +23,7 @@ function actionLabel(action: Action, review: ClinicalReview) {
   return action === "TRANSFER" && !review.assignee ? "Assign reviewer" : clinicalActionLabels[action];
 }
 function reviewStatusLabel(review: ClinicalReview) {
+  if (review.state === "RETURNED" && !previouslySent(review)) return "Reopened for corrections";
   if (review.state === "AWAITING_RESUBMISSION") return previouslySent(review) ? "Ready to resend for clinical review" : "Ready to send for clinical review";
   return clinicalReviewLabels[review.state];
 }
@@ -66,7 +67,7 @@ export function ClinicalReviewPanel({ organizationId, assessmentId, review, erro
     {review && <>
       {review.assignee && <p className="mt-3 text-sm">Reviewer: {review.assignee.displayName}</p>}
       {review.correctionPerson && review.state !== "AWAITING_RESUBMISSION" && <p className="mt-3 text-sm">Corrections assigned to: {review.correctionPerson.displayName}</p>}
-      {review.returnReason && review.state === "RETURNED" && <div className="mt-3 rounded-lg bg-muted p-3 text-sm"><p>Return reason</p><p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{review.returnReason}</p></div>}
+      {review.returnReason && review.state === "RETURNED" && <div className="mt-3 rounded-lg bg-muted p-3 text-sm"><p>{previouslySent(review) ? "Return reason" : "Correction reason"}</p><p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{review.returnReason}</p></div>}
       {review.state === "NOT_SUBMITTED" && <p className="mt-3 text-sm text-muted-foreground">The original assessment creator can send the scored assessment for clinical review.</p>}
       {review.state === "QUEUED" && <p className="mt-3 text-sm text-muted-foreground">An eligible clinician can claim this review.</p>}
       {review.state === "RETURNED" && <p className="mt-3 text-sm text-muted-foreground">The clinician assigned to corrections updates the questionnaire, requests a new score, then {previouslySent(review) ? "resends" : "sends"} it for clinical review.</p>}
