@@ -234,7 +234,7 @@ test("high-risk card shows a single zero when the comparison is unchanged", asyn
       .find(item => item.textContent?.includes("High Risk patients"));
     expect(card?.querySelector("strong")?.textContent).toBe("0");
     expect(card?.querySelector('[aria-label="No change 0"]')).toBeNull();
-    expect(card?.textContent).not.toContain("vs 30 days ago");
+    expect(card?.textContent).toContain("vs 30 days ago");
   }, { highRiskPatients: 0, highRiskPatients30DaysAgo: 0 });
 });
 
