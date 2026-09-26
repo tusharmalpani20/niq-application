@@ -89,6 +89,29 @@ test("tumour choices have distinct decorative icons without changing their label
   expect(html).not.toContain("bg-primary text-primary-foreground shadow-sm");
 });
 
+test("stage and metastatic site choices keep their labels alongside decorative icons", () => {
+  const stage: FormField = { ...field, id: "stage", label: "Stage", kind: "select", options: [
+    { id: "stage_localized", label: "Localized (stage 1–2)" },
+    { id: "stage_locally_advanced", label: "Locally Advanced (stage 3)" },
+    { id: "stage_metastatic", label: "Metastatic (Stage 4)" },
+  ] };
+  const site: FormField = { ...field, id: "metastasis_site", label: "Metastasis site", kind: "select", visibleWhen: [{ fieldId: "stage", equals: "stage_metastatic" }], options: [
+    { id: "brain", label: "Brain" }, { id: "liver", label: "Liver" }, { id: "lung", label: "Lung" }, { id: "bone", label: "Bone" }, { id: "others", label: "Others" },
+  ] };
+  const initial = render([stage, site]);
+  for (const option of stage.options!) {
+    expect(initial).toContain(`data-disease-choice-icon="${option.id}"`);
+    expect(initial).toContain(option.label);
+  }
+  expect(initial).not.toContain('data-disease-choice-icon="brain"');
+  const metastatic = render([stage, site], { stage: "stage_metastatic", metastasis_site: "lung" });
+  for (const option of site.options!) {
+    expect(metastatic).toContain(`data-disease-choice-icon="${option.id}"`);
+    expect(metastatic).toContain(option.label);
+  }
+  expect(metastatic).toContain("bg-primary text-primary-foreground shadow-sm");
+});
+
 
 test("all editable answered field kinds offer clearing, including zero and explicit None", () => {
   for (const [kind, value] of [["multi_select", ["nausea"]], ["select", "nausea"], ["number", 0], ["text", "Details"], ["date", "2026-09-22"]] as const) {
