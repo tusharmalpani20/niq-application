@@ -71,7 +71,6 @@ function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignO
     <div className="workspace-header-inner">
       <button type="button" className="workspace-brand" aria-label={`${branding.displayName} home`} onClick={() => go("/")}>
         <OrganizationMark key={branding.logoUrl} url={branding.logoUrl} />
-        <span className="workspace-brand-text"><strong>{branding.displayName}</strong></span>
       </button>
       <details className="workspace-account" ref={menuRef}>
         <summary aria-label={`Account menu for ${user.displayName}`}>
@@ -81,7 +80,7 @@ function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignO
         </summary>
         <div className="workspace-account-menu" data-has-management={managementItems.length > 0}>
           <div className="workspace-account-identity">
-            <span><strong>{branding.displayName}</strong><small>{user.displayName} · {membershipRoleLabels[user.role]}</small></span>
+            <span><strong>{user.displayName}</strong><small>{membershipRoleLabels[user.role]}</small></span>
           </div>
           {managementItems.map((item) => <button type="button" key={item.to} onClick={() => go(item.to)}>
             <Icon name={item.icon} size={18} />{item.label}

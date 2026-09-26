@@ -134,8 +134,6 @@
   cursor: pointer;
 }
 .workspace-brand-logo { width: 4.6rem; height: 2.75rem; flex: 0 0 auto; object-fit: contain; }
-.workspace-brand-text { display: grid; min-width: 0; }
-.workspace-brand-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
 .workspace-account { position: relative; flex: 0 0 auto; }
 .workspace-account summary {
   display: flex;
@@ -165,10 +163,10 @@
   background: var(--background);
   box-shadow: 0 16px 40px rgb(17 41 50 / 14%);
 }
-.workspace-account-identity { display: flex; align-items: center; gap: .55rem; padding: .45rem .65rem .6rem; border-bottom: 1px solid var(--border); }
-.workspace-account-identity > span { display: grid; min-width: 0; }
-.workspace-account-identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
-.workspace-account-identity small { color: var(--muted-foreground); font-size: .72rem; }
+.workspace-account-identity { display: flex; align-items: center; gap: .55rem; padding: .6rem .65rem .7rem; border-bottom: 1px solid var(--border); }
+.workspace-account-identity > span { display: grid; min-width: 0; gap: .2rem; }
+.workspace-account-identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .88rem; }
+.workspace-account-identity small { width: fit-content; border-radius: 999px; padding: .1rem .45rem; color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); font-size: .72rem; font-weight: 600; }
 .workspace-account-menu > button {
   display: flex;
   width: 100%;
@@ -234,7 +232,6 @@
   .workspace-header-inner { height: 4rem; padding: .4rem .5rem .4rem .65rem; border-radius: 1.25rem; }
   .workspace-brand { gap: .45rem; }
   .workspace-brand-logo { width: 3.8rem; height: 2.5rem; }
-  .workspace-brand-text strong { font-size: .78rem; }
   .workspace-account-name { display: none; }
   .workspace-account summary { gap: .15rem; padding: .2rem; }
   .workspace-account summary > svg { display: none; }
