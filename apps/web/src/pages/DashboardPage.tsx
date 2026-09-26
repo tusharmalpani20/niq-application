@@ -41,20 +41,17 @@ function ActionCard({ title, count, detail, to }: { title: string; count: number
   </Link>;
 }
 
-function QuickActions({ assessments, canAddPatient, canCreateAssessment, queuedReviews, myReviews }: { assessments: AssessmentSummary[]; canAddPatient: boolean; canCreateAssessment: boolean; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null }) {
-  const draft = assessments.filter(item => item.myAction === "EDIT_DRAFT" || item.myAction === "CORRECT_DRAFT")
-    .sort((a, b) => (b.updatedAt ?? b.createdAt).getTime() - (a.updatedAt ?? a.createdAt).getTime() || b.createdAt.getTime() - a.createdAt.getTime())[0];
+function QuickActions({ canAddPatient, canCreateAssessment, queuedReviews, myReviews }: { canAddPatient: boolean; canCreateAssessment: boolean; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null }) {
   const reviewDetail = [queuedReviews?.total ? `${queuedReviews.total} waiting` : null, myReviews?.total ? `${myReviews.total} in progress` : null].filter(Boolean).join(" · ") || "Open review work";
   const actions = [
-    ...(draft ? [{ label: draft.myAction === "CORRECT_DRAFT" ? "Continue corrections" : "Continue draft", detail: `${draft.reference} · ${draft.patient.displayName}`, to: `/assessments/${draft.reference}`, icon: ClipboardList }] : []),
     ...(canCreateAssessment ? [{ label: "New assessment", detail: "Start an assessment", to: "/assessments/new", icon: Plus }] : []),
     ...(canAddPatient ? [{ label: "Add patient", detail: "Register a new patient", to: "/patients/new", icon: UserRoundPlus }] : []),
     { label: "Clinical reviews", detail: reviewDetail, to: "/assessments?tab=clinical-reviews", icon: Stethoscope },
   ];
   return <section className="surface relative min-w-0 overflow-hidden border-primary/20 p-5 text-foreground" aria-label="Quick actions" style={{ background: "linear-gradient(135deg, color-mix(in srgb, var(--primary) 15%, white), color-mix(in srgb, var(--primary) 4%, white))" }}>
     <div className="pointer-events-none absolute -right-12 -top-20 size-44 rounded-full border border-primary/15" aria-hidden="true" />
-    <div className="relative flex min-w-0 items-center gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-full border border-primary/20 bg-white/70 text-brand-ink"><Sparkles className="size-5" aria-hidden="true" /></span><div><h2 className="font-semibold">Quick actions</h2><p className="text-xs text-muted-foreground">Start or continue care</p></div></div>
-    <div className="relative mt-5 grid grid-cols-2 gap-2">{actions.map(({ label, detail, to, icon: Icon }) => <Link key={label} to={to} title={detail} aria-label={`${label}: ${detail}`} className="flex min-h-20 min-w-0 items-center gap-2 rounded-xl border border-primary/15 bg-white/70 px-3 py-3 text-sm font-medium text-foreground no-underline transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><Icon className="size-4 shrink-0 text-brand-ink" aria-hidden="true" /><span className="min-w-0"><span className="block">{label}</span>{(to === `/assessments/${draft?.reference}` || to === "/assessments?tab=clinical-reviews") && <span className="block truncate text-xs font-normal text-muted-foreground">{detail}</span>}</span></Link>)}</div>
+    <div className="relative flex min-w-0 items-center gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-full border border-primary/20 bg-white/70 text-brand-ink"><Sparkles className="size-5" aria-hidden="true" /></span><div><h2 className="font-semibold">Quick actions</h2><p className="text-xs text-muted-foreground">Start care or open review work</p></div></div>
+    <div className="relative mt-5 grid gap-2">{actions.map(({ label, detail, to, icon: Icon }) => <Link key={label} to={to} title={detail} aria-label={`${label}: ${detail}`} className="flex min-h-14 min-w-0 items-center gap-2 rounded-xl border border-primary/15 bg-white/70 px-3 py-3 text-sm font-medium text-foreground no-underline transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><Icon className="size-4 shrink-0 text-brand-ink" aria-hidden="true" /><span className="min-w-0"><span className="block">{label}</span>{to === "/assessments?tab=clinical-reviews" && <span className="block truncate text-xs font-normal text-muted-foreground">{detail}</span>}</span></Link>)}</div>
   </section>;
 }
 
@@ -141,7 +138,7 @@ export function DashboardPage() {
       </section>
     </>}
     {data && (isClinician || isAdmin) && <>
-      <div className="mt-7 grid items-start gap-4 min-[860px]:grid-cols-2"><QuickActions assessments={data.assessments} canAddPatient={hasPermission(user.role, "patients.create")} canCreateAssessment={canCreateAssessment} queuedReviews={data.queuedReviews} myReviews={data.myReviews} /><PriorityAssessments assessments={data.assessments} /></div>
+      <div className="mt-7 grid items-start gap-4 min-[860px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><PriorityAssessments assessments={data.assessments} /><QuickActions canAddPatient={hasPermission(user.role, "patients.create")} canCreateAssessment={canCreateAssessment} queuedReviews={data.queuedReviews} myReviews={data.myReviews} /></div>
       <AssessmentActivityCalendar organizationId={user.organizationId} assessments={data.assessments} />
       <RiskOverviewCards risk={data.risk} />
     </>}

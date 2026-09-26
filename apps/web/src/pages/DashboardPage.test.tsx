@@ -71,31 +71,23 @@ test("clinician overview shows review work without administrator operations", as
   }, { assessmentStatus: "DRAFT" });
 });
 
-test("quick actions sit above activity and link to assigned work and patient registration", async () => {
+test("priority assessments precede quick actions, which link to new care and reviews", async () => {
   await renderOverview("DOCTOR", body => {
     const actions = body.querySelector('[aria-label="Quick actions"]');
+    const priority = body.querySelector('[aria-label="Priority assessments"]');
     const activity = body.querySelector('[aria-label="My assessment activity"]');
     expect(actions).not.toBeNull();
+    expect(priority).not.toBeNull();
     expect(activity).not.toBeNull();
+    expect(priority!.compareDocumentPosition(actions!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(actions!.compareDocumentPosition(activity!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(actions?.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("Continue draft");
-    expect(actions?.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("ASM-000001 · Example Patient");
+    expect(actions?.textContent).not.toContain("Continue draft");
+    expect(actions?.querySelector('a[href="/assessments/ASM-000001"]')).toBeNull();
     expect(actions?.querySelector('a[href="/assessments/new"]')?.textContent).toContain("New assessment");
     expect(actions?.querySelector('a[href="/patients/new"]')?.textContent).toContain("Add patient");
     expect(actions?.querySelector('a[href="/assessments?tab=clinical-reviews"]')?.textContent).toContain("Clinical reviews");
     expect(actions?.querySelector('a[href="/assessments?tab=clinical-reviews"]')?.textContent).toContain("2 waiting · 2 in progress");
   }, { assessmentStatus: "DRAFT" });
-});
-
-test("continue draft opens the most recently updated assigned draft", async () => {
-  await renderOverview("DOCTOR", body => {
-    const actions = body.querySelector('[aria-label="Quick actions"]');
-    expect(actions?.querySelector('a[href="/assessments/ASM-000002"]')).not.toBeNull();
-    expect(actions?.querySelector('a[href="/assessments/ASM-000003"]')).toBeNull();
-  }, { assessments: [
-    { ...assessment, id: "01ARZ3NDEKTSV4RRFFQ69G5FAV", reference: "ASM-000002", status: "DRAFT", myAction: "EDIT_DRAFT", createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-26T10:00:00Z" },
-    { ...assessment, id: "01ARZ3NDEKTSV4RRFFQ69G5FAW", reference: "ASM-000003", status: "DRAFT", myAction: "EDIT_DRAFT", createdAt: "2026-09-25T00:00:00Z", updatedAt: "2026-09-25T10:00:00Z" },
-  ] });
 });
 
 test("bottom cards show recent patients and real NIQ category comparisons", async () => {
@@ -135,8 +127,7 @@ test("my assessment actions counts only work assigned to the signed-in clinician
   await renderOverview("DOCTOR", body => {
     expect(body.querySelector('a[href="/assessments?status=MY_ACTIONS"] strong')?.textContent).toBe("2");
     const actions = body.querySelector('[aria-label="Quick actions"]');
-    expect(actions?.querySelector('a[href="/assessments/ASM-000001"]')).not.toBeNull();
-    expect(actions?.querySelector('a[href="/assessments/ASM-000002"]')).toBeNull();
+    expect(actions?.querySelector('a[href^="/assessments/ASM-"]')).toBeNull();
   }, { assessments: items });
 });
 
