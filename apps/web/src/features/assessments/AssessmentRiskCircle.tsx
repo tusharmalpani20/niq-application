@@ -39,17 +39,17 @@ export function AssessmentRiskCircle({ score, classification, categories }: {
   return <div className={`flex min-w-0 flex-wrap items-center gap-5 sm:gap-8 ${bands ? "" : "justify-center"}`}>
     <div className="flex shrink-0 flex-col items-center gap-2">
       <p className="text-sm text-muted-foreground">Final NIQ score</p>
-      <div data-risk-circle className="grid size-44 place-items-center rounded-full p-3 sm:size-48" style={{ background } as CSSProperties}>
+      <div data-risk-circle className="grid size-44 place-items-center rounded-full p-3 ring-1 ring-border sm:size-48" style={{ background } as CSSProperties}>
         <div className="flex size-full flex-col items-center justify-center rounded-full bg-card text-center">
           <span className="text-4xl font-semibold tabular-nums text-foreground">{score ?? "—"}</span>
           <span className="text-sm text-muted-foreground">points</span>
         </div>
       </div>
-      {classification && <p className="font-semibold" style={{ color: selectedColor }}>{classification.label}</p>}
+      {classification && <p className="font-semibold text-foreground">{classification.label}</p>}
     </div>
     {bands && <div className="min-w-0 flex-1" aria-label="Risk categories used for this score">
       <p className="mb-3 text-sm font-medium text-foreground">Risk categories</p>
-      <ul className="flex flex-wrap gap-2">{bands.map(band => <li key={band.id} className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${band.id === classification?.id ? "border-current bg-card font-semibold" : "border-border bg-card text-muted-foreground"}`} style={band.id === classification?.id ? { color: categoryColor(band.color) } : undefined}>
+      <ul className="flex flex-wrap gap-2">{bands.map(band => <li key={band.id} className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${band.id === classification?.id ? "bg-card font-semibold text-foreground" : "border-border bg-card text-muted-foreground"}`} style={band.id === classification?.id ? { borderColor: categoryColor(band.color) } : undefined}>
         <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: categoryColor(band.color) }} aria-hidden="true" />
         <span>{band.label}</span><span className="text-xs tabular-nums">{scoreRange(band)}</span>
       </li>)}</ul>
