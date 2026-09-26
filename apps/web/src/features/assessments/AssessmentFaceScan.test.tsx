@@ -7,7 +7,7 @@ import { AssessmentFaceScan, type MissingScanInput } from "./AssessmentFaceScan"
 import { createCaptureController, type CaptureSDK } from "./careplix-capture";
 
 const session: FaceScanSession = { id: "session", state: "REQUESTED", context: { dob: "1990-01-01", gender: "female", heightCm: 170, weightKg: 70, posture: "resting", employeeId: "employee" }, createdAt: "2026-09-20T12:00:00.000Z", updatedAt: "2026-09-20T12:00:00.000Z", completedAt: null, failureCode: null, result: null, score: null };
-async function harness(run: (ctx: { click: (text: string) => Promise<void>; startScan: (label?: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null } = {}) {
+async function harness(run: (ctx: { click: (text: string) => Promise<void>; startScan: (label?: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null; status?: AssessmentWorkflow["status"] } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "https://niq.test", pretendToBeVisual: true });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -38,7 +38,7 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; star
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable: true });
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {} });
   const root = createRoot(document.getElementById("root")!);
-  const record = { id: "assessment", revision: 3, status: "DRAFT", patient: { dateOfBirth: "1990-01-01", gender: "FEMALE" }, answers: { height_cm: 170, current_weight_kg: options.weight === undefined ? 70 : options.weight } } as AssessmentWorkflow;
+  const record = { id: "assessment", revision: 3, status: options.status ?? "DRAFT", patient: { dateOfBirth: "1990-01-01", gender: "FEMALE" }, answers: { height_cm: 170, current_weight_kg: options.weight === undefined ? 70 : options.weight } } as AssessmentWorkflow;
   const flush = () => new Promise(resolve => setTimeout(resolve, 0));
   async function click(text: string) {
     const button = [...document.querySelectorAll("button")].find(b => b.textContent?.trim() === text);
@@ -115,6 +115,12 @@ test("lost upload response reconciles accepted scan without another capture", as
 test("reopens processing session without requesting camera", async () => harness(async ({ starts }) => {
   expect(document.body.textContent).toContain("Getting scan results"); expect(starts()).toBe(0);
 }, { existing: { ...session, state: "PROCESSING" } }));
+test("a scored assessment can cancel an unfinished scan before clinical review", async () => harness(async ({ click, requests }) => {
+ expect(document.body.textContent).toContain("Cancel it before sending the assessment for clinical review.");
+ await click("Cancel attempt");
+ expect(requests.some(request => request.path.endsWith("/cancel"))).toBe(true);
+ expect(document.body.textContent).toContain("Scan cancelled");
+}, { existing: session, status: "SCORED" }));
 
 test("explains an expired attempt and retains earlier attempts in scan history", async () => harness(async ({ starts }) => {
   expect(document.body.textContent).toContain("No scan result");

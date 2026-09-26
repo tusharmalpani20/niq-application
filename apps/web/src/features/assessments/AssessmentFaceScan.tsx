@@ -226,6 +226,10 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {session?.state === "FAILED" && <p className="text-sm text-muted-foreground">The scan didn’t finish. Please try again.</p>}
     {session?.state === "EXPIRED" && <p className="text-sm text-muted-foreground">The attempt started on {new Date(session.createdAt).toLocaleString()} ended before analysis, so there is no measurement from that attempt. This record remains in the scan history. A new scan would measure the patient at a new time.</p>}
     {session?.state === "COMPLETED" && record.status === "DRAFT" && <p className="text-sm text-muted-foreground">The saved face scan is retained. Scan again only if a new measurement is needed.</p>}
+    {session?.state === "REQUESTED" && record.status === "SCORED" && <div className="space-y-2 rounded-lg border border-border p-3">
+      <p className="text-sm">This scan attempt is still open. Cancel it before sending the assessment for clinical review.</p>
+      <Button variant="outline" isDisabled={disabled || stale} onPress={() => { void cancel(); }}>Cancel attempt</Button>
+    </div>}
     {changedScanInputs.length > 0 && <p role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm">The saved scan used different {changedScanInputs.join(", ")}. Its results still reflect the original scan details shown below; changing questionnaire answers does not update those results.</p>}
     {session && <FaceScanResults session={session}/>}
     {previousSessions.length > 0 && <section aria-label="Scan history" className="space-y-2">
