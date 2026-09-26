@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { HeartPulse, Lightbulb, ShieldCheck, TriangleAlert } from "lucide-react";
+import { HeartPulse, Lightbulb, MessageCircle, Utensils } from "lucide-react";
 import { getOverviewRisk } from "../lib/api";
 
 type Risk = Awaited<ReturnType<typeof getOverviewRisk>>;
@@ -14,11 +14,6 @@ function countLabel(count: number, singular: string, plural: string) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function comparison(now: number, before: number, label: string) {
-  if (now === before) return `The same ${label} count as 30 days ago.`;
-  return `${Math.abs(now - before)} ${now > before ? "more" : "fewer"} than 30 days ago.`;
-}
-
 function insightsFor(risk: Risk): Insight[] {
   const { categories, categories30DaysAgo: previous } = risk;
   const previousTotal = previous.low + previous.moderate + previous.high;
@@ -27,26 +22,37 @@ function insightsFor(risk: Risk): Insight[] {
   const atRiskPercent = risk.assessedPatients ? Math.round(atRisk / risk.assessedPatients * 100) : 0;
   const previousAtRiskPercent = previousTotal ? Math.round(previousAtRisk / previousTotal * 100) : null;
   const riskChange = previousAtRiskPercent === null ? null : atRiskPercent - previousAtRiskPercent;
+  const protein = risk.nutrition.protein;
+  const barrier = risk.nutrition.eatingBarrier;
 
   return [
     {
-      title: `${atRiskPercent}% of scored patients are at nutritional risk`,
+      title: `${atRisk} of ${countLabel(risk.assessedPatients, "scored patient", "scored patients")} (${atRiskPercent}%) at nutritional risk`,
       detail: riskChange === null
-        ? `${countLabel(atRisk, "patient", "patients")} in moderate or high risk. No scored patients 30 days ago.`
-        : `${countLabel(atRisk, "patient", "patients")} in moderate or high risk. ${riskChange === 0 ? "Unchanged" : `${Math.abs(riskChange)} percentage points ${riskChange > 0 ? "higher" : "lower"}`} vs 30 days ago.`,
+        ? "Moderate or high NIQ category. No comparable scored patients 30 days ago."
+        : `Moderate or high NIQ category. ${riskChange === 0 ? "Unchanged" : `${Math.abs(riskChange)} percentage points ${riskChange > 0 ? "higher" : "lower"}`} vs 30 days ago.`,
       icon: HeartPulse,
       color: "bg-rose-50 text-rose-600",
     },
     {
-      title: countLabel(categories.high, "patient is", "patients are") + " high risk",
-      detail: comparison(categories.high, previous.high, "high-risk patient"),
-      icon: TriangleAlert,
+      title: protein.assessed
+        ? `${protein.inadequate} of ${protein.assessed} patients had inadequate protein intake`
+        : "Protein intake results not yet available",
+      detail: protein.assessed
+        ? `${Math.round(protein.inadequate / protein.assessed * 100)}% of patients with a protein result on their latest final assessment.`
+        : "Shown when a completed assessment has a protein adequacy result.",
+      icon: Utensils,
       color: "bg-indigo-50 text-indigo-600",
     },
     {
-      title: countLabel(categories.low, "patient has", "patients have") + " a low-risk NIQ category",
-      detail: comparison(categories.low, previous.low, "low-risk patient"),
-      icon: ShieldCheck,
+      title: barrier.top
+        ? `Most reported eating barrier: ${barrier.top.label}`
+        : barrier.assessed ? "No eating barriers reported by at-risk patients" : "Eating barrier data not yet available",
+      detail: barrier.top
+        ? `Reported by ${barrier.top.count} of ${countLabel(barrier.assessed, "at-risk patient", "at-risk patients")} who answered the dietary symptoms question.`
+        : barrier.assessed ? `${countLabel(barrier.assessed, "at-risk patient answered", "at-risk patients answered")} the dietary symptoms question.`
+          : "Shown when patients with moderate or high NIQ risk report dietary symptoms.",
+      icon: MessageCircle,
       color: "bg-teal-50 text-teal-600",
     },
   ];
@@ -60,9 +66,9 @@ export function NutritionInsights({ risk }: { risk: Risk | null }) {
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h2 className="flex items-center gap-2 font-semibold"><Lightbulb className="size-5 text-primary" aria-hidden="true" />Key nutrition insights</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Latest final NIQ category for each patient</p>
+        <p className="mt-1 text-xs text-muted-foreground">Latest completed assessment for each patient</p>
       </div>
-      <span className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">Now vs 30 days ago</span>
+      <span className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">Risk vs 30 days ago</span>
     </div>
     {!risk ? <p className="mt-5 text-sm text-muted-foreground">Nutrition insights are unavailable right now.</p>
       : insights.length ? <div className="mt-4 rounded-2xl border border-border px-4">
