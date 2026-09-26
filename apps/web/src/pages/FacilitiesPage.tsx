@@ -13,6 +13,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
+import { FacilityEmptyIllustration } from "../components/FacilityEmptyIllustration";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { updateFacility } from "../lib/facility-management";
@@ -72,11 +73,11 @@ export function FacilitiesPage() {
   ];
   if (canManage) columns.push({ id: "actions", header: "Actions", cell: ({ row }) => actions(row.original) });
   const hasFilters = query.trim() || status !== "all";
-  const emptyContent = <div className="table-empty-content">
+  const emptyContent = <div className={`table-empty-content${loadState === "ready" && !hasFilters ? " illustrated-empty-state" : ""}`}>
     {loadState === "loading" ? <span>Loading facilities…</span>
       : loadState === "error" ? <><strong>Facilities could not be loaded</strong><Button variant="outline" onPress={() => { setLoadState("loading"); setReload((n) => n + 1); }}>Retry</Button></>
       : hasFilters ? <><strong>No matching facilities</strong><span>Try changing the search or filter.</span></>
-      : <><p className="text-sm text-foreground">No facilities yet</p><p className="text-sm">{canManage ? "Add a facility to organize patients and staff access." : "Facilities will appear here once added."}</p>{canManage && <Button className="patient-empty-action" variant="outline" size="sm" onPress={() => setShowForm(true)}><Icon name="plus" size={16}/>Add facility</Button>}</>}
+      : <><FacilityEmptyIllustration /><strong>No facilities yet</strong><span>{canManage ? "Add a facility to organize patients and staff access." : "Facilities will appear here once added."}</span>{canManage && <Button onPress={() => setShowForm(true)}>Add facility</Button>}</>}
   </div>;
 
   return <>
