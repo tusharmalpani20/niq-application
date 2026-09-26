@@ -358,10 +358,10 @@ test("verification stops when saved answers change before the dialog opens", asy
   expect(requests.some(request => request.method === "POST" && request.url.endsWith("/submit"))).toBe(false);
 }));
 
-test("returned scoring confirmations remain visible in review history", async () => harness(async ({ click }) => {
+test("review and score does not repeat the assessment audit history", async () => harness(async ({ click }) => {
   await click("Review & score");
-  expect(document.body.textContent).toContain("Submission verification history");
-  expect(document.body.textContent).toContain("Verification 1 · Example Doc");
+  expect(document.body.textContent).not.toContain("Submission verification history");
+  expect(document.body.textContent).not.toContain("Verification 1 · Example Doc");
 }, { attestations: [{ submissionId: "old-submission", cycle: 1, revision: 3, confirmedAt: "2026-09-22T20:41:33.104Z", actorMembershipId: "doctor-a", actorDisplayName: "Example Doc", statementVersion: 1, reviewedSectionIds: ["personal_details", "face-scan", "attachments"] }] }));
 
 test("clearing a controlling answer clears dependent answers in the saved draft", async () => harness(async ({ click, requests }) => {

@@ -72,10 +72,5 @@ export function AssessmentReview({ record, answers, scanStatus, scanSession, org
       </div>
     </ReviewSection>
     </div>
-    {record.attestations.length > 0 && <section className="rounded-xl border border-border bg-card p-4" aria-label="Submission verification history">
-      <h3 className="font-semibold">Submission verification history</h3>
-      <p className="mt-1 text-sm text-muted-foreground">Each confirmation is saved with its scoring request, including requests later returned for correction.</p>
-      <ol className="mt-3 divide-y divide-border">{record.attestations.map((item, index) => <li key={item.submissionId} className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-3 text-sm"><span><strong>Verification {index + 1}</strong> · {item.actorDisplayName}</span><span className="text-muted-foreground">{new Date(item.confirmedAt).toLocaleString()}</span></li>)}</ol>
-    </section>}
   </div>;
 }

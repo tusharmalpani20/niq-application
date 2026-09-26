@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { membershipRoleLabels, type ClinicalReview, type ClinicalReviewAction, type ClinicalReviewEvent, type ClinicalReviewer } from "@niq/application-contracts";
+import { membershipRoleLabels, type AssessmentSubmissionAttestation, type ClinicalReview, type ClinicalReviewAction, type ClinicalReviewEvent, type ClinicalReviewer } from "@niq/application-contracts";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SearchCombobox } from "@/components/ui/combobox";
@@ -48,15 +48,25 @@ function ReviewHistoryEvent({ event, history }: { event: ClinicalReviewEvent; hi
     {event.remark && <p className="mt-2 whitespace-pre-wrap break-words"><span className="font-medium">Final remark:</span> {event.remark}</p>}
   </li>;
 }
-function ReviewHistory({ history }: { history: ClinicalReviewEvent[] }) {
-  if (!history.length) return null;
+function ReviewHistory({ history, attestations }: { history: ClinicalReviewEvent[]; attestations: AssessmentSubmissionAttestation[] }) {
+  const events = [
+    ...history.map(event => ({ kind: "review" as const, at: event.createdAt, event })),
+    ...attestations.map(event => ({ kind: "verification" as const, at: event.confirmedAt, event })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  if (!events.length) return null;
   return <details className="mt-4 border-t border-border pt-3">
-    <summary className="min-h-11 cursor-pointer font-medium">Review history ({history.length})</summary>
-    <ol className="mt-2">{[...history].reverse().map(event => <ReviewHistoryEvent key={event.id} event={event} history={history} />)}</ol>
+    <summary className="min-h-11 cursor-pointer font-medium">Assessment history ({events.length})</summary>
+    <ol className="mt-2">{events.map(item => item.kind === "review"
+      ? <ReviewHistoryEvent key={`review-${item.event.id}`} event={item.event} history={history} />
+      : <li key={`verification-${item.event.submissionId}`} className="relative border-l-2 border-border py-3 pl-5 text-sm first:pt-1 last:pb-1">
+        <span aria-hidden className="absolute -left-[5px] top-4 size-2 rounded-full bg-primary" />
+        <p className="font-medium">Answers verified before scoring</p>
+        <p className="mt-1 text-xs text-muted-foreground"><time dateTime={item.event.confirmedAt}>{new Date(item.event.confirmedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</time><span className="mx-1.5">·</span>Cycle {item.event.cycle}<span className="mx-1.5">·</span>by {item.event.actorDisplayName}</p>
+      </li>)}</ol>
   </details>;
 }
-export function ClinicalReviewPanel({ organizationId, assessmentId, review, error, loading, blocked, onRefresh, onChanged, onBusyChange }: {
-  organizationId: string; assessmentId: string; review: ClinicalReview | null; error: string; loading: boolean; blocked: boolean;
+export function ClinicalReviewPanel({ organizationId, assessmentId, review, attestations = [], error, loading, blocked, onRefresh, onChanged, onBusyChange }: {
+  organizationId: string; assessmentId: string; review: ClinicalReview | null; attestations?: AssessmentSubmissionAttestation[]; error: string; loading: boolean; blocked: boolean;
   onRefresh: () => Promise<unknown>; onChanged: () => Promise<unknown>; onBusyChange: (busy: boolean) => void;
 }) {
   const [action, setAction] = useState<Action | null>(null);
@@ -76,7 +86,7 @@ export function ClinicalReviewPanel({ organizationId, assessmentId, review, erro
       {review.riskClassificationPending && <p className="mt-3 text-sm text-muted-foreground">NIQ must confirm the current reviewed risk before this review can be completed. Check the assessment summary below.</p>}
       {blocked && !!review.allowedActions?.length && <p className="mt-3 text-sm text-muted-foreground">Finish or cancel your current changes before changing the review workflow.</p>}
       <div className="mt-4 flex flex-wrap gap-2">{review.allowedActions?.map(next => <Button key={next} variant={["SEND", "CLAIM", "RESEND", "COMPLETE"].includes(next) ? "default" : "outline"} isDisabled={blocked || loading || !!error || !!action || (next === "COMPLETE" && review.riskClassificationPending === true)} onPress={() => setAction(next)}>{actionLabel(next, review)}</Button>)}</div>
-      {!!review.history?.length && <ReviewHistory history={review.history} />}
+      <ReviewHistory history={review.history ?? []} attestations={attestations} />
       {action && <ClinicalReviewCommandDialog key={action} action={action} review={review} organizationId={organizationId} assessmentId={assessmentId} blocked={blocked || loading || !!error || (action === "COMPLETE" && review.riskClassificationPending === true)} onClose={() => setAction(null)} onChanged={onChanged} onRefresh={onRefresh} onBusyChange={onBusyChange} />}
     </>}
   </section>;

@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import type { ClinicalReview, ClinicalReviewer } from "@niq/application-contracts";
+import type { AssessmentSubmissionAttestation, ClinicalReview, ClinicalReviewer } from "@niq/application-contracts";
 import { ClinicalReviewPanel } from "./ClinicalReviewPanel";
 
 const review: ClinicalReview = { assessmentId: "assessment", revision: 4, scoreRevision: 2, cycle: 1, state: "IN_REVIEW", assignee: { membershipId: "reviewer", displayName: "Reviewer", role: "DOCTOR" }, correctionPerson: null, previousReviewer: null, defaultCorrectionPersonId: null, returnReason: null, finalRemark: null, submittedAt: null, completedAt: null, history: [], allowedActions: ["COMPLETE", "TRANSFER", "RELEASE", "RETURN_TO_DRAFT"], canAdjustScores: true, canEditDraft: false };
-async function harness(run: (ctx: { click: (label: string) => Promise<void>; type: (value: string) => Promise<void>; posts: unknown[]; changed: () => number }) => Promise<void>, options: { review?: ClinicalReview; blocked?: boolean; conflict?: boolean; recipients?: () => ClinicalReviewer[] } = {}) {
+async function harness(run: (ctx: { click: (label: string) => Promise<void>; type: (value: string) => Promise<void>; posts: unknown[]; changed: () => number }) => Promise<void>, options: { review?: ClinicalReview; attestations?: AssessmentSubmissionAttestation[]; blocked?: boolean; conflict?: boolean; recipients?: () => ClinicalReviewer[] } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", {url:"http://localhost", pretendToBeVisual:true});
   const values: Record<string,unknown> = { window:dom.window, document:dom.window.document, navigator:dom.window.navigator, IS_REACT_ACT_ENVIRONMENT:true, requestAnimationFrame:(fn:()=>void)=>setTimeout(fn,0), cancelAnimationFrame:clearTimeout, getComputedStyle:dom.window.getComputedStyle };
   for (const key of ["FocusEvent","HTMLElement","SVGElement","Element","Node","NodeFilter","DocumentFragment","HTMLButtonElement","HTMLInputElement","HTMLTextAreaElement","HTMLSelectElement","MutationObserver","CustomEvent","Event"]) values[key]=(dom.window as any)[key];
@@ -18,7 +18,7 @@ async function harness(run: (ctx: { click: (label: string) => Promise<void>; typ
   const root = createRoot(document.getElementById("root")!);
   const flush = () => new Promise(resolve => setTimeout(resolve,0));
   try {
-    await act(async () => {root.render(<ClinicalReviewPanel organizationId="org" assessmentId="assessment" review={options.review ?? review} error="" loading={false} blocked={options.blocked ?? false} onRefresh={async()=>review} onChanged={async()=>{changes++;}} onBusyChange={()=>{}}/>); await flush();});
+    await act(async () => {root.render(<ClinicalReviewPanel organizationId="org" assessmentId="assessment" review={options.review ?? review} attestations={options.attestations} error="" loading={false} blocked={options.blocked ?? false} onRefresh={async()=>review} onChanged={async()=>{changes++;}} onBusyChange={()=>{}}/>); await flush();});
     await run({posts,changed:()=>changes,click:async label=>{ const button=[...document.querySelectorAll("button")].filter(item=>item.textContent?.trim()===label).at(-1); expect(button).toBeDefined(); await act(async()=>{button!.click();await flush();});},type:async value=>{const input=document.querySelector("textarea")!;await act(async()=>{input.focus();Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype,"value")!.set!.call(input,value); input.dispatchEvent(new dom.window.Event("input",{bubbles:true}));input.dispatchEvent(new dom.window.KeyboardEvent("keyup",{bubbles:true,key:"l"}));await flush();});}});
   } finally {await act(async()=>root.unmount()); dom.window.close();for(const [key,descriptor] of Object.entries(previous)) if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete (globalThis as any)[key];}
 }
@@ -118,7 +118,7 @@ test("a correction before the first review has its own stage and reason labels",
 
 test("one review history disclosure shows every event without a same-person arrow", async()=>harness(async()=>{
   const history = document.querySelector("details");
-  expect(history?.querySelector("summary")?.textContent).toBe("Review history (2)");
+  expect(history?.querySelector("summary")?.textContent).toBe("Assessment history (2)");
   history?.querySelector("summary")?.click();
   expect(history?.open).toBe(true);
   const events = history?.querySelectorAll("li");
@@ -134,3 +134,14 @@ test("one review history disclosure shows every event without a same-person arro
   {id:"first",action:"RETURN_TO_DRAFT",revision:1,cycle:1,actor:review.assignee!,assignee:review.assignee!,createdAt:"2026-09-23T00:00:00Z",reason:"Earlier correction"},
   {id:"second",action:"RETURN_TO_DRAFT",revision:2,cycle:2,actor:review.assignee!,assignee:review.assignee!,createdAt:"2026-09-24T00:00:00Z",reason:"Latest correction"},
 ]}}));
+
+test("scoring confirmations and clinical decisions share one dated history", async()=>harness(async()=>{
+  const history = document.querySelector("details");
+  expect(history?.querySelector("summary")?.textContent).toBe("Assessment history (2)");
+  const events = history?.querySelectorAll("li");
+  expect(events).toHaveLength(2);
+  expect(events?.[0]?.textContent).toContain("Reopened for corrections");
+  expect(events?.[1]?.textContent).toContain("Answers verified before scoring");
+  expect(events?.[1]?.textContent).toContain("by Example Doc");
+  expect(document.body.textContent).not.toContain("Submission verification history");
+}, {review:{...review,history:[{id:"return",action:"RETURN_TO_DRAFT",revision:2,cycle:2,actor:review.assignee!,assignee:review.assignee!,createdAt:"2026-09-24T00:00:00Z",reason:"Correct answers"}]},attestations:[{submissionId:"submission",cycle:1,revision:1,confirmedAt:"2026-09-23T00:00:00Z",actorMembershipId:"doctor",actorDisplayName:"Example Doc",statementVersion:1,reviewedSectionIds:["personal_details"]}]}));
