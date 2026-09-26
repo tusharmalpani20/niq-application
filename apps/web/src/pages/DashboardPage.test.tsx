@@ -11,7 +11,7 @@ const date = "2026-09-20T00:00:00Z";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Example Patient", homeFacility: null, dateOfBirth: null, gender: "UNKNOWN", createdAt: date, updatedAt: date };
 const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: null, status: "SCORING_UNAVAILABLE", isPriority: false, createdAt: date, completedAt: null };
 
-type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; patients?: typeof patient[]; assessments?: Array<typeof assessment & { myAction?: string | null; updatedAt?: string }>; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number; activity?: { id: string; assessmentId: string; action: string; occurredAt: string }[]; highRiskAssessments?: { patientId: string; assessmentId: string }[] };
+type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; patients?: typeof patient[]; assessments?: Array<typeof assessment & { myAction?: string | null; updatedAt?: string }>; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number; risk?: { assessedPatients: number; categories: { low: number; moderate: number; high: number }; categories30DaysAgo: { low: number; moderate: number; high: number } }; activity?: { id: string; assessmentId: string; action: string; occurredAt: string }[]; highRiskAssessments?: { patientId: string; assessmentId: string }[] };
 
 test("overview greeting follows the local hour", () => {
   expect(greetingForHour(0)).toBe("Good evening");
@@ -34,7 +34,7 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
     if (url.endsWith("/patients")) return Response.json({ items: scenario.patients ?? [patient] });
     if (url.endsWith("/facilities")) return Response.json({ items: [] });
     if (url.endsWith("/assessments")) return Response.json({ items: scenario.assessments ?? [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status, myAction: scenario.assessmentStatus === "DRAFT" ? "EDIT_DRAFT" : null, createdAt: scenario.assessmentCreatedAt ?? date, completedAt: scenario.completedAt ?? null }] });
-    if (url.endsWith("/overview-risk")) return Response.json({ highRiskPatients: scenario.highRiskPatients ?? 1, highRiskPatients30DaysAgo: scenario.highRiskPatients30DaysAgo ?? 0, assessedPatients: 1, categories: { low: 0, moderate: 0, high: 1 }, categories30DaysAgo: { low: 0, moderate: 0, high: scenario.highRiskPatients30DaysAgo ?? 0 }, highRiskAssessments: scenario.highRiskAssessments ?? [] });
+    if (url.endsWith("/overview-risk")) return Response.json({ highRiskPatients: scenario.highRiskPatients ?? 1, highRiskPatients30DaysAgo: scenario.highRiskPatients30DaysAgo ?? 0, assessedPatients: 1, categories: { low: 0, moderate: 0, high: 1 }, categories30DaysAgo: { low: 0, moderate: 0, high: scenario.highRiskPatients30DaysAgo ?? 0 }, highRiskAssessments: scenario.highRiskAssessments ?? [], ...scenario.risk });
     if (url.includes("/overview-activity?")) return Response.json({ items: scenario.activity ?? [] });
     if (url.endsWith("/users")) return Response.json({ items: [{ membershipId: id, userId: id, email: "admin@example.test", displayName: "Admin", status: "ACTIVE", role, active: true, createdAt: date }] });
     if (url.includes("/clinical-reviews?")) return Response.json({ items: [], total: scenario.reviewTotal ?? 2, page: 1, pageSize: 3 });
@@ -90,7 +90,7 @@ test("priority assessments precede quick actions, which link to new care and rev
   }, { assessmentStatus: "DRAFT" });
 });
 
-test("quick actions show only assigned send and correction work", async () => {
+test("quick actions keep send and correction links visible with assigned counts", async () => {
   const items = [
     { ...assessment, id: `${id.slice(0, -1)}1`, reference: "ASM-000001", status: "SCORED", myAction: "SEND_FOR_REVIEW" },
     { ...assessment, id: `${id.slice(0, -1)}2`, reference: "ASM-000002", status: "DRAFT", myAction: "CORRECT_DRAFT" },
@@ -103,21 +103,39 @@ test("quick actions show only assigned send and correction work", async () => {
   }, { assessments: items });
   await renderOverview("DOCTOR", body => {
     const actions = body.querySelector('[aria-label="Quick actions"]');
-    expect(actions?.querySelector('a[href="/assessments?status=SEND_FOR_REVIEW"]')).toBeNull();
-    expect(actions?.querySelector('a[href="/assessments?status=CORRECT_DRAFT"]')).toBeNull();
+    expect(actions?.querySelector('a[href="/assessments?status=SEND_FOR_REVIEW"]')?.textContent).toContain("Ready to send0 assessments");
+    expect(actions?.querySelector('a[href="/assessments?status=CORRECT_DRAFT"]')?.textContent).toContain("Corrections to make0 assessments");
   }, { assessments: [items[2]!] });
 });
 
-test("bottom cards show recent patients and real NIQ category comparisons", async () => {
+test("bottom cards show recent patients and data-backed nutrition insights", async () => {
   const now = new Date();
   await renderOverview("DOCTOR", body => {
     const cards = body.querySelector('[aria-label="Recent patients and NIQ insights"]');
     expect(cards?.textContent).toContain("Example Patient");
     expect(cards?.textContent).toContain("ASM-000001");
-    expect(cards?.textContent).toContain("NIQ insights");
-    expect(cards?.textContent).toContain("High Risk");
-    expect(cards?.textContent).toContain("30 days ago");
+    expect(cards?.textContent).toContain("Key nutrition insights");
+    expect(cards?.textContent).toContain("100% of scored patients are at nutritional risk");
+    expect(cards?.textContent).toContain("1 patient is high risk");
+    expect(cards?.textContent).toContain("Now vs 30 days ago");
   }, { assessmentStatus: "COMPLETED", completedAt: date, patients: [{ ...patient, createdAt: now.toISOString() }] });
+});
+
+test("nutrition insights do not invent metrics before final categories exist", async () => {
+  await renderOverview("DOCTOR", body => {
+    const card = body.querySelector('[aria-label="Key nutrition insights"]');
+    expect(card?.textContent).toContain("No final NIQ categories yet");
+    expect(card?.textContent).not.toContain("% of scored patients");
+  }, { risk: { assessedPatients: 0, categories: { low: 0, moderate: 0, high: 0 }, categories30DaysAgo: { low: 0, moderate: 0, high: 0 } } });
+});
+
+test("nutrition insights compare patient risk percentages with the prior snapshot", async () => {
+  await renderOverview("DOCTOR", body => {
+    const card = body.querySelector('[aria-label="Key nutrition insights"]');
+    expect(card?.textContent).toContain("50% of scored patients are at nutritional risk");
+    expect(card?.textContent).toContain("50 percentage points lower vs 30 days ago");
+    expect(card?.textContent).toContain("1 patient is high risk");
+  }, { risk: { assessedPatients: 2, categories: { low: 1, moderate: 0, high: 1 }, categories30DaysAgo: { low: 0, moderate: 0, high: 1 } } });
 });
 
 test("recent patients paginate four at a time and keep View all", async () => {

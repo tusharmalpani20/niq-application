@@ -45,8 +45,8 @@ function QuickActions({ canCreateAssessment, queuedReviews, myReviews, readyToSe
   const reviewDetail = [queuedReviews?.total ? `${queuedReviews.total} waiting` : null, myReviews?.total ? `${myReviews.total} in progress` : null].filter(Boolean).join(" · ") || "Open review work";
   const actions = [
     ...(canCreateAssessment ? [{ label: "New assessment", detail: "Start an assessment", to: "/assessments/new", icon: Plus }] : []),
-    ...(readyToSend > 0 ? [{ label: "Ready to send", detail: `${readyToSend} ${readyToSend === 1 ? "assessment" : "assessments"}`, to: "/assessments?status=SEND_FOR_REVIEW", icon: Send }] : []),
-    ...(correctionsToMake > 0 ? [{ label: "Corrections to make", detail: `${correctionsToMake} ${correctionsToMake === 1 ? "assessment" : "assessments"}`, to: "/assessments?status=CORRECT_DRAFT", icon: ClipboardPenLine }] : []),
+    { label: "Ready to send", detail: `${readyToSend} ${readyToSend === 1 ? "assessment" : "assessments"}`, to: "/assessments?status=SEND_FOR_REVIEW", icon: Send },
+    { label: "Corrections to make", detail: `${correctionsToMake} ${correctionsToMake === 1 ? "assessment" : "assessments"}`, to: "/assessments?status=CORRECT_DRAFT", icon: ClipboardPenLine },
     { label: "Clinical reviews", detail: reviewDetail, to: "/assessments?tab=clinical-reviews", icon: Stethoscope },
   ];
   return <section className="surface relative min-w-0 overflow-hidden border-primary/20 p-5 text-foreground" aria-label="Quick actions" style={{ background: "linear-gradient(135deg, color-mix(in srgb, var(--primary) 15%, white), color-mix(in srgb, var(--primary) 4%, white))" }}>
