@@ -57,8 +57,8 @@ export function AssessmentActivityCalendar({ organizationId, assessments }: { or
       <div><h2 className="flex items-center gap-2 text-lg font-semibold"><CalendarDays className="size-5 text-primary" aria-hidden="true" />My assessment activity</h2><p className="mt-1 text-sm text-muted-foreground">Select a day to see the assessments you worked on.</p></div>
       <button type="button" className="rounded-full border px-3 py-1 text-sm hover:bg-muted" onClick={() => { const today = new Date(); setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); selectDate(today); }}>Today</button>
     </div>
-    <div className="grid gap-5 md:grid-cols-[250px_minmax(0,1fr)]">
-      <div className="w-full max-w-[280px] rounded-xl border bg-muted/30 p-3 md:max-w-none">
+    <div className="grid items-start gap-5 md:grid-cols-[250px_minmax(0,1fr)]">
+      <div className="mx-auto w-full max-w-[280px] rounded-xl border bg-muted/30 p-3 md:mx-0 md:max-w-none">
         <div className="mb-3 flex items-center justify-between"><button type="button" aria-label="Previous month" className="rounded-md p-1 hover:bg-muted" onClick={() => changeMonth(-1)}><ChevronLeft className="size-4" /></button><strong className="text-sm">{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</strong><button type="button" aria-label="Next month" className="rounded-md p-1 hover:bg-muted" onClick={() => changeMonth(1)}><ChevronRight className="size-4" /></button></div>
         <div className="grid grid-cols-7 text-center text-xs text-muted-foreground">{"SMTWTFS".split("").map((day, index) => <span key={index}>{day}</span>)}</div>
         <div className="mt-2 grid grid-cols-7 gap-1">{Array.from({ length: firstWeekday }, (_, index) => <span key={`pad-${index}`} />)}{Array.from({ length: daysInMonth }, (_, index) => {
