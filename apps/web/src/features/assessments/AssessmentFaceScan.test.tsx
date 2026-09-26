@@ -7,7 +7,7 @@ import { AssessmentFaceScan, type MissingScanInput } from "./AssessmentFaceScan"
 import { createCaptureController, type CaptureSDK } from "./careplix-capture";
 
 const session: FaceScanSession = { id: "session", state: "REQUESTED", context: { dob: "1990-01-01", gender: "female", heightCm: 170, weightKg: 70, posture: "resting", employeeId: "employee" }, createdAt: "2026-09-20T12:00:00.000Z", updatedAt: "2026-09-20T12:00:00.000Z", completedAt: null, failureCode: null, result: null, score: null };
-async function harness(run: (ctx: { click: (text: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null } = {}) {
+async function harness(run: (ctx: { click: (text: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "https://niq.test", pretendToBeVisual: true });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -25,7 +25,7 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; cons
     if (path.endsWith("/signal")) { current = { ...session, state: "UPLOAD_ACCEPTED" }; if (options.lostUpload) throw new Error("connection lost"); return Response.json(current); }
     if (path.endsWith("/cancel")) { current = { ...session, state: "CANCELLED" }; return Response.json(current); }
     if (init?.method === "POST") { current = session; if (options.lostStart) throw new Error("Start response lost"); return Response.json(current); }
-    const list: FaceScanList = { enabled: options.enabled ?? true, currentSessionId: current?.id ?? null, sessions: current ? [current] : [] };
+    const list: FaceScanList = { enabled: options.enabled ?? true, currentSessionId: current?.id ?? null, sessions: [...(current ? [current] : []), ...(options.history ?? [])] };
     if (options.delayedStatus && ++reads === 2) return new Promise<Response>(resolve => { releaseStatus = () => resolve(Response.json(list)); });
     return Response.json(list);
   };
@@ -82,6 +82,14 @@ test("lost upload response reconciles accepted scan without another capture", as
 test("reopens processing session without requesting camera", async () => harness(async ({ starts }) => {
   expect(document.body.textContent).toContain("Getting scan results"); expect(starts()).toBe(0);
 }, { existing: { ...session, state: "PROCESSING" } }));
+
+test("explains an expired attempt and retains earlier attempts in scan history", async () => harness(async ({ starts }) => {
+  expect(document.body.textContent).toContain("No scan result");
+  expect(document.body.textContent).toContain("ended before analysis");
+  expect(document.querySelector('section[aria-label="Scan history"]')?.textContent).toContain("Scan failed");
+  expect([...document.querySelectorAll("button")].some(button => button.textContent === "Start a new scan")).toBe(true);
+  expect(starts()).toBe(0);
+}, { existing: { ...session, state: "EXPIRED" }, history: [{ ...session, id: "earlier", state: "FAILED" }] }));
 
 test("late pre-upload status cannot overwrite accepted upload", async () => harness(async ({ consent, click, finish, releaseStatus }) => {
   await consent(); await click("Start face scan"); await finish(); await releaseStatus();
