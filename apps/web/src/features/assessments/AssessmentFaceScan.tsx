@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { faceScanContextSchema, type AssessmentWorkflow, type FaceScanList, type FaceScanSession, type FaceScanSignal } from "@niq/application-contracts";
-import { ScanFace } from "lucide-react";
+import { Armchair, PersonStanding, ScanFace } from "lucide-react";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { createCaptureController } from "./careplix-capture";
@@ -229,9 +229,15 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {data?.enabled && session?.state === "COMPLETED" && !rescanRequested && phase === "idle" && record.status === "DRAFT" && <Button variant="outline" isDisabled={disabled || stale} onPress={() => { setConsented(false); setPosture(""); setRescanRequested(true); }}>Scan again</Button>}
     {data?.enabled && canStart && (session?.state !== "COMPLETED" || rescanRequested) && phase === "idle" && record.status === "DRAFT" && <div className="space-y-4 border-t border-border pt-4">
       {session?.state === "COMPLETED" && <p className="text-sm text-muted-foreground">A new scan will replace the current result. Previous results stay saved in the assessment history.</p>}
-      <p className="text-sm text-muted-foreground">Keep your face still and well-lit for 30 seconds. Follow the position guidance during capture.</p>
-      <p className="text-sm text-muted-foreground">Stay on this page. Clicking elsewhere stops the scan.</p>
-      <div className="space-y-2"><p className="text-sm font-medium">Posture <span aria-hidden="true" className="text-destructive">*</span></p><ChoiceGroup id="face-scan-posture" label="Posture" options={scanPostureOptions} value={selectedPosture} onChange={value => { setPosture(value as ScanPosture); }} required disabled={disabled || session?.state === "REQUESTED" || (startKey.current !== null && !terminal.has(session?.state ?? ""))} /></div>
+      <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground" aria-hidden="true"><ScanFace className="size-6" strokeWidth={2.5} /></span>
+        <div className="min-w-0 space-y-2 text-sm text-foreground">
+          <p className="font-semibold">Before you start</p>
+          <p>Keep your face still and well-lit for 30 seconds. Follow the position guidance during capture.</p>
+          <p><strong>Stay on this page.</strong> Clicking elsewhere stops the scan.</p>
+        </div>
+      </div>
+      <div className="space-y-2"><p className="text-sm font-medium">Posture <span aria-hidden="true" className="text-destructive">*</span></p><ChoiceGroup id="face-scan-posture" label="Posture" options={scanPostureOptions} value={selectedPosture} onChange={value => { setPosture(value as ScanPosture); }} required disabled={disabled || session?.state === "REQUESTED" || (startKey.current !== null && !terminal.has(session?.state ?? ""))} iconTiles renderIcon={optionId => optionId === "resting" ? <Armchair className="size-6" strokeWidth={2} /> : <PersonStanding className="size-6" strokeWidth={2} />} /></div>
       {session?.state === "REQUESTED" && <p className="text-sm">This attempt uses {session.context.heightCm} cm and {session.context.weightKg} kg, {scanPostureLabels[session.context.posture].toLowerCase()}. Cancel it to use changed details.</p>}
       <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={consented} onChange={event => setConsented(event.target.checked)} className="mt-1 accent-primary"/>The patient agrees to a camera scan and sharing scan data, date of birth, gender, height and weight for analysis.</label>
       <div className="flex flex-wrap gap-3"><Button isDisabled={disabled || !consented || !selectedPosture || stale} onPress={() => { void start(); }}><ScanFace aria-hidden="true"/>{session?.state === "REQUESTED" ? "Resume capture" : session?.state === "FAILED" ? "Try again" : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start face scan"}</Button>{session?.state === "COMPLETED" && <Button variant="outline" onPress={() => { setRescanRequested(false); }}>Keep current results</Button>}{session?.state === "REQUESTED" && <Button variant="outline" isDisabled={disabled} onPress={() => { void cancel(); }}>Cancel attempt</Button>}</div>
