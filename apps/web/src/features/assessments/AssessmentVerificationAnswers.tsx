@@ -1,13 +1,14 @@
 import { assessmentFieldError, isAssessmentFieldApplicable, type FormAnswers, type FormField } from "@niq/application-contracts";
 import { assessmentFieldGroups } from "./AssessmentFields";
 import { assessmentOptionIcon } from "./assessmentOptionIcon";
+import { formatGenderAnswer } from "./formatGenderAnswer";
 
 function AnswerValue({ field, answers }: { field: FormField; answers: FormAnswers }) {
   const value = answers[field.id];
   const empty = value === null || value === undefined || value === "" || typeof value === "string" && !value.trim();
   const display = empty ? "Not answered" : Array.isArray(value)
     ? value.length ? value.map(id => field.options?.find(option => option.id === id)?.label ?? id).join(", ") : "None"
-    : field.options?.find(option => option.id === value)?.label ?? String(value);
+    : field.options?.find(option => option.id === value)?.label ?? (field.id === "gender" && typeof value === "string" ? formatGenderAnswer(value) : String(value));
   const error = assessmentFieldError(field, value);
   const choiceIds = Array.isArray(value) ? value : typeof value === "string" && field.options?.some(option => option.id === value) ? [value] : [];
   const visualChoices = choiceIds.map(id => ({ id, label: field.options?.find(option => option.id === id)?.label ?? id, icon: assessmentOptionIcon(field.id, id) }));

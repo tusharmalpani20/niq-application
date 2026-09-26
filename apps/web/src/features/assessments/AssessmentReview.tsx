@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { AssessmentReports } from "./AssessmentReports";
 import { ArrowRight, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, ClipboardList } from "lucide-react";
 import { assessmentSectionIcons } from "./AssessmentSectionNavigation";
+import { formatGenderAnswer } from "./formatGenderAnswer";
 
 function ReviewSection({ id, title, summary, open, onToggle, children }: { id: string; title: string; summary: string; open: boolean; onToggle: () => void; children: ReactNode }) {
   const Icon = assessmentSectionIcons[id as keyof typeof assessmentSectionIcons] ?? ClipboardList;
@@ -52,7 +53,7 @@ export function AssessmentReview({ record, answers, scanStatus, scanSession, org
         <dl className="grid min-w-0 gap-3">{section.fields.filter(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers)).map(field => {
           const value = answers[field.id];
           const empty = value === null || value === undefined || value === "" || typeof value === "string" && !value.trim();
-          const display = empty ? "Not answered" : Array.isArray(value) ? value.length ? value.map(id => field.options?.find(option => option.id === id)?.label ?? id).join(", ") : "None" : field.options?.find(option => option.id === value)?.label ?? String(value);
+          const display = empty ? "Not answered" : Array.isArray(value) ? value.length ? value.map(id => field.options?.find(option => option.id === id)?.label ?? id).join(", ") : "None" : field.options?.find(option => option.id === value)?.label ?? (field.id === "gender" && typeof value === "string" ? formatGenderAnswer(value) : String(value));
           const error = assessmentFieldError(field, value);
           return <div key={field.id} className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-1 border-b border-border pb-3 last:border-0"><dt className="break-words text-sm text-muted-foreground">{field.label}{field.required && " *"}</dt><dd className={`min-w-0 break-words ${error ? "text-destructive" : ""}`}>{display}{field.unit && !empty && ` ${field.unit}`}{error && error !== "Required" && <p className="mt-1 text-sm">{error}</p>}</dd></div>;
         })}</dl>
