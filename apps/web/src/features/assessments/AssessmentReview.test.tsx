@@ -11,13 +11,14 @@ test("review distinguishes questionnaire coverage from required readiness", () =
   expect(html).toContain("0/6 answered");
   expect(html).not.toContain("No required questions");
   expect(html).toContain("Edit answers");
-  expect(html).toMatch(/Face scan<\/span><span[^>]*>Done<\/span>/);
+  expect(html).toContain('aria-controls="review-section-face_scan"');
+  expect(html).toContain('>Done</span>');
   expect(html).toContain("Loading saved scan results…");
   expect(html).toContain("Go to Face scan");
   expect(html).toContain("No attachments added.");
   expect(html).not.toContain("Review attachments");
   expect(html.indexOf("Face scan")).toBeGreaterThan(html.indexOf("Personal details"));
-  expect(html.indexOf('>Attachments</span>')).toBeGreaterThan(html.indexOf('>Dietary details</span>'));
+  expect(html.indexOf('>Attachments</button>')).toBeGreaterThan(html.indexOf('>Dietary details</button>'));
 });
 
 test("review includes saved face scan measurements inside its Face scan section", () => {
