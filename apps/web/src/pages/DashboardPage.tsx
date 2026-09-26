@@ -138,7 +138,7 @@ export function DashboardPage() {
       </section>
     </>}
     {data && (isClinician || isAdmin) && <>
-      <div className="mt-7 grid items-start gap-4 min-[860px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><PriorityAssessments assessments={data.assessments} /><QuickActions canAddPatient={hasPermission(user.role, "patients.create")} canCreateAssessment={canCreateAssessment} queuedReviews={data.queuedReviews} myReviews={data.myReviews} /></div>
+      <div className="mt-7 grid items-stretch gap-4 min-[860px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><PriorityAssessments assessments={data.assessments} /><QuickActions canAddPatient={hasPermission(user.role, "patients.create")} canCreateAssessment={canCreateAssessment} queuedReviews={data.queuedReviews} myReviews={data.myReviews} /></div>
       <AssessmentActivityCalendar organizationId={user.organizationId} assessments={data.assessments} />
       <RiskOverviewCards risk={data.risk} />
     </>}
