@@ -43,7 +43,7 @@ export function AssessmentBmiCard({ answers }: { answers: FormAnswers }) {
         {category && <p className="mt-2 text-sm font-semibold">{category} <span className="font-normal text-muted-foreground">· Adult reference</span></p>}
         {bmi === null && <p className="mt-2 text-sm text-muted-foreground">Enter height and current weight to calculate BMI.</p>}
         {bmi !== null && !adult && <p className="mt-2 text-sm text-muted-foreground">Adult BMI categories do not apply under age 20.</p>}
-        {category && <p className="mt-2 text-xs text-muted-foreground">BMI is a screening measure; interpret it alongside clinical findings.</p>}
+        {category && <p className="mt-2 text-xs text-muted-foreground">BMI is a screening tool, not a diagnosis. Consider other health information too.</p>}
       </div>
       {adult && <svg viewBox="0 0 240 122" className="mx-auto w-full max-w-64" aria-hidden="true">
         {reference.map(band => <path key={band.label} d={arcPath(band.min, band.max)} fill="none" stroke={band.color} strokeWidth="15" />)}
