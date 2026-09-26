@@ -135,6 +135,28 @@ test("new assessment switches to inline patient registration without opening the
   });
 });
 
+test("a no-match search offers patient creation and prefills the searched name", async () => {
+  let writes = 0;
+  await harness("/assessments/new", async (_url, init) => { if (init?.method === "POST") writes++; throw new Error("Unexpected request"); }, async () => {
+    const input = document.querySelector<HTMLInputElement>("#assessment-patient")!;
+    const search = async (text: string) => act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new window.KeyboardEvent("keyup", { key: "e", bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    await act(async () => { input.click(); input.focus(); });
+    await search("Real selected");
+    expect([...document.querySelectorAll('[role="option"]')].some(option => option.textContent?.includes("Create"))).toBe(false);
+    await search("New patient name");
+    const create = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent?.includes("Create “New patient name”"));
+    expect(create).toBeDefined();
+    await act(async () => { create!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(document.querySelector<HTMLInputElement>("#patient-name")?.value).toBe("New patient name");
+    expect(writes).toBe(0);
+  });
+});
+
 test("Exit leaves patient selection without creating an assessment", async () => {
   await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async router => {
     expect(document.querySelector(".assessment-workflow > header button")).toBeNull();

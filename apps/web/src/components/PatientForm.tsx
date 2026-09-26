@@ -20,6 +20,8 @@ type Props = {
   organizationId: string;
   facilities: Facility[];
   patient?: Patient;
+  initialName?: string;
+  initialFacilityId?: string;
   canCorrectIdentity?: boolean;
   onCancel: () => void;
   onExit?: () => void;
@@ -30,9 +32,9 @@ type Props = {
   cancelLabel?: string;
 };
 
-export function PatientForm({ organizationId, facilities, patient, canCorrectIdentity, onCancel, onExit, onSaved, onBusyChange, focusField, submitLabel, cancelLabel = "Cancel", ref }: Props) {
+export function PatientForm({ organizationId, facilities, patient, initialName, initialFacilityId: preferredFacilityId, canCorrectIdentity, onCancel, onExit, onSaved, onBusyChange, focusField, submitLabel, cancelLabel = "Cancel", ref }: Props) {
   const activeFacilities = facilities.filter(item => item.status === "ACTIVE");
-  const initialFacilityId = useRef(patient?.homeFacility?.id ?? (activeFacilities.length === 1 ? activeFacilities[0]!.id : null)).current;
+  const initialFacilityId = useRef(patient?.homeFacility?.id ?? activeFacilities.find(item => item.id === preferredFacilityId)?.id ?? (activeFacilities.length === 1 ? activeFacilities[0]!.id : null)).current;
   const [facilityId, setFacilityId] = useState<string | null>(initialFacilityId);
   const [gender, setGender] = useState<Patient["gender"] | null>(patient?.gender ?? null);
   const [birth, setBirth] = useState(patient?.dateOfBirth ?? "");
@@ -107,7 +109,7 @@ export function PatientForm({ organizationId, facilities, patient, canCorrectIde
       <div className="grid gap-4">
         <h3 className="font-semibold">Patient details</h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field data-invalid={!!fieldErrors.name || undefined}><FieldLabel htmlFor="patient-name" className="required-field-label">Patient name <span aria-hidden="true">*</span></FieldLabel><Input id="patient-name" name="name" defaultValue={patient?.displayName} autoComplete="name" required maxLength={200} autoFocus={!focusField} aria-invalid={!!fieldErrors.name} aria-describedby={fieldErrors.name ? "patient-name-error" : undefined} onChange={() => clearFieldError("name")} />{fieldErrors.name && <FieldError id="patient-name-error">{fieldErrors.name}</FieldError>}</Field>
+          <Field data-invalid={!!fieldErrors.name || undefined}><FieldLabel htmlFor="patient-name" className="required-field-label">Patient name <span aria-hidden="true">*</span></FieldLabel><Input id="patient-name" name="name" defaultValue={patient?.displayName ?? initialName} autoComplete="name" required maxLength={200} autoFocus={!focusField} aria-invalid={!!fieldErrors.name} aria-describedby={fieldErrors.name ? "patient-name-error" : undefined} onChange={() => clearFieldError("name")} />{fieldErrors.name && <FieldError id="patient-name-error">{fieldErrors.name}</FieldError>}</Field>
           <Field data-invalid={!!fieldErrors.medicalRecordNumber || undefined}><FieldLabel htmlFor="patient-mrn" className={patient ? undefined : "required-field-label"}>Medical record number {!patient && <span aria-hidden="true">*</span>}</FieldLabel><Input id="patient-mrn" name={patient ? undefined : "mrn"} defaultValue={patient?.medicalRecordNumber} placeholder="Hospital MRN" maxLength={120} disabled={!!patient} required={!patient} aria-invalid={!!fieldErrors.medicalRecordNumber} aria-describedby={fieldErrors.medicalRecordNumber ? "patient-mrn-error" : undefined} onChange={() => clearFieldError("medicalRecordNumber")} />{patient && <FieldDescription>{canCorrectIdentity ? "Use Correct MRN on the patient record to change this." : "Ask an organization admin to correct this."}</FieldDescription>}{fieldErrors.medicalRecordNumber && <FieldError id="patient-mrn-error">{fieldErrors.medicalRecordNumber}</FieldError>}</Field>
           <Field data-invalid={!!fieldErrors.homeFacilityId || undefined}><FieldLabel className="required-field-label">Facility <span aria-hidden="true">*</span></FieldLabel><Select aria-label="Facility" placeholder="Select facility" selectedKey={facilityId} onSelectionChange={key => { setFacilityId(String(key)); clearFieldError("homeFacilityId"); }} isRequired isInvalid={!!fieldErrors.homeFacilityId} aria-describedby={fieldErrors.homeFacilityId ? "patient-facility-error" : undefined} isDisabled={isSubmitting}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{options.map(item => <SelectItem id={item.id} key={item.id}>{item.name}{item.status !== "ACTIVE" ? " (inactive)" : ""}</SelectItem>)}{missingCurrent && <SelectItem id={currentFacility.id}>{currentFacility.name} (current)</SelectItem>}</SelectContent></Select>{fieldErrors.homeFacilityId && <FieldError id="patient-facility-error">{fieldErrors.homeFacilityId}</FieldError>}</Field>
           <Field data-invalid={!!fieldErrors.dateOfBirth || undefined}><FieldLabel htmlFor="patient-birth" className={patient ? undefined : "required-field-label"}>Date of birth {!patient && <span aria-hidden="true">*</span>}</FieldLabel><DateInput id="patient-birth" label="Date of birth" value={birth} disabled={isSubmitting || !!patient} required={!patient} invalid={!!fieldErrors.dateOfBirth} describedBy={fieldErrors.dateOfBirth ? "patient-birth-error" : undefined} max={todayDate()} onChange={value => { setBirth(value ?? ""); clearFieldError("dateOfBirth"); }} />{patient && <FieldDescription>{canCorrectIdentity ? "Use Correct DOB on the patient record to change this." : "Ask an organization admin to correct this."}</FieldDescription>}{fieldErrors.dateOfBirth && <FieldError id="patient-birth-error">{fieldErrors.dateOfBirth}</FieldError>}</Field>
