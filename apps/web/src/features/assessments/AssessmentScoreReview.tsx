@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { assessmentResultView } from "./AssessmentResult";
 import { assessmentSectionIcons } from "./AssessmentSectionNavigation";
 import { assessmentRequest } from "./workflow-api";
+import { AssessmentRiskCircle } from "./AssessmentRiskCircle";
 
 const points = (value: number | null) => value === null ? "—" : `${value} ${value === 1 ? "pt" : "pts"}`;
 const riskColorClasses = {
@@ -107,7 +108,6 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   const scan = data?.scan;
   const scanSummaryStatus = scanStatus === "Face scan ready" ? "Not done" : scanStatus;
   const scoreCard = riskCardAppearance(revised ? null : result.classification);
-  const originalRiskBadge = riskBadgeAppearance(result.classification);
   const scanSection = <div className="overflow-hidden rounded-xl border border-border">
     <div className={`${summaryRowClass} ${expanded === "face_scan" ? "bg-muted/40" : ""}`}>
       <Button variant="ghost" className={summaryToggleClass} aria-expanded={expanded === "face_scan"} aria-controls="score-section-face_scan" onPress={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>{expanded === "face_scan" ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}<assessmentSectionIcons.face_scan className="size-4 shrink-0" aria-hidden="true" />Face scan</Button>
@@ -122,7 +122,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="assessment-summary-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">Assessment summary</h2><span className="text-sm text-muted-foreground">{record.progress.answered}/{record.progress.required} required answers complete</span></div>
     {record.progress.answered === record.progress.required && coverage.answered < coverage.total && <p className="mt-2 text-sm text-muted-foreground">Some optional questions remain unanswered.</p>}
     <div {...scoreCard}>
-      <div className="min-w-44 flex-1"><p className="text-sm text-muted-foreground">Final NIQ score</p><p className="mt-1 text-3xl font-semibold tabular-nums">{points(result.score)}</p>{result.classification && <p className={`mt-2 ${originalRiskBadge.className}`} style={originalRiskBadge.style}>{result.classification.label}</p>}</div>
+      <div className="min-w-44 flex-1"><AssessmentRiskCircle score={result.score} classification={result.classification} categories={result.riskCategories} /></div>
       {revised && overall && <div className="min-w-44 flex-1 border-t border-border pt-4 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0"><p className="text-sm text-muted-foreground">Reviewed score</p><p className="mt-1 text-3xl font-semibold tabular-nums text-brand-ink">{points(overall.reviewedPoints)}</p><p className="text-xs text-muted-foreground">{overall.overridden ? "Total override" : "From section scores"}</p>
         <p className="mt-1 text-sm" role="status">{data?.risk?.classification && ["ORIGINAL", "CONFIRMED"].includes(data.risk.status)
           ? <span {...riskBadgeAppearance(data.risk.classification)}>{data.risk.classification.label}{data.risk.status === "ORIGINAL" ? " (original restored)" : ""}</span>

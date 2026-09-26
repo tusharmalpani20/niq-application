@@ -19,31 +19,23 @@ async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[];
  const root=createRoot(document.getElementById("root")!); const flush=()=>new Promise(resolve=>setTimeout(resolve,0));
  try {await act(async()=>{root.render(<AssessmentScoreReview record={{...record,result:scoredResult}} organizationId="org" renderScan={()=><p>Scan details</p>} reportsContent={<p>Report details</p>}/>);await flush();});await run({posts,rerender:async(next,canReview=true,scanStatus)=>{await act(async()=>{root.render(<AssessmentScoreReview record={next} organizationId="org" canReview={canReview} scanStatus={scanStatus} renderScan={()=><p>Scan details</p>} reportsContent={<p>Report details</p>}/>);await flush();});},click:async name=>{const button=[...document.querySelectorAll("button")].find(b=>(b.getAttribute("aria-label")??b.textContent?.trim())===name);if(!button)throw new Error(`Missing ${name}`);await act(async()=>{button.click();await flush();});}});}finally{await act(async()=>root.unmount());dom.window.close();for(const [key,value] of Object.entries(previous))if(value)Object.defineProperty(globalThis,key,value);else delete (globalThis as any)[key];}
 }
-test("saved category colors style original and reviewed risk badges", async()=>harness(async()=>{
- const original=[...document.querySelectorAll("p")].find(node=>node.textContent?.trim()==="Low · NIQ");
- const reviewed=[...document.querySelectorAll("span")].find(node=>node.textContent?.trim()==="Reviewed category · NIQ");
- expect(original?.className).toContain("border-emerald-300");
+test("saved bands form a circular category display while reviewed risk stays separate", async()=>harness(async()=>{
+ const circle=document.querySelector('[data-risk-circle]');
+ const reviewed=[...document.querySelectorAll("span")].find(node=>node.textContent?.trim()==="Reviewed category");
+ expect(circle?.getAttribute("style")).toContain("conic-gradient");
+ expect(document.body.textContent).toContain("0–15 pts");
+ expect(document.body.textContent).toContain("≥26 pts");
  expect(reviewed?.className).toContain("border-red-300");
- expect(original?.parentElement?.parentElement?.className).toContain("border-primary/20");
-},[entry],{status:"CONFIRMED",classification:{id:"reviewed",label:"Reviewed category",interpretation:"",color:"red"},resultReference:"classification",failureCode:null,canRetry:false},{...result,classification:{...result.classification!,color:"green"}}));
+},[entry],{status:"CONFIRMED",classification:{id:"reviewed",label:"Reviewed category",interpretation:"",color:"red"},resultReference:"classification",failureCode:null,canRetry:false},{...result,classification:{...result.classification!,color:"green"},riskCategories:[
+ {id:"low",label:"Low",color:"green",min:0,max:15,minInclusive:true,maxInclusive:true},
+ {id:"moderate",label:"Moderate",color:"amber",min:16,max:25,minInclusive:true,maxInclusive:true},
+ {id:"high",label:"High",color:"red",min:26,max:null,minInclusive:true,maxInclusive:true},
+ ]}));
 
-test("custom colors style the saved score card and keep light badges legible", async()=>harness(async()=>{
- const badge=[...document.querySelectorAll("p")].find(node=>node.textContent?.trim()==="Low · NIQ");
- expect(badge?.style.backgroundColor).toBe("rgb(254, 254, 254)");
- expect(badge?.style.color).toBe("rgb(0, 0, 0)");
- expect(badge?.parentElement?.parentElement?.style.borderColor).toBe("rgb(254, 254, 254)");
-},[],undefined,{...result,classification:{...result.classification!,color:"#FeFeFe"}}));
-
-test("custom reviewed risk color remains distinct from the original color", async()=>harness(async()=>{
- const original=[...document.querySelectorAll("p")].find(node=>node.textContent?.trim()==="Low · NIQ");
- const reviewed=[...document.querySelectorAll("span")].find(node=>node.textContent?.trim()==="Reviewed category · NIQ");
- expect(original?.style.backgroundColor).toBe("rgb(254, 254, 254)");
- expect(reviewed?.style.backgroundColor).toBe("rgb(18, 52, 86)");
- expect(reviewed?.style.color).toBe("rgb(255, 255, 255)");
-},[entry],{status:"CONFIRMED",classification:{id:"reviewed",label:"Reviewed category",interpretation:"",color:"#123456"},resultReference:"classification",failureCode:null,canRetry:false},{...result,classification:{...result.classification!,color:"#FeFeFe"}}));
-
-test("historical categories without color use the neutral badge", async()=>harness(async()=>{
- expect([...document.querySelectorAll("p")].find(node=>node.textContent?.trim()==="Low · NIQ")?.className).toContain("border-border");
+test("historical results without saved ranges still show the saved category", async()=>harness(async()=>{
+ expect(document.querySelector('[data-risk-circle]')?.getAttribute("style")).toContain("rgb(100, 116, 139)");
+ expect(document.body.textContent).toContain("Low");
+ expect(document.body.textContent).not.toContain("Risk categories");
 }));
 
 test("summary keeps scored answers readable without score edit controls", async () => harness(async ({ click, posts }) => {
@@ -86,8 +78,8 @@ test("all original and reviewed scores remain visible without adjustment actions
 }, [entry, { ...entry, id: "entry2", revision: 2, actorId: "actor2", actorName: "Reviewer Two", previousPoints: 10, points: 11 }]));
 
 test("confirmed reviewed risk displays separately from original NIQ risk", async()=>harness(async()=>{
- expect(document.body.textContent).toContain("Reviewed category · NIQ");
- expect(document.body.textContent).toContain("Low · NIQ");
+ expect(document.body.textContent).toContain("Reviewed category");
+ expect(document.body.textContent).toContain("Low");
  expect(document.body.textContent).not.toContain("Risk assessment pending");
 },[entry],{status:"CONFIRMED",classification:{id:"reviewed",label:"Reviewed category",interpretation:""},resultReference:"classification",failureCode:null,canRetry:false}));
 
@@ -96,7 +88,7 @@ test("failed risk keeps scores visible and retry fences the current result and r
  expect(document.body.textContent).toContain("Your score changes are saved");
  await click("Retry risk assessment");
  expect(posts).toEqual([{expectedResultReference:"result",expectedRevision:1}]);
- expect(document.body.textContent).toContain("Reviewed category · NIQ");
+ expect(document.body.textContent).toContain("Reviewed category");
  expect(document.body.textContent).not.toContain("Risk assessment unavailable");
 },[entry],{status:"UNAVAILABLE",classification:null,resultReference:null,failureCode:"TIMEOUT",canRetry:true}));
 
@@ -109,11 +101,11 @@ test("risk retry is hidden after review access is lost", async()=>harness(async(
 test("pending classification never displays a previous reviewed risk", async()=>harness(async()=>{
  expect(document.body.textContent).toContain("Risk assessment pending");
  expect(document.body.textContent).toContain("Clinical review can be completed once its risk is confirmed");
- expect(document.body.textContent).not.toContain("Old category · NIQ");
+ expect(document.body.textContent).not.toContain("Old category");
 },[entry],{status:"PENDING",classification:{id:"old",label:"Old category",interpretation:""},resultReference:null,failureCode:null,canRetry:false}));
 
 test("restored questionnaire uses original risk and has no retry", async()=>harness(async()=>{
- expect(document.body.textContent).toContain("Low · NIQ (original restored)");
+ expect(document.body.textContent).toContain("Low (original restored)");
  expect(document.body.textContent).not.toContain("Risk assessment pending");
  expect([...document.querySelectorAll("button")].some(b=>b.textContent==="Retry risk assessment")).toBe(false);
 },[entry,{...entry,id:"restore",revision:2,points:null}],{status:"ORIGINAL",classification:result.classification,resultReference:result.resultReference,failureCode:null,canRetry:false}));
