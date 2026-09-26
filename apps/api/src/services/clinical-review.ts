@@ -55,6 +55,17 @@ export class ClinicalReviewService {
  }
  async command(actor:Principal,org:string,id:string,raw:ClinicalReviewAction,context:RequestContext){
   const parsed=clinicalReviewActionSchema.safeParse(raw);if(!parsed.success)throw new ServiceError("VALIDATION_ERROR","Complete the required clinical review fields.");const input=parsed.data;
+  if(input.action==="SEND"||input.action==="RESEND") {
+   const current=await this.read(actor,org,id);
+   if(current.allowedActions.includes(input.action)&&current.revision===input.expectedRevision&&current.scoreRevision===input.expectedScoreRevision) {
+    const [openScan]=await this.service.db.select({id:assessmentFaceScans.id}).from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId,org),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true),eq(assessmentFaceScans.active,true)));
+    if(openScan) {
+     const { AssessmentFaceScanService }=await import("./assessment-face-scan");
+     const cancelled=await new AssessmentFaceScanService(this.service).mutate(actor,org,id,openScan.id,"cancel");
+     if(cancelled.state!=="CANCELLED")throw new ServiceError("CONFLICT","The face scan is still open. Automatic cancellation was not confirmed; try again when its status updates.");
+    }
+   }
+  }
   return this.service.db.transaction(async tx=>{
    const row=await this.service.authorize(actor,org,id,tx,true);await this.actor(actor,org,tx);
    // Scope may have changed while waiting for the membership lock.
