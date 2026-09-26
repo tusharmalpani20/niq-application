@@ -19,6 +19,8 @@ export async function isDatabaseSchemaReady(sql: postgres.Sql): Promise<boolean>
       to_regclass('public.assessments') is not null
       and to_regclass('public.assessment_initializations') is not null
       and to_regclass('public.assessment_face_scans') is not null
+      and to_regclass('public.face_scan_consents') is not null
+      and exists (select 1 from information_schema.columns where table_schema='public' and table_name='assessment_face_scans' and column_name='consent_id')
       and exists (select 1 from information_schema.columns where table_schema='public' and table_name='assessment_face_scans' and column_name='reconciliation_attempts')
       and exists (select 1 from information_schema.columns where table_schema='public' and table_name='assessment_face_scans' and column_name='is_current')
       and to_regclass('public.assessment_history') is not null and to_regclass('public.assessment_reviewed_risks') is not null

@@ -720,6 +720,7 @@ export const assessmentFaceScans = pgTable("assessment_face_scans", {
   revision: integer("revision").notNull(), requestKey: text("request_key").notNull(), connection: jsonb("connection").notNull(),
   remoteRequestKey: text("remote_request_key"), reconciliationAttempts: integer("reconciliation_attempts").notNull().default(0),
   snapshot: jsonb("snapshot").notNull(), remoteId: text("remote_id"), state: text("state").notNull().default("REQUESTED"),
+  consentId: entityId("consent_id"),
   isCurrent: boolean("is_current").notNull().default(false),
   cycle: integer("cycle").notNull().default(0),
   active: boolean("active").notNull().default(true), projection: jsonb("projection"), failureCode: text("failure_code"),
@@ -731,6 +732,29 @@ export const assessmentFaceScans = pgTable("assessment_face_scans", {
   uniqueIndex("assessment_face_scans_active_uidx").on(t.organizationId,t.assessmentId).where(sql`${t.active} = true`),
   index("assessment_face_scans_recovery_idx").on(t.active,t.nextAttemptAt),
   foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),
+  foreignKey({columns:[t.organizationId,t.consentId],foreignColumns:[faceScanConsents.organizationId,faceScanConsents.id]}),
+]);
+
+/** Each consent attempt remains as an audit record; only one is current. */
+export const faceScanConsents = pgTable("face_scan_consents", {
+  id: entityId("id").primaryKey(), organizationId: entityId("organization_id").notNull(), assessmentId: entityId("assessment_id").notNull(),
+  patientId: entityId("patient_id").notNull(), actorId: entityId("actor_id").notNull(), cycle: integer("cycle").notNull(),
+  method: text("method").notNull(), provenance: text("provenance").notNull(), status: text("status").notNull(),
+  isCurrent: boolean("is_current").notNull().default(true), requestedAt: timestamp("requested_at",{withTimezone:true}),
+  respondedAt: timestamp("responded_at",{withTimezone:true}), fileName: text("file_name"), mediaType: text("media_type"),
+  size: integer("size"), sha256: text("sha256"), objectKey: text("object_key"), uploadKey: text("upload_key"),
+  ...timestamps,
+}, t => [
+  uniqueIndex("face_scan_consents_org_id_uidx").on(t.organizationId,t.id),
+  uniqueIndex("face_scan_consents_current_uidx").on(t.organizationId,t.assessmentId).where(sql`${t.isCurrent} = true`),
+  uniqueIndex("face_scan_consents_upload_uidx").on(t.organizationId,t.uploadKey),
+  index("face_scan_consents_assessment_idx").on(t.organizationId,t.assessmentId,t.createdAt),
+  foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),
+  foreignKey({columns:[t.organizationId,t.patientId],foreignColumns:[patients.organizationId,patients.id]}),
+  foreignKey({columns:[t.organizationId,t.actorId],foreignColumns:[organizationMemberships.organizationId,organizationMemberships.id]}),
+  check("face_scan_consents_method_ck",sql`${t.method} in ('LINK','UPLOAD')`),
+  check("face_scan_consents_provenance_ck",sql`${t.provenance} in ('SIMULATED','SIGNED_UPLOAD')`),
+  check("face_scan_consents_status_ck",sql`${t.status} in ('REQUESTED','APPROVED')`),
 ]);
 
 /** Append-only encrypted review events. The original scoring result is never updated. */

@@ -12,6 +12,7 @@ import { secureEqual } from "./security/tokens";
 import type { ApplicationService, Principal, RequestContext } from "./services/application";
 import { ServiceError } from "./services/application";
 import { mountFaceScanRoutes } from "./face-scan-routes";
+import { mountFaceScanConsentRoutes } from "./face-scan-consent-routes";
 import { AssessmentFaceScanService } from "./services/assessment-face-scan";
 import { BoundedBodyError } from "./http/bounded-json";
 import { mountAssessmentRoutes } from "./assessment-routes";
@@ -117,6 +118,7 @@ export function createApp(dependencies: AppDependencies) {
     if (context.req.header("origin") !== dependencies.allowedOrigin) return context.json(errorBody("FORBIDDEN", "The request origin is not allowed.", context.get("requestId")), 403);
     // Files stream through a separately bounded storage adapter; JSON drafts are bounded here.
     if (/\/reports\/[^/]+\/files$/.test(path) && context.req.method === "POST") return next();
+    if (/\/face-scan-consent\/upload$/.test(path) && context.req.method === "POST") return next();
     if (/\/face-scans(?:\/|$)/.test(path)) return next(); // Routes count actual bytes and enforce an upload deadline.
     return bodyLimit({ maxSize: 256 * 1024, onError: c => c.json(errorBody("VALIDATION_ERROR", "The request is too large.", c.get("requestId")), 413) })(context, next);
   });
@@ -203,6 +205,7 @@ export function createApp(dependencies: AppDependencies) {
   if (dependencies.assessmentWorkflow) {
     mountAssessmentRoutes(app, dependencies.assessmentWorkflow);
     mountFaceScanRoutes(app, new AssessmentFaceScanService(dependencies.assessmentWorkflow));
+    mountFaceScanConsentRoutes(app, dependencies.assessmentWorkflow);
   }
   app.notFound((context) => context.json(errorBody("NOT_FOUND", "The requested resource was not found.", context.get("requestId")), 404));
   app.onError((error, context) => {

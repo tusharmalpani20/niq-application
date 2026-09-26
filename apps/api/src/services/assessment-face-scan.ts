@@ -9,6 +9,7 @@ import { decryptCredential } from "../security/credential-encryption";
 import { ServiceError, type Principal, type RequestContext } from "./application";
 import { AssessmentWorkflowService, type StoredWorkflow, type WorkflowExecutor } from "./assessment-workflow";
 import { appendAssessmentHistory } from "./clinical-review-state";
+import { FaceScanConsentService } from "./face-scan-consent";
 const recoverableAssessmentStatuses: Array<typeof assessments.$inferSelect.status> = ["DRAFT", "SCORED", "SCORING_PENDING", "SCORING_UNAVAILABLE"];
 type Row = typeof assessmentFaceScans.$inferSelect;
 type Identity = {
@@ -131,6 +132,10 @@ export class AssessmentFaceScanService {
         return replay;
       }
       this.workflow.editable(assessmentRow, input.revision, actor);
+      const consent = await new FaceScanConsentService(this.workflow).current(actor, org, assessment, tx, context);
+      if (!consent || consent.status !== "APPROVED" ||
+          (consent.provenance === "SIMULATED" && this.workflow.config.NODE_ENV === "production"))
+        throw new ServiceError("VALIDATION_ERROR", "Patient consent is required before starting a face scan.");
       const [existing] = await tx.select().from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId, org), eq(assessmentFaceScans.assessmentId, assessment), eq(assessmentFaceScans.active, true)));
       if (existing)
         throw new ServiceError("CONFLICT", "A face scan attempt already exists. Restore it before starting another.", { currentSessionId: existing.id });
@@ -158,11 +163,12 @@ export class AssessmentFaceScanService {
         requestKey: input.requestKey,
         remoteRequestKey: `face-scan:${org}:${id}`,
         connection: connection.identity,
-        snapshot: this.workflow.seal(snapshot)
+        snapshot: this.workflow.seal(snapshot),
+        consentId: consent.id,
       }).returning();
-      await appendAssessmentHistory(this.workflow,tx,assessmentRow,actor,"FACE_SCAN_REQUESTED",{sessionId:id,context:snapshot});
+      await appendAssessmentHistory(this.workflow,tx,assessmentRow,actor,"FACE_SCAN_REQUESTED",{sessionId:id,consentId:consent.id,context:snapshot});
       await this.workflow.audit(tx, actor, context, assessment, "FACE_SCAN_REQUESTED", {
-        sessionId: id
+        sessionId: id, consentId: consent.id
       });
       return row!;
     });

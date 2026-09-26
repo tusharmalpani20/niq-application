@@ -43,3 +43,11 @@ test("face scan endpoints enforce session, origin and bounded upload before serv
  // Signal requests larger than ordinary drafts reach their own JSON validation boundary.
  expect((await send(`${scans}/01J00000000000000000000005/signal`,"http://localhost:5173",JSON.stringify({extra:"x".repeat(300000)}))).status).toBe(400);
 });
+
+test("consent endpoints require a session and reject cross-origin writes", async () => {
+  const { app } = harness();
+  const consent = `${path}/face-scan-consent`;
+  expect((await app.request(consent)).status).toBe(401);
+  expect((await app.request(`${consent}/request`, { method: "POST", headers: { cookie: "niq_session=valid", origin: "https://untrusted.invalid", "content-type": "application/json" }, body: JSON.stringify({ revision: 0 }) })).status).toBe(403);
+  expect((await app.request(`${consent}/request`, { method: "POST", headers: { cookie: "niq_session=valid", origin: "http://localhost:5173", "content-type": "application/json" }, body: JSON.stringify({ revision: 0, fakePatientClick: true }) })).status).toBe(400);
+});

@@ -474,6 +474,7 @@ export type VerifyMfaRequest = z.infer<typeof verifyMfaRequestSchema>;
 export type ResendMfaRequest = z.infer<typeof resendMfaRequestSchema>;
 
 export * from "./face-scan";
+export * from "./face-scan-consent";
 
 export * from "./assessment-score-reviews";
 

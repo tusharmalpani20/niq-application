@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { loadApplicationConfig } from "@niq/application-config";
 import { AssessmentFaceScanService, frozenFaceScanContext, canProjectScan } from "./assessment-face-scan";
-import { assessmentFaceScans } from "../db/schema";
+import { assessmentFaceScans, faceScanConsents } from "../db/schema";
 import { faceScanSignalSchema, startFaceScanSchema, faceScanResultSchema } from "../../../../packages/contracts/src/face-scan";
 test("new capture is unavailable by default",()=>expect(loadApplicationConfig({DATABASE_URL:"postgres://test",SESSION_SECRET:"test-secret-that-is-at-least-32-characters"}).FACE_SCAN_ENABLED).toBe(false));
 test("snapshot derives real patient demographics and saved measurements",()=>{
@@ -46,8 +46,9 @@ test("start freezes the configured staging employee and replay ignores later ove
  for (const override of [undefined, "spoke-operator-001"]) {
   const config=loadApplicationConfig({DATABASE_URL:"postgres://unused",SESSION_SECRET:"test-secret-that-is-at-least-32-characters",FACE_SCAN_ENABLED:"true",FACE_SCAN_EMPLOYEE_ID_OVERRIDE:override});
   let stored:any;
+  let consentApproved=false;
   const tx={
-   select:()=>({from:()=>({where:async()=>stored?[stored]:[]})}),
+   select:()=>({from:(table:any)=>({where:async()=>table===faceScanConsents?(consentApproved?[{id:"consent",status:"APPROVED",provenance:"SIGNED_UPLOAD",cycle:0}]:[]):stored?[stored]:[]})}),
    update:()=>({set:()=>({where:async()=>{}})}),
    insert:(table:any)=>({values:(value:any)=> table!==assessmentFaceScans?Promise.resolve():({returning:async()=>{
     stored={...value,state:"REQUESTED",active:true,projection:null,failureCode:null,createdAt:new Date(),updatedAt:new Date()};return [stored];
@@ -64,6 +65,8 @@ test("start freezes the configured staging employee and replay ignores later ove
   scans.row=async()=>stored;
   const actor={membershipId:"operator",role:"DOCTOR",platformRole:"USER",organizationId:"organization"} as any;
   const input={revision:0,requestKey:"test-staging-start-key",posture:"resting" as const};
+  await expect(scans.start(actor,"organization","assessment",input,{requestId:"test"})).rejects.toMatchObject({code:"VALIDATION_ERROR"});
+  consentApproved=true;
   const first=await scans.start(actor,"organization","assessment",input,{requestId:"test"});
   expect(first.context.employeeId).toBe(override??"deployment:operator");
   expect(JSON.stringify(stored.snapshot)).not.toContain(first.context.employeeId);
