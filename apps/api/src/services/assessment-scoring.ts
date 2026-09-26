@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { assessmentRiskColorSchema } from "@niq/application-contracts";
+import { assessmentRiskCategorySchema, assessmentRiskColorSchema } from "@niq/application-contracts";
 
 const id = z.string().min(1).max(200);
 const option = z.object({ id, label: z.string(), help: z.string() }).strict();
@@ -30,6 +30,7 @@ const classificationSchema = z.object({ id, label: z.string(), interpretation: z
 const evaluationSchema = evidenceSchema.extend({
   formatVersion: z.literal(2), profile: z.literal("NIQ_FINAL_ASSESSMENT"), complete: z.boolean(),
   score: z.number().finite().nonnegative().nullable(), classification: classificationSchema.nullable(),
+  riskCategories: z.array(assessmentRiskCategorySchema).optional(),
   questionnaireScore: z.number().finite().nonnegative().nullable().optional(),
   faceScan: z.object({ sessionId: id, points: z.number().finite().nonnegative() }).strict().nullable().optional(),
   components: z.array(component), answerCoverage: z.object({ totalEntries: z.literal(19), answeredEntries: z.number().int().nonnegative(), unansweredEntries: z.number().int().nonnegative(), pendingEntries: z.number().int().nonnegative(), allUnanswered: z.boolean() }).strict(),

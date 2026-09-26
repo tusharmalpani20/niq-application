@@ -36,6 +36,14 @@ describe("assessment scoring transport", () => {
     for (const color of ["chartreuse", "#fff", "#1234567", "#gggggg"])
       await expect(calculate({ ...colored, result: { ...colored.result, classification: { ...colored.result.classification, color } } })).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
+  test("retains configured risk ranges for the saved result", async () => {
+    const riskCategories = [
+      { id: "low", label: "Low", color: "green", min: 0, max: 15, minInclusive: true, maxInclusive: true },
+      { id: "high", label: "High", color: "#a12345", min: 15, max: null, minInclusive: false, maxInclusive: false },
+    ];
+    expect((await calculate({ ...success(), result: { ...success().result, riskCategories } })).result.riskCategories).toEqual(riskCategories);
+    await expect(calculate({ ...success(), result: { ...success().result, riskCategories: [{ ...riskCategories[0], sources: ["internal"] }] } })).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+  });
   test("accepts a completed blank questionnaire without inventing a score or risk", async () => {
     const blank = { ...result(), score: null, classification: null,
       components: result().components.map(component => ({ ...component, points: null, status: "unanswered" })),

@@ -70,6 +70,11 @@ export const assessmentRiskColorSchema = z.union([
   z.enum(["green", "amber", "red", "neutral", "blue", "purple"]),
   z.string().regex(/^#[0-9a-f]{6}$/i, "Use a six-digit hex color"),
 ]);
+export const assessmentRiskCategorySchema = z.object({
+  id: z.string(), label: z.string(), color: assessmentRiskColorSchema.optional(),
+  min: z.number().finite().nonnegative().nullable(), max: z.number().finite().nonnegative().nullable(),
+  minInclusive: z.boolean(), maxInclusive: z.boolean(),
+}).strict();
 export const assessmentClassificationSchema = z.object({
   id: z.string(), label: z.string(), interpretation: z.string(),
   // Older saved results predate category colors.
@@ -81,6 +86,9 @@ export const assessmentScoreResultSchema = z.object({
   questionnaireScore: z.number().finite().nonnegative().nullable().optional(),
   faceScan: z.object({ sessionId: z.string(), points: z.number().finite().nonnegative() }).nullable().optional(),
   classification: assessmentClassificationSchema.nullable(),
+  /** Snapshot of the scoring version's categories; older saved results may not have one. */
+  riskCategories: z.array(assessmentRiskCategorySchema).optional(),
+  derived: z.object({ weightLossPercent: z.number().finite().nullable(), proteinAdequacy: z.enum(["adequate", "inadequate"]).nullable() }).optional(),
   components: z.array(z.object({ id: z.string(), sectionId: z.string(), label: z.string(), points: z.number().finite().nonnegative().nullable(), status: z.enum(["answered", "unanswered", "pending"]), reason: z.string().optional() })),
   version: z.string(), checksum: z.string().regex(/^[a-f0-9]{64}$/), resultReference: z.string(), calculatedAt: z.iso.datetime(), clinicalUsePermitted: z.boolean(),
 }).superRefine((result, ctx) => {
