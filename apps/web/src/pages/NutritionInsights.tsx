@@ -69,7 +69,7 @@ export function NutritionInsights({ risk }: { risk: Risk | null }) {
           <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${color}`}><Icon className="size-5" aria-hidden={true} /></span>
           <span className="min-w-0"><strong className="block text-sm font-semibold leading-snug">{title}</strong><span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{detail}</span></span>
         </li>)}</ul>
-      </div> : <div className="mt-4 flex min-h-40 flex-1 flex-col items-center justify-center rounded-2xl border border-primary/10 bg-primary/[.025] p-4 text-center">
+      </div> : <div className="mt-3 flex min-h-40 flex-1 flex-col items-center justify-center text-center">
         <NutritionEmptyIllustration />
         <p className="mt-1 text-sm font-semibold">No completed NIQ results yet</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Insights will appear after an assessment is completed.</p>
       </div>}
