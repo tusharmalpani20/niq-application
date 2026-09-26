@@ -75,6 +75,19 @@ test("dietary intake choices have matching icon tiles", () => {
   expect(html).toContain("bg-primary/10 text-primary/70");
 });
 
+test("activity, stress and fluid choices use matching icon tiles", () => {
+  for (const [id, suffixes] of [
+    ["functional_capacity", ["normal_activity", "reduced_activity", "bedridden"]],
+    ["stress_level", ["high", "moderate", "none_low"]],
+    ["fluid_intake", ["below_1_litre", "one_to_two_litres", "above_2_litres"]],
+  ] as const) {
+    const options = suffixes.map(suffix => ({ id: `${id}_${suffix}`, label: suffix }));
+    const html = render([{ ...field, id, label: id, kind: "select", options }]);
+    for (const option of options) expect(html).toContain(`data-dietary-status-icon="${option.id}"`);
+    expect(html).toContain("bg-primary/10 text-primary/70");
+  }
+});
+
 test("short multi-selects expose checkboxes and short Other lists expose radios", () => {
   const html = render([{ ...field, options: [{ id: "solid", label: "Solid" }, { id: "in_situ", label: "In Situ" }] }], { choices: ["solid"] });
   expect(html).toContain('type="checkbox"');
