@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AssessmentFields, assessmentNumericInput, assessmentFieldGroups, addAssessmentMultiChoice } from "./AssessmentFields";
 import { MedicationSupplementIcon } from "./MedicationSupplementIcon";
+import { HealthHistoryChoiceIcon } from "./HealthHistoryChoiceIcon";
 import type { FormAnswers, FormField } from "@niq/application-contracts";
 const field: FormField = { id: "choices", label: "Symptoms", kind: "multi_select", owner: "scoring", required: false, source: "F104", options: [{ id: "nausea", label: "Nausea" }, ...Array.from({ length: 6 }, (_, i) => ({ id: `item${i}`, label: `Item ${i}` }))] };
 function render(fields: FormField[], answers: FormAnswers = {}) {
@@ -155,6 +156,21 @@ test("medication and supplement options have icons and selected chips retain the
   expect(render([medications], { current_medications: [medicationIds[0]!] })).toContain(`data-intake-choice-icon="${medicationIds[0]}"`);
   expect(render([supplements], { supplements_intake: [supplementIds[0]!] })).toContain(`data-intake-choice-icon="${supplementIds[0]}"`);
   expect(render([supplements], { supplements_intake: [] })).toContain('data-intake-choice-icon="__none__"');
+});
+
+test("health history choices have icons in the long list and Yes/No tiles", () => {
+  const conditions = ["diabetes", "hypertension", "thyroid_disorder", "kidney_disease", "liver_disease", "cardiac_disease", "high_cholesterol", "psychological_disorders"].map(id => `co_morbidities_${id}`);
+  for (const id of [...conditions, "__none__", "previous_surgeries_yes", "previous_surgeries_no", "family_history_cancer_yes", "family_history_cancer_no"]) {
+    expect(renderToStaticMarkup(<HealthHistoryChoiceIcon type={id} />)).toContain(`data-health-history-icon="${id}"`);
+  }
+  const coMorbidities: FormField = { ...field, id: "co_morbidities", options: conditions.map(id => ({ id, label: id })) };
+  expect(render([coMorbidities], { co_morbidities: [conditions[0]!] })).toContain(`data-health-history-icon="${conditions[0]}"`);
+  expect(render([coMorbidities], { co_morbidities: [] })).toContain('data-health-history-icon="__none__"');
+  const surgeries: FormField = { ...field, id: "previous_surgeries", kind: "select", options: [{ id: "previous_surgeries_yes", label: "Yes" }, { id: "previous_surgeries_no", label: "No" }] };
+  const family: FormField = { ...field, id: "family_history_cancer", kind: "select", options: [{ id: "family_history_cancer_yes", label: "Yes" }, { id: "family_history_cancer_no", label: "No" }] };
+  const html = render([surgeries, family], { previous_surgeries: "previous_surgeries_yes" });
+  for (const id of ["previous_surgeries_yes", "previous_surgeries_no", "family_history_cancer_yes", "family_history_cancer_no"]) expect(html).toContain(`data-health-history-icon="${id}"`);
+  expect(html).toContain("bg-primary text-primary-foreground shadow-sm");
 });
 
 
