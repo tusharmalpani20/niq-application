@@ -401,6 +401,7 @@ export const assessmentSummarySchema = z.object({
   patient: patientSchema.pick({ id: true, reference: true, displayName: true }),
   facility: facilitySchema.pick({ id: true, name: true }).nullable(),
   status: assessmentStatusSchema,
+  myAction: z.enum(["EDIT_DRAFT", "CORRECT_DRAFT", "SEND_FOR_REVIEW"]).nullable(),
   createdAt: z.coerce.date(),
   completedAt: z.coerce.date().nullable(),
 });

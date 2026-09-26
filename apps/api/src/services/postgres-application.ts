@@ -1,6 +1,6 @@
 import { correctPatientDob as correctDob, correctPatientMrn as correctMrn, editPatient, editOrganizationUser } from "./profile-edits";
 import { faceScanSessionSchema } from "../../../../packages/contracts/src/face-scan";
-import { formatAssessmentReference, hasPermission, type Permission } from "@niq/application-contracts";
+import { formatAssessmentReference, hasPermission, type AssessmentSummary, type Permission } from "@niq/application-contracts";
 import type { ApplicationConfig } from "@niq/application-config";
 import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CorrectPatientDob, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
@@ -37,6 +37,7 @@ import { facilityAccessCondition } from "./facility-access";
 import { facilityTrend } from "./facility-performance";
 import { requestScoringOrganizationInfo, ScoringOrganizationInfoRequestError } from "./scoring-organization-info";
 import { countOverviewRisk } from "./overview-risk";
+import type { ClinicalReviewStored } from "./clinical-review-state";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Executor = Database | Transaction;
@@ -50,6 +51,22 @@ const patientProfileSchema = z.object({
   phone: z.string().optional(),
   email: z.string().optional(),
 });
+export function myAssessmentAction(
+  actor: Principal,
+  row: Pick<typeof assessments.$inferSelect, "status" | "createdByMembershipId">,
+  correctionPersonId: string | null,
+): AssessmentSummary["myAction"] {
+  if (actor.platformRole !== "USER") return null;
+  const ownerId = correctionPersonId ?? row.createdByMembershipId;
+  if (ownerId !== actor.membershipId) return null;
+  if (row.status === "DRAFT" && hasPermission(actor.role, "assessments.edit")) {
+    return correctionPersonId ? "CORRECT_DRAFT" : "EDIT_DRAFT";
+  }
+  if (row.status === "SCORED" && hasPermission(actor.role, "assessments.submit")) {
+    return "SEND_FOR_REVIEW";
+  }
+  return null;
+}
 type PatientRecord = {
   id: string;
   organizationId: string;
@@ -852,9 +869,13 @@ export class PostgresApplicationService implements ApplicationService {
       patientReferencePrefix: patients.referencePrefix,
       patientSerialNumber: patients.serialNumber,
       patientEncryptedProfile: patients.encryptedProfile,
+      patientArchived: patients.isArchived,
+      patientAccessible: sql<boolean>`(${facilityAccessCondition(actor, organizationId, patients.homeFacilityId)})`,
       facilityId: facilities.id,
       facilityName: facilities.name,
       status: assessments.status,
+      createdByMembershipId: assessments.createdByMembershipId,
+      clinicalReview: assessments.clinicalReview,
       createdAt: assessments.createdAt,
       completedAt: assessments.completedAt,
     }).from(assessments)
@@ -863,21 +884,29 @@ export class PostgresApplicationService implements ApplicationService {
       .where(and(eq(assessments.organizationId, organizationId), facilityAccessCondition(actor, organizationId, assessments.facilityId)))
       .orderBy(desc(assessments.createdAt));
     const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
-    return rows.map((row) => ({
-      id: row.id,
-      reference: formatAssessmentReference(row.serialNumber),
-      serialNumber: row.serialNumber,
-      organizationId: row.organizationId,
-      patient: {
-        id: row.patientId,
-        reference: `${row.patientReferencePrefix}-${row.patientSerialNumber}`,
-        displayName: patientProfileSchema.parse(JSON.parse(decryptPatientData(row.patientEncryptedProfile, key))).name,
-      },
-      facility: row.facilityId && row.facilityName ? { id: row.facilityId, name: row.facilityName } : null,
-      status: row.status,
-      createdAt: row.createdAt,
-      completedAt: row.completedAt,
-    }));
+    return rows.map((row) => {
+      const review = (row.status === "DRAFT" || row.status === "SCORED") && row.clinicalReview ? (() => {
+        const encrypted = (row.clinicalReview as { encrypted?: string }).encrypted;
+        if (!encrypted) throw new ServiceError("CONFLICT", "Assessment review data could not be read.");
+        return JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key)) as ClinicalReviewStored;
+      })() : null;
+      return {
+        id: row.id,
+        reference: formatAssessmentReference(row.serialNumber),
+        serialNumber: row.serialNumber,
+        organizationId: row.organizationId,
+        patient: {
+          id: row.patientId,
+          reference: `${row.patientReferencePrefix}-${row.patientSerialNumber}`,
+          displayName: patientProfileSchema.parse(JSON.parse(decryptPatientData(row.patientEncryptedProfile, key))).name,
+        },
+        facility: row.facilityId && row.facilityName ? { id: row.facilityId, name: row.facilityName } : null,
+        status: row.status,
+        myAction: !row.patientArchived && row.patientAccessible ? myAssessmentAction(actor, row, review?.correctionPerson?.membershipId ?? null) : null,
+        createdAt: row.createdAt,
+        completedAt: row.completedAt,
+      };
+    });
   }
   async getOverviewRisk(actor: Principal, organizationId: string) {
     this.ensureOrganizationAccess(actor, organizationId, "assessments.read");

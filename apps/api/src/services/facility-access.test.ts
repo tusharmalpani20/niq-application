@@ -17,7 +17,7 @@ describe.skipIf(!process.env.FACILITY_TEST_SOCKET)("facility access against Post
     await client`create temporary table facility_memberships (organization_id text, organization_membership_id text, facility_id text)`;
     await client`create temporary table facilities (id text, organization_id text, name text, code text, timezone text default 'UTC', status text default 'ACTIVE', created_at timestamptz default now(), updated_at timestamptz default now())`;
     await client`create temporary table patients (id text, organization_id text, home_facility_id text, reference_prefix text, serial_number int, date_of_birth date, gender text, encrypted_profile bytea, encrypted_external_reference bytea, is_archived boolean default false, created_at timestamptz default now(), updated_at timestamptz default now())`;
-    await client`create temporary table assessments (id text, organization_id text, patient_id text, facility_id text, serial_number serial, status text default 'DRAFT', completed_at timestamptz, created_at timestamptz default now(), updated_at timestamptz default now())`;
+    await client`create temporary table assessments (id text, organization_id text, patient_id text, facility_id text, serial_number serial, status text default 'DRAFT', created_by_membership_id text default 'creator', clinical_review jsonb, completed_at timestamptz, created_at timestamptz default now(), updated_at timestamptz default now())`;
     await client`insert into facilities (id, organization_id, name, code) values ('a','org','A','A'), ('b','org','B','B'), ('c','other','C','C')`;
     await client`insert into facility_memberships values ('org','restricted','a'), ('org','multi','a'), ('org','multi','b'), ('org','inactive','b')`;
     const encrypted = encryptPatientData(JSON.stringify({ name: "Fixture" }), patientDataKey(undefined, config.SESSION_SECRET));
@@ -58,6 +58,15 @@ describe.skipIf(!process.env.FACILITY_TEST_SOCKET)("facility access against Post
     expect((await service.listAssessments(actor, "org")).map((row) => row.id)).toEqual(["assessment-a"]);
     expect((await service.listAssessments({ ...actor, membershipId: "multi" }, "org")).map((row) => row.id).sort()).toEqual(["assessment-a", "assessment-b"]);
     expect((await service.listAssessments({ ...actor, membershipId: "all" }, "org")).map((row) => row.id).sort()).toEqual(["assessment-a", "assessment-b", "assessment-unassigned"]);
+  });
+  test("does not offer a personal action when the patient home facility is inaccessible", async () => {
+    await client`update assessments set created_by_membership_id = 'restricted' where id = 'assessment-a'`;
+    const [available] = await service.listAssessments(actor, "org");
+    expect(available?.myAction).toBe("EDIT_DRAFT");
+    await client`update patients set home_facility_id = 'b' where id = 'patient-a'`;
+    const [inaccessible] = await service.listAssessments(actor, "org");
+    expect(inaccessible?.myAction).toBeNull();
+    await client`update patients set home_facility_id = 'a' where id = 'patient-a'`;
   });
   test("does not exempt assigned organization admins or widen access for inactive facilities", async () => {
     expect((await service.listPatients({ ...actor, role: "ORGANIZATION_ADMIN" }, "org")).map((row) => row.id)).toEqual(["patient-a"]);
