@@ -7,8 +7,8 @@ import { faceScanContextSchema, faceScanSessionSchema, type FaceScanContext, typ
 import { assessmentFaceScans, assessments, scoringConnections } from "../db/schema";
 import { decryptCredential } from "../security/credential-encryption";
 import { ServiceError, type Principal, type RequestContext } from "./application";
-import { AssessmentWorkflowService, type StoredWorkflow, type WorkflowExecutor } from "./assessment-workflow";
-import { appendAssessmentHistory } from "./clinical-review-state";
+import { AssessmentWorkflowService, type StoredWorkflow, type WorkflowExecutor, type WorkflowRow } from "./assessment-workflow";
+import { appendAssessmentHistory, assertCorrectionOwner, reviewState } from "./clinical-review-state";
 import { FaceScanConsentService } from "./face-scan-consent";
 const recoverableAssessmentStatuses: Array<typeof assessments.$inferSelect.status> = ["DRAFT", "SCORED", "SCORING_PENDING", "SCORING_UNAVAILABLE"];
 type Row = typeof assessmentFaceScans.$inferSelect;
@@ -322,8 +322,8 @@ export class AssessmentFaceScanService {
     const token=crypto.randomUUID();
     const row=await this.db.transaction(async tx => {
       const assessmentRow=await this.workflow.authorize(actor,org,assessment,tx,true);
-      this.workflow.editable(assessmentRow,assessmentRow.revision,actor);
       const row=await this.row(org,assessment,id,tx);
+      this.assertMutationAllowed(assessmentRow,row,action,actor);
       if(["COMPLETED","CANCELLED"].includes(row.state)) throw new ServiceError("CONFLICT","This scan is already finished.");
       if(row.cycle!==assessmentRow.cycle) throw new ServiceError("CONFLICT","This scan belongs to an earlier assessment cycle.");
       if(action==="signal"&&!this.workflow.config.FACE_SCAN_ENABLED) throw new ServiceError("SCORING_UNAVAILABLE","New scan uploads are disabled.");
@@ -336,7 +336,7 @@ export class AssessmentFaceScanService {
       const remote=await this.request(row,action,signal);
       await this.db.transaction(async tx => {
         const assessmentRow=await this.workflow.authorize(actor,org,assessment,tx,true);
-        this.workflow.editable(assessmentRow,assessmentRow.revision,actor);
+        this.assertMutationAllowed(assessmentRow,row,action,actor);
         await this.project(row,remote,token,tx);
       });
     } catch(error) {
@@ -349,6 +349,16 @@ export class AssessmentFaceScanService {
       throw error;
     }
     return this.dto(await this.row(org, assessment, id));
+  }
+  private assertMutationAllowed(assessment: WorkflowRow, scan: Row, action: "signal" | "cancel", actor: Principal) {
+    // A pending capture can remain after scoring; cancelling it must be possible before clinical review freezes the cycle.
+    if (action === "cancel" && assessment.status === "SCORED" && scan.state === "REQUESTED") {
+      assertCorrectionOwner(this.workflow,assessment,actor);
+      if (!reviewState(this.workflow,assessment).correctionPerson && assessment.createdByMembershipId !== actor.membershipId)
+        throw new ServiceError("FORBIDDEN", "Only the assessment creator can cancel this scan before clinical review.");
+      return;
+    }
+    this.workflow.editable(assessment,assessment.revision,actor);
   }
   async recoverPending() {
     const rows = await this.db.select().from(assessmentFaceScans).where(and(sql`exists (select 1 from assessments a where a.id=${assessmentFaceScans.assessmentId} and a.cycle=${assessmentFaceScans.cycle} and a.status in (${sql.join(recoverableAssessmentStatuses.map(status => sql`${status}`), sql`, `)}))`, recoveryCondition, sql`(${assessmentFaceScans.leaseExpiresAt} is null or ${assessmentFaceScans.leaseExpiresAt}<now())`, sql `(${assessmentFaceScans.nextAttemptAt} is null or ${assessmentFaceScans.nextAttemptAt}<=now())`)).orderBy(assessmentFaceScans.updatedAt).limit(10);
