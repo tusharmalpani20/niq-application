@@ -127,14 +127,15 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   const changed=await command(admin,id,"REASSIGN_CORRECTION",{assigneeId:colleague.membershipId,reason:"Cover absence"});expect(changed.correctionPerson?.membershipId).toBe(colleague.membershipId);
  });
  test("admin creator sends but cannot score review and support cannot read queue",async()=>{const id=await assessment(admin);await command(admin,id,"SEND");await expect(command(admin,id,"CLAIM")).rejects.toMatchObject({code:"FORBIDDEN"});await expect(reviews.queue(support,org,{page:1,pageSize:25})).rejects.toMatchObject({code:"FORBIDDEN"});expect((await reviews.eligible(admin,org,id)).some(r=>r.membershipId===admin.membershipId)).toBe(false);});
- test("queue excludes corrections reopened before the first review handoff",async()=>{
+ test("queue includes corrections reopened before and after review handoff",async()=>{
   const beforeReview=await assessment();
   await command(creator,beforeReview,"RETURN_TO_DRAFT",{assigneeId:creator.membershipId,reason:"Correct before review"});
   const afterReview=await assessment();
   await command(creator,afterReview,"SEND");
   await command(admin,afterReview,"RETURN_TO_DRAFT",{assigneeId:creator.membershipId,reason:"Correct after review"});
   const queue=await reviews.queue(admin,org,{page:1,pageSize:1000});
-  expect(queue.items.some(item=>item.assessmentId===beforeReview)).toBe(false);
+  expect(queue.items.some(item=>item.assessmentId===beforeReview)).toBe(true);
+  expect(queue.items.find(item=>item.assessmentId===beforeReview)?.review.submittedAt).toBeNull();
   expect(queue.items.some(item=>item.assessmentId===afterReview)).toBe(true);
  });
  test("completion versus adjustment serializes to a consistent final result",async()=>{
