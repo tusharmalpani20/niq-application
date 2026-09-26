@@ -120,6 +120,17 @@ test("review missing-answer link focuses its field after changing section", asyn
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
   expect(document.activeElement?.id).toBe("assessment-field-height_cm");
 }, { answers: { ...recordFixture().answers, height_cm: null } }));
+test("review highlights the section with a blocking answer until it is corrected", async () => harness(async ({ click }) => {
+  const nav = document.querySelector('nav[aria-label="Assessment sections"]')!;
+  expect(nav.querySelector('[data-has-issue]')).toBeNull();
+  await click("Review & score");
+  expect(nav.querySelector('button[aria-label="Personal details; needs attention"]')?.getAttribute("data-has-issue")).toBe("true");
+  expect(nav.querySelector('button[aria-label="Disease status; needs attention"]')).toBeNull();
+  await click("Personal details; needs attention");
+  expect(nav.querySelector('button[aria-label="Personal details; needs attention"]')).not.toBeNull();
+  await click("50 kg");
+  expect(nav.querySelector('button[aria-label="Personal details; needs attention"]')).toBeNull();
+}, { answers: { ...recordFixture().answers, current_weight_kg: null } }));
 test("scan prerequisites open the missing inputs with inline errors and no summary box", async () => harness(async ({ click, requests }) => {
   await click("Face scan");
   await act(async () => {

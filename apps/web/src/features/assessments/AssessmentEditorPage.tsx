@@ -1,5 +1,5 @@
 import { hasPermission, type MembershipRole } from "@niq/application-contracts";
-import { assessmentFieldError, clearInactiveAssessmentAnswers, getAssessmentCompletion, getAssessmentAnswerCoverage, getReportSubmissionIssues, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
+import { assessmentFieldError, clearInactiveAssessmentAnswers, getAssessmentCompletion, getAssessmentAnswerCoverage, getReportSubmissionIssues, isAssessmentFieldApplicable, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Link, useOutletContext, useParams } from "react-router-dom";
 import { PatientHeader } from "@/components/PatientHeader";
@@ -38,6 +38,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   const [sectionId, setSectionId] = useState("personal_details");
   const [error, setError] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showSubmissionIssues, setShowSubmissionIssues] = useState(false);
   const [scanCorrection, setScanCorrection] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -104,6 +105,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   }
   async function selectSection(id: string, save = false, fieldId?: string) {
     if (busy || reportBusy || scanBusy) return;
+    if (id === "review") setShowSubmissionIssues(true);
     setShowScoredAnswers(true);
     if (save && editable && dirty && !await persist()) return;
     setSectionId(id); setError("");
@@ -127,6 +129,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   async function openVerification() {
     if (!hasPermission(role, "assessments.submit")) return;
     if (!record || busy || reportBusy || scanBusy || reportDirty || conflict) return;
+    setShowSubmissionIssues(true);
     const invalid = validateAssessmentAnswers(record.manifest, answers, { requireComplete: true });
     setErrors(invalid);
     if (Object.keys(invalid).length) { setError("Complete required fields before requesting a score."); return; }
@@ -201,6 +204,14 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   const index = tabs.findIndex(tab => tab.id === sectionId);
   const locked = busy || reportBusy || scanBusy || reviewBusy || conflict;
   const scanStepStatus = scanStatus === "Scan complete" ? "Done" : scanStatus === "Face scan ready" ? "Pending" : scanStatus.replace(/^Face scan |^Scan /, "");
+  const issueSections = new Set<string>();
+  if ((showSubmissionIssues || sectionId === "review") && !scored) {
+    for (const section of record.manifest.sections) {
+      if (section.fields.some(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers) && assessmentFieldError(field, answers[field.id]))) issueSections.add(section.id);
+    }
+    if (record.reports.some(report => getReportSubmissionIssues(report).length > 0)) issueSections.add("reports");
+    if (record.submission?.status === "REJECTED" && record.submission.failureCode === "FACE_SCAN_UNAVAILABLE") issueSections.add("face_scan");
+  }
   const attachmentCounts = { reports: record.reports.length, files: record.reports.reduce((total, report) => total + report.files.filter(file => file.status === "READY").length, 0) };
   const separatedEditor = record.result !== null || clinical.review?.state === "RETURNED" || !!clinical.error
     || !!error || (!scanCorrection && Object.keys(errors).length > 0)
@@ -221,7 +232,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     {record.result !== null && showScoredAnswers && <Button className="my-4" variant="outline" onPress={() => setShowScoredAnswers(false)}><ArrowLeft aria-hidden="true"/>Back to summary</Button>}
     <div hidden={record.result !== null && !showScoredAnswers}>
     <div className={`grid min-w-0 border-x border-border bg-card @min-[48rem]:grid-cols-[250px_minmax(0,1fr)] ${separatedEditor ? "rounded-t-xl border-t" : ""}`}>
-      <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} scores={sectionScores} scanStatus={scanStepStatus} attachmentCounts={attachmentCounts} disabled={locked} onSelect={id => { void selectSection(id); }} />
+      <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} scores={sectionScores} scanStatus={scanStepStatus} attachmentCounts={attachmentCounts} issueSections={issueSections} disabled={locked} onSelect={id => { void selectSection(id); }} />
       <div className="min-w-0 p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 id="assessment-section-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">{tabs[index]?.title}</h2>{sectionId === "reports" && <span className="text-xs text-muted-foreground tabular-nums">{attachmentCounts.files} {attachmentCounts.files === 1 ? "file" : "files"} uploaded</span>}{sectionCoverage && <span className="text-xs text-muted-foreground">{sectionCoverage.answered}/{sectionCoverage.total} answered · {sectionCoverage.percent ?? 0}%</span>}</div>
         {(record.result === null || showScoredAnswers) && <AssessmentFaceScan organizationId={organizationId} record={{ ...record, answers }} active={sectionId === "face_scan"} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onMissingInputs={showMissingScanInputs} onBusyChange={setScanBusy} onStatusChange={setScanStatus} onSessionChange={setScanSession}/>}
         {section && <section><AssessmentFields heightSourceDate={record.heightSource?.recordedAt} section={section} answers={answers} errors={errors} readOnly={!editable || locked} measurementUnits={measurementUnits} onMeasurementUnitsChange={changeMeasurementUnits} patientReference={record.patient.reference} canEditPatient={hasPermission(role, "patients.edit")} canCorrectDob={role === "ORGANIZATION_ADMIN"} onEditContact={editable ? () => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); } : undefined} onChange={(id, value) => { setAnswers(current => clearInactiveAssessmentAnswers(record.manifest, { ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}

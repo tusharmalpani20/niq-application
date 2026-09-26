@@ -432,6 +432,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
   border-color: color-mix(in srgb, var(--primary) 10%, var(--card));
   box-shadow: 0 2px 4px -2px color-mix(in srgb, var(--primary) 16%, transparent);
 }
+.assessment-workflow .assessment-error-step {
+  color: var(--destructive);
+  background-image: linear-gradient(115deg, color-mix(in srgb, var(--destructive) 10%, var(--card)), color-mix(in srgb, var(--destructive) 4%, var(--card)));
+  box-shadow: inset 3px 0 var(--destructive);
+}
 .assessment-progress-fill {
   background: linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 65%, var(--card)));
 }
