@@ -54,14 +54,14 @@ test("demo consent request unlocks the scan after two seconds without sending a 
   await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"][value="standing"]')!.click());
   const scan = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Start face scan")!;
   expect(scan.disabled).toBe(true);
-  await click("Simulate consent request");
+  await click("Send consent request");
   expect(scan.disabled).toBe(true);
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 2_050)); });
   expect(scan.disabled).toBe(false);
   expect(document.body.textContent).toContain("No patient was contacted.");
   expect(requests.every(request => request.body === null)).toBe(true);
   expect(starts()).toBe(0);
-  await click("Reset demo consent");
+  await click("Clear consent selection");
   expect(scan.disabled).toBe(true);
 }, { demoConsentEnabled: true }));
 test("demo signed consent selection starts a scan without uploading the file", async () => harness(async ({ click, requests, starts }) => {
@@ -72,7 +72,7 @@ test("demo signed consent selection starts a scan without uploading the file", a
   await act(async () => input.dispatchEvent(new window.Event("change", { bubbles: true })));
   const scan = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Start face scan")!;
   expect(scan.disabled).toBe(false);
-  expect(document.body.textContent).toContain("Simulated upload complete. The file was not stored.");
+  expect(document.body.textContent).toContain("The file was not uploaded or stored.");
   expect(requests.every(request => request.body === null)).toBe(true);
   await click("Start face scan");
   expect(starts()).toBe(1);
