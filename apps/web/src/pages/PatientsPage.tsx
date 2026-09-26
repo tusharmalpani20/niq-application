@@ -16,6 +16,7 @@ import { PatientForm, PatientFormDialog } from "../components/PatientForm";
 import { CorrectPatientMrnDialog } from "../components/CorrectPatientMrnDialog";
 import { CorrectPatientDobDialog } from "../components/CorrectPatientDobDialog";
 import { PatientHeader } from "../components/PatientHeader";
+import { PatientEmptyIllustration } from "../components/PatientEmptyIllustration";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
 import { getPatient, listAssessments, listFacilities, listPatients } from "../lib/api";
@@ -97,12 +98,12 @@ export function PatientsPage() {
     { id: "actions", header: () => <span className="sr-only">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-1">{editAction(row.original)}<RouterButtonLink variant="ghost" size="icon-sm" to={`/patients/${row.original.reference}`} aria-label={`Open ${row.original.reference}`}><Icon name="chevron" size={18}/></RouterButtonLink></div> },
   ];
   const hasFilters = query.trim() || facility !== "all" || gender !== "all" || registeredThisMonth;
-  const emptyContent = <div className="table-empty-content">
+  const emptyContent = <div className={`table-empty-content${loadState === "ready" && !hasFilters ? " patient-empty-state" : ""}`}>
     {loadState === "loading" ? <span>Loading patients…</span>
       : loadState === "error" ? <><strong>Patients could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></>
       : hasFilters
       ? <><strong>No matching patients</strong><span>Try changing the search or filters.</span></>
-      : <><p className="text-sm text-foreground">No patients yet</p><p className="text-sm">Register a patient to start recording assessments.</p><Button className="patient-empty-action" variant="outline" size="sm" onPress={() => setShowRegistration(true)}><Icon name="plus" size={16} />Register patient</Button></>}
+      : <><PatientEmptyIllustration /><strong>Your patient list starts here</strong><span>Register your first patient to begin an assessment.</span><Button className="patient-empty-action" variant="outline" size="sm" onPress={() => setShowRegistration(true)}>Register patient</Button></>}
   </div>;
   return <>
     <h1 className="patient-page-title">Patients</h1>

@@ -187,6 +187,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .assessment-filter-bar { grid-template-columns:repeat(2,minmax(0,190px)); }
 .administrator-empty-table-action { display:flex;min-height:9rem;align-items:center;justify-content:center;color:var(--ink-muted);font-size:.75rem;font-weight:600; }.administrator-empty-action { color:var(--primary);border-color:color-mix(in srgb,var(--primary) 16%,var(--border));background:var(--primary-soft); }.administrator-empty-mobile { min-height:9rem;align-items:center;justify-content:center; }
 .patient-empty-action:hover,.administrator-empty-action:hover { color:var(--primary);border-color:color-mix(in srgb,var(--primary) 28%,var(--border));background:color-mix(in srgb,var(--primary) 16%,var(--surface)); }
+.patient-empty-state { min-height:17rem;gap:.55rem;padding:1.25rem; }
+.patient-empty-state strong { font-size:.9rem; }
+.patient-empty-state span { font-size:.75rem; }
+.patient-empty-illustration { display:block;width:min(17.5rem,100%);height:auto;margin-bottom:.2rem;color:var(--primary); }
 .organization-table-card th { background: transparent; }
 .toolbar { display: flex; gap: .7rem; padding: .9rem; border-bottom: 1px solid var(--border-subtle); }.toolbar select { width: auto; min-width: 155px; }
 .users-toolbar { justify-content:flex-end; }.toolbar.users-toolbar input { height:2.25rem;font-size:.72rem; }
