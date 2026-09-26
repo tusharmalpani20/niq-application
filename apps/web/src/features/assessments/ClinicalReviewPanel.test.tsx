@@ -6,12 +6,12 @@ import type { AssessmentSubmissionAttestation, ClinicalReview, ClinicalReviewer 
 import { ClinicalReviewPanel } from "./ClinicalReviewPanel";
 
 const review: ClinicalReview = { assessmentId: "assessment", revision: 4, scoreRevision: 2, cycle: 1, state: "IN_REVIEW", assignee: { membershipId: "reviewer", displayName: "Reviewer", role: "DOCTOR" }, correctionPerson: null, previousReviewer: null, defaultCorrectionPersonId: null, returnReason: null, finalRemark: null, submittedAt: null, completedAt: null, history: [], allowedActions: ["COMPLETE", "TRANSFER", "RELEASE", "RETURN_TO_DRAFT"], canAdjustScores: true, canEditDraft: false };
-async function harness(run: (ctx: { click: (label: string) => Promise<void>; type: (value: string) => Promise<void>; posts: unknown[]; changed: () => number }) => Promise<void>, options: { review?: ClinicalReview; attestations?: AssessmentSubmissionAttestation[]; blocked?: boolean; conflict?: boolean; recipients?: () => ClinicalReviewer[] } = {}) {
+async function harness(run: (ctx: { click: (label: string) => Promise<void>; type: (value: string) => Promise<void>; posts: unknown[]; changed: () => number }) => Promise<void>, options: { review?: ClinicalReview; attestations?: AssessmentSubmissionAttestation[]; blocked?: boolean; conflict?: boolean; conflictMessage?: string; recipients?: () => ClinicalReviewer[] } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", {url:"http://localhost", pretendToBeVisual:true});
   const values: Record<string,unknown> = { window:dom.window, document:dom.window.document, navigator:dom.window.navigator, IS_REACT_ACT_ENVIRONMENT:true, requestAnimationFrame:(fn:()=>void)=>setTimeout(fn,0), cancelAnimationFrame:clearTimeout, getComputedStyle:dom.window.getComputedStyle };
   for (const key of ["FocusEvent","HTMLElement","SVGElement","Element","Node","NodeFilter","DocumentFragment","HTMLButtonElement","HTMLInputElement","HTMLTextAreaElement","HTMLSelectElement","MutationObserver","CustomEvent","Event"]) values[key]=(dom.window as any)[key];
   const posts: unknown[] = []; let changes = 0;
-  values.fetch = async (_url: string, init?: RequestInit) => { if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return options.conflict ? Response.json({error:{message:"Changed"}},{status:409}) : Response.json(options.review ?? review); } return Response.json(options.recipients?.() ?? []); };
+  values.fetch = async (_url: string, init?: RequestInit) => { if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return options.conflict ? Response.json({error:{message:options.conflictMessage ?? "Changed"}},{status:409}) : Response.json(options.review ?? review); } return Response.json(options.recipients?.() ?? []); };
   const previous = Object.fromEntries(Object.keys(values).map(key => [key,Object.getOwnPropertyDescriptor(globalThis,key)]));
   for (const [key,value] of Object.entries(values)) Object.defineProperty(globalThis,key,{value,configurable:true});
   Object.assign(dom.window.HTMLElement.prototype,{attachEvent(){},detachEvent(){}});
@@ -53,6 +53,14 @@ test("a stale transition preserves the note and requires an explicit reload",asy
  expect(posts).toHaveLength(1);expect(document.querySelector("textarea")?.value).toBe("Keep this remark");expect(document.body.textContent).toContain("Your entered details are preserved");
  await click("Complete review");expect(posts).toHaveLength(1);
 },{conflict:true}));
+test("a pending face scan explains the blocker instead of asking to reload", async()=>harness(async({click,posts})=>{
+ await click("Send for clinical review");
+ await click("Send for clinical review");
+ expect(posts).toHaveLength(1);
+ expect(document.querySelector('[role="dialog"]')?.textContent).toContain("cancel the attempt before sending");
+ expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Reload review");
+ expect([...document.querySelectorAll("button")].filter(button=>button.textContent?.trim()==="Send for clinical review").at(-1)?.disabled).toBe(true);
+},{review:{...review,state:"NOT_SUBMITTED",allowedActions:["SEND"]},conflict:true,conflictMessage:"Resolve the pending face scan before changing the review workflow."}));
 test("cancel after adding a remark offers keep editing instead of silently dismissing",async()=>harness(async({click,type})=>{
  await click("Complete review");await type("Unsaved remark");await click("Cancel");expect(document.body.textContent).toContain("Discard review changes?");await click("Keep editing");expect(document.querySelector("textarea")?.value).toBe("Unsaved remark");
 }));
