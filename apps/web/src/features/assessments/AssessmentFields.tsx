@@ -21,6 +21,7 @@ import { HealthHistoryChoiceIcon } from "./HealthHistoryChoiceIcon";
 import { DietaryIntakeIcon } from "./DietaryIntakeIcon";
 import { DietaryStatusIcon } from "./DietaryStatusIcon";
 import { formatGenderAnswer } from "./formatGenderAnswer";
+import { PatientGenderIcon } from "../../components/PatientGenderIcon";
 export { assessmentNumericInput } from "./assessmentNumericInput";
 
 export type AssessmentFieldsProps = {
@@ -101,7 +102,7 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
     }
     if (field.id === "bmi") return <AssessmentBmiCard key={field.id} answers={answers} />;
     if (field.readOnly || field.kind === "calculated") return <div key={field.id} id={id} tabIndex={-1} className="space-y-1.5">
-      <p className="text-base text-muted-foreground">{label}</p><p className="min-h-8 text-base font-medium">{field.kind === "calculated" ? calculated(field, answers) : value === undefined || value === null || value === "" ? "Not provided" : field.id === "gender" && typeof value === "string" ? formatGenderAnswer(value) : String(value)}</p>{field.id === "contact" && !value && onEditContact && !readOnly && <Button variant="link" className="px-0" onPress={onEditContact}>Add contact</Button>}{errorMarkup}
+      <p className="text-base text-muted-foreground">{label}</p><p className="min-h-8 text-base font-medium">{field.kind === "calculated" ? calculated(field, answers) : value === undefined || value === null || value === "" ? "Not provided" : field.id === "gender" && typeof value === "string" ? <span className="inline-flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary"><PatientGenderIcon gender={value} /></span>{formatGenderAnswer(value)}</span> : String(value)}</p>{field.id === "contact" && !value && onEditContact && !readOnly && <Button variant="link" className="px-0" onPress={onEditContact}>Add contact</Button>}{errorMarkup}
       {error && field.id === "age" && patientReference && (canCorrectDob ? <Link className="text-sm text-brand-ink underline" to={`/patients/${encodeURIComponent(patientReference)}?edit=dateOfBirth`}>Correct date of birth in patient details</Link> : <p className="text-sm text-muted-foreground">Ask an organization admin to correct the date of birth.</p>)}
       {error && field.id === "gender" && patientReference && (canEditPatient ? <Link className="text-sm text-brand-ink underline" to={`/patients/${encodeURIComponent(patientReference)}?edit=gender`}>Edit gender in patient details</Link> : <p className="text-sm text-muted-foreground">Ask someone with patient editing access to update this detail.</p>)}
     </div>;
