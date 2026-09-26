@@ -3,8 +3,6 @@ import { assessmentFieldGroups } from "./AssessmentFields";
 import { assessmentOptionIcon } from "./assessmentOptionIcon";
 import { formatGenderAnswer } from "./formatGenderAnswer";
 
-const reviewCardClass = "min-w-0 rounded-xl border border-border bg-muted/20 p-4";
-
 function AnswerValue({ field, answers }: { field: FormField; answers: FormAnswers }) {
   const value = answers[field.id];
   const empty = value === null || value === undefined || value === "" || typeof value === "string" && !value.trim();
@@ -45,25 +43,24 @@ function DietaryAnswers({ fields, answers }: { fields: FormField[]; answers: For
   ];
   const shown = new Set(["previous_weight_kg", ...parts.flatMap(part => part.ids)]);
 
-  return <div className="@container min-w-0"><div className="grid min-w-0 gap-3 @min-[36rem]:grid-cols-2">
-    <section className={`${reviewCardClass} @min-[36rem]:col-span-2`} data-review-dietary-part="Weight comparison">
-      <h4 className="mb-4 text-sm font-semibold text-foreground">Weight comparison</h4>
-      <dl className="grid gap-4 sm:grid-cols-2">
+  return <div className="@container min-w-0 divide-y divide-border/70">
+    <section className="min-w-0 pb-4" data-review-dietary-part="Weight comparison">
+      <h4 className="mb-3 text-sm font-semibold text-foreground">Weight comparison</h4>
+      <dl className="grid min-w-0 gap-4 @min-[28rem]:grid-cols-2">
         {byId.get("previous_weight_kg") && <AnswerItem field={byId.get("previous_weight_kg")!} answers={answers} />}
         <div className="min-w-0 space-y-1.5"><dt className="text-sm text-muted-foreground">Current weight</dt><dd className="text-sm font-medium">{typeof current === "number" && current > 0 ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(current)} kg` : "Not answered"}<span className="block text-xs font-normal text-muted-foreground">From Personal details</span></dd></div>
+        <div className="min-w-0 space-y-1.5 @min-[28rem]:col-span-2"><dt className="text-sm text-muted-foreground">Change over 1–2 months</dt><dd className="text-sm font-semibold text-foreground">{changeLabel}</dd></div>
       </dl>
-      <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5"><p className="text-xs text-muted-foreground">Change over 1–2 months</p><p className="mt-0.5 text-base font-semibold">{changeLabel}</p></div>
     </section>
     {parts.map(part => {
       const partFields = part.ids.map(id => byId.get(id)).filter((field): field is FormField => Boolean(field));
       if (!partFields.length) return null;
-      return <section key={part.title} className={reviewCardClass} data-review-dietary-part={part.title}>
-        <h4 className="mb-4 text-sm font-semibold text-foreground">{part.title}</h4>
-        <dl className="grid gap-4">{partFields.map(field => <AnswerItem key={field.id} field={field} answers={answers} />)}</dl>
-      </section>;
+      return <dl key={part.title} className="grid min-w-0 gap-4 py-4 last:pb-0 @min-[28rem]:grid-cols-2" data-review-dietary-part={part.title}>
+        {partFields.map(field => <AnswerItem key={field.id} field={field} answers={answers} spanColumns={field.kind === "multi_select"} />)}
+      </dl>;
     })}
-    {visible.filter(field => !shown.has(field.id)).map(field => <dl key={field.id} className={reviewCardClass}><AnswerItem field={field} answers={answers} /></dl>)}
-  </div></div>;
+    {visible.filter(field => !shown.has(field.id)).map(field => <dl key={field.id} className="grid min-w-0 gap-4 py-4 last:pb-0 @min-[28rem]:grid-cols-2"><AnswerItem field={field} answers={answers} spanColumns={field.kind === "multi_select"} /></dl>)}
+  </div>;
 }
 
 export function AssessmentVerificationAnswers({ sectionId, fields, answers }: { sectionId: string; fields: FormField[]; answers: FormAnswers }) {
