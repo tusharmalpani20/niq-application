@@ -39,7 +39,8 @@ function DietaryAnswers({ fields, answers }: { fields: FormField[]; answers: For
     { title: "Dietary intake", ids: ["dietary_intake"] },
     { title: "Symptoms", ids: ["dietary_symptoms"] },
     { title: "Daily activity", ids: ["functional_capacity"] },
-    { title: "Stress & hydration", ids: ["stress_level", "fluid_intake"] },
+    { title: "Stress level", ids: ["stress_level"] },
+    { title: "Fluid intake", ids: ["fluid_intake"] },
   ];
   const shown = new Set(["previous_weight_kg", ...parts.flatMap(part => part.ids)]);
 
