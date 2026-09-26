@@ -115,7 +115,6 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
       <div className="w-28 shrink-0 text-right text-sm tabular-nums sm:w-36"><p className="text-xs text-muted-foreground">{scanSummaryStatus}</p><p>Vital IQ {scan?.niqPoints ?? "—"}</p>{scan?.overridden && <p className="text-brand-ink">Reviewed Vital IQ {scan.reviewedPoints ?? "—"}</p>}</div>
     </div>
     <div id="score-section-face_scan" hidden={expanded !== "face_scan"} className="border-t border-border p-4">
-      <p className="mb-3 text-xs text-muted-foreground">Vital IQ points are included in the final NIQ score when this scan was part of the scoring request.</p>
       {renderScan(expanded === "face_scan")}
     </div>
   </div>;

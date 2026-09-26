@@ -115,11 +115,10 @@ test("lost upload response reconciles accepted scan without another capture", as
 test("reopens processing session without requesting camera", async () => harness(async ({ starts }) => {
   expect(document.body.textContent).toContain("Getting scan results"); expect(starts()).toBe(0);
 }, { existing: { ...session, state: "PROCESSING" } }));
-test("a scored assessment can cancel an unfinished scan before clinical review", async () => harness(async ({ click, requests }) => {
- expect(document.body.textContent).toContain("Cancel it before sending the assessment for clinical review.");
- await click("Cancel attempt");
- expect(requests.some(request => request.path.endsWith("/cancel"))).toBe(true);
- expect(document.body.textContent).toContain("Scan cancelled");
+test("a scored assessment does not ask clinicians to cancel an unfinished scan", async () => harness(async ({ requests }) => {
+ expect(document.body.textContent).toContain("Scan not completed");
+ expect([...document.querySelectorAll("button")].some(button => button.textContent?.trim() === "Cancel attempt")).toBe(false);
+ expect(requests.some(request => request.path.endsWith("/cancel"))).toBe(false);
 }, { existing: session, status: "SCORED" }));
 
 test("explains an expired attempt and retains earlier attempts in scan history", async () => harness(async ({ starts }) => {

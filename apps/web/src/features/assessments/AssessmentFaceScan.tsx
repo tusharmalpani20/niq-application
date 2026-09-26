@@ -71,7 +71,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   ].filter(Boolean) : [];
   const blocked = phase !== "idle";
   const rejected = session?.state === "RECONCILIATION_REQUIRED" && session.failureCode === "PROVIDER_REJECTED";
-  const statusLabel = phase === "capturing" ? "Capturing scan" : phase === "preparing" ? "Preparing scan" : phase === "uploading" ? "Uploading scan" : session ? rejected ? "Scan failed" : labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable";
+  const statusLabel = phase === "capturing" ? "Capturing scan" : phase === "preparing" ? "Preparing scan" : phase === "uploading" ? "Uploading scan" : session ? rejected ? "Scan failed" : session.state === "REQUESTED" && record.status !== "DRAFT" ? "Scan not completed" : labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable";
   const selectedPosture = session?.state === "REQUESTED" ? session.context.posture : posture;
   const consentReady = consentApproval?.assessmentId === record.id && consentApproval.approved;
   const handleConsentApproval = useCallback((approved: boolean) => setConsentApproval({ assessmentId: record.id, approved }), [record.id]);
@@ -226,10 +226,6 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {session?.state === "FAILED" && <p className="text-sm text-muted-foreground">The scan didn’t finish. Please try again.</p>}
     {session?.state === "EXPIRED" && <p className="text-sm text-muted-foreground">The attempt started on {new Date(session.createdAt).toLocaleString()} ended before analysis, so there is no measurement from that attempt. This record remains in the scan history. A new scan would measure the patient at a new time.</p>}
     {session?.state === "COMPLETED" && record.status === "DRAFT" && <p className="text-sm text-muted-foreground">The saved face scan is retained. Scan again only if a new measurement is needed.</p>}
-    {session?.state === "REQUESTED" && record.status === "SCORED" && <div className="space-y-2 rounded-lg border border-border p-3">
-      <p className="text-sm">This scan attempt is still open. Cancel it before sending the assessment for clinical review.</p>
-      <Button variant="outline" isDisabled={disabled || stale} onPress={() => { void cancel(); }}>Cancel attempt</Button>
-    </div>}
     {changedScanInputs.length > 0 && <p role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm">The saved scan used different {changedScanInputs.join(", ")}. Its results still reflect the original scan details shown below; changing questionnaire answers does not update those results.</p>}
     {session && <FaceScanResults session={session}/>}
     {previousSessions.length > 0 && <section aria-label="Scan history" className="space-y-2">
