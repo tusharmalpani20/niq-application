@@ -21,41 +21,11 @@ function AnswerValue({ field, answers }: { field: FormField; answers: FormAnswer
   </span>;
 }
 
-function AnswerItem({ field, answers, compact = false }: { field: FormField; answers: FormAnswers; compact?: boolean }) {
+function AnswerItem({ field, answers }: { field: FormField; answers: FormAnswers }) {
   return <div className="min-w-0 space-y-1.5" data-review-answer={field.id}>
-    <dt className={`break-words text-muted-foreground ${compact ? "text-xs" : "text-sm"}`}>{field.label}{field.required && " *"}</dt>
+    <dt className="break-words text-sm text-muted-foreground">{field.label}{field.required && " *"}</dt>
     <dd className="min-w-0 text-sm font-medium text-foreground"><AnswerValue field={field} answers={answers} /></dd>
   </div>;
-}
-
-function TreatmentAnswers({ fields, answers }: { fields: FormField[]; answers: FormAnswers }) {
-  const visible = fields.filter(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers));
-  const byId = new Map(visible.map(field => [field.id, field]));
-  const parts = [
-    { title: "Care path", main: "treatment_status", details: ["palliative_status", "palliative_timing"] },
-    { title: "Surgery", main: "cancer_surgical_status", details: ["surgery_date", "planned_surgery_date"] },
-    { title: "Current treatment", main: "current_cancer_treatment", details: ["treatment_cycle_number", "treatment_cycle_frequency"] },
-    { title: "Medications & supplements", main: null, details: ["current_medications", "supplements_intake"] },
-  ];
-  const shown = new Set(parts.flatMap(part => [part.main, ...part.details]));
-
-  return <div className="@container min-w-0"><div className="grid min-w-0 gap-3 @min-[36rem]:grid-cols-2">
-    {parts.map(part => {
-      const main = part.main ? byId.get(part.main) : null;
-      const details = part.details.map(id => byId.get(id)).filter((field): field is FormField => Boolean(field));
-      if (!main && !details.length) return null;
-      return <section key={part.title} className={reviewCardClass} data-review-treatment-part={part.title}>
-        <h4 className="mb-4 text-sm font-semibold text-foreground">{part.title}</h4>
-        <dl className="grid min-w-0 gap-4">
-          {main && <AnswerItem field={main} answers={answers} />}
-          {details.length > 0 && <div className={`grid min-w-0 gap-4 border-l-2 border-primary/20 pl-3 ${main ? "ml-1" : ""}`}>
-            {details.map(field => <AnswerItem key={field.id} field={field} answers={answers} compact={Boolean(main)} />)}
-          </div>}
-        </dl>
-      </section>;
-    })}
-    {visible.filter(field => !shown.has(field.id)).map(field => <dl key={field.id} className="p-4"><AnswerItem field={field} answers={answers} /></dl>)}
-  </div></div>;
 }
 
 function DietaryAnswers({ fields, answers }: { fields: FormField[]; answers: FormAnswers }) {
@@ -97,7 +67,6 @@ function DietaryAnswers({ fields, answers }: { fields: FormField[]; answers: For
 }
 
 export function AssessmentVerificationAnswers({ sectionId, fields, answers }: { sectionId: string; fields: FormField[]; answers: FormAnswers }) {
-  if (sectionId === "treatment") return <TreatmentAnswers fields={fields} answers={answers} />;
   if (sectionId === "dietary_details") return <DietaryAnswers fields={fields} answers={answers} />;
 
   return <div className="min-w-0 divide-y divide-border/70">{assessmentFieldGroups(fields, answers).map(group => {
