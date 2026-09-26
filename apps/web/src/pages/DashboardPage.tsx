@@ -14,6 +14,7 @@ import { assessmentStatusLabels } from "../lib/patient-display";
 import { overviewGrowth } from "./overview-growth";
 import { OverviewStatCard } from "./OverviewStatCard";
 import { AssessmentActivityCalendar, RiskOverviewCards } from "./OverviewClinicalCards";
+import { OverviewBottomCards } from "./OverviewBottomCards";
 
 type Overview = { patients: Patient[]; assessments: AssessmentSummary[]; risk: Awaited<ReturnType<typeof getOverviewRisk>> | null; highRiskPatients: number | null; highRiskPatients30DaysAgo: number | null; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
 
@@ -53,7 +54,7 @@ function QuickActions({ assessments, canAddPatient }: { assessments: AssessmentS
   ];
   return <section className="mt-7" aria-label="Quick actions">
     <h2 className="mb-3 text-lg font-semibold">Quick actions</h2>
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{actions.map(({ label, detail, to, icon: Icon }) => <Link key={label} to={to} className="surface flex min-w-0 items-center gap-3 p-4 no-underline transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><Icon className="size-5" aria-hidden="true" /></span><span className="min-w-0 flex-1"><strong className="block text-sm font-semibold text-foreground">{label}</strong><span className="block truncate text-xs text-muted-foreground">{detail}</span></span><ArrowRight className="size-4 shrink-0 text-primary" aria-hidden="true" /></Link>)}</div>
+    <div className="grid gap-3 min-[650px]:grid-cols-3">{actions.map(({ label, detail, to, icon: Icon }) => <Link key={label} to={to} className="surface flex min-w-0 items-center gap-3 p-4 no-underline transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><Icon className="size-5" aria-hidden="true" /></span><span className="min-w-0 flex-1"><strong className="block text-sm font-semibold text-foreground">{label}</strong><span className="block truncate text-xs text-muted-foreground">{detail}</span></span><ArrowRight className="size-4 shrink-0 text-primary" aria-hidden="true" /></Link>)}</div>
   </section>;
 }
 
@@ -178,6 +179,7 @@ export function DashboardPage() {
       <UserSeats enabled={data.enabledUsers ?? 0} reserved={data.seats + data.pendingInvitations} pending={data.pendingInvitations} limit={data.userLimit} />
       <OverviewUsage organizationId={user.organizationId} />
     </>}
+    {data && (isClinician || isAdmin) && <OverviewBottomCards patients={data.patients} assessments={data.assessments} risk={data.risk} />}
     {data && !isAdmin && !isClinician && <section className="mt-7" aria-label="Patient registration"><h2 className="text-lg font-semibold">Patient registration</h2><p className="text-sm text-muted-foreground">Register patients and keep their details current.</p><RecentPatients patients={data.patients} /></section>}
   </>;
 }

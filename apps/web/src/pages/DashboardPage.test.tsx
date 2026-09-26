@@ -71,6 +71,30 @@ test("clinician overview shows review work without administrator operations", as
   }, { assessmentStatus: "DRAFT" });
 });
 
+test("quick actions sit above activity and link to assigned work and patient registration", async () => {
+  await renderOverview("DOCTOR", body => {
+    const actions = body.querySelector('[aria-label="Quick actions"]');
+    const activity = body.querySelector('[aria-label="My assessment activity"]');
+    expect(actions).not.toBeNull();
+    expect(activity).not.toBeNull();
+    expect(actions!.compareDocumentPosition(activity!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(actions?.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("Continue draft");
+    expect(actions?.querySelector('a[href="/patients/new"]')?.textContent).toContain("Add patient");
+    expect(actions?.querySelector('a[href="/assessments?tab=clinical-reviews"]')?.textContent).toContain("Clinical reviews");
+  }, { assessmentStatus: "DRAFT" });
+});
+
+test("bottom cards show recent patients and real NIQ category comparisons", async () => {
+  await renderOverview("DOCTOR", body => {
+    const cards = body.querySelector('[aria-label="Recent patients and NIQ insights"]');
+    expect(cards?.textContent).toContain("Example Patient");
+    expect(cards?.textContent).toContain("ASM-000001");
+    expect(cards?.textContent).toContain("NIQ insights");
+    expect(cards?.textContent).toContain("High Risk");
+    expect(cards?.textContent).toContain("30 days ago");
+  }, { assessmentStatus: "COMPLETED", completedAt: date });
+});
+
 test("overview cards show accessible patients, completed assessments, high risk and my actions", async () => {
   const now = new Date();
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 15).toISOString();
