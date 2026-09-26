@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { getAssessmentAnswerCoverage, isAssessmentFieldApplicable, calculateAssessmentBmi, calculateAssessmentWeightChange, type AssessmentWorkflow, type AssessmentScoreReviews, type AssessmentScoreResult } from "@niq/application-contracts";
+import { getAssessmentAnswerCoverage, type AssessmentWorkflow, type AssessmentScoreReviews, type AssessmentScoreResult } from "@niq/application-contracts";
 import { ChevronDown, ChevronRight, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { assessmentResultView } from "./AssessmentResult";
 import { assessmentSectionIcons } from "./AssessmentSectionNavigation";
 import { assessmentRequest } from "./workflow-api";
+import { AssessmentScoredAnswers } from "./AssessmentScoredAnswers";
 import { AssessmentRiskCircle } from "./AssessmentRiskCircle";
 
 const points = (value: number | null) => value === null ? "—" : `${value} ${value === 1 ? "pt" : "pts"}`;
@@ -147,25 +148,8 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
           <Button variant="ghost" className={summaryToggleClass} aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}<Icon className="size-4 shrink-0" aria-hidden="true" />{section.title}</Button>
           <div className="w-28 shrink-0 text-right text-sm tabular-nums sm:w-36"><p className="text-xs text-muted-foreground">{completion?.answered ?? 0}/{completion?.total ?? 0} questions answered</p><p className="font-medium">{revised ? "NIQ " : ""}{points(section.points)}</p>{revised && effective?.reviewedPoints !== null && effective?.reviewedPoints !== undefined && <p className="text-brand-ink">Reviewed {points(effective.reviewedPoints)}{effective.overridden ? " · Override" : ""}</p>}</div>
         </div>
-        <div id={`score-section-${section.id}`} hidden={!open} className="border-t border-border px-4 pb-4">
-          <div className="divide-y divide-border">{section.fields.filter(field => isAssessmentFieldApplicable(field, record.answers)).map(field => {
-            const item = result.components.find(item => item.id === field.id);
-            const raw = record.answers[field.id];
-            const label = (value: string | number) => field?.options?.find(option => option.id === value)?.label ?? String(value);
-            let answer = raw === undefined || raw === null || raw === "" ? "Not answered" : Array.isArray(raw) ? raw.length ? raw.map(label).join(", ") : "None" : label(raw);
-            if (field.kind === "calculated") {
-              const a = record.answers;
-              if (field.id === "bmi") { const n = typeof a.height_cm === "number" && typeof a.current_weight_kg === "number" ? calculateAssessmentBmi(a.height_cm, a.current_weight_kg) : null; answer = n === null ? "Not available" : n.toFixed(1); }
-              else if (field.id === "weight_loss") { const n = typeof a.previous_weight_kg === "number" && typeof a.current_weight_kg === "number" ? calculateAssessmentWeightChange(a.previous_weight_kg, a.current_weight_kg) : null; answer = n === null ? "Not available" : n === 0 ? "No change" : `${Math.abs(n).toFixed(1)}% ${n > 0 ? "loss" : "gain"}`; }
-              else answer = item?.status === "answered" ? "Calculated from assessment answers" : "Not available";
-            } else if (field.unit && answer !== "Not answered") answer += ` ${field.unit}`;
-            const reviewed = effective?.items.find(row => row.id === field.id);
-            return <div key={field.id} className="grid min-w-0 gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-              <div><p className="text-sm font-medium">{field.label}</p><p className="break-words text-sm text-muted-foreground">{answer}</p>{item?.status === "pending" && <p className="mt-1 text-xs text-muted-foreground">{item.reason || "More information needed"}</p>}</div>
-              {item && <div className="flex flex-wrap items-center gap-3 text-sm"><span>{revised ? "NIQ " : ""}{points(item.points)}</span>{revised && reviewed?.reviewedPoints !== null && reviewed?.reviewedPoints !== undefined && <span className="text-brand-ink">Reviewed {points(reviewed.reviewedPoints)}{reviewed.overridden ? " · Adjusted" : ""}</span>}
-              </div>}
-            </div>;
-          })}</div>
+        <div id={`score-section-${section.id}`} hidden={!open} className="border-t border-border px-4">
+          <AssessmentScoredAnswers fields={section.fields} answers={record.answers} components={result.components} derived={result.derived} reviewedItems={effective?.items} revised={revised} />
         </div>
       </div>{section.id === "personal_details" && scanSection}</Fragment>;
     })}{!sections.some(section => section.id === "personal_details") && scanSection}</div>
