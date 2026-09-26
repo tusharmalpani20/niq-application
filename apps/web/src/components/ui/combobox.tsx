@@ -57,7 +57,6 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
           </ListBoxItem>;
         }}
       </ListBox>
-      {items.length > 6 && <p className="shrink-0 border-t border-border px-3 py-2 text-xs text-muted-foreground">{items.length} options · Scroll to see more</p>}
     </Popover>
     </>}</ComboBoxStateContext.Consumer>
   </ComboBox>;
