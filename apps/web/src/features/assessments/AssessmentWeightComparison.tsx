@@ -14,7 +14,7 @@ export function AssessmentWeightComparison({ answers, children, unit = "kg" }: {
     <h3 className="mb-4 text-sm font-semibold">Weight comparison</h3>
     <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] items-start gap-4">
       {children}
-      <div className="space-y-2"><p className="flex min-h-8 items-center text-sm font-medium">Current weight ({unit})</p><p className="flex min-h-11 items-center rounded-lg border border-border bg-muted/50 px-3 text-sm">{currentValid ? `${formatted(current)} ${unit}` : "Not entered"}</p><p className="text-xs text-muted-foreground">From Personal details</p></div>
+      <div className="space-y-2"><p className="flex min-h-9 items-center text-base font-medium">Current weight ({unit})</p><p className="flex min-h-12 items-center rounded-lg border border-border bg-muted/50 px-3 text-base">{currentValid ? `${formatted(current)} ${unit}` : "Not entered"}</p><p className="text-xs text-muted-foreground">From Personal details</p></div>
     </div>
     <div id="assessment-field-weight_loss" tabIndex={-1} className="mt-4 flex flex-wrap items-center justify-between gap-2" aria-live="polite" aria-atomic="true">
       <p className="text-sm text-muted-foreground">Change over 1–2 months</p>

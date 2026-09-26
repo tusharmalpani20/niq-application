@@ -60,6 +60,21 @@ test("None is removable and weight uses a bounded numeric input", () => {
   expect(html).toContain('step="any"');
 });
 
+test("previous weight follows the current weight unit without a second unit control", () => {
+  const previous: FormField = { ...field, id: "previous_weight_kg", label: "Weight 1–2 months ago", kind: "number" };
+  const html = renderToStaticMarkup(<AssessmentFields section={{ id: "dietary_details", title: "Dietary details", fields: [previous] }} answers={{ previous_weight_kg: 50 }} onChange={() => {}} errors={{}} readOnly={false} measurementUnits={{ height: "cm", weight: "lb" }} />);
+  expect(html).toContain("Weight 1–2 months ago (lb)");
+  expect(html).toContain('value="110.23"');
+  expect(html).not.toContain('aria-label="Weight 1–2 months ago unit"');
+});
+
+test("dietary intake choices have matching icon tiles", () => {
+  const options = ["normal", "more_than_usual", "reduced", "liquid", "little_solid", "tube_feeding"].map(id => ({ id: `dietary_intake_${id}`, label: id }));
+  const html = render([{ ...field, id: "dietary_intake", label: "Dietary intake change", kind: "select", options }]);
+  for (const option of options) expect(html).toContain(`data-dietary-intake-icon="${option.id}"`);
+  expect(html).toContain("bg-primary/10 text-primary/70");
+});
+
 test("short multi-selects expose checkboxes and short Other lists expose radios", () => {
   const html = render([{ ...field, options: [{ id: "solid", label: "Solid" }, { id: "in_situ", label: "In Situ" }] }], { choices: ["solid"] });
   expect(html).toContain('type="checkbox"');
