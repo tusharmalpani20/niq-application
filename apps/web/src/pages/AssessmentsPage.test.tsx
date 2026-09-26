@@ -39,6 +39,7 @@ test("open-assessment link shows only drafts and assessments ready for scoring",
     expect(table?.textContent).toContain("ASM-000001");
     expect(table?.textContent).toContain("ASM-000002");
     expect(table?.textContent).not.toContain("ASM-000003");
+    expect(table?.querySelector('[data-status="draft"]')?.getAttribute("style")).toContain("var(--primary-soft)");
     expect(document.body.textContent).toContain("2 total");
   });
 });
@@ -119,6 +120,7 @@ test("clinical review rows show stage and a compact open action", async () => {
     const table = document.querySelector('[aria-label="Clinical reviews"]');
     expect(table?.textContent).toContain("Awaiting reviewer");
     expect(table?.textContent).toContain("20 Sept 2026");
+    expect(table?.querySelector('[data-status="awaiting-reviewer"]')?.getAttribute("style")).toContain("var(--warning-soft)");
     const open = table?.querySelector('a[aria-label="Open clinical review ASM-000001"]');
     expect(open?.getAttribute("href")).toBe("/assessments/ASM-000001");
     expect(open?.querySelector("svg.lucide-chevron-right")).not.toBeNull();
