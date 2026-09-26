@@ -10,6 +10,7 @@ import type { Database } from "../db/client";
 import {
   auditEvents,
   assessmentFaceScans,
+  assessmentPriorities,
   assessments,
   authenticationFailures,
   authSessions,
@@ -879,9 +880,11 @@ export class PostgresApplicationService implements ApplicationService {
       createdAt: assessments.createdAt,
       updatedAt: assessments.updatedAt,
       completedAt: assessments.completedAt,
+      priorityMembershipId: assessmentPriorities.membershipId,
     }).from(assessments)
       .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
       .leftJoin(facilities, and(eq(facilities.organizationId, assessments.organizationId), eq(facilities.id, assessments.facilityId)))
+      .leftJoin(assessmentPriorities, and(eq(assessmentPriorities.organizationId, assessments.organizationId), eq(assessmentPriorities.assessmentId, assessments.id), eq(assessmentPriorities.membershipId, actor.membershipId)))
       .where(and(eq(assessments.organizationId, organizationId), facilityAccessCondition(actor, organizationId, assessments.facilityId)))
       .orderBy(desc(assessments.createdAt));
     const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
@@ -904,11 +907,36 @@ export class PostgresApplicationService implements ApplicationService {
         facility: row.facilityId && row.facilityName ? { id: row.facilityId, name: row.facilityName } : null,
         status: row.status,
         myAction: !row.patientArchived && row.patientAccessible ? myAssessmentAction(actor, row, review?.correctionPerson?.membershipId ?? null) : null,
+        isPriority: row.priorityMembershipId !== null,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         completedAt: row.completedAt,
       };
     });
+  }
+  async getAssessmentPriority(actor: Principal, organizationId: string, assessmentId: string): Promise<boolean> {
+    if (actor.platformRole !== "USER") return false;
+    this.ensureOrganizationAccess(actor, organizationId, "assessments.read");
+    const [assessment] = await this.db.select({ id: assessments.id }).from(assessments)
+      .where(and(eq(assessments.organizationId, organizationId), eq(assessments.id, assessmentId), facilityAccessCondition(actor, organizationId, assessments.facilityId)));
+    if (!assessment) throw new ServiceError("NOT_FOUND", "Assessment not found.");
+    const [priority] = await this.db.select({ assessmentId: assessmentPriorities.assessmentId }).from(assessmentPriorities)
+      .where(and(eq(assessmentPriorities.organizationId, organizationId), eq(assessmentPriorities.assessmentId, assessmentId), eq(assessmentPriorities.membershipId, actor.membershipId)));
+    return Boolean(priority);
+  }
+  async setAssessmentPriority(actor: Principal, organizationId: string, assessmentId: string, isPriority: boolean): Promise<{ assessmentId: string; isPriority: boolean }> {
+    if (actor.platformRole !== "USER") throw new ServiceError("FORBIDDEN", "Only organization members can mark assessment priority.");
+    this.ensureOrganizationAccess(actor, organizationId, "assessments.read");
+    // Apply the same facility boundary as assessment reads, including unassigned records.
+    const [assessment] = await this.db.select({ id: assessments.id }).from(assessments)
+      .where(and(eq(assessments.organizationId, organizationId), eq(assessments.id, assessmentId), facilityAccessCondition(actor, organizationId, assessments.facilityId)));
+    if (!assessment) throw new ServiceError("NOT_FOUND", "Assessment not found.");
+    if (isPriority) {
+      await this.db.insert(assessmentPriorities).values({ organizationId, assessmentId, membershipId: actor.membershipId }).onConflictDoNothing();
+    } else {
+      await this.db.delete(assessmentPriorities).where(and(eq(assessmentPriorities.organizationId, organizationId), eq(assessmentPriorities.assessmentId, assessmentId), eq(assessmentPriorities.membershipId, actor.membershipId)));
+    }
+    return { assessmentId, isPriority };
   }
   async getOverviewRisk(actor: Principal, organizationId: string) {
     this.ensureOrganizationAccess(actor, organizationId, "assessments.read");

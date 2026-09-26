@@ -28,7 +28,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     getScoringOrganizationInfo: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], getFacilityPerformance: async () => ({}), updateFacility: async () => ({}),
     updatePatient: async () => ({}), correctPatientMrn: async () => ({}), correctPatientDob: async () => ({}), updateOrganizationUser: async () => ({}),
-    createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [], getOverviewRisk: async () => ({ highRiskPatients: 0, highRiskPatients30DaysAgo: 0, assessedPatients: 0, categories: { low: 0, moderate: 0, high: 0 }, categories30DaysAgo: { low: 0, moderate: 0, high: 0 }, highRiskAssessments: [] }), getOverviewActivity: async () => ({ items: [] }),
+    createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [], getAssessmentPriority: async () => false, setAssessmentPriority: async (_actor, _organizationId, assessmentId, isPriority) => ({ assessmentId, isPriority }), getOverviewRisk: async () => ({ highRiskPatients: 0, highRiskPatients30DaysAgo: 0, assessedPatients: 0, categories: { low: 0, moderate: 0, high: 0 }, categories30DaysAgo: { low: 0, moderate: 0, high: 0 }, highRiskAssessments: [] }), getOverviewActivity: async () => ({ items: [] }),
     invitationAccess: async () => ({ allFacilities: true }), manageUserInvitation: async () => ({ invitation: {}, token: "replacement-token" }),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
     ...overrides,
@@ -36,6 +36,26 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
 }
 
 describe("local authentication routes", () => {
+  test("validates personal assessment priority changes within the authenticated tenant", async () => {
+    const assessmentId = "01J00000000000000000000004";
+    const calls: boolean[] = [];
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({ setAssessmentPriority: async (actor, organizationId, id, isPriority) => {
+        expect(actor).toEqual(principal);
+        expect(organizationId).toBe(principal.organizationId);
+        expect(id).toBe(assessmentId);
+        calls.push(isPriority);
+        return { assessmentId: id, isPriority };
+      } }) });
+    const path = `/v1/organizations/${principal.organizationId}/assessments/${assessmentId}/priority`;
+    const request = (body: unknown, cookie = "niq_session=valid-session") => app.request(path, { method: "PATCH", headers: { cookie, origin: "http://localhost:5173", "content-type": "application/json" }, body: JSON.stringify(body) });
+    expect((await (await request({ isPriority: true })).json()).isPriority).toBe(true);
+    expect((await (await request({ isPriority: false })).json()).isPriority).toBe(false);
+    expect((await request({ isPriority: "true" })).status).toBe(400);
+    expect((await request({ isPriority: true, extra: true })).status).toBe(400);
+    expect((await request({ isPriority: true }, "")).status).toBe(401);
+    expect(calls).toEqual([true, false]);
+  });
   test("patient and user profile edits validate input and require authentication", async () => {
     let patientCalls = 0, correctionCalls = 0, dobCorrectionCalls = 0, userCalls = 0;
     const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service: fakeService({

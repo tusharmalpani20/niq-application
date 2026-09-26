@@ -54,7 +54,7 @@ export function getReportSubmissionIssues(report: Pick<AssessmentReport, "label"
 }
 export type AssessmentInitialization = { id: string; status: string; assessmentId: string | null; assessmentReference?: string | null; failureCode: string | null };
 export type AssessmentWorkflow = {
-  id: string; reference: string; serialNumber: number; organizationId: string; patientId: string; facilityId: string | null; status: string; revision: number; canEditDraft?: boolean;
+  id: string; reference: string; serialNumber: number; organizationId: string; patientId: string; facilityId: string | null; status: string; revision: number; canEditDraft?: boolean; isPriority: boolean;
   patient: AssessmentPatient; answers: FormAnswers; manifest: AssessmentFormManifest;
   progress: ReturnType<typeof getAssessmentCompletion>; reports: AssessmentReport[]; reportLimits?: AssessmentReportLimits;
   binding: { version: string; checksum: string }; result: unknown | null;

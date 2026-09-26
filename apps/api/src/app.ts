@@ -171,6 +171,10 @@ export function createApp(dependencies: AppDependencies) {
   app.put("/v1/organizations/:organizationId/users/:membershipId/profile", zValidator("param", idParamsSchema, validationFailure), zValidator("json", updateOrganizationUserSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.updateOrganizationUser(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").membershipId!, context.req.valid("json"), requestContext(context)))));
   app.get("/v1/organizations/:organizationId/patients/:patientLocator", zValidator("param", patientParamsSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.getPatient(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").patientLocator))));
   app.get("/v1/organizations/:organizationId/assessments", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json({ items: await dependencies.service!.listAssessments(context.get("principal"), context.req.valid("param").organizationId) }));
+  app.patch("/v1/organizations/:organizationId/assessments/:assessmentId/priority", zValidator("param", z.object({ organizationId: idSchema, assessmentId: idSchema }), validationFailure), zValidator("json", z.object({ isPriority: z.boolean() }).strict(), validationFailure), async (context) => {
+    context.header("Cache-Control", "private, no-store");
+    return context.json(await dependencies.service!.setAssessmentPriority(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").assessmentId, context.req.valid("json").isPriority));
+  });
   app.get("/v1/organizations/:organizationId/overview-risk", zValidator("param", idParamsSchema, validationFailure), async (context) => {
     context.header("Cache-Control", "private, no-store");
     return context.json(await dependencies.service!.getOverviewRisk(context.get("principal"), context.req.valid("param").organizationId));

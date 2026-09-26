@@ -466,6 +466,24 @@ export const assessments = pgTable(
   ],
 );
 
+// A clinician's priority queue is personal, so marking an assessment does not
+// change the queue shown to colleagues in the same organization.
+export const assessmentPriorities = pgTable(
+  "assessment_priorities",
+  {
+    organizationId: entityId("organization_id").notNull(),
+    assessmentId: entityId("assessment_id").notNull(),
+    membershipId: entityId("membership_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table): PgTableExtraConfigValue[] => [
+    uniqueIndex("assessment_priorities_owner_uidx").on(table.organizationId, table.assessmentId, table.membershipId),
+    index("assessment_priorities_membership_idx").on(table.organizationId, table.membershipId),
+    foreignKey({ name: "assessment_priorities_assessment_fk", columns: [table.organizationId, table.assessmentId], foreignColumns: [assessments.organizationId, assessments.id] }),
+    foreignKey({ name: "assessment_priorities_membership_fk", columns: [table.organizationId, table.membershipId], foreignColumns: [organizationMemberships.organizationId, organizationMemberships.id] }),
+  ],
+);
+
 export const assessmentAnswers = pgTable(
   "assessment_answers",
   {

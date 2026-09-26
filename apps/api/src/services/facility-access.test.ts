@@ -18,6 +18,7 @@ describe.skipIf(!process.env.FACILITY_TEST_SOCKET)("facility access against Post
     await client`create temporary table facilities (id text, organization_id text, name text, code text, timezone text default 'UTC', status text default 'ACTIVE', created_at timestamptz default now(), updated_at timestamptz default now())`;
     await client`create temporary table patients (id text, organization_id text, home_facility_id text, reference_prefix text, serial_number int, date_of_birth date, gender text, encrypted_profile bytea, encrypted_external_reference bytea, is_archived boolean default false, created_at timestamptz default now(), updated_at timestamptz default now())`;
     await client`create temporary table assessments (id text, organization_id text, patient_id text, facility_id text, serial_number serial, status text default 'DRAFT', created_by_membership_id text default 'creator', clinical_review jsonb, completed_at timestamptz, created_at timestamptz default now(), updated_at timestamptz default now())`;
+    await client`create temporary table assessment_priorities (organization_id text, assessment_id text, membership_id text, created_at timestamptz default now(), unique (organization_id, assessment_id, membership_id))`;
     await client`insert into facilities (id, organization_id, name, code) values ('a','org','A','A'), ('b','org','B','B'), ('c','other','C','C')`;
     await client`insert into facility_memberships values ('org','restricted','a'), ('org','multi','a'), ('org','multi','b'), ('org','inactive','b')`;
     const encrypted = encryptPatientData(JSON.stringify({ name: "Fixture" }), patientDataKey(undefined, config.SESSION_SECRET));
@@ -53,6 +54,14 @@ describe.skipIf(!process.env.FACILITY_TEST_SOCKET)("facility access against Post
   test("supports multiple assignments and explicit all-facility membership", async () => {
     expect((await service.listPatients({ ...actor, membershipId: "multi" }, "org")).map((row) => row.id).sort()).toEqual(["patient-a", "patient-b"]);
     expect((await service.listPatients({ ...actor, membershipId: "all" }, "org")).map((row) => row.id).sort()).toEqual(["patient-a", "patient-b", "unassigned"]);
+  });
+  test("keeps assessment priority personal and respects facility access", async () => {
+    expect(await service.setAssessmentPriority(actor, "org", "assessment-a", true)).toEqual({ assessmentId: "assessment-a", isPriority: true });
+    expect((await service.listAssessments(actor, "org"))[0]?.isPriority).toBe(true);
+    expect((await service.listAssessments({ ...actor, membershipId: "multi" }, "org"))[0]?.isPriority).toBe(false);
+    await expect(service.setAssessmentPriority(actor, "org", "assessment-b", true)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(await service.setAssessmentPriority(actor, "org", "assessment-a", false)).toEqual({ assessmentId: "assessment-a", isPriority: false });
+    expect(await service.getAssessmentPriority(actor, "org", "assessment-a")).toBe(false);
   });
   test("filters assessment lists to assigned facilities", async () => {
     expect((await service.listAssessments(actor, "org")).map((row) => row.id)).toEqual(["assessment-a"]);

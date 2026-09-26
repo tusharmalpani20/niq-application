@@ -414,6 +414,7 @@ export const assessmentSummarySchema = z.object({
   facility: facilitySchema.pick({ id: true, name: true }).nullable(),
   status: assessmentStatusSchema,
   myAction: z.enum(["EDIT_DRAFT", "CORRECT_DRAFT", "SEND_FOR_REVIEW"]).nullable(),
+  isPriority: z.boolean(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date().optional(),
   completedAt: z.coerce.date().nullable(),
