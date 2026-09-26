@@ -115,7 +115,7 @@ export function DashboardPage() {
   const now = new Date();
   const patientGrowth = data ? overviewGrowth(data.patients.map(item => item.createdAt), now) : null;
   const completedGrowth = data ? overviewGrowth(data.assessments.flatMap(item => item.status === "COMPLETED" && item.completedAt ? [item.completedAt] : []), now) : null;
-  const highRiskTrend = data?.highRiskPatients != null && data.highRiskPatients30DaysAgo != null
+  const highRiskTrend = data?.highRiskPatients != null && data.highRiskPatients30DaysAgo != null && data.highRiskPatients !== data.highRiskPatients30DaysAgo
     ? { change: data.highRiskPatients - data.highRiskPatients30DaysAgo, percent: null, increaseIsGood: false }
     : undefined;
   const myAssessmentActions = data?.assessments.filter(item => !!item.myAction) ?? [];
@@ -129,7 +129,7 @@ export function DashboardPage() {
         <OverviewStatCard label="Total patients" value={patientGrowth?.total ?? null} icon={UsersRound} trend={patientGrowth ? { change: patientGrowth.added, percent: patientGrowth.percent, increaseIsGood: true } : undefined} detail="vs 30 days ago" to="/patients" />
         {(isClinician || isAdmin) && <>
           <OverviewStatCard label="Assessments completed" value={completedGrowth?.total ?? null} icon={ClipboardCheck} trend={completedGrowth ? { change: completedGrowth.added, percent: completedGrowth.percent, increaseIsGood: true } : undefined} detail="vs 30 days ago" to="/assessments?status=COMPLETED" />
-          <OverviewStatCard label="High Risk patients" value={data?.highRiskPatients ?? null} icon={TriangleAlert} tone="alert" trend={highRiskTrend} detail="vs 30 days ago" />
+          <OverviewStatCard label="High Risk patients" value={data?.highRiskPatients ?? null} icon={TriangleAlert} tone="alert" trend={highRiskTrend} detail={highRiskTrend ? "vs 30 days ago" : ""} />
           <OverviewStatCard label="My assessment actions" value={data ? myAssessmentActions.length : null} icon={ClipboardList} detail="Drafts, corrections, ready to send" to="/assessments?status=MY_ACTIONS" />
         </>}
       </section>

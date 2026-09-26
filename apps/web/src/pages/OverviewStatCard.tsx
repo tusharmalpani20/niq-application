@@ -23,7 +23,7 @@ export function OverviewStatCard({ label, value, icon: Icon, detail, to, tone = 
         <strong className="text-2xl font-semibold leading-none tracking-tight tabular-nums text-foreground sm:text-3xl">{value ?? "—"}</strong>
         {trend && <span className={`inline-flex items-center gap-0.5 text-sm font-semibold tabular-nums ${trendColor}`} aria-label={`${trend.change > 0 ? "Up" : trend.change < 0 ? "Down" : "No change"} ${trend.percent === null ? Math.abs(trend.change) : `${Math.abs(trend.percent)} percent`}`}><Direction className="size-4" aria-hidden="true" />{trend.percent === null ? Math.abs(trend.change) : `${Math.abs(trend.percent)}%`}</span>}
       </span>
-      <span className="mt-1 block text-xs text-muted-foreground">{detail}</span>
+      {detail && <span className="mt-1 block text-xs text-muted-foreground">{detail}</span>}
     </span>
   </>;
   const className = "surface flex min-h-28 min-w-0 items-center gap-2 p-3 no-underline transition-colors focus-visible:outline-2 focus-visible:outline-primary sm:gap-4 sm:p-4";

@@ -228,6 +228,16 @@ test("high-risk direction is red when more patients are high risk and green when
   }, { highRiskPatients: 1, highRiskPatients30DaysAgo: 3 });
 });
 
+test("high-risk card shows a single zero when the comparison is unchanged", async () => {
+  await renderOverview("DOCTOR", body => {
+    const card = Array.from(body.querySelectorAll('[aria-label="Overview statistics"] > *'))
+      .find(item => item.textContent?.includes("High Risk patients"));
+    expect(card?.querySelector("strong")?.textContent).toBe("0");
+    expect(card?.querySelector('[aria-label="No change 0"]')).toBeNull();
+    expect(card?.textContent).not.toContain("vs 30 days ago");
+  }, { highRiskPatients: 0, highRiskPatients30DaysAgo: 0 });
+});
+
 test("organization admin sees actionable operations but no clinician review card", async () => {
   await renderOverview("ORGANIZATION_ADMIN", body => {
     expect(body.textContent).toContain("Organization operations");
