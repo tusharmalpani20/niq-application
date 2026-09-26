@@ -28,14 +28,13 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
   const canCreate = Boolean(onCreate && query && !options.some(option => option.label.toLocaleLowerCase() === query.toLocaleLowerCase()) && query !== customValue);
   const items = [...(search === selectedLabel ? options : matches), ...(canCreate ? [{ id: "__custom__", label: `Use “${query}” as Other` }] : [])];
   const selectedIcon = renderIcon && value && search === selectedLabel ? renderIcon(value) : null;
-  const highlightClass = primaryHighlight ? "data-focused:bg-primary data-focused:text-foreground data-hovered:bg-primary data-hovered:text-foreground data-selected:bg-primary data-selected:text-foreground" : "data-focused:bg-accent data-focused:text-accent-foreground";
   return <ComboBox data-slot="search-combobox" aria-label={label} isDisabled={disabled} isRequired={required} isInvalid={invalid} allowsCustomValue allowsEmptyCollection menuTrigger="manual"
     selectedKey={value} inputValue={search} onInputChange={setSearch} items={items}
     onSelectionChange={key => { if (key === null) return; if (key === "__custom__") { onCreate?.(query); setSearch(selectedLabel); } else { onChange(String(key)); setSearch(options.find(option => option.id === key)?.label || ""); } }}
     onBlur={() => setSearch(selectedLabel)} className="w-full min-w-0">
     <ComboBoxStateContext.Consumer>{state => <>
     <Group className={`flex items-center rounded-lg border border-input bg-background focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30 ${large ? "min-h-12" : "min-h-11"}`}>
-      {selectedIcon && <span className="ml-2 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-brand-ink" aria-hidden="true">{selectedIcon}</span>}
+      {selectedIcon && <span className={`ml-2 flex size-9 shrink-0 items-center justify-center rounded-lg ${primaryHighlight ? "bg-primary text-primary-foreground" : "bg-primary/10 text-brand-ink"}`} aria-hidden="true">{selectedIcon}</span>}
       <Input onClick={() => state?.open()} onInput={() => state?.open()} id={id} aria-describedby={describedBy} maxLength={2000} placeholder={placeholder} onKeyDown={event => {
         // React Aria commits a highlighted option itself. Enter without one is
         // also an explicit acceptance of the visible custom-answer action.
@@ -52,8 +51,8 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
       <ListBox<ComboboxOption> className="themed-scrollbar min-h-0 max-h-72 overflow-y-auto overscroll-contain p-1.5 outline-none" renderEmptyState={() => <p className="p-3 text-sm text-muted-foreground">No matching options</p>}>
         {option => {
           const icon = renderIcon?.(option.id);
-          return <ListBoxItem id={option.id} textValue={option.label} className={`flex cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 outline-none data-selected:font-medium ${highlightClass} ${large ? "min-h-12 text-base" : "min-h-11 text-sm"}`}>
-            {({ isSelected, isFocused, isHovered }) => <><span className="flex min-w-0 items-center gap-3">{icon && <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${primaryHighlight && (isSelected || isFocused || isHovered) ? "bg-background/70 text-brand-ink" : "bg-primary/10 text-brand-ink"}`} aria-hidden="true">{icon}</span>}<span className="break-words">{option.label}</span></span>{isSelected && <Check className="size-4 shrink-0" />}</>}
+          return <ListBoxItem id={option.id} textValue={option.label} className={({ isSelected, isFocused, isHovered }) => `flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 outline-none data-selected:font-medium ${primaryHighlight ? isSelected ? "border-primary bg-primary/10 text-foreground" : isFocused || isHovered ? "border-primary bg-primary text-foreground" : "border-transparent" : "border-transparent data-focused:bg-accent data-focused:text-accent-foreground"} ${large ? "min-h-12 text-base" : "min-h-11 text-sm"}`}>
+            {({ isSelected, isFocused, isHovered }) => <><span className="flex min-w-0 items-center gap-3">{icon && <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${primaryHighlight && isSelected ? "bg-primary text-primary-foreground" : primaryHighlight && (isFocused || isHovered) ? "bg-background/70 text-brand-ink" : "bg-primary/10 text-brand-ink"}`} aria-hidden="true">{icon}</span>}<span className="break-words">{option.label}</span></span>{isSelected && !primaryHighlight && <Check className="size-4 shrink-0" />}</>}
           </ListBoxItem>;
         }}
       </ListBox>
