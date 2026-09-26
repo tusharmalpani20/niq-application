@@ -90,6 +90,24 @@ test("priority assessments precede quick actions, which link to new care and rev
   }, { assessmentStatus: "DRAFT" });
 });
 
+test("quick actions show only assigned send and correction work", async () => {
+  const items = [
+    { ...assessment, id: `${id.slice(0, -1)}1`, reference: "ASM-000001", status: "SCORED", myAction: "SEND_FOR_REVIEW" },
+    { ...assessment, id: `${id.slice(0, -1)}2`, reference: "ASM-000002", status: "DRAFT", myAction: "CORRECT_DRAFT" },
+    { ...assessment, id: `${id.slice(0, -1)}3`, reference: "ASM-000003", status: "DRAFT", myAction: "EDIT_DRAFT" },
+  ];
+  await renderOverview("DOCTOR", body => {
+    const actions = body.querySelector('[aria-label="Quick actions"]');
+    expect(actions?.querySelector('a[href="/assessments?status=SEND_FOR_REVIEW"]')?.textContent).toContain("Ready to send1 assessment");
+    expect(actions?.querySelector('a[href="/assessments?status=CORRECT_DRAFT"]')?.textContent).toContain("Corrections to make1 assessment");
+  }, { assessments: items });
+  await renderOverview("DOCTOR", body => {
+    const actions = body.querySelector('[aria-label="Quick actions"]');
+    expect(actions?.querySelector('a[href="/assessments?status=SEND_FOR_REVIEW"]')).toBeNull();
+    expect(actions?.querySelector('a[href="/assessments?status=CORRECT_DRAFT"]')).toBeNull();
+  }, { assessments: [items[2]!] });
+});
+
 test("bottom cards show recent patients and real NIQ category comparisons", async () => {
   const now = new Date();
   await renderOverview("DOCTOR", body => {
