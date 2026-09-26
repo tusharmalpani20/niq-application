@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { faceScanContextSchema, type AssessmentWorkflow, type FaceScanList, type FaceScanSession, type FaceScanSignal } from "@niq/application-contracts";
-import { Armchair, PersonStanding, ScanFace } from "lucide-react";
+import { Armchair, Info, PersonStanding, ScanFace } from "lucide-react";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { createCaptureController } from "./careplix-capture";
@@ -230,7 +230,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {data?.enabled && canStart && (session?.state !== "COMPLETED" || rescanRequested) && phase === "idle" && record.status === "DRAFT" && <div className="space-y-4 border-t border-border pt-4">
       {session?.state === "COMPLETED" && <p className="text-sm text-muted-foreground">A new scan will replace the current result. Previous results stay saved in the assessment history.</p>}
       <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground" aria-hidden="true"><ScanFace className="size-6" strokeWidth={2.5} /></span>
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground" aria-hidden="true"><Info className="size-6" strokeWidth={2.5} /></span>
         <div className="min-w-0 space-y-2 text-sm text-foreground">
           <p className="font-semibold">Before you start</p>
           <p>Keep your face still and well-lit for 30 seconds. Follow the position guidance during capture.</p>
