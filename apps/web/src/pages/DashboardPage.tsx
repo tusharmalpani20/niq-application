@@ -50,11 +50,12 @@ function RecentPatients({ patients }: { patients: Patient[] }) {
   </section>;
 }
 
-function OpenAssessments({ records }: { records: AssessmentSummary[] }) {
+function MyAssessmentActions({ records }: { records: AssessmentSummary[] }) {
   const recent = [...records].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 3);
-  return <section className="surface p-5" aria-label="Open assessments">
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">Open assessments in your facilities</h3><p className="text-sm text-muted-foreground">{records.length} to continue or score</p></div><Link className="text-sm text-primary hover:underline" to="/assessments?status=OPEN">View all open assessments</Link></div>
-    {recent.length ? <ul className="divide-y">{recent.map(record => <li key={record.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><div><Link className="font-medium text-foreground hover:underline" to={`/assessments/${record.reference}`}>{record.patient.displayName}</Link><p className="text-xs text-muted-foreground">{record.reference} · {record.facility?.name ?? "No facility"}</p></div><span className="text-xs text-muted-foreground">{assessmentStatusLabels[record.status]} · Started {record.createdAt.toLocaleDateString("en-GB")}</span></li>)}</ul> : <p className="text-sm text-muted-foreground">No open assessments in your accessible facilities.</p>}
+  const actionLabel = (record: AssessmentSummary) => record.myAction === "CORRECT_DRAFT" ? "Continue corrections" : record.myAction === "SEND_FOR_REVIEW" ? "Send for review" : assessmentStatusLabels[record.status];
+  return <section className="surface p-5" aria-label="My assessment actions">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">My assessment actions</h3><p className="text-sm text-muted-foreground">{records.length} to continue or send</p></div><Link className="text-sm text-primary hover:underline" to="/assessments?status=MY_ACTIONS">View all my actions</Link></div>
+    {recent.length ? <ul className="divide-y">{recent.map(record => <li key={record.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><div><Link className="font-medium text-foreground hover:underline" to={`/assessments/${record.reference}`}>{record.patient.displayName}</Link><p className="text-xs text-muted-foreground">{record.reference} · {record.facility?.name ?? "No facility"}</p></div><span className="text-xs text-muted-foreground">{actionLabel(record)} · Started {record.createdAt.toLocaleDateString("en-GB")}</span></li>)}</ul> : <p className="text-sm text-muted-foreground">No assessment actions assigned to you.</p>}
   </section>;
 }
 
@@ -120,7 +121,7 @@ export function DashboardPage() {
   const highRiskTrend = data?.highRiskPatients != null && data.highRiskPatients30DaysAgo != null
     ? { change: data.highRiskPatients - data.highRiskPatients30DaysAgo, percent: null, increaseIsGood: false }
     : undefined;
-  const openAssessments = data?.assessments.filter(item => item.status === "DRAFT" || item.status === "READY_FOR_SCORING") ?? [];
+  const myAssessmentActions = data?.assessments.filter(item => !!item.myAction) ?? [];
   const scoringIssues = data?.assessments.filter(item => item.status === "SCORING_UNAVAILABLE").length ?? 0;
   return <>
     <header className="mb-7 flex flex-wrap items-center justify-between gap-4" aria-label="Overview greeting">
@@ -132,14 +133,14 @@ export function DashboardPage() {
         {(isClinician || isAdmin) && <>
           <OverviewStatCard label="Assessments completed" value={completedGrowth?.total ?? null} icon={ClipboardCheck} trend={completedGrowth ? { change: completedGrowth.added, percent: completedGrowth.percent, increaseIsGood: true } : undefined} detail="vs 30 days ago" to="/assessments?status=COMPLETED" />
           <OverviewStatCard label="High Risk patients" value={data?.highRiskPatients ?? null} icon={TriangleAlert} tone="alert" trend={highRiskTrend} detail="vs 30 days ago" />
-          <OverviewStatCard label="Open assessments" value={data ? openAssessments.length : null} icon={ClipboardList} detail="Draft or ready to score" to="/assessments?status=OPEN" />
+          <OverviewStatCard label="My assessment actions" value={data ? myAssessmentActions.length : null} icon={ClipboardList} detail="Drafts, corrections, ready to send" to="/assessments?status=MY_ACTIONS" />
         </>}
       </section>
     </>}
     {data && isClinician && <section className="mt-7" aria-label="Clinical work">
       <div className="mb-4"><h2 className="text-lg font-semibold">Clinical work</h2><p className="text-sm text-muted-foreground">Assessments and reviews in your accessible facilities</p></div>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <OpenAssessments records={openAssessments} />
+        <MyAssessmentActions records={myAssessmentActions} />
         <ReviewWork queued={data.queuedReviews} mine={data.myReviews} />
       </div>
     </section>}

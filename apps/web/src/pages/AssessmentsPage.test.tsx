@@ -8,7 +8,7 @@ import { AssessmentsPage } from "./AssessmentsPage";
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const date = "2026-09-20T00:00:00Z";
 const patient = { id, reference: "PAT-1", displayName: "Example Patient" };
-const records = ["DRAFT", "READY_FOR_SCORING", "SCORED"].map((status, index) => ({ id: `${id.slice(0, -1)}${index + 1}`, reference: `ASM-00000${index + 1}`, serialNumber: index + 1, organizationId: id, patient, facility: null, status, createdAt: date, completedAt: null }));
+const records = ["DRAFT", "READY_FOR_SCORING", "SCORED"].map((status, index) => ({ id: `${id.slice(0, -1)}${index + 1}`, reference: `ASM-00000${index + 1}`, serialNumber: index + 1, organizationId: id, patient, facility: null, status, myAction: null as string | null, createdAt: date, completedAt: null }));
 type AssessmentFixture = Omit<(typeof records)[number], "facility" | "completedAt"> & { facility: { id: string; name: string } | null; completedAt: string | null };
 
 async function renderAssessments(path: string, items: AssessmentFixture[], verify: () => void) {
@@ -92,6 +92,22 @@ test("completed overview card opens all completed assessments", async () => {
 test("clinical reviews tab shows its unfiltered total", async () => {
   await renderAssessments("/assessments?tab=clinical-reviews&review=QUEUED", records, () => {
     expect(document.querySelector('[data-slot="tabs-list"]')?.textContent).toMatch(/Clinical reviews\s*2/);
+  });
+});
+
+test("my assessment actions link shows the same assigned work as the overview", async () => {
+  const items = [
+    { ...records[0], myAction: "EDIT_DRAFT" },
+    { ...records[1], myAction: null },
+    { ...records[2], myAction: "SEND_FOR_REVIEW" },
+  ];
+  await renderAssessments("/assessments?status=MY_ACTIONS", items, () => {
+    const table = document.querySelector('[aria-label="Assessments"]');
+    expect(table?.textContent).toContain("ASM-000001");
+    expect(table?.textContent).toContain("ASM-000003");
+    expect(table?.textContent).not.toContain("ASM-000002");
+    expect(table?.querySelector('a[aria-label="Send for review ASM-000003"]')).not.toBeNull();
+    expect(document.body.textContent).toContain("2 total");
   });
 });
 

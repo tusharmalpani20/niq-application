@@ -11,7 +11,7 @@ const date = "2026-09-20T00:00:00Z";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Example Patient", homeFacility: null, dateOfBirth: null, gender: "UNKNOWN", createdAt: date, updatedAt: date };
 const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: null, status: "SCORING_UNAVAILABLE", createdAt: date, completedAt: null };
 
-type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number };
+type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; assessments?: Array<typeof assessment & { myAction?: string | null }>; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number };
 
 test("overview greeting follows the local hour", () => {
   expect(greetingForHour(0)).toBe("Good evening");
@@ -33,7 +33,7 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
     const url = String(input); requests.push(url);
     if (url.endsWith("/patients")) return Response.json({ items: [patient] });
     if (url.endsWith("/facilities")) return Response.json({ items: [] });
-    if (url.endsWith("/assessments")) return Response.json({ items: [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status, createdAt: scenario.assessmentCreatedAt ?? date, completedAt: scenario.completedAt ?? null }] });
+    if (url.endsWith("/assessments")) return Response.json({ items: scenario.assessments ?? [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status, myAction: scenario.assessmentStatus === "DRAFT" ? "EDIT_DRAFT" : null, createdAt: scenario.assessmentCreatedAt ?? date, completedAt: scenario.completedAt ?? null }] });
     if (url.endsWith("/overview-risk")) return Response.json({ highRiskPatients: scenario.highRiskPatients ?? 1, highRiskPatients30DaysAgo: scenario.highRiskPatients30DaysAgo ?? 0, assessedPatients: 1 });
     if (url.endsWith("/users")) return Response.json({ items: [{ membershipId: id, userId: id, email: "admin@example.test", displayName: "Admin", status: "ACTIVE", role, active: true, createdAt: date }] });
     if (url.includes("/clinical-reviews?")) return Response.json({ items: [], total: scenario.reviewTotal ?? 2, page: 1, pageSize: 3 });
@@ -60,8 +60,8 @@ test("clinician overview shows review work without administrator operations", as
     expect(body.querySelector('a[href="/assessments/new"]')?.textContent).toContain("New assessment");
     expect(body.textContent).not.toContain("Resume assessment");
     expect(body.textContent).toContain("Clinical work");
-    expect(body.textContent).toContain("Open assessments in your facilities");
-    expect(body.querySelector('a[href="/assessments?status=OPEN"]')).not.toBeNull();
+    expect(body.textContent).toContain("My assessment actions");
+    expect(body.querySelector('a[href="/assessments?status=MY_ACTIONS"]')).not.toBeNull();
     expect(body.querySelector('a[href="/assessments/ASM-000001"]')).not.toBeNull();
     expect(body.textContent).toContain("My reviews in progress");
     expect(body.querySelector('a[href="/assessments?tab=clinical-reviews&review=mine-active"]')).not.toBeNull();
@@ -70,7 +70,7 @@ test("clinician overview shows review work without administrator operations", as
   }, { assessmentStatus: "DRAFT" });
 });
 
-test("overview cards show accessible patients, completed assessments, high risk and open work", async () => {
+test("overview cards show accessible patients, completed assessments, high risk and my actions", async () => {
   const now = new Date();
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 15).toISOString();
   await renderOverview("DOCTOR", body => {
@@ -78,13 +78,28 @@ test("overview cards show accessible patients, completed assessments, high risk 
     expect(cards?.textContent).toContain("Total patients");
     expect(cards?.textContent).toContain("Assessments completed");
     expect(cards?.textContent).toContain("High Risk patients");
-    expect(cards?.textContent).toContain("Open assessments");
+    expect(cards?.textContent).toContain("My assessment actions");
     expect(cards?.querySelectorAll(":scope > *")).toHaveLength(4);
     expect(body.querySelector('a[href="/assessments?status=COMPLETED"] strong')?.textContent).toBe("1");
   }, { assessmentStatus: "COMPLETED", assessmentCreatedAt: lastMonth, completedAt: now.toISOString() });
   await renderOverview("DOCTOR", body => {
     expect(body.querySelector('a[href="/assessments?status=COMPLETED"] strong')?.textContent).toBe("1");
   }, { assessmentStatus: "COMPLETED", assessmentCreatedAt: now.toISOString(), completedAt: lastMonth });
+});
+
+test("my assessment actions counts only work assigned to the signed-in clinician", async () => {
+  const items = [
+    { ...assessment, status: "DRAFT", myAction: "EDIT_DRAFT" },
+    { ...assessment, id: `${id.slice(0, -1)}B`, reference: "ASM-000002", status: "DRAFT", myAction: null },
+    { ...assessment, id: `${id.slice(0, -1)}C`, reference: "ASM-000003", status: "SCORED", myAction: "SEND_FOR_REVIEW" },
+  ];
+  await renderOverview("DOCTOR", body => {
+    expect(body.querySelector('a[href="/assessments?status=MY_ACTIONS"] strong')?.textContent).toBe("2");
+    const work = body.querySelector('[aria-label="My assessment actions"]');
+    expect(work?.textContent).toContain("ASM-000001");
+    expect(work?.textContent).toContain("ASM-000003");
+    expect(work?.textContent).not.toContain("ASM-000002");
+  }, { assessments: items });
 });
 
 test("high-risk direction is red when more patients are high risk and green when fewer are", async () => {
