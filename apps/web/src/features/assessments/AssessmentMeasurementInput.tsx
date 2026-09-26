@@ -18,7 +18,7 @@ export function AssessmentMeasurementUnitControl({ label, kind, unit, onUnitChan
 }) {
   const choices = kind === "height" ? (["cm", "ft-in"] as const) : (["kg", "lb"] as const);
   return <div role="group" aria-label={`${label} unit`} className="inline-flex rounded-lg border border-border p-0.5">
-    {choices.map(choice => <Button key={choice} type="button" size="sm" variant={unit === choice ? "secondary" : "ghost"} className="h-7 px-2 text-xs" aria-pressed={unit === choice} isDisabled={disabled} onPress={() => onUnitChange(choice)}>{choice === "ft-in" ? "ft / in" : choice}</Button>)}
+    {choices.map(choice => <Button key={choice} type="button" size="sm" variant={unit === choice ? "secondary" : "ghost"} className="h-8 px-2.5 text-sm" aria-pressed={unit === choice} isDisabled={disabled} onPress={() => onUnitChange(choice)}>{choice === "ft-in" ? "ft / in" : choice}</Button>)}
   </div>;
 }
 
@@ -78,11 +78,11 @@ export function AssessmentMeasurementInput({ id, label, kind, value, unit, showQ
       : weightKgQuickValues.map(kg => ({ label: `${kg} kg`, value: kg, draft: [String(kg), ""] }));
   return <div className="space-y-2">
     {imperialHeight ? <div className="grid grid-cols-2 gap-3">
-      <div className="relative"><Input id={id} aria-label="Height feet" type="number" inputMode="numeric" min={0} step={1} className="min-h-11 bg-background pr-9" disabled={disabled} aria-required={required} aria-invalid={invalid || invalidInches} aria-describedby={describedBy} value={draft[0]} onKeyDown={blockMinusKey} onChange={event => change(0, event.currentTarget)} /><span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">ft</span></div>
-      <div className="relative"><Input id={`${id}-inches`} aria-label="Height inches" type="number" inputMode="decimal" min={0} max={11.99} step="any" className="min-h-11 bg-background pr-9" disabled={disabled} aria-invalid={invalid || invalidInches} value={draft[1]} onKeyDown={blockMinusKey} onChange={event => change(1, event.currentTarget)} /><span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">in</span></div>
-    </div> : <Input id={id} type="number" min={0} step="any" inputMode="decimal" className="min-h-11 bg-background" disabled={disabled} aria-required={required} aria-invalid={invalid} aria-describedby={describedBy} value={draft[0]} onKeyDown={blockMinusKey} onChange={event => change(0, event.currentTarget)} />}
+      <div className="relative"><Input id={id} aria-label="Height feet" type="number" inputMode="numeric" min={0} step={1} className="min-h-12 bg-background pr-9 md:text-base" disabled={disabled} aria-required={required} aria-invalid={invalid || invalidInches} aria-describedby={describedBy} value={draft[0]} onKeyDown={blockMinusKey} onChange={event => change(0, event.currentTarget)} /><span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">ft</span></div>
+      <div className="relative"><Input id={`${id}-inches`} aria-label="Height inches" type="number" inputMode="decimal" min={0} max={11.99} step="any" className="min-h-12 bg-background pr-9 md:text-base" disabled={disabled} aria-invalid={invalid || invalidInches} value={draft[1]} onKeyDown={blockMinusKey} onChange={event => change(1, event.currentTarget)} /><span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">in</span></div>
+    </div> : <Input id={id} type="number" min={0} step="any" inputMode="decimal" className="min-h-12 bg-background md:text-base" disabled={disabled} aria-required={required} aria-invalid={invalid} aria-describedby={describedBy} value={draft[0]} onKeyDown={blockMinusKey} onChange={event => change(0, event.currentTarget)} />}
     {showQuickValues && !disabled && empty && <div className="flex flex-wrap gap-1.5" aria-label={`Suggested ${label.toLowerCase()} values`}>
-      {quickValues.map(option => <Button key={option.label} type="button" size="xs" variant="outline" className="rounded-full text-xs" onPress={() => { setDraft(option.draft); emit(option.value); }}>{option.label}</Button>)}
+      {quickValues.map(option => <Button key={option.label} type="button" size="xs" variant="outline" className="min-h-9 rounded-full text-sm" onPress={() => { setDraft(option.draft); emit(option.value); }}>{option.label}</Button>)}
     </div>}
     {invalidInches && <p role="alert" className="text-xs text-destructive">Inches must be less than 12.</p>}
   </div>;
