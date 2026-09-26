@@ -352,7 +352,7 @@ export class AssessmentFaceScanService {
   }
   private assertMutationAllowed(assessment: WorkflowRow, scan: Row, action: "signal" | "cancel", actor: Principal) {
     // A pending capture can remain after scoring; cancelling it must be possible before clinical review freezes the cycle.
-    if (action === "cancel" && assessment.status === "SCORED" && scan.state === "REQUESTED") {
+    if (action === "cancel" && assessment.status === "SCORED" && scan.active && !terminal.has(scan.state)) {
       assertCorrectionOwner(this.workflow,assessment,actor);
       if (!reviewState(this.workflow,assessment).correctionPerson && assessment.createdByMembershipId !== actor.membershipId)
         throw new ServiceError("FORBIDDEN", "Only the assessment creator can cancel this scan before clinical review.");

@@ -95,16 +95,17 @@ test("scan recovery cannot rewrite reviewed, completed or previous-cycle evidenc
  expect(canProjectScan(undefined,{cycle:1})).toBe(false);
 });
 
-test("only cancellation of a requested scan remains available after scoring", () => {
+test("only cancellation of an open scan remains available after scoring", () => {
  const workflow = { editable: () => { throw new Error("Assessment is no longer editable"); }, unseal: () => ({ correctionPerson: null }) } as any;
  const scans = new AssessmentFaceScanService(workflow);
  const actor = { membershipId: "creator" } as any;
  const scored = { status: "SCORED", clinicalReview: null, createdByMembershipId: "creator" } as any;
- expect(() => (scans as any).assertMutationAllowed(scored, { state: "REQUESTED" }, "cancel", actor)).not.toThrow();
- expect(() => (scans as any).assertMutationAllowed(scored, { state: "REQUESTED" }, "signal", actor)).toThrow("Assessment is no longer editable");
- expect(() => (scans as any).assertMutationAllowed({ ...scored, status: "UNDER_REVIEW" }, { state: "REQUESTED" }, "cancel", actor)).toThrow("Assessment is no longer editable");
- expect(() => (scans as any).assertMutationAllowed(scored, { state: "COMPLETED" }, "cancel", actor)).toThrow("Assessment is no longer editable");
- expect(() => (scans as any).assertMutationAllowed({ ...scored, createdByMembershipId: "someone-else" }, { state: "REQUESTED" }, "cancel", actor)).toThrow("Only the assessment creator");
+ expect(() => (scans as any).assertMutationAllowed(scored, { state: "REQUESTED", active: true }, "cancel", actor)).not.toThrow();
+ expect(() => (scans as any).assertMutationAllowed(scored, { state: "PROCESSING", active: true }, "cancel", actor)).not.toThrow();
+ expect(() => (scans as any).assertMutationAllowed(scored, { state: "REQUESTED", active: true }, "signal", actor)).toThrow("Assessment is no longer editable");
+ expect(() => (scans as any).assertMutationAllowed({ ...scored, status: "UNDER_REVIEW" }, { state: "REQUESTED", active: true }, "cancel", actor)).toThrow("Assessment is no longer editable");
+ expect(() => (scans as any).assertMutationAllowed(scored, { state: "COMPLETED", active: false }, "cancel", actor)).toThrow("Assessment is no longer editable");
+ expect(() => (scans as any).assertMutationAllowed({ ...scored, createdByMembershipId: "someone-else" }, { state: "REQUESTED", active: true }, "cancel", actor)).toThrow("Only the assessment creator");
 });
 
 test("late provider completion makes no evidence write after review freezes the cycle", async () => {

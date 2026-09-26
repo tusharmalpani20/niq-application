@@ -191,6 +191,32 @@ export class AssessmentWorkflowService {
   }
   async submit(actor:Principal,organizationId:string,id:string,input:AssessmentSubmitInput,context:RequestContext) {
     this.clinicalActor(actor,organizationId,"assessments.submit");
+    // A scan that has not finished is not part of the score. Cancel it before freezing the scoring request.
+    // Provider I/O stays outside the assessment transaction; the original review token is checked again below.
+    let scanBeforeCancellation: Awaited<ReturnType<AssessmentWorkflowService["reviewScan"]>> = null;
+    const [openScan]=await this.db.select({id:assessmentFaceScans.id}).from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId,organizationId),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true),eq(assessmentFaceScans.active,true)));
+    if(openScan) {
+      const row=await this.authorize(actor,organizationId,id);
+      if(row.status==="DRAFT") {
+        this.editable(row,input.revision,actor);
+        const state=this.unseal<StoredWorkflow>(row.workflow);
+        const patient=await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient;
+        const answers=clearInactiveAssessmentAnswers(state.manifest,{...state.answers,...patientAnswers(patient,row.createdAt)});
+        const expectedSections=[...state.manifest.sections.map(section=>section.id),"face-scan","attachments"];
+        const reviewed=new Set(input.attestation.reviewedSectionIds);
+        if(!input.attestation.confirmed||reviewed.size!==expectedSections.length||expectedSections.some(section=>!reviewed.has(section))) throw new ServiceError("VALIDATION_ERROR","Review every section and confirm the submission before requesting a score.");
+        const errors=validateAssessmentAnswers(state.manifest,answers,{requireComplete:true});
+        if(Object.keys(errors).length) throw new ServiceError("VALIDATION_ERROR","Complete the required answers before submitting.",{fields:errors});
+        const reports=await this.reports.list(organizationId,id);
+        const scan=await this.reviewScan(organizationId,id);
+        const token=this.reviewToken(row,patient,answers,reports,scan);
+        if(!/^[a-f0-9]{64}$/.test(input.reviewToken)||!timingSafeEqual(Buffer.from(token,"hex"),Buffer.from(input.reviewToken,"hex"))) throw new ServiceError("CONFLICT","Assessment details changed during review. Review the latest values before submitting.");
+        const { AssessmentFaceScanService }=await import("./assessment-face-scan");
+        const cancelled=await new AssessmentFaceScanService(this).mutate(actor,organizationId,id,openScan.id,"cancel");
+        if(cancelled.state!=="CANCELLED") throw new ServiceError("CONFLICT","The face scan is still open. Scoring was not requested.");
+        scanBeforeCancellation=scan;
+      }
+    }
     await this.db.transaction(async tx=>{
       const row=await this.authorize(actor,organizationId,id,tx,true);
       assertCorrectionOwner(this,row,actor);
@@ -204,7 +230,8 @@ export class AssessmentWorkflowService {
       if(!input.attestation.confirmed||reviewed.size!==expectedSections.length||expectedSections.some(section=>!reviewed.has(section))) throw new ServiceError("VALIDATION_ERROR","Review every section and confirm the submission before requesting a score.");
       const reports=await this.reports.list(organizationId,id,tx);
       const scan=await this.reviewScan(organizationId,id,tx);
-      const actualToken=this.reviewToken(row,patient,answers,reports,scan);
+      if(scanBeforeCancellation && (scan?.id!==scanBeforeCancellation.id || scan.state!=="CANCELLED")) throw new ServiceError("CONFLICT","The face scan changed during submission. Review the latest scan before submitting.");
+      const actualToken=this.reviewToken(row,patient,answers,reports,scanBeforeCancellation??scan);
       if(!/^[a-f0-9]{64}$/.test(input.reviewToken)||!timingSafeEqual(Buffer.from(actualToken,"hex"),Buffer.from(input.reviewToken,"hex"))) throw new ServiceError("CONFLICT","Assessment details changed during review. Review the latest values before submitting.");
       const errors=validateAssessmentAnswers(state.manifest,answers,{requireComplete:true});
       if(Object.keys(errors).length) throw new ServiceError("VALIDATION_ERROR","Complete the required answers before submitting.",{fields:errors});
