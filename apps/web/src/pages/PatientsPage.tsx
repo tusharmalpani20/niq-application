@@ -97,7 +97,7 @@ export function PatientsPage() {
     { id: "actions", header: () => <span className="sr-only">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-1">{editAction(row.original)}<RouterButtonLink variant="ghost" size="icon-sm" to={`/patients/${row.original.reference}`} aria-label={`Open ${row.original.reference}`}><Icon name="chevron" size={18}/></RouterButtonLink></div> },
   ];
   const hasFilters = query.trim() || facility !== "all" || gender !== "all" || registeredThisMonth;
-  const emptyContent = <div className={`table-empty-content${loadState === "ready" && !hasFilters ? " patient-empty-state" : ""}`}>
+  const emptyContent = <div className={`table-empty-content${loadState === "ready" && !hasFilters ? " illustrated-empty-state" : ""}`}>
     {loadState === "loading" ? <span>Loading patients…</span>
       : loadState === "error" ? <><strong>Patients could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></>
       : hasFilters

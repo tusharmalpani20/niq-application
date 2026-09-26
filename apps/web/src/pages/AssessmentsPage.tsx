@@ -12,6 +12,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
+import { AssessmentEmptyIllustration } from "../components/AssessmentEmptyIllustration";
 import { RouterButtonLink } from "../components/RouterButtonLink";
 import { StatusBadge } from "../components/StatusBadge";
 import { listAssessments, listFacilities, setAssessmentPriority } from "../lib/api";
@@ -126,7 +127,7 @@ export function AssessmentsPage() {
   ];
   if (canOpen) columns.push({ id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-1">{priorityButton(row.original)}{openButton(row.original)}</div> });
   const hasFilters = query.trim() || facility !== "all" || status !== "all";
-  const emptyContent = <div className="table-empty-content">{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : <><p className="text-sm text-foreground">No assessments yet</p><p className="text-sm">{canCreate ? "Choose a patient to start their first assessment." : "Assessments will appear here once created."}</p>{canCreate && <RouterButtonLink to="/assessments/new"><Icon name="plus" size={18} />New assessment</RouterButtonLink>}</>}</div>;
+  const emptyContent = <div className={`table-empty-content${loadState === "ready" && !hasFilters ? " illustrated-empty-state" : ""}`}>{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : <><AssessmentEmptyIllustration /><strong>No assessments to display</strong><span>Assessments will appear here when available.</span></>}</div>;
   return <>
     <h1 className="patient-page-title">Assessments</h1>
     <Tabs selectedKey={tab} onSelectionChange={key => setTab(String(key))}>

@@ -1,6 +1,6 @@
 /** A patient record illustration that follows the current organization's colours. */
 export function PatientEmptyIllustration() {
-  return <svg className="patient-empty-illustration" viewBox="0 0 280 164" fill="none" aria-hidden="true">
+  return <svg className="empty-list-illustration" viewBox="0 0 280 164" fill="none" aria-hidden="true">
     <ellipse cx="140" cy="150" rx="91" ry="8" fill="currentColor" opacity=".07" />
     <circle cx="140" cy="79" r="72" fill="currentColor" opacity=".06" />
     <circle cx="140" cy="79" r="57" stroke="currentColor" opacity=".12" />
