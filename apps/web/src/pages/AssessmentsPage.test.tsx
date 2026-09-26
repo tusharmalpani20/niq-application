@@ -131,7 +131,11 @@ test("my assessment actions link shows the same assigned work as the overview", 
 test("assessment rows offer a status-aware action to open the assessment", async () => {
   await renderAssessments("/assessments", records, () => {
     const table = document.querySelector('[aria-label="Assessments"]');
-    expect(table?.querySelector('a[aria-label="Open draft ASM-000001"]')?.getAttribute("href")).toBe("/assessments/ASM-000001");
+    const openDraft = table?.querySelector('a[aria-label="Open draft ASM-000001"]');
+    expect(openDraft?.getAttribute("href")).toBe("/assessments/ASM-000001");
+    expect(openDraft?.getAttribute("title")).toBe("Open draft");
+    expect(openDraft?.textContent).toBe("");
+    expect(openDraft?.querySelector("svg")).not.toBeNull();
     expect(table?.querySelector('a[aria-label="Review answers ASM-000002"]')).not.toBeNull();
     expect(table?.querySelector('a[aria-label="View score ASM-000003"]')).not.toBeNull();
   });
