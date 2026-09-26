@@ -11,7 +11,7 @@ const date = "2026-09-20T00:00:00Z";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Example Patient", homeFacility: null, dateOfBirth: null, gender: "UNKNOWN", createdAt: date, updatedAt: date };
 const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: null, status: "SCORING_UNAVAILABLE", isPriority: false, createdAt: date, completedAt: null };
 
-type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; assessments?: Array<typeof assessment & { myAction?: string | null; updatedAt?: string }>; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number; activity?: { id: string; assessmentId: string; action: string; occurredAt: string }[]; highRiskAssessments?: { patientId: string; assessmentId: string }[] };
+type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; patients?: typeof patient[]; assessments?: Array<typeof assessment & { myAction?: string | null; updatedAt?: string }>; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number; activity?: { id: string; assessmentId: string; action: string; occurredAt: string }[]; highRiskAssessments?: { patientId: string; assessmentId: string }[] };
 
 test("overview greeting follows the local hour", () => {
   expect(greetingForHour(0)).toBe("Good evening");
@@ -31,7 +31,7 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
   const requests: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input); requests.push(url);
-    if (url.endsWith("/patients")) return Response.json({ items: [patient] });
+    if (url.endsWith("/patients")) return Response.json({ items: scenario.patients ?? [patient] });
     if (url.endsWith("/facilities")) return Response.json({ items: [] });
     if (url.endsWith("/assessments")) return Response.json({ items: scenario.assessments ?? [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status, myAction: scenario.assessmentStatus === "DRAFT" ? "EDIT_DRAFT" : null, createdAt: scenario.assessmentCreatedAt ?? date, completedAt: scenario.completedAt ?? null }] });
     if (url.endsWith("/overview-risk")) return Response.json({ highRiskPatients: scenario.highRiskPatients ?? 1, highRiskPatients30DaysAgo: scenario.highRiskPatients30DaysAgo ?? 0, assessedPatients: 1, categories: { low: 0, moderate: 0, high: 1 }, categories30DaysAgo: { low: 0, moderate: 0, high: scenario.highRiskPatients30DaysAgo ?? 0 }, highRiskAssessments: scenario.highRiskAssessments ?? [] });
@@ -99,6 +99,29 @@ test("bottom cards show recent patients and real NIQ category comparisons", asyn
     expect(cards?.textContent).toContain("High Risk");
     expect(cards?.textContent).toContain("30 days ago");
   }, { assessmentStatus: "COMPLETED", completedAt: date });
+});
+
+test("recent patients paginate four at a time and keep View all", async () => {
+  const patients = Array.from({ length: 5 }, (_, index) => ({
+    ...patient,
+    id: `${id.slice(0, -1)}${index}`,
+    reference: `PAT-${index + 1}`,
+    displayName: `Patient ${index + 1}`,
+    createdAt: new Date(2026, 8, index + 1).toISOString(),
+  }));
+  await renderOverview("DOCTOR", async body => {
+    const cards = body.querySelector('[aria-label="Recent patients and NIQ insights"]')!;
+    const recent = cards.querySelector('.surface')!;
+    const pages = recent.querySelector('[aria-label="Recent patient pages"]')!;
+    expect(recent.querySelector('a[href="/patients"]')?.textContent).toContain("View all");
+    expect(recent.querySelectorAll('a[href^="/patients/PAT-"]')).toHaveLength(4);
+    expect(recent.textContent).toContain("1–4 of 5");
+    expect(recent.querySelector('a[href="/patients/PAT-5"]')).not.toBeNull();
+    await act(async () => { (Array.from(pages.querySelectorAll('button')).find(button => button.textContent === "Next") as HTMLButtonElement).click(); });
+    expect(recent.querySelectorAll('a[href^="/patients/PAT-"]')).toHaveLength(1);
+    expect(recent.querySelector('a[href="/patients/PAT-1"]')).not.toBeNull();
+    expect(recent.textContent).toContain("5–5 of 5");
+  }, { patients });
 });
 
 test("overview cards show accessible patients, completed assessments, high risk and my actions", async () => {
