@@ -69,10 +69,11 @@ function DietaryAnswers({ fields, answers }: { fields: FormField[]; answers: For
 export function AssessmentVerificationAnswers({ sectionId, fields, answers }: { sectionId: string; fields: FormField[]; answers: FormAnswers }) {
   if (sectionId === "dietary_details") return <DietaryAnswers fields={fields} answers={answers} />;
 
-  return <div className="min-w-0 divide-y divide-border/70">{assessmentFieldGroups(fields, answers).map(group => {
+  return <div className="@container min-w-0 divide-y divide-border/70">{assessmentFieldGroups(fields, answers).map(group => {
     const visible = group.filter(field => field.kind !== "calculated");
     if (!visible.length) return null;
-    return <dl key={group[0]!.id} data-review-question-group={group[0]!.id} className="grid min-w-0 gap-4 py-4 first:pt-0 last:pb-0 sm:grid-cols-2">
+    const palliativePath = group[0]!.id === "treatment_status" && visible.length === 3;
+    return <dl key={group[0]!.id} data-review-question-group={group[0]!.id} className={`grid min-w-0 gap-4 py-4 first:pt-0 last:pb-0 sm:grid-cols-2 ${palliativePath ? "@min-[39rem]:grid-cols-3" : ""}`}>
       {visible.map(field => <AnswerItem key={field.id} field={field} answers={answers} spanColumns={field.kind === "multi_select"} />)}
     </dl>;
   })}</div>;
