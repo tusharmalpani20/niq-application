@@ -7,7 +7,7 @@ import { AssessmentFaceScan, type MissingScanInput } from "./AssessmentFaceScan"
 import { createCaptureController, type CaptureSDK } from "./careplix-capture";
 
 const session: FaceScanSession = { id: "session", state: "REQUESTED", context: { dob: "1990-01-01", gender: "female", heightCm: 170, weightKg: 70, posture: "resting", employeeId: "employee" }, createdAt: "2026-09-20T12:00:00.000Z", updatedAt: "2026-09-20T12:00:00.000Z", completedAt: null, failureCode: null, result: null, score: null };
-async function harness(run: (ctx: { click: (text: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null; demoConsentEnabled?: boolean } = {}) {
+async function harness(run: (ctx: { click: (text: string) => Promise<void>; startScan: (label?: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "https://niq.test", pretendToBeVisual: true });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -15,6 +15,7 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; cons
   Object.defineProperty(dom.window.navigator, "mediaDevices", { value: { getUserMedia: () => { throw new Error("Real camera must not be used in this test"); } } });
   const requests: Array<{ path: string; body: any }> = [];
   let current = options.existing ?? null, starts = 0, saves = 0, busy = false, reads = 0, missing: MissingScanInput[] = [];
+  let consentRecord: { id: string; method: "LINK"; provenance: "SIMULATED"; status: "APPROVED"; requestedAt: string; respondedAt: string; createdAt: string; fileName: null; mediaType: null; size: null } | null = null;
   let releaseStatus: () => void = () => {};
   let finish: Parameters<CaptureSDK["facescan"]["onScanFinish"]>[0] = () => {};
   let onFrame: Parameters<CaptureSDK["facescan"]["onFrame"]>[0] = () => {};
@@ -22,6 +23,11 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; cons
   values.fetch = async (input: string, init?: RequestInit) => {
     const path = String(input), body = init?.body ? JSON.parse(String(init.body)) : null;
     requests.push({ path, body });
+    if (path.includes("/face-scan-consent")) {
+      if (path.endsWith("/request")) consentRecord = { id: "consent", method: "LINK", provenance: "SIMULATED", status: "APPROVED", requestedAt: new Date().toISOString(), respondedAt: new Date().toISOString(), createdAt: new Date().toISOString(), fileName: null, mediaType: null, size: null };
+      if (init?.method === "DELETE") consentRecord = null;
+      return Response.json({ current: consentRecord, demoEnabled: true });
+    }
     if (path.endsWith("/signal")) { current = { ...session, state: "UPLOAD_ACCEPTED" }; if (options.lostUpload) throw new Error("connection lost"); return Response.json(current); }
     if (path.endsWith("/cancel")) { current = { ...session, state: "CANCELLED" }; return Response.json(current); }
     if (init?.method === "POST") { current = session; if (options.lostStart) throw new Error("Start response lost"); return Response.json(current); }
@@ -34,13 +40,23 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; cons
   const root = createRoot(document.getElementById("root")!);
   const record = { id: "assessment", revision: 3, status: "DRAFT", patient: { dateOfBirth: "1990-01-01", gender: "FEMALE" }, answers: { height_cm: 170, current_weight_kg: options.weight === undefined ? 70 : options.weight } } as AssessmentWorkflow;
   const flush = () => new Promise(resolve => setTimeout(resolve, 0));
+  async function click(text: string) {
+    const button = [...document.querySelectorAll("button")].find(b => b.textContent?.trim() === text);
+    if (!button) throw new Error(`Missing ${text}`);
+    await act(async () => { button.click(); await flush(); });
+  }
+  async function startScan(label = "Start face scan") {
+    await click(label);
+    if ([...document.querySelectorAll("button")].some(button => button.textContent?.trim() === "Send consent request")) await click("Send consent request");
+    await click("Continue to face scan");
+  }
   try {
-    await act(async () => { root.render(<AssessmentFaceScan organizationId="org" record={record} active disabled={false} beforeStart={async () => { saves++; if (options.hiddenDuringSave) Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true }); return { ...record, revision: 4 }; }} onMissingInputs={fields => { missing = fields; }} onBusyChange={value => { busy = value; }} onStatusChange={() => {}} captureFactory={() => createCaptureController(async () => sdk)} demoConsentEnabled={options.demoConsentEnabled ?? false}/>); await flush(); });
+    await act(async () => { root.render(<AssessmentFaceScan organizationId="org" record={record} active disabled={false} beforeStart={async () => { saves++; if (options.hiddenDuringSave) Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true }); return { ...record, revision: 4 }; }} onMissingInputs={fields => { missing = fields; }} onBusyChange={value => { busy = value; }} onStatusChange={() => {}} captureFactory={() => createCaptureController(async () => sdk)}/>); await flush(); });
     await run({ releaseStatus: async () => { await act(async () => { releaseStatus(); await flush(); }); },
       setCurrent: async value => { current = value; await act(async () => { document.dispatchEvent(new dom.window.Event("visibilitychange")); await flush(); }); },
       requests, starts: () => starts, saved: () => saves, busy: () => busy, missing: () => missing,
-      click: async text => { const button = [...document.querySelectorAll("button")].find(b => b.textContent?.trim() === text); if (!button) throw new Error(`Missing ${text}`); await act(async () => { button.click(); await flush(); }); },
-      consent: async () => { await act(async () => { document.querySelector<HTMLInputElement>('input[type="radio"][value="standing"]:not(:disabled)')?.click(); document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click(); }); },
+      click, startScan,
+      consent: async () => { await act(async () => { document.querySelector<HTMLInputElement>('input[type="radio"][value="standing"]:not(:disabled)')?.click(); }); },
       finish: async () => { await act(async () => { finish({ raw_intensity: [{ r: 1, g: 2, b: 3 }, { r: 2, g: 3, b: 4 }], ppg_time: [0, 33], average_fps: 30 }); await flush(); }); },
       frame: async message => { await act(async () => { onFrame({ message, progress: 25, type: "scan", isLiteMode: false, isThrottling: false }); await flush(); }); },
     });
@@ -50,48 +66,37 @@ test("disabled feature never starts SDK or consumes a session", async () => harn
   expect(document.body.textContent).toContain("Face scan is not available yet");
   expect(starts()).toBe(0); expect(requests.every(r => r.body === null)).toBe(true);
 }, { enabled: false }));
-test("demo consent request unlocks the scan after two seconds without sending a message", async () => harness(async ({ click, requests, starts }) => {
+test("start opens consent dialog and waits for a separate continue action", async () => harness(async ({ click, requests, starts }) => {
   await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"][value="standing"]')!.click());
   const scan = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Start face scan")!;
-  expect(scan.disabled).toBe(true);
-  await click("Send consent request");
-  expect(scan.disabled).toBe(true);
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, 2_050)); });
+  expect(document.querySelector('section[aria-label="Patient consent"]')).toBeNull();
   expect(scan.disabled).toBe(false);
-  expect(document.body.textContent).toContain("No patient was contacted.");
-  expect(requests.every(request => request.body === null)).toBe(true);
-  expect(starts()).toBe(0);
-  await click("Clear consent selection");
-  expect(scan.disabled).toBe(true);
-}, { demoConsentEnabled: true }));
-test("demo signed consent selection starts a scan without uploading the file", async () => harness(async ({ click, requests, starts }) => {
-  await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"][value="resting"]')!.click());
-  const input = document.querySelector<HTMLInputElement>('input[aria-label="Choose signed consent file"]')!;
-  const file = new window.File(["signed consent"], "consent.pdf", { type: "application/pdf" });
-  Object.defineProperty(input, "files", { configurable: true, value: [file] });
-  await act(async () => input.dispatchEvent(new window.Event("change", { bubbles: true })));
-  const scan = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Start face scan")!;
-  expect(scan.disabled).toBe(false);
-  expect(document.body.textContent).toContain("The file was not uploaded or stored.");
-  expect(requests.every(request => request.body === null)).toBe(true);
   await click("Start face scan");
+  expect(document.querySelector('section[aria-label="Patient consent"]')?.textContent).toContain("Request consent from the patient or upload a signed form");
+  const continueButton = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Continue to face scan")!;
+  expect(continueButton.disabled).toBe(true);
+  expect(starts()).toBe(0);
+  await click("Send consent request");
+  expect(continueButton.disabled).toBe(false);
+  expect(requests.some(request => request.path.endsWith("/face-scan-consent/request"))).toBe(true);
+  expect(starts()).toBe(0);
+  await click("Continue to face scan");
   expect(starts()).toBe(1);
-  expect(requests.some(request => request.body?.posture === "resting")).toBe(true);
-}, { demoConsentEnabled: true }));
-test("missing scan weight directs correction without creating a remote session", async () => harness(async ({ consent, click, missing, requests, starts }) => {
-  await consent(); await click("Start face scan");
+}));
+test("missing scan weight directs correction without creating a remote session", async () => harness(async ({ consent, startScan, click, missing, requests, starts }) => {
+  await consent(); await startScan();
   expect(missing()).toEqual(["weightKg"]);
   expect(requests.some(request => request.body?.requestKey)).toBe(false);
   expect(starts()).toBe(0);
 }, { weight: null }));
-test("saves draft before capture and unlocks navigation only after upload acceptance", async () => harness(async ({ consent, click, starts, saved, requests, finish, busy }) => {
-  await consent(); await click("Start face scan");
+test("saves draft before capture and unlocks navigation only after upload acceptance", async () => harness(async ({ consent, startScan, click, starts, saved, requests, finish, busy }) => {
+  await consent(); await startScan();
   expect(saved()).toBe(1); expect(starts()).toBe(1); expect(busy()).toBe(true);
-  const start = requests.find(r => r.body?.revision); expect(start?.body.revision).toBe(4); expect(start?.body.requestKey.length).toBeGreaterThan(16);
+  const start = requests.find(r => r.body?.requestKey); expect(start?.body.revision).toBe(4); expect(start?.body.requestKey.length).toBeGreaterThan(16);
   await finish(); expect(busy()).toBe(false); expect(document.body.textContent).toContain("Your capture is saved");
 }));
-test("shows position and stillness guidance below the camera image", async () => harness(async ({ consent, click, frame }) => {
-  await consent(); await click("Start face scan");
+test("shows position and stillness guidance below the camera image", async () => harness(async ({ consent, startScan, click, frame }) => {
+  await consent(); await startScan();
   const videoArea = document.querySelector('canvas[aria-label="Camera scan preview"]')?.parentElement;
   const preview = videoArea?.parentElement;
   const guidance = preview?.querySelector('[role="status"]');
@@ -102,8 +107,8 @@ test("shows position and stillness guidance below the camera image", async () =>
   await frame("25% Completed");
   expect(preview?.querySelector('[role="status"]')?.textContent).toBe("Hold still and keep your face in view.");
 }));
-test("lost upload response reconciles accepted scan without another capture", async () => harness(async ({ consent, click, finish, starts, requests }) => {
-  await consent(); await click("Start face scan"); await finish();
+test("lost upload response reconciles accepted scan without another capture", async () => harness(async ({ consent, startScan, click, finish, starts, requests }) => {
+  await consent(); await startScan(); await finish();
   expect(starts()).toBe(1); expect(requests.filter(r => r.path.endsWith("/signal")).length).toBe(1);
   expect(document.body.textContent).toContain("Your capture is saved");
 }, { lostUpload: true }));
@@ -119,37 +124,37 @@ test("explains an expired attempt and retains earlier attempts in scan history",
   expect(starts()).toBe(0);
 }, { existing: { ...session, state: "EXPIRED" }, history: [{ ...session, id: "earlier", state: "FAILED" }] }));
 
-test("late pre-upload status cannot overwrite accepted upload", async () => harness(async ({ consent, click, finish, releaseStatus }) => {
-  await consent(); await click("Start face scan"); await finish(); await releaseStatus();
+test("late pre-upload status cannot overwrite accepted upload", async () => harness(async ({ consent, startScan, click, finish, releaseStatus }) => {
+  await consent(); await startScan(); await finish(); await releaseStatus();
   expect(document.body.textContent).toContain("Your capture is saved");
   expect(document.body.textContent).not.toContain("Resume capture");
 }, { delayedStatus: true }));
-test("queued cancellation targets the current attempt after a previous capture", async () => harness(async ({ consent, click, finish, setCurrent, requests }) => {
-  await consent(); await click("Start face scan"); await finish();
+test("queued cancellation targets the current attempt after a previous capture", async () => harness(async ({ consent, startScan, click, finish, setCurrent, requests }) => {
+  await consent(); await startScan(); await finish();
   await setCurrent({ ...session, id: "another-attempt", state: "UPLOAD_ACCEPTED" });
   await click("Cancel scan");
   expect(requests.find(r => r.path.endsWith("/cancel"))?.path).toContain("/another-attempt/cancel");
 }));
-test("backgrounding during preparation never starts a camera", async () => harness(async ({ consent, click, starts, busy }) => {
-  await consent(); await click("Start face scan");
+test("backgrounding during preparation never starts a camera", async () => harness(async ({ consent, startScan, click, starts, busy }) => {
+  await consent(); await startScan();
   expect(starts()).toBe(0); expect(busy()).toBe(false);
   expect(document.body.textContent).toContain("Keep this page visible before starting the camera");
 }, { hiddenDuringSave: true }));
 
-test("lost start response restores the accepted attempt before camera retry", async () => harness(async ({ consent, click, starts, requests }) => {
-  await consent(); await click("Start face scan");
+test("lost start response restores the accepted attempt before camera retry", async () => harness(async ({ consent, startScan, click, starts, requests }) => {
+  await consent(); await startScan();
   expect(starts()).toBe(0);
   expect(document.body.textContent).toContain("Resume capture");
-  await click("Resume capture");
+  await startScan("Resume capture");
   expect(starts()).toBe(1);
   expect(requests.filter(r => r.body?.requestKey)).toHaveLength(1);
 }, { lostStart: true }));
 
-test("requires posture and sends the selected activity with scan creation", async () => harness(async ({ consent, click, requests }) => {
+test("requires posture and sends the selected activity with scan creation", async () => harness(async ({ consent, startScan, click, requests }) => {
   expect([...document.querySelectorAll<HTMLInputElement>('input[type="radio"]')].map(input => input.value)).toEqual(["resting", "standing"]);
   const start = [...document.querySelectorAll("button")].find(b => b.textContent?.trim() === "Start face scan")!;
   expect(start.disabled).toBe(true);
-  await consent(); await click("Start face scan");
+  await consent(); await startScan();
   expect(requests.find(r => r.body?.requestKey)?.body.posture).toBe("standing");
 }));
 
@@ -160,11 +165,11 @@ test("uncertain provider outcome offers neither cancellation nor a duplicate sca
   expect(starts()).toBe(0);
 }, {existing: {...session, state: "RECONCILIATION_REQUIRED"}}));
 
-test("failed pre-submission attempt offers explicit retry without automatic capture", async () => harness(async ({consent, click, starts, requests}) => {
+test("failed pre-submission attempt offers explicit retry without automatic capture", async () => harness(async ({consent, startScan, click, starts, requests}) => {
   expect(starts()).toBe(0);
   expect(requests.every(r => r.body === null)).toBe(true);
   expect([...document.querySelectorAll("button")].some(b => b.textContent === "Try again")).toBe(true);
-  await consent(); await click("Try again");
+  await consent(); await startScan("Try again");
   expect(starts()).toBe(1);
   expect(requests.filter(r => r.body?.requestKey).length).toBe(1);
 }, {existing: {...session, state:"FAILED", failureCode:"SCAN_NOT_SUBMITTED"}}));
@@ -177,25 +182,28 @@ test("explicit service rejection shows failed status without permitting another 
   expect(starts()).toBe(0);
 }, {existing: {...session,state:"RECONCILIATION_REQUIRED",failureCode:"PROVIDER_REJECTED"}}));
 
-test("confirmed device rejection offers explicit retry without automatic capture", async () => harness(async ({consent, click, starts, requests}) => {
+test("confirmed device rejection offers explicit retry without automatic capture", async () => harness(async ({consent, startScan, click, starts, requests}) => {
   expect(starts()).toBe(0);
   expect(requests.every(r => r.body === null)).toBe(true);
   expect([...document.querySelectorAll("button")].some(b => b.textContent === "Try again")).toBe(true);
-  await consent(); await click("Try again");
+  await consent(); await startScan("Try again");
   expect(starts()).toBe(1);
   expect(requests.filter(r => r.body?.requestKey).length).toBe(1);
 }, {existing: {...session, state:"FAILED", failureCode:"DEVICE_NOT_SUPPORTED"}}));
 
 
 test("completed scan keeps rescan setup closed until explicitly requested", async () => harness(async ({ click, starts, requests }) => {
-  expect(document.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(document.querySelector('section[aria-label="Patient consent"]')).toBeNull();
   await click("Scan again");
   expect(document.body.textContent).toContain("Previous results stay saved");
-  expect(document.querySelector('input[type="checkbox"]')).not.toBeNull();
+  await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"][value="resting"]')!.click());
+  await click("Start another scan");
+  expect(document.querySelector('section[aria-label="Patient consent"]')).not.toBeNull();
   expect(starts()).toBe(0);
-  expect(requests.every(request => request.body === null)).toBe(true);
+  expect(requests.some(request => request.body?.requestKey)).toBe(false);
+  await click("Cancel");
   await click("Keep current results");
-  expect(document.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(document.querySelector('section[aria-label="Patient consent"]')).toBeNull();
   expect(document.body.textContent).toContain("Scan again");
 }, { existing: { ...session, state: "COMPLETED" } }));
 

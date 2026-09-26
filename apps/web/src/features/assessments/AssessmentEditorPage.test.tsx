@@ -29,10 +29,15 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {} });
   dom.window.confirm = () => false;
   let record = { ...recordFixture(), ...overrides }; let rejectSave = false;
+  let consentCurrent: unknown = null;
   const requests: Array<{ url: string; method: string; body: any }> = [];
   globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
     const method = init?.method ?? "GET"; const body = init?.body ? JSON.parse(String(init.body)) : null;
     requests.push({ url: String(_url), method, body });
+    if (scanEnabled && String(_url).includes("/face-scan-consent")) {
+      if (method === "POST" && String(_url).endsWith("/request")) consentCurrent = { id: "consent", method: "LINK", provenance: "SIMULATED", status: "APPROVED", requestedAt: new Date().toISOString(), respondedAt: new Date().toISOString(), createdAt: new Date().toISOString(), fileName: null, mediaType: null, size: null };
+      return Response.json({ current: consentCurrent, demoEnabled: true });
+    }
     if (scanEnabled && String(_url).endsWith("/face-scans")) return Response.json({ enabled: true, currentSessionId: null, sessions: [] });
     if (String(_url).endsWith("/clinical-review")) return Response.json({ assessmentId:record.id, revision:0, scoreRevision:0, cycle:0, state:"NOT_SUBMITTED", allowedActions:[], history:[], canAdjustScores:role !== "ORGANIZATION_ADMIN", canEditDraft:record.canEditDraft ?? true });
     if (String(_url).endsWith("/score-reviews") && record.result) return Response.json(projectScoreReviews(record.result, []));
@@ -138,9 +143,10 @@ test("scan prerequisites open the missing inputs with inline errors and no summa
   await click("Face scan");
   await act(async () => {
     document.querySelector<HTMLInputElement>('input[type="radio"][value="resting"]')!.click();
-    document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
   });
   await click("Start face scan");
+  await click("Send consent request");
+  await click("Continue to face scan");
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
   expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Personal details");
   expect(document.getElementById("assessment-field-height_cm-error")?.textContent).toContain("Enter a valid height");
