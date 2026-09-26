@@ -83,9 +83,10 @@ test("tumour choices have distinct decorative icons without changing their label
   expect((html.match(/aria-hidden="true"/g) ?? []).length).toBeGreaterThanOrEqual(4);
   expect(render([{ ...field, options }])).not.toContain("data-tumour-icon");
   const selected = render([{ ...field, id: "tumour_type", label: "Type of tumour", options }], { tumour_type: ["tumour_type_solid"] });
-  expect(selected).toContain("bg-primary text-primary-foreground ring-2");
+  expect(selected).toContain("text-primary-foreground ring-2");
   expect(selected).toContain("data-selected");
-  expect(html).not.toContain("bg-primary text-primary-foreground ring-2");
+  expect(selected).not.toContain("lucide-check");
+  expect(html).not.toContain("text-primary-foreground ring-2");
 });
 
 
