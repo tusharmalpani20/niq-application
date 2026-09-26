@@ -105,12 +105,13 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   const { result, sections } = view;
   const overall = data?.overall;
   const scan = data?.scan;
+  const scanSummaryStatus = scanStatus === "Face scan ready" ? "Not done" : scanStatus;
   const scoreCard = riskCardAppearance(revised ? null : result.classification);
   const originalRiskBadge = riskBadgeAppearance(result.classification);
   const scanSection = <div className="overflow-hidden rounded-xl border border-border">
     <div className={`${summaryRowClass} ${expanded === "face_scan" ? "bg-muted/40" : ""}`}>
       <Button variant="ghost" className={summaryToggleClass} aria-expanded={expanded === "face_scan"} aria-controls="score-section-face_scan" onPress={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>{expanded === "face_scan" ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}<assessmentSectionIcons.face_scan className="size-4 shrink-0" aria-hidden="true" />Face scan</Button>
-      <div className="w-28 shrink-0 text-right text-sm tabular-nums sm:w-36"><p className="text-xs text-muted-foreground">{scanStatus}</p>{scan?.niqPoints !== null && scan?.niqPoints !== undefined && <p>Vital IQ {scan.niqPoints}</p>}{scan?.overridden && <p className="text-brand-ink">Reviewed Vital IQ {scan.reviewedPoints ?? "—"}</p>}</div>
+      <div className="w-28 shrink-0 text-right text-sm tabular-nums sm:w-36"><p className="text-xs text-muted-foreground">{scanSummaryStatus}</p><p>Vital IQ {scan?.niqPoints ?? "—"}</p>{scan?.overridden && <p className="text-brand-ink">Reviewed Vital IQ {scan.reviewedPoints ?? "—"}</p>}</div>
     </div>
     <div id="score-section-face_scan" hidden={expanded !== "face_scan"} className="border-t border-border p-4">
       <p className="mb-3 text-xs text-muted-foreground">Vital IQ points are included in the final NIQ score when this scan was part of the scoring request.</p>

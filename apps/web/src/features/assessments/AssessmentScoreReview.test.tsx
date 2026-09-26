@@ -7,12 +7,12 @@ import { AssessmentScoreReview } from "./AssessmentScoreReview";
 const result: AssessmentScoreResult = {formatVersion:2,profile:"NIQ_FINAL_ASSESSMENT",complete:true,score:8,classification:{id:"low",label:"Low",interpretation:""},components:[{id:"stage",sectionId:"disease",label:"Stage",points:8,status:"answered"}],version:"V1",checksum:"a".repeat(64),resultReference:"result",calculatedAt:"2026-09-22T00:00:00.000Z",clinicalUsePermitted:true};
 const record = {id:"assessment",reference:"ASM-000002",result,binding:{version:"V1",checksum:"a".repeat(64)},answers:{stage:"metastatic",patient_name:"Example Patient"},manifest:{sections:[{id:"personal_details",title:"Personal details",fields:[{id:"patient_name",label:"Patient name",kind:"text",owner:"application"}]},{id:"disease",title:"Disease status",fields:[{id:"stage",label:"Stage",owner:"scoring",options:[{id:"metastatic",label:"Metastatic"}]}]}]},progress:{answered:1,required:1,sections:[]},reports:[]} as unknown as AssessmentWorkflow;
 const entry: ScoreReviewEntry = {id:"entry",revision:1,targetType:"item",targetId:"stage",previousPoints:8,points:10,reason:null,actorId:"actor",actorName:"Reviewer One",createdAt:"2026-09-22T00:00:00.000Z",resultReference:"result"};
-async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[]; rerender:(next:AssessmentWorkflow,canReview?:boolean,scanStatus?:string)=>Promise<void>})=>Promise<void>, entries:ScoreReviewEntry[] = [], risk?: AssessmentScoreReviews["risk"], scoredResult: AssessmentScoreResult = result) {
+async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[]; rerender:(next:AssessmentWorkflow,canReview?:boolean,scanStatus?:string)=>Promise<void>})=>Promise<void>, entries:ScoreReviewEntry[] = [], risk?: AssessmentScoreReviews["risk"], scoredResult: AssessmentScoreResult = result, scanInput: { id: string; points: number | null } | null = { id: "local-scan-id", points: 8 }) {
  const dom = new JSDOM("<html><body><div id='root'></div></body></html>",{url:"http://localhost",pretendToBeVisual:true});
  const values:Record<string,unknown>={window:dom.window,document:dom.window.document,navigator:dom.window.navigator,IS_REACT_ACT_ENVIRONMENT:true,requestAnimationFrame:(fn:()=>void)=>setTimeout(fn,0),cancelAnimationFrame:clearTimeout,getComputedStyle:dom.window.getComputedStyle};
  for(const key of ["FocusEvent","HTMLElement","SVGElement","Element","Node","NodeFilter","DocumentFragment","HTMLButtonElement","HTMLInputElement","HTMLTextAreaElement","HTMLSelectElement","MutationObserver"]) values[key]=(dom.window as any)[key];
  const posts:any[]=[];
- values.fetch=async (_url:string,init?:RequestInit)=>{if(init?.method==="POST"){posts.push(JSON.parse(String(init.body)));if(_url.endsWith("/classification/retry"))return Response.json({...projectScoreReviews(scoredResult,entries),risk:{status:"CONFIRMED",classification:{id:"reviewed",label:"Reviewed category",interpretation:""},resultReference:"classified",failureCode:null,canRetry:false}}); throw new Error(`Unexpected POST: ${_url}`);}return Response.json({...projectScoreReviews(scoredResult,entries,{id:"local-scan-id",points:8}),...(risk?{risk}:{})});};
+ values.fetch=async (_url:string,init?:RequestInit)=>{if(init?.method==="POST"){posts.push(JSON.parse(String(init.body)));if(_url.endsWith("/classification/retry"))return Response.json({...projectScoreReviews(scoredResult,entries),risk:{status:"CONFIRMED",classification:{id:"reviewed",label:"Reviewed category",interpretation:""},resultReference:"classified",failureCode:null,canRetry:false}}); throw new Error(`Unexpected POST: ${_url}`);}return Response.json({...projectScoreReviews(scoredResult,entries,scanInput ?? undefined),...(risk?{risk}:{})});};
  const previous=Object.fromEntries(Object.keys(values).map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
  for(const [key,value] of Object.entries(values))Object.defineProperty(globalThis,key,{value,configurable:true});
  Object.assign(dom.window.HTMLElement.prototype,{attachEvent(){},detachEvent(){}});
@@ -61,6 +61,14 @@ test("summary keeps scored answers readable without score edit controls", async 
   expect(document.getElementById("score-section-reports")?.hidden).toBe(false);
   expect(posts).toHaveLength(0);
 }));
+
+test("available but unperformed face scan shows no Vital IQ score", async () => harness(async ({ rerender }) => {
+  await rerender(record, true, "Face scan ready");
+  const row = document.getElementById("score-section-face_scan")?.previousElementSibling;
+  expect(row?.textContent).toContain("Not done");
+  expect(row?.textContent).toContain("Vital IQ —");
+  expect(row?.textContent).not.toContain("Face scan ready");
+}, [], undefined, result, null));
 
 test("all original and reviewed scores remain visible without adjustment actions", async () => harness(async ({ click, posts }) => {
   expect(document.body.textContent).toContain("Reviewed score");
