@@ -7,6 +7,7 @@ import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ApplicationLogo } from "./ApplicationLogo";
+import { WorkspaceSearch } from "./WorkspaceSearch";
 import { signOut } from "../lib/api";
 import { useBranding } from "../lib/branding-context";
 import { Icon } from "../lib/icons";
@@ -72,6 +73,7 @@ function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignO
       <button type="button" className="workspace-brand" aria-label={`${branding.displayName} home`} onClick={() => go("/")}>
         <OrganizationMark key={branding.logoUrl} url={branding.logoUrl} />
       </button>
+      <WorkspaceSearch key={`${user.organizationId}:${user.role}`} user={user} onNavigate={go} />
       <details className="workspace-account" ref={menuRef}>
         <summary aria-label={`Account menu for ${user.displayName}`}>
           <Avatar className="size-9 shrink-0"><AvatarFallback className="text-xs">{initials}</AvatarFallback></Avatar>
