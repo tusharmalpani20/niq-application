@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { HeartPulse, Lightbulb, MessageCircle, Utensils } from "lucide-react";
 import { getOverviewRisk } from "../lib/api";
+import { NutritionEmptyIllustration } from "../components/DashboardEmptyIllustrations";
 
 type Risk = Awaited<ReturnType<typeof getOverviewRisk>>;
 type Insight = {
@@ -68,9 +69,9 @@ export function NutritionInsights({ risk }: { risk: Risk | null }) {
           <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${color}`}><Icon className="size-5" aria-hidden={true} /></span>
           <span className="min-w-0"><strong className="block text-sm font-semibold leading-snug">{title}</strong><span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{detail}</span></span>
         </li>)}</ul>
-      </div> : <div className="mt-4 flex flex-1 items-center gap-3 rounded-2xl border border-border p-4">
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-teal-50 text-teal-600"><Lightbulb className="size-5" aria-hidden="true" /></span>
-        <div><p className="text-sm font-semibold">No completed NIQ results yet</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Insights will appear after an assessment is completed.</p></div>
+      </div> : <div className="mt-4 flex min-h-40 flex-1 flex-col items-center justify-center rounded-2xl border border-primary/10 bg-primary/[.025] p-4 text-center">
+        <NutritionEmptyIllustration />
+        <p className="mt-1 text-sm font-semibold">No completed NIQ results yet</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Insights will appear after an assessment is completed.</p>
       </div>}
   </div>;
 }

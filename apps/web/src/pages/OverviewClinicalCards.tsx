@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, CalendarDays, ShieldCheck } from "lucide-react";
 import { getOverviewActivity, getOverviewRisk } from "../lib/api";
+import { ActivityEmptyIllustration } from "../components/DashboardEmptyIllustrations";
 
 type Risk = Awaited<ReturnType<typeof getOverviewRisk>>;
 type Activity = Awaited<ReturnType<typeof getOverviewActivity>>["items"][number];
@@ -98,7 +99,7 @@ export function AssessmentActivityCalendar({ organizationId, assessments }: { or
         {loading ? <p className="text-sm text-muted-foreground">Loading activity…</p> : error ? <p role="alert" className="text-sm text-muted-foreground">Activity could not be loaded for this month.</p> : selectedAssessments.length ? <>
           <ul className="divide-y">{pageAssessments.map(group => { const assessment = byAssessment.get(group.assessmentId)!; return <li key={group.assessmentId}><Link to={`/assessments/${assessment.reference}`} className="block rounded-lg px-2 py-3 text-sm hover:bg-muted/50"><span className="flex flex-wrap items-baseline gap-x-2"><strong className="text-foreground">{assessment.patient.displayName}</strong><span className="text-xs text-muted-foreground">{assessment.reference}</span></span><span className="mt-1.5 flex flex-wrap gap-2">{group.milestones.map(item => <span key={item.action} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/30 px-2.5 py-1 text-xs text-foreground"><i aria-hidden="true" className={`size-2 shrink-0 rounded-full ${actions[item.action].color}`} />{actions[item.action].label}<time className="ml-1 text-muted-foreground">{item.occurredAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</time></span>)}</span></Link></li>; })}</ul>
           {pageCount > 1 && <nav aria-label="Activity pages" className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-sm"><span className="text-muted-foreground">{(page - 1) * activityPageSize + 1}–{Math.min(page * activityPageSize, selectedAssessments.length)} of {selectedAssessments.length} assessments</span><div className="flex items-center gap-2"><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={page === 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page} of {pageCount}</span><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={page === pageCount} onClick={() => setPage(value => value + 1)}>Next</button></div></nav>}
-        </> : <p className="rounded-xl bg-muted/30 p-5 text-sm text-muted-foreground">{selected ? "No assessment milestones on this day." : "No assessment milestones in this month."}</p>}
+        </> : <div className="flex min-h-60 flex-col items-center justify-center rounded-xl border border-primary/10 bg-primary/[.025] p-5 text-center"><ActivityEmptyIllustration /><p className="mt-2 text-sm text-muted-foreground">{selected ? "No assessment milestones on this day." : "No assessment milestones in this month."}</p></div>}
       </div>
     </div>
   </section>;
