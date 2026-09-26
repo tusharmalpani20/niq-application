@@ -146,6 +146,36 @@ test("selecting a calendar date shows only activity from that local day", async 
   ] });
 });
 
+test("activity list pages long days, shows legend colors, and resets on date change", async () => {
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1, 10);
+  const secondDay = new Date(now.getFullYear(), now.getMonth(), 2, 10);
+  const records = Array.from({ length: 7 }, (_, index) => ({
+    ...assessment,
+    id: `${id.slice(0, -1)}${index}`,
+    reference: `ASM-${String(index + 1).padStart(6, "0")}`,
+    status: "DRAFT",
+    myAction: null,
+  }));
+  await renderOverview("DOCTOR", async body => {
+    const calendar = body.querySelector('[aria-label="My assessment activity"]')!;
+    await act(async () => { (calendar.querySelector(`[aria-label="${firstDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
+    expect(calendar.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(5);
+    expect(calendar.querySelector('nav[aria-label="Activity pages"]')?.textContent).toContain("1–5 of 7");
+    expect(calendar.querySelector('a[href^="/assessments/ASM-"] i')?.className).toContain("bg-slate-400");
+    await act(async () => { (calendar.querySelector('nav[aria-label="Activity pages"] button:last-child') as HTMLButtonElement).click(); });
+    expect(calendar.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(2);
+    expect(calendar.querySelector('nav[aria-label="Activity pages"]')?.textContent).toContain("6–7 of 7");
+    await act(async () => { (calendar.querySelector(`[aria-label="${secondDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
+    expect(calendar.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(1);
+    expect(calendar.querySelector('nav[aria-label="Activity pages"]')).toBeNull();
+  }, {
+    assessments: records,
+    activity: [...records.map((record, index) => ({ id: `${id.slice(0, -1)}${index}`, assessmentId: record.id, action: "ASSESSMENT_CREATED", occurredAt: new Date(firstDay.getTime() + index * 60_000).toISOString() })),
+      { id: `${id.slice(0, -1)}Z`, assessmentId: records[0]!.id, action: "CLINICAL_REVIEW_COMPLETE", occurredAt: secondDay.toISOString() }],
+  });
+});
+
 test("high-risk direction is red when more patients are high risk and green when fewer are", async () => {
   const highRiskTrend = (body: HTMLElement) => Array.from(body.querySelectorAll('[aria-label="Overview statistics"] > *'))
     .find(card => card.textContent?.includes("High Risk patients"))?.querySelector('[aria-label^="Up"], [aria-label^="Down"]');

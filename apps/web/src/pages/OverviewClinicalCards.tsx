@@ -6,6 +6,7 @@ import { getOverviewActivity, getOverviewRisk } from "../lib/api";
 
 type Risk = Awaited<ReturnType<typeof getOverviewRisk>>;
 type Activity = Awaited<ReturnType<typeof getOverviewActivity>>["items"][number];
+const activityPageSize = 5;
 const actions: Record<Activity["action"], { label: string; color: string }> = {
   ASSESSMENT_CREATED: { label: "Assessment created", color: "bg-slate-400" },
   ASSESSMENT_SUBMITTED: { label: "Submitted for scoring", color: "bg-primary" },
@@ -28,6 +29,7 @@ export function AssessmentActivityCalendar({ organizationId, assessments }: { or
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selected, setSelected] = useState(() => new Date());
   const [items, setItems] = useState<Activity[]>([]);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   useEffect(() => {
@@ -41,16 +43,19 @@ export function AssessmentActivityCalendar({ organizationId, assessments }: { or
   const byAssessment = useMemo(() => new Map(assessments.map(item => [item.id, item])), [assessments]);
   const visibleItems = summarizeAssessmentActivity(items.filter(item => byAssessment.has(item.assessmentId)));
   const selectedItems = visibleItems.filter(item => dayKey(item.occurredAt) === dayKey(selected));
+  const pageCount = Math.max(1, Math.ceil(selectedItems.length / activityPageSize));
+  const pageItems = selectedItems.slice((page - 1) * activityPageSize, page * activityPageSize);
+  const selectDate = (date: Date) => { setSelected(date); setPage(1); };
   const firstWeekday = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
   const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const changeMonth = (offset: number) => {
     const next = new Date(month.getFullYear(), month.getMonth() + offset, 1);
-    setMonth(next); setSelected(next);
+    setMonth(next); selectDate(next);
   };
   return <section className="surface mt-7 p-5" aria-label="My assessment activity">
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="flex items-center gap-2 text-lg font-semibold"><CalendarDays className="size-5 text-primary" aria-hidden="true" />My assessment activity</h2><p className="mt-1 text-sm text-muted-foreground">Select a day to see the assessments you worked on.</p></div>
-      <button type="button" className="rounded-full border px-3 py-1 text-sm hover:bg-muted" onClick={() => { const today = new Date(); setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSelected(today); }}>Today</button>
+      <button type="button" className="rounded-full border px-3 py-1 text-sm hover:bg-muted" onClick={() => { const today = new Date(); setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); selectDate(today); }}>Today</button>
     </div>
     <div className="grid gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
       <div className="rounded-xl border bg-muted/30 p-3">
@@ -60,12 +65,15 @@ export function AssessmentActivityCalendar({ organizationId, assessments }: { or
           const date = new Date(month.getFullYear(), month.getMonth(), index + 1);
           const events = visibleItems.filter(item => dayKey(item.occurredAt) === dayKey(date));
           const active = dayKey(date) === dayKey(selected);
-          return <button key={index} type="button" aria-label={date.toLocaleDateString(undefined, { dateStyle: "full" })} aria-pressed={active} className={`flex aspect-square flex-col items-center justify-center rounded-lg text-sm hover:bg-primary/10 ${active ? "bg-primary text-primary-foreground hover:bg-primary" : ""}`} onClick={() => setSelected(date)}><span>{index + 1}</span><span className="mt-0.5 flex min-h-1 gap-0.5">{[...new Set(events.map(event => event.action))].map(action => <span key={action} className={`size-1 rounded-full ${active ? "bg-white" : actions[action].color}`} />)}</span></button>;
+          return <button key={index} type="button" aria-label={date.toLocaleDateString(undefined, { dateStyle: "full" })} aria-pressed={active} className={`flex aspect-square flex-col items-center justify-center rounded-lg text-sm hover:bg-primary/10 ${active ? "bg-primary text-primary-foreground hover:bg-primary" : ""}`} onClick={() => selectDate(date)}><span>{index + 1}</span><span className="mt-0.5 flex min-h-1 gap-0.5">{[...new Set(events.map(event => event.action))].map(action => <span key={action} className={`size-1.5 rounded-full ${actions[action].color} ${active ? "ring-1 ring-white" : ""}`} />)}</span></button>;
         })}</div>
         <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-muted-foreground">{Object.entries(actions).map(([key, value]) => <span key={key} className="flex items-center gap-1"><i className={`size-1.5 rounded-full ${value.color}`} />{value.label}</span>)}</div>
       </div>
       <div className="min-w-0"><div className="mb-3"><h3 className="font-semibold">{selected.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</h3><p className="text-sm text-muted-foreground">{loading ? "Loading activity…" : `${selectedItems.length} ${selectedItems.length === 1 ? "action" : "actions"}`}</p></div>
-        {loading ? <p className="text-sm text-muted-foreground">Loading activity…</p> : error ? <p role="alert" className="text-sm text-muted-foreground">Activity could not be loaded for this month.</p> : selectedItems.length ? <ul className="divide-y">{selectedItems.map(item => { const assessment = byAssessment.get(item.assessmentId)!; return <li key={item.id}><Link to={`/assessments/${assessment.reference}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-3 text-sm hover:bg-muted/50"><span><strong className="text-foreground">{assessment.reference}</strong><span className="ml-2 text-muted-foreground">{assessment.patient.displayName}</span><span className="mt-1 block text-xs text-muted-foreground">{actions[item.action].label}</span></span><time className="text-xs text-muted-foreground">{item.occurredAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</time></Link></li>; })}</ul> : <p className="rounded-xl bg-muted/30 p-5 text-sm text-muted-foreground">No assessment activity on this day.</p>}
+        {loading ? <p className="text-sm text-muted-foreground">Loading activity…</p> : error ? <p role="alert" className="text-sm text-muted-foreground">Activity could not be loaded for this month.</p> : selectedItems.length ? <>
+          <ul className="divide-y">{pageItems.map(item => { const assessment = byAssessment.get(item.assessmentId)!; return <li key={item.id}><Link to={`/assessments/${assessment.reference}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-3 text-sm hover:bg-muted/50"><span><strong className="text-foreground">{assessment.reference}</strong><span className="ml-2 text-muted-foreground">{assessment.patient.displayName}</span><span className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><i aria-hidden="true" className={`size-2.5 shrink-0 rounded-full ${actions[item.action].color}`} />{actions[item.action].label}</span></span><time className="text-xs text-muted-foreground">{item.occurredAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</time></Link></li>; })}</ul>
+          {pageCount > 1 && <nav aria-label="Activity pages" className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-sm"><span className="text-muted-foreground">{(page - 1) * activityPageSize + 1}–{Math.min(page * activityPageSize, selectedItems.length)} of {selectedItems.length}</span><div className="flex items-center gap-2"><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={page === 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page} of {pageCount}</span><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={page === pageCount} onClick={() => setPage(value => value + 1)}>Next</button></div></nav>}
+        </> : <p className="rounded-xl bg-muted/30 p-5 text-sm text-muted-foreground">No assessment activity on this day.</p>}
       </div>
     </div>
   </section>;
