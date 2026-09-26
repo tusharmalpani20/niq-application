@@ -16,6 +16,7 @@ import { TumourTypeIcon } from "./TumourTypeIcon";
 import { CancerTypeIcon } from "./CancerTypeIcon";
 import { DiseaseChoiceIcon } from "./DiseaseChoiceIcon";
 import { TreatmentChoiceIcon } from "./TreatmentChoiceIcon";
+import { MedicationSupplementIcon } from "./MedicationSupplementIcon";
 export { assessmentNumericInput } from "./assessmentNumericInput";
 
 export type AssessmentFieldsProps = {
@@ -37,6 +38,7 @@ function calculated(field: FormField, answers: FormAnswers): string {
 const explicitNoneFields = new Set(["current_medications", "supplements_intake", "co_morbidities", "gastrointestinal_symptoms"]);
 const diseaseChoiceFields = new Set(["stage", "metastasis_site", "relapse_status"]);
 const treatmentChoiceFields = new Set(["treatment_status", "palliative_status", "palliative_timing", "cancer_surgical_status"]);
+const intakeChoiceFields = new Set(["current_medications", "supplements_intake"]);
 export function addAssessmentMultiChoice(selected: string[], choice: string): string[] {
   return [...selected, choice];
 }
@@ -80,10 +82,11 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
       return <fieldset id={id} key={field.id} tabIndex={-1} disabled={readOnly} aria-describedby={error ? errorId : undefined} aria-invalid={Boolean(error)} className="col-[1/-1] min-w-0 space-y-3">
         <legend className="mb-2 w-full text-base font-medium"><span className="flex min-h-8 items-center justify-between gap-2"><span>{label}{required}</span>{reset}</span></legend>
         {Array.isArray(value) && <div className="flex flex-wrap items-center gap-2">{selected.length ? selected.map(item => <span key={item} className="inline-flex max-w-full items-center rounded-full border border-primary/20 bg-primary/5 pl-3 text-base">
+          {intakeChoiceFields.has(field.id) && <span className="mr-2 text-primary" aria-hidden="true"><MedicationSupplementIcon type={item} /></span>}
           <span className="break-words">{field.options?.find(option => option.id === item)?.label || item}</span>
           <Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove ${field.options?.find(option => option.id === item)?.label || item}`} onPress={() => onChange(field.id, selected.length === 1 ? null : selected.filter(choice => choice !== item))}><X className="size-3.5" /></Button>
-        </span>) : explicitNoneFields.has(field.id) ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 pl-3 text-base">None<Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove None from ${field.label}`} onPress={() => onChange(field.id, null)}><X className="size-3.5" /></Button></span> : <span className="text-base text-muted-foreground">No selections</span>}</div>}
-        {!readOnly && <div className="max-w-md"><SearchCombobox large key={JSON.stringify(value)} label={`Add ${field.label.toLowerCase()}`} placeholder={`Add ${field.label.toLowerCase()}…`} options={options} value={null} onChange={choice => onChange(field.id, choice === "__none__" ? [] : addAssessmentMultiChoice(selected, choice))} invalid={Boolean(error)} describedBy={error ? errorId : undefined} /></div>}
+        </span>) : explicitNoneFields.has(field.id) ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 pl-3 text-base">{intakeChoiceFields.has(field.id) && <span className="mr-2 text-primary" aria-hidden="true"><MedicationSupplementIcon type="__none__" /></span>}None<Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove None from ${field.label}`} onPress={() => onChange(field.id, null)}><X className="size-3.5" /></Button></span> : <span className="text-base text-muted-foreground">No selections</span>}</div>}
+        {!readOnly && <div className="max-w-md"><SearchCombobox large key={JSON.stringify(value)} label={`Add ${field.label.toLowerCase()}`} placeholder={`Add ${field.label.toLowerCase()}…`} options={options} value={null} onChange={choice => onChange(field.id, choice === "__none__" ? [] : addAssessmentMultiChoice(selected, choice))} invalid={Boolean(error)} describedBy={error ? errorId : undefined} renderIcon={intakeChoiceFields.has(field.id) ? optionId => <MedicationSupplementIcon type={optionId} /> : undefined} primaryHighlight={intakeChoiceFields.has(field.id)} /></div>}
         {errorMarkup}
       </fieldset>;
     }

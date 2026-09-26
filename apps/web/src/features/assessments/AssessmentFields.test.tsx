@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AssessmentFields, assessmentNumericInput, assessmentFieldGroups, addAssessmentMultiChoice } from "./AssessmentFields";
+import { MedicationSupplementIcon } from "./MedicationSupplementIcon";
 import type { FormAnswers, FormField } from "@niq/application-contracts";
 const field: FormField = { id: "choices", label: "Symptoms", kind: "multi_select", owner: "scoring", required: false, source: "F104", options: [{ id: "nausea", label: "Nausea" }, ...Array.from({ length: 6 }, (_, i) => ({ id: `item${i}`, label: `Item ${i}` }))] };
 function render(fields: FormField[], answers: FormAnswers = {}) {
@@ -141,6 +142,19 @@ test("treatment choices use icon tiles, including conditional palliative choices
   const palliative = render([status, path, timing, surgery], { treatment_status: "treatment_status_palliative_care", palliative_status: "post_treatment" });
   for (const option of [...path.options!, ...timing.options!]) expect(palliative).toContain(`data-treatment-choice-icon="${option.id}"`);
   expect(palliative).toContain("bg-primary text-primary-foreground shadow-sm");
+});
+
+test("medication and supplement options have icons and selected chips retain them", () => {
+  const medicationIds = ["blood_thinners", "anti_hypertensives", "anti_diabetics", "thyroid", "cholesterols", "steroids", "anti_histamines", "pain_medications", "antibiotics", "antacid"].map(id => `current_medications_${id}`);
+  const supplementIds = ["protein", "iron", "calcium", "folic_acid", "multivitamins", "omega_3"].map(id => `supplements_intake_${id}`);
+  for (const id of [...medicationIds, ...supplementIds, "__none__"]) {
+    expect(renderToStaticMarkup(<MedicationSupplementIcon type={id} />)).toContain(`data-intake-choice-icon="${id}"`);
+  }
+  const medications: FormField = { ...field, id: "current_medications", options: medicationIds.map(id => ({ id, label: id })) };
+  const supplements: FormField = { ...field, id: "supplements_intake", options: supplementIds.map(id => ({ id, label: id })) };
+  expect(render([medications], { current_medications: [medicationIds[0]!] })).toContain(`data-intake-choice-icon="${medicationIds[0]}"`);
+  expect(render([supplements], { supplements_intake: [supplementIds[0]!] })).toContain(`data-intake-choice-icon="${supplementIds[0]}"`);
+  expect(render([supplements], { supplements_intake: [] })).toContain('data-intake-choice-icon="__none__"');
 });
 
 
