@@ -114,6 +114,9 @@ test("save conflict preserves local input and dirty navigation can be cancelled"
 
 test("review missing-answer link focuses its field after changing section", async () => harness(async ({ click }) => {
   await click("Review & score");
+  expect(document.body.textContent).toContain("1 item needs attention before submission");
+  expect(document.body.textContent).toContain("You can still save this draft and return later.");
+  expect(document.body.textContent).not.toContain("Attachments are optional");
   const label = [...document.querySelectorAll("button")].find(button => button.textContent?.includes("Height:") && button.textContent?.includes("Not answered"))?.textContent?.trim();
   expect(label).toBeDefined();
   await click(label!);
@@ -197,7 +200,7 @@ test("report refresh adopts concurrent server answers when local answers are cle
 test("past scoring rejection does not clutter submission readiness", async () => harness(async ({ click }) => {
   expect(document.body.textContent).not.toContain("Review the questionnaire answers");
   await click("Review & score");
-  expect(document.body.textContent).toContain("Submission readiness");
+  expect(document.body.textContent).toContain("Ready to submit");
   expect(document.body.textContent).not.toContain("Previous scoring feedback");
   expect(document.body.textContent).not.toContain("Check the value before submitting again.");
 }, { submission: { status: "REJECTED", failureCode: "VALIDATION_ERROR", issues: [{ fieldId: "current_weight_kg", message: "Check the value before submitting again." }] } }));

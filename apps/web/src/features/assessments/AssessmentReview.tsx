@@ -4,7 +4,7 @@ import { assessmentResultView, sectionScoreLabel } from "./AssessmentResult";
 import { FaceScanResults } from "./FaceScanResults";
 import { Button } from "@/components/ui/button";
 import { AssessmentReports } from "./AssessmentReports";
-import { CircleAlert } from "lucide-react";
+import { ArrowRight, CircleAlert } from "lucide-react";
 
 export function AssessmentReview({ record, answers, scanStatus, scanSession, organizationId, assessmentId, onSection }: { record: AssessmentWorkflow; answers: FormAnswers; scanStatus: string; scanSession: FaceScanSession | null; organizationId: string; assessmentId: string; onSection: (id: string, fieldId?: string) => void }) {
   const scored = assessmentResultView(record);
@@ -17,13 +17,18 @@ export function AssessmentReview({ record, answers, scanStatus, scanSession, org
   });
   const scanRejected = record.submission?.status === "REJECTED" && record.submission.failureCode === "FACE_SCAN_UNAVAILABLE";
   const blocked = missing.length > 0 || incompleteReports.length > 0 || scanRejected;
+  const issueCount = missing.length + incompleteReports.length + (scanRejected ? 1 : 0);
   return <div className="grid min-w-0 gap-4">
     {!scored && <section className={`rounded-xl border p-4 ${blocked ? "border-destructive/40 bg-destructive/5" : "border-border bg-card"}`}>
-      <div className="flex items-center gap-2">{blocked && <CircleAlert className="size-5 text-destructive" aria-hidden="true"/>}<h3 className={`font-semibold ${blocked ? "text-destructive" : ""}`}>{blocked ? "Submission blocked" : "Submission readiness"}</h3></div>
-      {missing.length > 0 ? <><p className="mt-2 text-sm text-muted-foreground">Check these answers before submitting.</p><ul className="mt-3 grid gap-1">{missing.map(({ sectionId, field, error }) => <li key={field.id}><Button className="h-auto min-h-11 whitespace-normal text-left text-destructive hover:text-destructive" variant="link" onPress={() => onSection(sectionId, field.id)}>{field.label}: {error === "Required" ? "Not answered" : error}</Button></li>)}</ul></> : <p className="mt-2 text-sm text-muted-foreground">Required answers are complete.</p>}
-      {incompleteReports.length > 0 && <><p className="mt-3 text-sm text-muted-foreground">Complete these attachments before submitting:</p><ul className="mt-2 grid gap-1">{incompleteReports.map(({ index, issues }) => <li key={index}><Button className="h-auto min-h-11 whitespace-normal text-left font-semibold text-destructive hover:text-destructive" variant="link" onPress={() => onSection("reports")}>Report {index} needs {issues.map(issue => issue === "name" ? "a report name" : issue === "date" ? "a date" : "an uploaded file").join(" and ")}</Button></li>)}</ul></>}
-      {scanRejected && <Button className="mt-2 h-auto min-h-11 whitespace-normal text-left text-destructive hover:text-destructive" variant="link" onPress={() => onSection("face_scan")}>NIQ Scoring could not use the selected face scan. Review the scan before submitting again.</Button>}
-      {!incompleteReports.length && !record.reports.length && <p className="mt-2 text-sm text-muted-foreground">Attachments are optional when no report has been created.</p>}
+      <div className="flex items-center gap-2">{blocked && <CircleAlert className="size-5 text-destructive" aria-hidden="true"/>}<h3 className={`font-semibold ${blocked ? "text-destructive" : ""}`}>{blocked ? `${issueCount} ${issueCount === 1 ? "item needs" : "items need"} attention before submission` : "Ready to submit"}</h3></div>
+      {blocked ? <>
+        <p className="mt-2 text-sm text-muted-foreground">Select an item below to fix it. You can still save this draft and return later.</p>
+        <ul className="mt-3 grid gap-2">
+          {missing.map(({ sectionId, field, error }) => <li key={field.id}><Button className="h-auto min-h-14 w-full justify-between gap-3 whitespace-normal border-destructive/25 bg-card px-3 py-2 text-left hover:bg-destructive/5" variant="outline" onPress={() => onSection(sectionId, field.id)}><span className="grid gap-0.5"><span className="text-xs font-normal text-muted-foreground">{record.manifest.sections.find(section => section.id === sectionId)?.title}</span><span className="font-medium text-destructive">{field.label}: {error === "Required" ? "Not answered" : error}</span></span><span className="flex shrink-0 items-center gap-1 text-xs text-destructive">Fix answer <ArrowRight className="size-4" aria-hidden="true"/></span></Button></li>)}
+          {incompleteReports.map(({ index, issues }) => <li key={index}><Button className="h-auto min-h-14 w-full justify-between gap-3 whitespace-normal border-destructive/25 bg-card px-3 py-2 text-left hover:bg-destructive/5" variant="outline" onPress={() => onSection("reports")}><span className="font-medium text-destructive">Report {index} needs {issues.map(issue => issue === "name" ? "a report name" : issue === "date" ? "a date" : "an uploaded file").join(" and ")}</span><span className="flex shrink-0 items-center gap-1 text-xs text-destructive">Fix report <ArrowRight className="size-4" aria-hidden="true"/></span></Button></li>)}
+          {scanRejected && <li><Button className="h-auto min-h-14 w-full justify-between gap-3 whitespace-normal border-destructive/25 bg-card px-3 py-2 text-left hover:bg-destructive/5" variant="outline" onPress={() => onSection("face_scan")}><span className="font-medium text-destructive">The selected face scan could not be used for scoring.</span><span className="flex shrink-0 items-center gap-1 text-xs text-destructive">Review scan <ArrowRight className="size-4" aria-hidden="true"/></span></Button></li>}
+        </ul>
+      </> : <p className="mt-2 text-sm text-muted-foreground">Required answers are complete.{!record.reports.length && " Attachments are optional."}</p>}
     </section>}
     <div className="overflow-hidden rounded-xl border border-border bg-card">{record.manifest.sections.map(section => {
       const progress = completion.sections.find(item => item.id === section.id)!;
