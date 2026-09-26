@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import {
-  Bandage, Bone, CircleMinus, Droplets, Fish, HeartPulse, type LucideIcon,
+  Bandage, Bone, CircleMinus, Droplets, Fish, HeartPulse, Pill, type LucideIcon,
 } from "lucide-react";
 
 /** Small site or product cues; the adjacent option label remains the clinical meaning. */
@@ -13,8 +13,7 @@ const drawings: Record<string, ReactNode> = {
   current_medications_antibiotics: <><path d="M5.5 19a4 4 0 0 1 0-5.7l7.8-7.8a4 4 0 0 1 5.7 5.7L11.2 19a4 4 0 0 1-5.7 0Z" /><path d="m9.4 9.4 5.2 5.2M16.5 7v4m-2-2h4" /></>,
   current_medications_antacid: <><path d="M10 3v4c0 1.7 1 2.8 2.8 2.8 1.2 0 2-.8 2-2.2 3.5.9 5.2 3.5 5.2 6.5 0 4-3 6.9-7 6.9-3 0-4.8-1.4-5.8-3.5-.4-.8-.8-1.2-1.3-1.2-1 0-1.6 1.3-1.6 3V21H3v-1.6c0-3.2 1.3-5.2 4.2-5.4 2.7-.2 4.2-2 4.2-4.5 0-1.4-.5-2.3-1.4-3V3" /><path d="M13 14h4" /></>,
   supplements_intake_protein: <><path d="M8 3h8m-7 0v3h6V3M7 6h10l1 3v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9Z" /><path d="M6 11h12m-9 5h6" /></>,
-  supplements_intake_iron: <><rect x="4" y="4" width="16" height="16" rx="3" /><text x="12" y="15.3" fill="currentColor" stroke="none" textAnchor="middle" fontSize="8" fontWeight="700">Fe</text></>,
-  supplements_intake_folic_acid: <><path d="M20 4C11 4 5 7 5 14a6 6 0 0 0 6 6c7 0 9-7 9-16Z" /><path d="M5 20c2-4 6-7 11-10" /><circle cx="14.5" cy="15.5" r="1" /></>,
+  supplements_intake_folic_acid: <><path d="M5.5 19a4 4 0 0 1 0-5.7l7.8-7.8a4 4 0 0 1 5.7 5.7L11.2 19a4 4 0 0 1-5.7 0Z" /><path d="m9.4 9.4 5.2 5.2M6.5 16.7c.3-2.2 1.8-3.4 4.4-3.5-.3 2.5-1.8 3.7-4.4 3.5Z" /><path d="m6.5 16.7 2.9-2.3" /></>,
   supplements_intake_multivitamins: <><path d="M5.5 19a4 4 0 0 1 0-5.7l7.8-7.8a4 4 0 0 1 5.7 5.7L11.2 19a4 4 0 0 1-5.7 0Z" /><path d="m9.4 9.4 5.2 5.2" /><circle cx="8" cy="15.5" r=".7" /><circle cx="11" cy="13" r=".7" /><circle cx="15.5" cy="9" r=".7" /></>,
 };
 
@@ -23,6 +22,7 @@ const lucideIcons: Record<string, LucideIcon> = {
   current_medications_anti_hypertensives: HeartPulse,
   current_medications_pain_medications: Bandage,
   supplements_intake_calcium: Bone,
+  supplements_intake_iron: Pill,
   supplements_intake_omega_3: Fish,
   __none__: CircleMinus,
 };
