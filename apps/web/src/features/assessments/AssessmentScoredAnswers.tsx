@@ -11,6 +11,7 @@ import { ClinicalGutChoiceIcon } from "./ClinicalGutChoiceIcon";
 import { DietaryIntakeIcon } from "./DietaryIntakeIcon";
 import { DietaryStatusIcon } from "./DietaryStatusIcon";
 import { DietarySymptomIcon } from "./DietarySymptomIcon";
+import { formatGenderAnswer } from "./formatGenderAnswer";
 
 const diseaseFields = new Set(["stage", "metastasis_site", "relapse_status"]);
 const treatmentFields = new Set(["treatment_status", "palliative_status", "palliative_timing", "cancer_surgical_status", "current_cancer_treatment"]);
@@ -56,7 +57,8 @@ function scoredAnswer(field: FormField, answers: FormAnswers, item?: AssessmentS
   const raw = answers[field.id];
   if (raw === undefined || raw === null || raw === "") return "Not answered";
   if (Array.isArray(raw)) return raw.length ? raw.map(value => field.options?.find(option => option.id === value)?.label ?? value).join(", ") : "None";
-  const label = field.options?.find(option => option.id === raw)?.label ?? String(raw);
+  const label = field.options?.find(option => option.id === raw)?.label
+    ?? (field.id === "gender" && typeof raw === "string" ? formatGenderAnswer(raw) : String(raw));
   return field.unit ? `${label} ${field.unit}` : label;
 }
 

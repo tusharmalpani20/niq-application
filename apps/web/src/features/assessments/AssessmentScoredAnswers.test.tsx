@@ -42,6 +42,13 @@ test("scored answer layout retains item scores and calculated values", () => {
   expect(document.querySelector('[data-score-field="stage"] [data-disease-choice-icon="stage_metastatic"]')).not.toBeNull();
 });
 
+test("scored personal details show a readable gender label", () => {
+  const fields = [{ id: "gender", label: "Gender", kind: "text", owner: "application" }] as FormField[];
+  const html = renderToStaticMarkup(<AssessmentScoredAnswers fields={fields} answers={{ gender: "MALE" }} components={[]} revised={false} />);
+  const gender = new JSDOM(html).window.document.querySelector('[data-score-field="gender"]');
+  expect(gender?.textContent).toBe("GenderMale");
+});
+
 test("protein shows the returned adequacy and assigns points only to protein intake", () => {
   const fields = [
     { id: "dietary_intake", label: "Dietary intake change", kind: "select", owner: "supporting", options: [{ id: "dietary_intake_more_than_usual", label: "More than usual" }] },
