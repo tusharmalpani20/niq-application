@@ -2,8 +2,10 @@ import { test, expect } from "bun:test";
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { projectScoreReviews, type AssessmentWorkflow, type AssessmentScoreResult, type ScoreReviewEntry, type AssessmentScoreReviews } from "@niq/application-contracts";
 import { AssessmentScoreReview } from "./AssessmentScoreReview";
+import { AssessmentRiskCircle } from "./AssessmentRiskCircle";
 const result: AssessmentScoreResult = {formatVersion:2,profile:"NIQ_FINAL_ASSESSMENT",complete:true,score:8,classification:{id:"low",label:"Low",interpretation:""},components:[{id:"stage",sectionId:"disease",label:"Stage",points:8,status:"answered"}],version:"V1",checksum:"a".repeat(64),resultReference:"result",calculatedAt:"2026-09-22T00:00:00.000Z",clinicalUsePermitted:true};
 const record = {id:"assessment",reference:"ASM-000002",result,binding:{version:"V1",checksum:"a".repeat(64)},answers:{stage:"metastatic",patient_name:"Example Patient"},manifest:{sections:[{id:"personal_details",title:"Personal details",fields:[{id:"patient_name",label:"Patient name",kind:"text",owner:"application"}]},{id:"disease",title:"Disease status",fields:[{id:"stage",label:"Stage",owner:"scoring",options:[{id:"metastatic",label:"Metastatic"}]}]}]},progress:{answered:1,required:1,sections:[]},reports:[]} as unknown as AssessmentWorkflow;
 const entry: ScoreReviewEntry = {id:"entry",revision:1,targetType:"item",targetId:"stage",previousPoints:8,points:10,reason:null,actorId:"actor",actorName:"Reviewer One",createdAt:"2026-09-22T00:00:00.000Z",resultReference:"result"};
@@ -19,20 +21,28 @@ async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[];
  const root=createRoot(document.getElementById("root")!); const flush=()=>new Promise(resolve=>setTimeout(resolve,0));
  try {await act(async()=>{root.render(<AssessmentScoreReview record={{...record,result:scoredResult}} organizationId="org" renderScan={()=><p>Scan details</p>} reportsContent={<p>Report details</p>}/>);await flush();});await run({posts,rerender:async(next,canReview=true,scanStatus)=>{await act(async()=>{root.render(<AssessmentScoreReview record={next} organizationId="org" canReview={canReview} scanStatus={scanStatus} renderScan={()=><p>Scan details</p>} reportsContent={<p>Report details</p>}/>);await flush();});},click:async name=>{const button=[...document.querySelectorAll("button")].find(b=>(b.getAttribute("aria-label")??b.textContent?.trim())===name);if(!button)throw new Error(`Missing ${name}`);await act(async()=>{button.click();await flush();});}});}finally{await act(async()=>root.unmount());dom.window.close();for(const [key,value] of Object.entries(previous))if(value)Object.defineProperty(globalThis,key,value);else delete (globalThis as any)[key];}
 }
-test("saved bands form a circular category display while reviewed risk stays separate", async()=>harness(async()=>{
+test("score ring uses the selected risk color without a range legend while reviewed risk stays separate", async()=>harness(async()=>{
  const circle=document.querySelector('[data-risk-circle]');
  const reviewed=[...document.querySelectorAll("span")].find(node=>node.textContent?.trim()==="Reviewed category");
- expect(circle?.getAttribute("aria-label")).toContain("3 risk bands");
- expect(circle?.querySelectorAll("svg circle")).toHaveLength(4);
- expect(circle?.querySelectorAll('svg circle[stroke-width="15"]')).toHaveLength(1);
- expect(document.body.textContent).toContain("0–15 pts");
- expect(document.body.textContent).toContain("≥26 pts");
+ expect(circle?.getAttribute("aria-label")).toBe("8 points, Low");
+ expect(circle?.querySelectorAll("svg circle")).toHaveLength(2);
+ expect(circle?.querySelector('svg circle:last-child')?.getAttribute("stroke")).toBe("#159f70");
+ expect(document.body.textContent).not.toContain("Score ranges used for this assessment");
  expect(reviewed?.className).toContain("border-red-300");
 },[entry],{status:"CONFIRMED",classification:{id:"reviewed",label:"Reviewed category",interpretation:"",color:"red"},resultReference:"classification",failureCode:null,canRetry:false},{...result,classification:{...result.classification!,color:"green"},riskCategories:[
  {id:"low",label:"Low",color:"green",min:0,max:15,minInclusive:true,maxInclusive:true},
  {id:"moderate",label:"Moderate",color:"amber",min:16,max:25,minInclusive:true,maxInclusive:true},
  {id:"high",label:"High",color:"red",min:26,max:null,minInclusive:true,maxInclusive:true},
  ]}));
+
+test("high risk colors the entire score ring and label red", ()=>{
+ const document=new JSDOM(renderToStaticMarkup(<AssessmentRiskCircle score={28} classification={{id:"high",label:"High Risk",interpretation:"",color:"red"}} />)).window.document;
+ const circle=document.querySelector('[data-risk-circle]');
+ expect(circle?.querySelector('svg circle:last-child')?.getAttribute("stroke")).toBe("#dc3d50");
+ expect(circle?.querySelector("span")?.getAttribute("style")).toContain("#dc3d50");
+ expect(document.querySelector('.text-2xl')?.getAttribute("style")).toContain("#dc3d50");
+ expect(document.body.textContent).not.toContain("Score ranges used for this assessment");
+});
 
 test("historical results without saved ranges still show the saved category", async()=>harness(async()=>{
  expect(document.querySelector('[data-risk-circle] svg circle:last-child')?.getAttribute("stroke")).toBe("#64748b");
