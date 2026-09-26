@@ -72,9 +72,8 @@ export function AssessmentVerificationAnswers({ sectionId, fields, answers }: { 
   return <div className="@container min-w-0 divide-y divide-border/70">{assessmentFieldGroups(fields, answers).map(group => {
     const visible = group.filter(field => field.kind !== "calculated");
     if (!visible.length) return null;
-    const palliativePath = group[0]!.id === "treatment_status" && visible.length === 3;
-    return <dl key={group[0]!.id} data-review-question-group={group[0]!.id} className={`grid min-w-0 gap-4 py-4 first:pt-0 last:pb-0 @min-[28rem]:grid-cols-2 ${palliativePath ? "@min-[37rem]:grid-cols-3 @min-[37rem]:gap-x-3" : ""}`}>
-      {visible.map(field => <AnswerItem key={field.id} field={field} answers={answers} spanColumns={field.kind === "multi_select" || group[0]!.id === "current_cancer_treatment" && field.id === "current_cancer_treatment"} />)}
+    return <dl key={group[0]!.id} data-review-question-group={group[0]!.id} className="grid min-w-0 gap-4 py-4 first:pt-0 last:pb-0 @min-[28rem]:grid-cols-2">
+      {visible.map(field => <AnswerItem key={field.id} field={field} answers={answers} spanColumns={field.kind === "multi_select" || field.id === "treatment_status" || group[0]!.id === "current_cancer_treatment" && field.id === "current_cancer_treatment"} />)}
     </dl>;
   })}</div>;
 }
