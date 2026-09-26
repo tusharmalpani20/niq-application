@@ -6,7 +6,7 @@ import { getOverviewActivity, getOverviewRisk } from "../lib/api";
 
 type Risk = Awaited<ReturnType<typeof getOverviewRisk>>;
 type Activity = Awaited<ReturnType<typeof getOverviewActivity>>["items"][number];
-const activityPageSize = 5;
+const activityPageSize = 4;
 const actionSequence: Activity["action"][] = ["ASSESSMENT_CREATED", "ASSESSMENT_SUBMITTED", "CLINICAL_REVIEW_COMPLETE"];
 const actions: Record<Activity["action"], { label: string; color: string }> = {
   ASSESSMENT_CREATED: { label: "Assessment created", color: "bg-slate-400" },

@@ -237,13 +237,13 @@ test("activity pagination counts assessments, shows legend colors, and resets on
   await renderOverview("DOCTOR", async body => {
     const calendar = body.querySelector('[aria-label="My assessment activity"]')!;
     await act(async () => { (calendar.querySelector(`[aria-label^="${firstDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
-    expect(calendar.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(5);
-    expect(calendar.textContent).toContain("1–5 of 6 assessments");
+    expect(calendar.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(4);
+    expect(calendar.textContent).toContain("1–4 of 6 assessments");
     expect(calendar.querySelector('a[href^="/assessments/ASM-"] i')?.className).toContain("bg-slate-400");
     expect(calendar.textContent).toContain("Page 1 of 2");
     await act(async () => { ([...calendar.querySelectorAll('button')].find(button => button.textContent === "Next") as HTMLButtonElement).click(); });
-    expect(calendar.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(1);
-    expect(calendar.textContent).toContain("6–6 of 6 assessments");
+    expect(calendar.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(2);
+    expect(calendar.textContent).toContain("5–6 of 6 assessments");
     await act(async () => { (calendar.querySelector(`[aria-label^="${secondDay.toLocaleDateString(undefined, { dateStyle: "full" })}"]`) as HTMLButtonElement).click(); });
     expect(calendar.querySelectorAll('a[href^="/assessments/ASM-"]')).toHaveLength(1);
     expect(calendar.querySelector('[aria-label="Activity pages"]')).toBeNull();
