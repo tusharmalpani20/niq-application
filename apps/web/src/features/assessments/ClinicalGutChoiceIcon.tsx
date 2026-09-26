@@ -6,6 +6,12 @@ import {
 } from "lucide-react";
 
 /** Decorative cues for appetite and gut choices; the labels carry the clinical meaning. */
+const appetiteUtensils = <>
+  <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
+  <path d="M7 2v20" />
+  <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />
+</>;
+
 const icons: Record<string, LucideIcon> = {
   appetite_status_normal: Utensils,
   gastrointestinal_symptoms_bloating: Bubbles,
@@ -22,14 +28,12 @@ const icons: Record<string, LucideIcon> = {
 
 const drawings: Record<string, ReactNode> = {
   appetite_status_reduced: <>
-    <circle cx="9.5" cy="11" r="6.5" />
-    <circle cx="9.5" cy="11" r="3.5" />
-    <path d="M19 6v12m-3-3 3 3 3-3" />
+    <g transform="translate(0 2) scale(.72)">{appetiteUtensils}</g>
+    <path d="M20 5v14m-3-3 3 3 3-3" />
   </>,
   appetite_status_no_appetite: <>
-    <circle cx="12" cy="12" r="8" />
-    <circle cx="12" cy="12" r="5" />
-    <path d="M4 20 20 4" />
+    {appetiteUtensils}
+    <path d="M2 22 22 2" />
   </>,
   below_3_week: <>
     <rect x="3" y="5" width="18" height="16" rx="2" />
