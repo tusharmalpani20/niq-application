@@ -66,7 +66,7 @@ export class AssessmentWorkflowService {
     return {identity,baseUrl:this.config.SCORING_API_URL,credential:decryptCredential(connection.encryptedCredential,connection.credentialIv,this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY),requestId:context.requestId,timeoutMs:this.config.SCORING_TIMEOUT_MS,fetcher:this.fetcher};
   }
   async initialize(actor:Principal,organizationId:string,input:{patientId:string;requestKey:string},context:RequestContext):Promise<AssessmentInitialization> {
-    this.clinicalActor(actor,organizationId,"assessments.edit");
+    this.clinicalActor(actor,organizationId,"assessments.create");
     const patient=await this.applicationService.getPatient(actor,organizationId,input.patientId) as AssessmentPatient;
     if(!patient.homeFacility) throw new ServiceError("VALIDATION_ERROR","The patient needs an active facility.");
     const [facility]=await this.db.select().from(facilities).where(and(eq(facilities.id,patient.homeFacility.id),eq(facilities.organizationId,organizationId),eq(facilities.status,"ACTIVE")));
@@ -96,7 +96,7 @@ export class AssessmentWorkflowService {
     return {...initializationDto(row),assessmentReference:assessment?formatAssessmentReference(assessment.serialNumber):null};
   }
   async retryInitialization(actor:Principal,organizationId:string,id:string,context:RequestContext):Promise<AssessmentInitialization> {
-    this.clinicalActor(actor,organizationId,"assessments.edit");
+    this.clinicalActor(actor,organizationId,"assessments.create");
     const row=await this.getInitialization(actor,organizationId,id);
     if(row.status==="READY") return this.initializationDto(row);
     const token=crypto.randomUUID();const now=new Date();

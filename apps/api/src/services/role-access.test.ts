@@ -51,13 +51,21 @@ test("facility performance rejects a different organization before querying", as
 
 test("clinical gate rejects support, cross-tenant and platform actors for every clinical operation", () => {
   const check = AssessmentWorkflowService.prototype.clinicalActor;
-  for (const permission of ["assessments.read", "assessments.edit", "assessments.submit", "scans.perform", "reports.manage", "scores.review"] as const) {
+  for (const permission of ["assessments.read", "assessments.create", "assessments.edit", "assessments.submit", "scans.perform", "reports.manage", "scores.review"] as const) {
     for (const role of ["DOCTOR", "NUTRITIONIST", "OTHER_MEDICAL"] as const) expect(() => check({ ...actor, role }, "org", permission)).not.toThrow();
     const adminCheck = () => check({ ...actor, role: "ORGANIZATION_ADMIN" }, "org", permission);
-    if (permission === "scores.review") expect(adminCheck).toThrow();
+    if (permission === "assessments.create" || permission === "scores.review") expect(adminCheck).toThrow();
     else expect(adminCheck).not.toThrow();
     expect(() => check({ ...actor, role: "SUPPORT" }, "org", permission)).toThrow();
     expect(() => check(actor, "other-org", permission)).toThrow();
     expect(() => check({ ...actor, platformRole: "NIQ_ADMIN" }, "org", permission)).toThrow();
   }
+});
+
+test("organization admins cannot initialize or retry creating an assessment", async () => {
+  // Both entry points must reject before consulting patient records or the database.
+  const workflow = new AssessmentWorkflowService({ db: {} as Database, applicationService: {} as any, config });
+  const admin = { ...actor, role: "ORGANIZATION_ADMIN" as const };
+  await expect(workflow.initialize(admin, "org", { patientId: "patient", requestKey: "request" }, { requestId: "audit" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(workflow.retryInitialization(admin, "org", "initialization", { requestId: "audit" })).rejects.toMatchObject({ code: "FORBIDDEN" });
 });

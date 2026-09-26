@@ -12,7 +12,7 @@ export const membershipRoleLabels: Record<MembershipRole, string> = {
 };
 
 export const permissions = [
-  "patients.read", "patients.create", "patients.edit", "assessments.list", "assessments.read",
+  "patients.read", "patients.create", "patients.edit", "assessments.list", "assessments.read", "assessments.create",
   "assessments.edit", "assessments.submit", "assessments.reconcile",
   "scans.perform", "reports.manage", "scores.review", "facilities.read",
   "reviews.submit", "reviews.claim", "reviews.transfer", "reviews.complete", "reviews.assign", "reviews.return",
@@ -21,7 +21,7 @@ export const permissions = [
 export type Permission = typeof permissions[number];
 const supportPermissions: readonly Permission[] = ["patients.read", "patients.create", "patients.edit", "assessments.list", "facilities.read"];
 const clinicalPermissions: readonly Permission[] = [
-  ...supportPermissions, "assessments.read", "assessments.edit", "assessments.submit",
+  ...supportPermissions, "assessments.read", "assessments.create", "assessments.edit", "assessments.submit",
   "scans.perform", "reports.manage", "scores.review",
   "reviews.submit", "reviews.claim", "reviews.transfer", "reviews.complete", "reviews.return",
 ];
@@ -30,7 +30,7 @@ const clinicalPermissions: readonly Permission[] = [
  * Organisation, active membership and facility checks must still run on the server.
  */
 export const rolePermissions: Readonly<Record<MembershipRole, readonly Permission[]>> = {
-  ORGANIZATION_ADMIN: permissions.filter(permission => !["scores.review", "reviews.claim", "reviews.complete"].includes(permission)),
+  ORGANIZATION_ADMIN: permissions.filter(permission => !["assessments.create", "scores.review", "reviews.claim", "reviews.complete"].includes(permission)),
   DOCTOR: [...clinicalPermissions],
   NUTRITIONIST: [...clinicalPermissions],
   OTHER_MEDICAL: [...clinicalPermissions],

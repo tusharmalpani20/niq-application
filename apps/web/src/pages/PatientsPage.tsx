@@ -209,6 +209,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
   if (failed) return <Alert variant="destructive"><AlertDescription>This patient could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button> <Link to="/patients">Back to patients</Link></AlertDescription></Alert>;
   if (!patient) return <p className="muted">Loading patient…</p>;
   const canEditPatient = hasPermission(user.role, "patients.edit");
+  const canCreateAssessment = hasPermission(user.role, "assessments.create");
   const canEditAssessment = hasPermission(user.role, "assessments.edit");
   const canReadAssessment = hasPermission(user.role, "assessments.read");
   const openEditor = async () => {
@@ -219,7 +220,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
     finally { setEditLoading(false); }
   };
   return <>
-    <PatientHeader patient={patient} action={<div className="flex flex-wrap gap-2">{canEditPatient && <TooltipTrigger><Button variant="outline" size="icon-lg" className="size-10 shrink-0" aria-label="Edit patient" onPress={openEditor} isDisabled={editLoading}><Pencil className="size-4" /></Button><Tooltip>Edit patient</Tooltip></TooltipTrigger>}{canEditAssessment && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>} />
+    <PatientHeader patient={patient} action={<div className="flex flex-wrap gap-2">{canEditPatient && <TooltipTrigger><Button variant="outline" size="icon-lg" className="size-10 shrink-0" aria-label="Edit patient" onPress={openEditor} isDisabled={editLoading}><Pencil className="size-4" /></Button><Tooltip>Edit patient</Tooltip></TooltipTrigger>}{canCreateAssessment && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>} />
     {editError && <Alert variant="destructive"><AlertDescription>Facilities could not be loaded for editing. <Button variant="link" onPress={openEditor}>Retry</Button></AlertDescription></Alert>}
     <Tabs selectedKey={patientTab} onSelectionChange={(key) => setPatientTab(String(key))} className="organization-detail-tabs gap-5">
       <TabsList variant="line" aria-label="Patient record" className="w-full justify-start gap-5 border-b p-0">
@@ -240,7 +241,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
             { id: "date", header: "Started", cell: ({ row }) => hasPermission(user.role, "assessments.read") ? <Link className="text-foreground underline" to={`/assessments/${row.original.reference}`}><DateDisplay value={row.original.createdAt} /></Link> : <DateDisplay value={row.original.createdAt} /> },
             { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "No facility" },
             { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
-          ]} /> : <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center"><h2 className="font-semibold">{hasPermission(user.role, "assessments.edit") ? "Start this patient’s first assessment" : "No assessments yet"}</h2>{hasPermission(user.role, "assessments.edit") && <RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18} />New assessment</RouterButtonLink>}</div>}
+          ]} /> : <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center"><h2 className="font-semibold">{canCreateAssessment ? "Start this patient’s first assessment" : "No assessments yet"}</h2>{canCreateAssessment && <RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18} />New assessment</RouterButtonLink>}</div>}
         </Card>
       </TabsContent>
     </Tabs>

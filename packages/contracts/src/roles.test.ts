@@ -8,13 +8,13 @@ describe("organisation roles", () => {
     expect(rolePermissions.DOCTOR).toEqual(rolePermissions.OTHER_MEDICAL);
     expect(rolePermissions.DOCTOR).not.toBe(rolePermissions.NUTRITIONIST);
     for (const role of ["DOCTOR", "NUTRITIONIST", "OTHER_MEDICAL"]) {
-      for (const permission of ["assessments.edit", "assessments.submit", "scans.perform", "reports.manage", "scores.review"] as const) expect(hasPermission(role, permission)).toBe(true);
+      for (const permission of ["assessments.create", "assessments.edit", "assessments.submit", "scans.perform", "reports.manage", "scores.review"] as const) expect(hasPermission(role, permission)).toBe(true);
       for (const permission of ["users.manage", "facilities.manage", "organization.manage", "scoring.manage", "assessments.reconcile"] as const) expect(hasPermission(role, permission)).toBe(false);
     }
   });
   test("admin has management permissions without clinical review and support retains only registration and list access", () => {
     for (const permission of permissions) {
-      expect(hasPermission("ORGANIZATION_ADMIN", permission)).toBe(!["scores.review", "reviews.claim", "reviews.complete"].includes(permission));
+      expect(hasPermission("ORGANIZATION_ADMIN", permission)).toBe(!["assessments.create", "scores.review", "reviews.claim", "reviews.complete"].includes(permission));
       expect(hasPermission("SUPPORT", permission)).toBe(["patients.read", "patients.create", "patients.edit", "assessments.list", "facilities.read"].includes(permission));
       expect(hasPermission("MEDICAL", permission)).toBe(false);
       expect(hasPermission("toString", permission)).toBe(false);

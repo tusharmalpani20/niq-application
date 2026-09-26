@@ -59,7 +59,7 @@ export function AssessmentsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const canOpen = hasPermission(user.role, "assessments.read");
-  const canCreate = hasPermission(user.role, "assessments.edit");
+  const canCreate = hasPermission(user.role, "assessments.create");
   const [tab, setTab] = useState(() => canOpen && searchParams.get("tab") === "clinical-reviews" ? "clinical-reviews" : "assessments");
   const [records, setRecords] = useState<AssessmentSummary[]>([]);
   const [reviewCount, setReviewCount] = useState<number | null>(null);

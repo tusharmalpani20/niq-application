@@ -36,6 +36,15 @@ async function harness(path: string, handler: (url: string, init?: RequestInit) 
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key]; }
   }
 }
+test("organization admins cannot open assessment creation", async () => {
+  let requests = 0;
+  await harness("/assessments/new", async () => { requests++; throw new Error("Unexpected request"); }, async router => {
+    expect(router.state.location.pathname).toBe("/assessments");
+    expect(document.body.textContent).toContain("Assessment list");
+    expect(document.body.textContent).not.toContain("New assessment");
+  }, "ORGANIZATION_ADMIN");
+  expect(requests).toBe(0);
+});
 test("patient entry starts directly and preserves creation key before uncertain request", async () => {
   const keys: string[] = [];
   await harness(`/assessments/new?patient=${id}`, async (url, init) => {

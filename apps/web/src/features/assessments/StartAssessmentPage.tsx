@@ -26,7 +26,7 @@ function preparationMessage(value: AssessmentInitialization): string {
 
 export function StartAssessmentPage() {
   const user = useOutletContext<AuthenticatedUser>();
-  if (!hasPermission(user.role, "assessments.edit")) return <Navigate to="/assessments" replace />;
+  if (!hasPermission(user.role, "assessments.create")) return <Navigate to="/assessments" replace />;
   return <ScopedStartAssessmentPage key={`${user.organizationId}:${user.userId}`} user={user} />;
 }
 
