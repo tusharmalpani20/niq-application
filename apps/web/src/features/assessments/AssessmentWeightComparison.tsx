@@ -10,15 +10,20 @@ export function AssessmentWeightComparison({ answers, children, unit = "kg" }: {
   const percent = typeof previous === "number" && currentValid ? calculateAssessmentWeightChange(previous, current) : null;
   const difference = percent !== null && typeof previous === "number" && currentValid ? current - previous : null;
   const formatted = (value: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(unit === "lb" ? kgToPounds(value) : value);
+  const change = difference === null ? null : difference === 0 ? "No change" : `${formatted(Math.abs(difference))} ${unit} ${difference > 0 ? "gain" : "loss"}`;
+  const context = percent === null || difference === null
+    ? currentValid ? "Enter weight from 1–2 months ago to see the change." : "Enter current weight in Personal details to see the change."
+    : difference === 0 ? `0 ${unit} (0%)` : `${Math.abs(percent).toFixed(1)}% ${difference > 0 ? "increase" : "decrease"} from earlier weight`;
   return <section className="col-[1/-1] min-w-0" aria-label="Weight comparison">
-    <h3 className="mb-4 text-sm font-semibold">Weight comparison</h3>
+    <h3 className="mb-4 text-base font-semibold">Weight comparison</h3>
     <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] items-start gap-4">
       {children}
       <div className="space-y-2"><p className="flex min-h-9 items-center text-base font-medium">Current weight ({unit})</p><p className="flex min-h-12 items-center rounded-lg border border-border bg-muted/50 px-3 text-base">{currentValid ? `${formatted(current)} ${unit}` : "Not entered"}</p><p className="text-xs text-muted-foreground">From Personal details</p></div>
     </div>
-    <div id="assessment-field-weight_loss" tabIndex={-1} className="mt-4 flex flex-wrap items-center justify-between gap-2" aria-live="polite" aria-atomic="true">
-      <p className="text-sm text-muted-foreground">Change over 1–2 months</p>
-      <p className="text-sm font-semibold">{percent === null || difference === null ? currentValid ? "Enter previous weight to compare" : "Enter current weight in Personal details" : difference === 0 ? `No change · 0 ${unit} (0%)` : `${formatted(Math.abs(difference))} ${unit} ${difference > 0 ? "gain" : "loss"} (${Math.abs(percent).toFixed(1)}%)`}</p>
+    <div id="assessment-field-weight_loss" tabIndex={-1} className="mt-4 rounded-xl border border-primary/15 bg-primary/5 p-4" aria-live="polite" aria-atomic="true">
+      <p className="text-sm font-medium text-muted-foreground">Change over 1–2 months</p>
+      {change && <p className="mt-1 text-2xl font-semibold leading-tight text-foreground">{change}</p>}
+      <p className={`text-sm ${change ? "mt-1 text-muted-foreground" : "mt-2 font-medium text-foreground"}`}>{context}</p>
     </div>
   </section>;
 }
