@@ -877,6 +877,7 @@ export class PostgresApplicationService implements ApplicationService {
       createdByMembershipId: assessments.createdByMembershipId,
       clinicalReview: assessments.clinicalReview,
       createdAt: assessments.createdAt,
+      updatedAt: assessments.updatedAt,
       completedAt: assessments.completedAt,
     }).from(assessments)
       .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
@@ -904,6 +905,7 @@ export class PostgresApplicationService implements ApplicationService {
         status: row.status,
         myAction: !row.patientArchived && row.patientAccessible ? myAssessmentAction(actor, row, review?.correctionPerson?.membershipId ?? null) : null,
         createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
         completedAt: row.completedAt,
       };
     });

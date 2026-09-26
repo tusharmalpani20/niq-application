@@ -415,6 +415,7 @@ export const assessmentSummarySchema = z.object({
   status: assessmentStatusSchema,
   myAction: z.enum(["EDIT_DRAFT", "CORRECT_DRAFT", "SEND_FOR_REVIEW"]).nullable(),
   createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date().optional(),
   completedAt: z.coerce.date().nullable(),
 });
 

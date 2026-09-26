@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { OverviewUsage } from "../components/OverviewUsage";
 import { GreetingIllustration } from "../components/GreetingIllustration";
-import { RouterButtonLink } from "../components/RouterButtonLink";
 import { listClinicalReviews } from "../features/assessments/clinical-review-api";
 import { getOrganization, getOverviewRisk, listAssessments, listOrganizationUsers, listPatients } from "../lib/api";
 import { assessmentStatusLabels } from "../lib/patient-display";
@@ -24,7 +23,7 @@ export function greetingForHour(hour: number): "Good morning" | "Good afternoon"
   return "Good evening";
 }
 
-function GreetingBanner({ hour, displayName, canCreateAssessment }: { hour: number; displayName: string; canCreateAssessment: boolean }) {
+function GreetingBanner({ hour, displayName }: { hour: number; displayName: string }) {
   const greeting = greetingForHour(hour);
   const period = greeting === "Good morning" ? "morning" : greeting === "Good afternoon" ? "afternoon" : "evening";
   const title = `${greeting}, ${displayName}!`;
@@ -33,7 +32,6 @@ function GreetingBanner({ hour, displayName, canCreateAssessment }: { hour: numb
       <GreetingIllustration period={period} />
       <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
     </div>
-    {canCreateAssessment && <RouterButtonLink to="/assessments/new" className="shrink-0"><Plus className="size-4" aria-hidden="true" />New assessment</RouterButtonLink>}
   </>;
 }
 
@@ -44,11 +42,12 @@ function ActionCard({ title, count, detail, to }: { title: string; count: number
   </Link>;
 }
 
-function QuickActions({ assessments, canAddPatient }: { assessments: AssessmentSummary[]; canAddPatient: boolean }) {
+function QuickActions({ assessments, canAddPatient, canCreateAssessment }: { assessments: AssessmentSummary[]; canAddPatient: boolean; canCreateAssessment: boolean }) {
   const draft = assessments.filter(item => item.myAction === "EDIT_DRAFT" || item.myAction === "CORRECT_DRAFT")
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+    .sort((a, b) => (b.updatedAt ?? b.createdAt).getTime() - (a.updatedAt ?? a.createdAt).getTime() || b.createdAt.getTime() - a.createdAt.getTime())[0];
   const actions = [
     ...(draft ? [{ label: draft.myAction === "CORRECT_DRAFT" ? "Continue corrections" : "Continue draft", detail: `${draft.reference} · ${draft.patient.displayName}`, to: `/assessments/${draft.reference}`, icon: ClipboardList }] : []),
+    ...(canCreateAssessment ? [{ label: "New assessment", detail: "Start an assessment", to: "/assessments/new", icon: Plus }] : []),
     ...(canAddPatient ? [{ label: "Add patient", detail: "Register a new patient", to: "/patients/new", icon: UserRoundPlus }] : []),
     { label: "Clinical reviews", detail: "Open review work", to: "/assessments?tab=clinical-reviews", icon: Stethoscope },
   ];
@@ -56,7 +55,7 @@ function QuickActions({ assessments, canAddPatient }: { assessments: AssessmentS
     <div className="pointer-events-none absolute -right-12 -top-20 size-44 rounded-full border border-primary/15" aria-hidden="true" />
     <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center">
       <div className="flex min-w-0 items-center gap-3 lg:w-56 lg:shrink-0"><span className="grid size-12 shrink-0 place-items-center rounded-full border border-primary/20 bg-white/60 text-brand-ink"><Sparkles className="size-6" aria-hidden="true" /></span><div><h2 className="text-base font-semibold">Quick actions</h2><p className="text-sm text-muted-foreground">Start or continue care</p></div></div>
-      <div className="grid flex-1 gap-2 min-[650px]:grid-cols-3">{actions.map(({ label, detail, to, icon: Icon }) => <Link key={label} to={to} title={detail} aria-label={`${label}: ${detail}`} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-primary/15 bg-white/60 px-3 py-2 text-center text-sm font-medium text-foreground no-underline transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><Icon className="size-4 shrink-0 text-brand-ink" aria-hidden="true" />{label}</Link>)}</div>
+      <div className={`grid flex-1 gap-2 min-[650px]:grid-cols-2 ${actions.length === 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>{actions.map(({ label, detail, to, icon: Icon }) => <Link key={label} to={to} title={detail} aria-label={`${label}: ${detail}`} className="flex min-h-14 min-w-0 items-center justify-center gap-2 rounded-xl border border-primary/15 bg-white/60 px-3 py-2 text-center text-sm font-medium text-foreground no-underline transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><Icon className="size-4 shrink-0 text-brand-ink" aria-hidden="true" /><span className="min-w-0"><span className="block">{label}</span>{draft && to === `/assessments/${draft.reference}` && <span className="block truncate text-xs font-normal text-muted-foreground">{detail}</span>}</span></Link>)}</div>
     </div>
   </section>;
 }
@@ -144,7 +143,7 @@ export function DashboardPage() {
   const scoringIssues = data?.assessments.filter(item => item.status === "SCORING_UNAVAILABLE").length ?? 0;
   return <>
     <header className="mb-7 flex flex-wrap items-center justify-between gap-4" aria-label="Overview greeting">
-      <GreetingBanner hour={localTime.getHours()} displayName={user.displayName} canCreateAssessment={canCreateAssessment} />
+      <GreetingBanner hour={localTime.getHours()} displayName={user.displayName} />
     </header>
     {error ? <Card className="surface p-6"><p role="alert">Overview could not be loaded.</p><Button className="w-fit" variant="outline" onPress={() => setAttempt((value) => value + 1)}>Retry</Button></Card> : <>
       <section aria-label="Overview statistics" aria-busy={!data} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -157,7 +156,7 @@ export function DashboardPage() {
       </section>
     </>}
     {data && (isClinician || isAdmin) && <>
-      <QuickActions assessments={data.assessments} canAddPatient={hasPermission(user.role, "patients.create")} />
+      <QuickActions assessments={data.assessments} canAddPatient={hasPermission(user.role, "patients.create")} canCreateAssessment={canCreateAssessment} />
       <AssessmentActivityCalendar organizationId={user.organizationId} assessments={data.assessments} />
       <RiskOverviewCards risk={data.risk} assessments={data.assessments} />
     </>}

@@ -11,7 +11,7 @@ const date = "2026-09-20T00:00:00Z";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Example Patient", homeFacility: null, dateOfBirth: null, gender: "UNKNOWN", createdAt: date, updatedAt: date };
 const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: null, status: "SCORING_UNAVAILABLE", createdAt: date, completedAt: null };
 
-type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; assessments?: Array<typeof assessment & { myAction?: string | null }>; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number; activity?: { id: string; assessmentId: string; action: string; occurredAt: string }[]; highRiskAssessments?: { patientId: string; assessmentId: string }[] };
+type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; assessments?: Array<typeof assessment & { myAction?: string | null; updatedAt?: string }>; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number; activity?: { id: string; assessmentId: string; action: string; occurredAt: string }[]; highRiskAssessments?: { patientId: string; assessmentId: string }[] };
 
 test("overview greeting follows the local hour", () => {
   expect(greetingForHour(0)).toBe("Good evening");
@@ -58,7 +58,8 @@ test("clinician overview shows review work without administrator operations", as
     expect(body.querySelector('header[aria-label="Overview greeting"] h1')?.textContent).toContain("Example User!");
     expect(body.querySelector('header[aria-label="Overview greeting"] svg.text-primary')).not.toBeNull();
     expect(body.querySelector('[aria-label="Open assessment"]')).toBeNull();
-    expect(body.querySelector('a[href="/assessments/new"]')?.textContent).toContain("New assessment");
+    expect(body.querySelector('header[aria-label="Overview greeting"] a[href="/assessments/new"]')).toBeNull();
+    expect(body.querySelector('[aria-label="Quick actions"] a[href="/assessments/new"]')?.textContent).toContain("New assessment");
     expect(body.textContent).not.toContain("Resume assessment");
     expect(body.textContent).toContain("Clinical work");
     expect(body.textContent).toContain("My assessment actions");
@@ -79,9 +80,22 @@ test("quick actions sit above activity and link to assigned work and patient reg
     expect(activity).not.toBeNull();
     expect(actions!.compareDocumentPosition(activity!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(actions?.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("Continue draft");
+    expect(actions?.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("ASM-000001 · Example Patient");
+    expect(actions?.querySelector('a[href="/assessments/new"]')?.textContent).toContain("New assessment");
     expect(actions?.querySelector('a[href="/patients/new"]')?.textContent).toContain("Add patient");
     expect(actions?.querySelector('a[href="/assessments?tab=clinical-reviews"]')?.textContent).toContain("Clinical reviews");
   }, { assessmentStatus: "DRAFT" });
+});
+
+test("continue draft opens the most recently updated assigned draft", async () => {
+  await renderOverview("DOCTOR", body => {
+    const actions = body.querySelector('[aria-label="Quick actions"]');
+    expect(actions?.querySelector('a[href="/assessments/ASM-000002"]')).not.toBeNull();
+    expect(actions?.querySelector('a[href="/assessments/ASM-000003"]')).toBeNull();
+  }, { assessments: [
+    { ...assessment, id: "01ARZ3NDEKTSV4RRFFQ69G5FAV", reference: "ASM-000002", status: "DRAFT", myAction: "EDIT_DRAFT", createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-26T10:00:00Z" },
+    { ...assessment, id: "01ARZ3NDEKTSV4RRFFQ69G5FAW", reference: "ASM-000003", status: "DRAFT", myAction: "EDIT_DRAFT", createdAt: "2026-09-25T00:00:00Z", updatedAt: "2026-09-25T10:00:00Z" },
+  ] });
 });
 
 test("bottom cards show recent patients and real NIQ category comparisons", async () => {
