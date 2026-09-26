@@ -11,7 +11,7 @@ import { AssessmentRequestError } from "./workflow-api";
 type Action = ClinicalReviewAction["action"];
 export const recipientActions: Action[] = ["TRANSFER", "RETURN_TO_DRAFT", "REASSIGN_CORRECTION"];
 const noteActions: Action[] = [...recipientActions, "RELEASE", "COMPLETE"];
-const pendingScanMessage = "A face scan attempt is still open. Close this dialog, open Face scan, and cancel the attempt before sending for clinical review.";
+const automaticCancellationMessage = "The face scan is still open. Automatic cancellation was not confirmed; try again when its status updates.";
 function previouslySent(review: ClinicalReview) {
   return !!review.submittedAt || review.history.some(event => event.action === "SEND" || event.action === "RESEND");
 }
@@ -138,8 +138,8 @@ export function ClinicalReviewCommandDialog({ action, review, organizationId, as
       await changeClinicalReview(organizationId, assessmentId, { ...body, requestKey: request.current.key } as ClinicalReviewAction);
       await onChanged(); onClose();
     } catch (cause) {
-      if (cause instanceof AssessmentRequestError && cause.status === 409 && cause.message === "Resolve the pending face scan before changing the review workflow.") {
-        setConflict(true); setError(pendingScanMessage);
+      if (cause instanceof AssessmentRequestError && cause.status === 409 && cause.message === automaticCancellationMessage) {
+        setError(cause.message);
       } else if (cause instanceof AssessmentRequestError && [403, 409].includes(cause.status)) { setConflict(true); setError("This review or your access has changed. Reload the review before continuing. Your entered details are preserved."); }
       else setError(cause instanceof Error ? cause.message : "Could not update the review. Your details are preserved; try again.");
     } finally { inFlight.current = false; setBusy(false); onBusyChange(false); }
@@ -151,7 +151,7 @@ export function ClinicalReviewCommandDialog({ action, review, organizationId, as
         <p className="text-sm text-muted-foreground">{action === "COMPLETE" ? "Complete this clinical review with a final remark. Completion is permanent; the assessment cannot be reopened or edited." : action === "RETURN_TO_DRAFT" ? reopeningBeforeReview(review) ? "Reopen this scored assessment for corrections and a new score. Existing submitted answers, results and adjustments stay in history." : "Return this assessment for corrections and a new score. Existing submitted answers, results and adjustments stay in history." : action === "RELEASE" ? "Release ownership so another eligible clinician can claim the review. Saved work stays in history." : action === "RESEND" ? (previouslySent(review) ? "Resend this scored assessment for clinical review." : "Send this scored assessment for clinical review.") : action === "SEND" ? "Send this scored assessment for clinical review." : action === "CLAIM" ? "You will become responsible for this clinical review." : "The selected person will become responsible immediately. This change is recorded in review history."}</p>
         {needsRecipient && <div className="grid gap-2"><label htmlFor="clinical-review-recipient">{action === "TRANSFER" ? "Reviewer" : "Assign corrections to"} *</label><SearchCombobox id="clinical-review-recipient" label={action === "TRANSFER" ? "Reviewer" : "Assign corrections to"} value={recipient} onChange={setRecipient} options={recipients.map(item => ({ id: item.membershipId, label: `${item.displayName} · ${membershipRoleLabels[item.role]}` }))} required disabled={busy || loading || conflict} placeholder="Search or select a person…" />{loading ? <p role="status" className="text-sm">Loading eligible people…</p> : !recipients.length && <p className="text-sm">No eligible people are available. An administrator needs to check clinical roles and facility access.</p>}</div>}
         {needsNote && <label className="grid gap-2">{action === "COMPLETE" ? "Final remark" : "Reason"} *<Textarea value={note} onChange={event => setNote(event.target.value)} required maxLength={4000} disabled={busy || conflict} /></label>}
-        {error && <div role="alert" className="text-sm text-destructive">{error}{conflict && error !== pendingScanMessage ? <Button variant="link" isDisabled={busy} onPress={async () => { const fresh = await onRefresh(); if (fresh) { setConflict(false); setError(""); setRetry(value => value + 1); } }}>Reload review</Button> : needsRecipient && !recipients.length && <Button variant="link" onPress={() => setRetry(value => value + 1)}>Retry loading people</Button>}</div>}
+        {error && <div role="alert" className="text-sm text-destructive">{error}{conflict ? <Button variant="link" isDisabled={busy} onPress={async () => { const fresh = await onRefresh(); if (fresh) { setConflict(false); setError(""); setRetry(value => value + 1); } }}>Reload review</Button> : needsRecipient && !recipients.length && <Button variant="link" onPress={() => setRetry(value => value + 1)}>Retry loading people</Button>}</div>}
       </div>
       <footer className="form-footer"><Button variant="outline" isDisabled={busy} onPress={requestClose}>Cancel</Button><Button type="submit" isDisabled={busy || blocked || loading || conflict || !review.allowedActions.includes(action) || (needsNote && !note.trim()) || (needsRecipient && !recipient)}>{busy ? "Saving…" : actionLabel(action, review)}</Button></footer>
     </form>

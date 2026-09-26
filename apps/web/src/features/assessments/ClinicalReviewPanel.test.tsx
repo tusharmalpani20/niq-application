@@ -53,14 +53,14 @@ test("a stale transition preserves the note and requires an explicit reload",asy
  expect(posts).toHaveLength(1);expect(document.querySelector("textarea")?.value).toBe("Keep this remark");expect(document.body.textContent).toContain("Your entered details are preserved");
  await click("Complete review");expect(posts).toHaveLength(1);
 },{conflict:true}));
-test("a pending face scan explains the blocker instead of asking to reload", async()=>harness(async({click,posts})=>{
+test("an unconfirmed automatic scan cancellation gives a retryable error", async()=>harness(async({click,posts})=>{
  await click("Send for clinical review");
  await click("Send for clinical review");
  expect(posts).toHaveLength(1);
- expect(document.querySelector('[role="dialog"]')?.textContent).toContain("cancel the attempt before sending");
+ expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Automatic cancellation was not confirmed");
  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Reload review");
- expect([...document.querySelectorAll("button")].filter(button=>button.textContent?.trim()==="Send for clinical review").at(-1)?.disabled).toBe(true);
-},{review:{...review,state:"NOT_SUBMITTED",allowedActions:["SEND"]},conflict:true,conflictMessage:"Resolve the pending face scan before changing the review workflow."}));
+ expect([...document.querySelectorAll("button")].filter(button=>button.textContent?.trim()==="Send for clinical review").at(-1)?.disabled).toBe(false);
+},{review:{...review,state:"NOT_SUBMITTED",allowedActions:["SEND"]},conflict:true,conflictMessage:"The face scan is still open. Automatic cancellation was not confirmed; try again when its status updates."}));
 test("cancel after adding a remark offers keep editing instead of silently dismissing",async()=>harness(async({click,type})=>{
  await click("Complete review");await type("Unsaved remark");await click("Cancel");expect(document.body.textContent).toContain("Discard review changes?");await click("Keep editing");expect(document.querySelector("textarea")?.value).toBe("Unsaved remark");
 }));
