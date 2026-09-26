@@ -60,6 +60,15 @@ test("header search finds accessible patients and assessments and opens a result
   });
 });
 
+test("focusing an empty search keeps the header compact", async () => {
+  await renderSearch("DOCTOR", async (body, requests) => {
+    const input = body.querySelector<HTMLInputElement>('input[aria-label="Search patients and assessments"]')!;
+    await act(async () => input.focus());
+    expect(body.querySelector('[role="listbox"]')).toBeNull();
+    expect(requests).toHaveLength(0);
+  });
+});
+
 test("support search excludes assessments it cannot open", async () => {
   await renderSearch("SUPPORT", async (body, requests, navigation) => {
     await search(body, "Tushar");

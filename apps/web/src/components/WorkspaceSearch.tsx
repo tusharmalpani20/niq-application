@@ -18,9 +18,10 @@ export function WorkspaceSearch({ user, onNavigate }: { user: AuthenticatedUser;
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const showResults = open && Boolean(query.trim());
 
   useEffect(() => {
-    if (!open) return;
+    if (!showResults) return;
     let active = true;
     setLoading(true);
     setFailed(false);
@@ -35,7 +36,7 @@ export function WorkspaceSearch({ user, onNavigate }: { user: AuthenticatedUser;
       setLoading(false);
     });
     return () => { active = false; };
-  }, [open, user.organizationId, canReadPatients, canReadAssessments]);
+  }, [showResults, user.organizationId, canReadPatients, canReadAssessments]);
 
   useEffect(() => {
     const closeOutside = (event: PointerEvent) => {
@@ -64,21 +65,20 @@ export function WorkspaceSearch({ user, onNavigate }: { user: AuthenticatedUser;
     onNavigate(to);
   }
 
-  return <div className="relative mx-auto min-w-0 max-w-lg flex-1" ref={rootRef}>
-    <div className="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-border bg-background/80 px-3 shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
+  return <div className="relative mx-auto min-w-0 max-w-md flex-1" ref={rootRef}>
+    <div className="flex h-9 min-w-0 items-center gap-2 rounded-full border border-border/80 bg-background/70 px-3 transition-colors focus-within:border-primary/60 focus-within:bg-background">
       <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <input ref={inputRef} type="text" inputMode="search" aria-label="Search patients and assessments" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? "workspace-search-results" : undefined} aria-activedescendant={open && !loading && results[activeIndex] ? `workspace-search-result-${activeIndex}` : undefined} role="combobox" value={query} onFocus={() => setOpen(true)} onChange={event => { setQuery(event.target.value); setActiveIndex(0); setOpen(true); }} onKeyDown={event => {
+      <input ref={inputRef} type="text" inputMode="search" aria-label="Search patients and assessments" aria-autocomplete="list" aria-expanded={showResults} aria-controls={showResults ? "workspace-search-results" : undefined} aria-activedescendant={showResults && !loading && results[activeIndex] ? `workspace-search-result-${activeIndex}` : undefined} role="combobox" value={query} onFocus={() => { if (query.trim()) setOpen(true); }} onChange={event => { setQuery(event.target.value); setActiveIndex(0); setOpen(Boolean(event.target.value.trim())); }} onKeyDown={event => {
         if (event.key === "Escape") { setOpen(false); inputRef.current?.blur(); }
-        if (event.key === "ArrowDown" && results.length) { event.preventDefault(); setActiveIndex(index => (index + 1) % results.length); }
-        if (event.key === "ArrowUp" && results.length) { event.preventDefault(); setActiveIndex(index => (index - 1 + results.length) % results.length); }
-        if (event.key === "Enter" && results[activeIndex]) { event.preventDefault(); select(results[activeIndex].to); }
-      }} placeholder="Search patients or assessments" className="w-full min-w-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground" />
-      {query && <button type="button" aria-label="Clear search" onClick={() => { setQuery(""); inputRef.current?.focus(); }} className="shrink-0 text-muted-foreground hover:text-foreground"><X className="size-4" aria-hidden="true" /></button>}
+        if (event.key === "ArrowDown" && showResults && results.length) { event.preventDefault(); setActiveIndex(index => (index + 1) % results.length); }
+        if (event.key === "ArrowUp" && showResults && results.length) { event.preventDefault(); setActiveIndex(index => (index - 1 + results.length) % results.length); }
+        if (event.key === "Enter" && showResults && results[activeIndex]) { event.preventDefault(); select(results[activeIndex].to); }
+      }} placeholder="Search patients or assessments" className="w-full min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground" style={{ border: 0, boxShadow: "none", outline: "none", padding: 0 }} />
+      {query && <button type="button" aria-label="Clear search" onClick={() => { setQuery(""); setOpen(false); inputRef.current?.focus(); }} className="shrink-0 text-muted-foreground hover:text-foreground"><X className="size-4" aria-hidden="true" /></button>}
     </div>
-    {open && <div className="absolute left-1/2 top-[calc(100%+.6rem)] z-50 w-[min(31rem,calc(100vw-1.5rem))] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-background p-2 shadow-xl" id="workspace-search-results" role="listbox" aria-label="Search results">
-      {!query.trim() ? <p className="px-3 py-3 text-sm text-muted-foreground">Search by patient name, patient ID, or assessment ID.</p>
-        : loading ? <p className="px-3 py-3 text-sm text-muted-foreground">Searching accessible records…</p>
-          : <>
+    {showResults && <div className="absolute left-1/2 top-[calc(100%+.5rem)] z-50 w-[min(28rem,calc(100vw-1.5rem))] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-background p-1.5 shadow-lg" id="workspace-search-results" role="listbox" aria-label="Search results">
+      {loading ? <p className="px-3 py-3 text-sm text-muted-foreground">Searching accessible records…</p>
+        : <>
             {failed && <p className="px-3 py-2 text-xs text-destructive">Some records could not be loaded. Try reopening search.</p>}
             {!results.length && <p className="px-3 py-3 text-sm text-muted-foreground">{failed ? "No matches in the records that loaded." : "No matching records found."}</p>}
             <div className="max-h-80 overflow-y-auto">{results.map((result, index) => <button key={result.key} id={`workspace-search-result-${index}`} role="option" aria-selected={index === activeIndex} type="button" onMouseEnter={() => setActiveIndex(index)} onClick={() => select(result.to)} className={`flex w-full min-w-0 items-center justify-between gap-3 rounded-lg px-3 py-2 text-left hover:bg-primary/10 ${index === activeIndex ? "bg-primary/5" : ""}`}><span className="min-w-0"><span className="block truncate text-sm font-medium text-foreground">{result.title}</span><span className="block truncate text-xs text-muted-foreground">{result.detail}</span></span><span className="shrink-0 text-xs text-muted-foreground">{result.kind}</span></button>)}</div>
