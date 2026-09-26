@@ -40,9 +40,9 @@ function MetricRows({ metrics, context }: { metrics: Metric[]; context: FaceScan
         {metric.icon && <metric.icon className={`mt-0.5 size-4 shrink-0 ${assessment?.outside ? "text-warning" : "text-muted-foreground/70"}`} aria-hidden="true" />}
         <span>{metric.label}</span>
       </dt>
-      <dd className="min-w-0 shrink-0 text-right font-medium tabular-nums" aria-label={metric.value === null ? "Not available" : undefined}>
+      <dd className={`min-w-0 shrink-0 text-right tabular-nums ${assessment?.outside ? "font-semibold text-warning" : "font-medium"}`} aria-label={metric.value === null ? "Not available" : undefined}>
         {display(metric)}
-        {assessment?.outside && <span className="block max-w-72 text-[11px] font-normal leading-tight text-warning">Normal range: {assessment.reference}</span>}
+        {assessment?.outside && <span className="block max-w-72 text-[11px] font-normal leading-tight text-muted-foreground">Normal range: {assessment.reference}</span>}
       </dd>
     </div>;
   })}</dl>;
@@ -94,8 +94,8 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
       const assessment = item.key ? assessFaceScanRange(item.key, item.value, session.context) : null;
       return <div key={item.label} className="min-w-0 rounded-xl border border-border bg-card p-3">
         <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">{item.icon && <item.icon className={`size-4 shrink-0 ${assessment?.outside ? "text-warning" : ""}`} aria-hidden="true" />}{item.label}</dt>
-        <dd className="mt-2 flex flex-wrap items-baseline gap-x-1 font-semibold tabular-nums"><span className="text-xl">{item.value ?? "—"}</span>{item.value !== null && <span className="text-sm font-normal">{item.unit}</span>}</dd>
-        {assessment?.outside && <p className="mt-2 text-[11px] leading-tight text-warning">Normal range: {assessment.reference}</p>}
+        <dd className={`mt-2 flex flex-wrap items-baseline gap-x-1 font-semibold tabular-nums ${assessment?.outside ? "text-warning" : ""}`}><span className="text-xl">{item.value ?? "—"}</span>{item.value !== null && <span className="text-sm font-normal">{item.unit}</span>}</dd>
+        {assessment?.outside && <p className="mt-2 text-[11px] leading-tight text-muted-foreground">Normal range: {assessment.reference}</p>}
       </div>;
     })}</dl>
     {groups.map(group => {
