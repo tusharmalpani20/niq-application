@@ -19,5 +19,5 @@ export function TumourTypeIcon({ type }: { type: string }) {
     default:
       return null;
   }
-  return <svg data-tumour-icon={type} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="size-6 shrink-0 text-brand-ink" aria-hidden="true">{drawing}</svg>;
+  return <svg data-tumour-icon={type} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="size-6 shrink-0" aria-hidden="true">{drawing}</svg>;
 }
