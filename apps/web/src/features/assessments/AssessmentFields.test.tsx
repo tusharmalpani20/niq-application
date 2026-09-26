@@ -110,8 +110,9 @@ test("disease status choices keep their labels alongside decorative icons", () =
   }
   expect(initial).not.toContain('data-disease-choice-icon="brain"');
   const metastatic = render([stage, site, relapse], { stage: "stage_metastatic", metastasis_site: "lung" });
+  const sharedSiteIcons: Record<string, string> = { brain: "cancer_9", liver: "cancer_5", lung: "cancer_2", bone: "cancer_17", others: "cancer_other" };
   for (const option of site.options!) {
-    expect(metastatic).toContain(`data-disease-choice-icon="${option.id}"`);
+    expect(metastatic).toContain(`data-cancer-icon="${sharedSiteIcons[option.id]}"`);
     expect(metastatic).toContain(option.label);
   }
   expect(metastatic).toContain("bg-primary text-primary-foreground shadow-sm");
