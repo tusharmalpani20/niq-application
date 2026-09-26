@@ -2,7 +2,7 @@ import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, ClinicalReviewQueue, Patient } from "@niq/application-contracts";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
-import { ArrowRight, ClipboardCheck, ClipboardList, Plus, Stethoscope, TriangleAlert, UserRoundPlus, UsersRound } from "lucide-react";
+import { ArrowRight, ClipboardCheck, ClipboardList, Plus, Sparkles, Stethoscope, TriangleAlert, UserRoundPlus, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { OverviewUsage } from "../components/OverviewUsage";
@@ -52,9 +52,12 @@ function QuickActions({ assessments, canAddPatient }: { assessments: AssessmentS
     ...(canAddPatient ? [{ label: "Add patient", detail: "Register a new patient", to: "/patients/new", icon: UserRoundPlus }] : []),
     { label: "Clinical reviews", detail: "Open review work", to: "/assessments?tab=clinical-reviews", icon: Stethoscope },
   ];
-  return <section className="mt-7" aria-label="Quick actions">
-    <h2 className="mb-3 text-lg font-semibold">Quick actions</h2>
-    <div className="grid gap-3 min-[650px]:grid-cols-3">{actions.map(({ label, detail, to, icon: Icon }) => <Link key={label} to={to} className="surface flex min-w-0 items-center gap-3 p-4 no-underline transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><Icon className="size-5" aria-hidden="true" /></span><span className="min-w-0 flex-1"><strong className="block text-sm font-semibold text-foreground">{label}</strong><span className="block truncate text-xs text-muted-foreground">{detail}</span></span><ArrowRight className="size-4 shrink-0 text-primary" aria-hidden="true" /></Link>)}</div>
+  return <section className="relative mt-7 overflow-hidden rounded-2xl border border-primary/30 p-4 text-primary-foreground shadow-md" aria-label="Quick actions" style={{ background: "linear-gradient(110deg, var(--brand-panel-start), var(--primary) 55%, var(--brand-panel-end))" }}>
+    <div className="pointer-events-none absolute -right-12 -top-20 size-44 rounded-full border border-white/20" aria-hidden="true" />
+    <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center">
+      <div className="flex min-w-0 items-center gap-3 lg:w-56 lg:shrink-0"><span className="grid size-12 shrink-0 place-items-center rounded-full border border-white/25 bg-white/15"><Sparkles className="size-6" aria-hidden="true" /></span><div><h2 className="text-sm font-semibold">Quick actions</h2><p className="text-xs text-primary-foreground/80">Start or continue care</p></div></div>
+      <div className="grid flex-1 gap-2 min-[650px]:grid-cols-3">{actions.map(({ label, detail, to, icon: Icon }) => <Link key={label} to={to} title={detail} aria-label={`${label}: ${detail}`} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/15 px-3 py-2 text-center text-sm font-semibold text-primary-foreground no-underline transition-colors hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"><Icon className="size-4 shrink-0" aria-hidden="true" />{label}</Link>)}</div>
+    </div>
   </section>;
 }
 
