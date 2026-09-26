@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import type { AssessmentScoreResult } from "@niq/application-contracts";
 
 type Classification = AssessmentScoreResult["classification"];
@@ -29,30 +28,35 @@ export function AssessmentRiskCircle({ score, classification, categories }: {
 }) {
   const bands = categories?.length ? categories : null;
   const selectedColor = categoryColor(classification?.color ?? bands?.find(band => band.id === classification?.id)?.color);
-  // The last category can be open-ended. Equal arc lengths show categories without implying a numeric maximum.
-  const sweep = bands?.length ? 100 / bands.length : 100;
-  const background = bands ? `conic-gradient(${bands.map((band, index) => {
-    const color = categoryColor(band.color);
-    const display = band.id === classification?.id ? color : `color-mix(in srgb, ${color} 38%, var(--card))`;
-    return `${display} ${index * sweep}% ${(index + 1) * sweep - 0.8}%, var(--card) ${(index + 1) * sweep - 0.8}% ${(index + 1) * sweep}%`;
-  }).join(", ")})` : selectedColor;
-  return <div className={`flex min-w-0 flex-wrap items-center gap-5 sm:gap-8 ${bands ? "" : "justify-center"}`}>
-    <div className="flex shrink-0 flex-col items-center gap-2">
-      <p className="text-sm text-muted-foreground">Final NIQ score</p>
-      <div data-risk-circle className="grid size-44 place-items-center rounded-full p-3 ring-1 ring-border sm:size-48" style={{ background } as CSSProperties}>
-        <div className="flex size-full flex-col items-center justify-center rounded-full bg-card text-center">
-          <span className="text-4xl font-semibold tabular-nums text-foreground">{score ?? "—"}</span>
-          <span className="text-sm text-muted-foreground">points</span>
-        </div>
+  const radius = 64;
+  const circumference = 2 * Math.PI * radius;
+  // Bands get equal arcs because the upper category may have no numeric maximum.
+  const arcLength = bands ? circumference / bands.length - 8 : circumference;
+  return <div className={`grid min-w-0 items-center gap-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-8 ${bands ? "" : "mx-auto max-w-xl"}`}>
+    <div data-risk-circle className="relative mx-auto grid size-40 place-items-center sm:size-44" role="img" aria-label={`${score ?? "No"} points, ${classification?.label ?? "no risk category"}${bands ? `, ${bands.length} risk bands` : ""}`}>
+      <svg className="absolute inset-0 size-full -rotate-90 overflow-visible" viewBox="0 0 160 160" aria-hidden="true">
+        <circle cx="80" cy="80" r={radius} fill="none" stroke="var(--border)" strokeWidth="9" />
+        {bands ? bands.map((band, index) => <circle key={band.id} cx="80" cy="80" r={radius} fill="none"
+          stroke={categoryColor(band.color)} strokeWidth={band.id === classification?.id ? 15 : 10} strokeLinecap="round"
+          strokeDasharray={`${arcLength} ${circumference - arcLength}`} strokeDashoffset={-index * circumference / bands.length} />)
+          : <circle cx="80" cy="80" r={radius} fill="none" stroke={selectedColor} strokeWidth="11" />}
+      </svg>
+      <div className="flex size-28 flex-col items-center justify-center rounded-full bg-card text-center">
+        <span className="text-4xl font-semibold tabular-nums text-foreground">{score ?? "—"}</span>
+        <span className="text-sm text-muted-foreground">points</span>
       </div>
-      {classification && <p className="font-semibold text-foreground">{classification.label}</p>}
     </div>
-    {bands && <div className="min-w-0 flex-1" aria-label="Risk categories used for this score">
-      <p className="mb-3 text-sm font-medium text-foreground">Risk categories</p>
-      <ul className="flex flex-wrap gap-2">{bands.map(band => <li key={band.id} className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${band.id === classification?.id ? "bg-card font-semibold text-foreground" : "border-border bg-card text-muted-foreground"}`} style={band.id === classification?.id ? { borderColor: categoryColor(band.color) } : undefined}>
-        <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: categoryColor(band.color) }} aria-hidden="true" />
-        <span>{band.label}</span><span className="text-xs tabular-nums">{scoreRange(band)}</span>
-      </li>)}</ul>
-    </div>}
+    <div className="min-w-0 text-center sm:text-left">
+      <p className="text-sm text-muted-foreground">Final NIQ score</p>
+      <p className="mt-1 text-2xl font-semibold text-foreground">{classification?.label ?? "No risk category"}</p>
+      {classification?.interpretation && <p className="mt-2 max-w-prose text-sm text-muted-foreground">{classification.interpretation}</p>}
+      {bands && <div className="mt-4 border-t border-border pt-3" aria-label="Risk categories used for this score">
+        <p className="mb-2 text-xs font-medium text-muted-foreground">Score ranges used for this assessment</p>
+        <ul className="flex flex-wrap justify-center gap-2 sm:justify-start">{bands.map(band => <li key={band.id} className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${band.id === classification?.id ? "bg-card font-semibold text-foreground" : "border-border bg-card text-muted-foreground"}`} style={band.id === classification?.id ? { borderColor: categoryColor(band.color) } : undefined}>
+          <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: categoryColor(band.color) }} aria-hidden="true" />
+          <span>{band.label}</span><span className="text-xs tabular-nums">{scoreRange(band)}</span>
+        </li>)}</ul>
+      </div>}
+    </div>
   </div>;
 }

@@ -22,7 +22,9 @@ async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[];
 test("saved bands form a circular category display while reviewed risk stays separate", async()=>harness(async()=>{
  const circle=document.querySelector('[data-risk-circle]');
  const reviewed=[...document.querySelectorAll("span")].find(node=>node.textContent?.trim()==="Reviewed category");
- expect(circle?.getAttribute("style")).toContain("conic-gradient");
+ expect(circle?.getAttribute("aria-label")).toContain("3 risk bands");
+ expect(circle?.querySelectorAll("svg circle")).toHaveLength(4);
+ expect(circle?.querySelectorAll('svg circle[stroke-width="15"]')).toHaveLength(1);
  expect(document.body.textContent).toContain("0–15 pts");
  expect(document.body.textContent).toContain("≥26 pts");
  expect(reviewed?.className).toContain("border-red-300");
@@ -33,7 +35,7 @@ test("saved bands form a circular category display while reviewed risk stays sep
  ]}));
 
 test("historical results without saved ranges still show the saved category", async()=>harness(async()=>{
- expect(document.querySelector('[data-risk-circle]')?.getAttribute("style")).toContain("rgb(100, 116, 139)");
+ expect(document.querySelector('[data-risk-circle] svg circle:last-child')?.getAttribute("stroke")).toBe("#64748b");
  expect(document.body.textContent).toContain("Low");
  expect(document.body.textContent).not.toContain("Risk categories");
 }));
