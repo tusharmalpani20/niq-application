@@ -66,7 +66,10 @@ export type AssessmentWorkflow = {
 };
 
 /** Read-only projection of the validated NIQ Scoring result for clinical workspace display. */
-export const assessmentRiskColorSchema = z.enum(["green", "amber", "red", "neutral", "blue", "purple"]);
+export const assessmentRiskColorSchema = z.union([
+  z.enum(["green", "amber", "red", "neutral", "blue", "purple"]),
+  z.string().regex(/^#[0-9a-f]{6}$/i, "Use a six-digit hex color"),
+]);
 export const assessmentClassificationSchema = z.object({
   id: z.string(), label: z.string(), interpretation: z.string(),
   // Older saved results predate category colors.

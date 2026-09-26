@@ -27,6 +27,21 @@ test("saved category colors style original and reviewed risk badges", async()=>h
  expect(original?.parentElement?.parentElement?.className).toContain("border-primary/20");
 },[entry],{status:"CONFIRMED",classification:{id:"reviewed",label:"Reviewed category",interpretation:"",color:"red"},resultReference:"classification",failureCode:null,canRetry:false},{...result,classification:{...result.classification!,color:"green"}}));
 
+test("custom colors style the saved score card and keep light badges legible", async()=>harness(async()=>{
+ const badge=[...document.querySelectorAll("p")].find(node=>node.textContent?.trim()==="Low · NIQ");
+ expect(badge?.style.backgroundColor).toBe("rgb(254, 254, 254)");
+ expect(badge?.style.color).toBe("rgb(0, 0, 0)");
+ expect(badge?.parentElement?.parentElement?.style.borderColor).toBe("rgb(254, 254, 254)");
+},[],undefined,{...result,classification:{...result.classification!,color:"#FeFeFe"}}));
+
+test("custom reviewed risk color remains distinct from the original color", async()=>harness(async()=>{
+ const original=[...document.querySelectorAll("p")].find(node=>node.textContent?.trim()==="Low · NIQ");
+ const reviewed=[...document.querySelectorAll("span")].find(node=>node.textContent?.trim()==="Reviewed category · NIQ");
+ expect(original?.style.backgroundColor).toBe("rgb(254, 254, 254)");
+ expect(reviewed?.style.backgroundColor).toBe("rgb(18, 52, 86)");
+ expect(reviewed?.style.color).toBe("rgb(255, 255, 255)");
+},[entry],{status:"CONFIRMED",classification:{id:"reviewed",label:"Reviewed category",interpretation:"",color:"#123456"},resultReference:"classification",failureCode:null,canRetry:false},{...result,classification:{...result.classification!,color:"#FeFeFe"}}));
+
 test("historical categories without color use the neutral badge", async()=>harness(async()=>{
  expect([...document.querySelectorAll("p")].find(node=>node.textContent?.trim()==="Low · NIQ")?.className).toContain("border-border");
 }));

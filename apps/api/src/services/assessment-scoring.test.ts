@@ -28,10 +28,13 @@ describe("assessment scoring transport", () => {
   test("accepts complete upstream totals with unanswered optional components", async () => {
     expect((await calculate(success())).result.score).toBe(2);
   });
-  test("keeps a validated category color in the scoring result", async () => {
+  test("keeps preset and custom category colors in the scoring result", async () => {
     const colored = { ...success(), result: { ...success().result, classification: { id: "low", label: "Low", interpretation: "", color: "green" } } };
     expect((await calculate(colored)).result.classification?.color).toBe("green");
-    await expect(calculate({ ...colored, result: { ...colored.result, classification: { ...colored.result.classification, color: "chartreuse" } } })).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+    for (const color of ["#A1b2C3", "#00ff00"])
+      expect((await calculate({ ...colored, result: { ...colored.result, classification: { ...colored.result.classification, color } } })).result.classification?.color).toBe(color);
+    for (const color of ["chartreuse", "#fff", "#1234567", "#gggggg"])
+      await expect(calculate({ ...colored, result: { ...colored.result, classification: { ...colored.result.classification, color } } })).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
   test("accepts a completed blank questionnaire without inventing a score or risk", async () => {
     const blank = { ...result(), score: null, classification: null,
@@ -95,10 +98,12 @@ describe("reviewed risk transport", () => {
   }});
   expect(risk.classification.label).toBe("High");
  });
- test("retains the reviewed category color and rejects unknown colors",async()=>{
+ test("retains preset and custom reviewed category colors and rejects invalid ones",async()=>{
   const colored={...response(),result:{...response().result,classification:{...response().result.classification,color:"red"}}};
   expect((await classify(colored)).classification.color).toBe("red");
-  await expect(classify({...colored,result:{...colored.result,classification:{...colored.result.classification,color:"chartreuse"}}})).rejects.toMatchObject({code:"INVALID_RESPONSE"});
+  expect((await classify({...colored,result:{...colored.result,classification:{...colored.result.classification,color:"#Aa0088"}}})).classification.color).toBe("#Aa0088");
+  for(const color of ["chartreuse","#fff","#1234567","#gggggg"])
+   await expect(classify({...colored,result:{...colored.result,classification:{...colored.result.classification,color}}})).rejects.toMatchObject({code:"INVALID_RESPONSE"});
  });
  test("rejects a different total, binding, request key or malformed category",async()=>{
   const valid=response();

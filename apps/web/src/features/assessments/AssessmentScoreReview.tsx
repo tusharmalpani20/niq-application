@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { getAssessmentAnswerCoverage, isAssessmentFieldApplicable, calculateAssessmentBmi, calculateAssessmentWeightChange, type AssessmentWorkflow, type AssessmentScoreReviews, type AssessmentScoreResult } from "@niq/application-contracts";
 import { ChevronDown, ChevronRight, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,8 +23,36 @@ const riskCardClasses = {
   blue: "border-blue-200 bg-blue-50/40 dark:border-blue-800 dark:bg-blue-950/20",
   purple: "border-purple-200 bg-purple-50/40 dark:border-purple-800 dark:bg-purple-950/20",
 } as const;
-function riskBadgeClass(classification: AssessmentScoreResult["classification"]) {
-  return `inline-flex rounded-full border px-3 py-1 text-sm font-semibold ${riskColorClasses[classification?.color ?? "neutral"]}`;
+function customRiskColor(color: string | undefined): color is `#${string}` {
+  return !!color && /^#[0-9a-f]{6}$/i.test(color);
+}
+function presetRiskColor(color: string | undefined): color is keyof typeof riskColorClasses {
+  return !!color && Object.hasOwn(riskColorClasses, color);
+}
+function readableTextColor(color: `#${string}`) {
+  const channels = [1, 3, 5].map(index => {
+    const channel = parseInt(color.slice(index, index + 2), 16) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
+  return luminance > 0.179 ? "#000000" : "#ffffff";
+}
+function riskBadgeAppearance(classification: AssessmentScoreResult["classification"]): { className: string; style?: CSSProperties } {
+  const color = classification?.color;
+  const base = "inline-flex rounded-full border px-3 py-1 text-sm font-semibold";
+  if (customRiskColor(color)) {
+    const foreground = readableTextColor(color);
+    return { className: base, style: { backgroundColor: color, borderColor: foreground, color: foreground } };
+  }
+  return { className: `${base} ${riskColorClasses[presetRiskColor(color) ? color : "neutral"]}` };
+}
+function riskCardAppearance(classification: AssessmentScoreResult["classification"]): { className: string; style?: CSSProperties } {
+  const selected = classification?.color;
+  const base = "my-5 flex flex-wrap gap-4 rounded-xl border p-4";
+  if (customRiskColor(selected)) {
+    return { className: base, style: { borderColor: selected, backgroundColor: `color-mix(in srgb, ${selected} 8%, transparent)` } };
+  }
+  return { className: `${base} ${riskCardClasses[presetRiskColor(selected) ? selected : "neutral"]}` };
 }
 const summaryRowClass = "flex items-center gap-2 px-2 py-1 sm:px-3";
 const summaryToggleClass = "min-h-11 min-w-0 flex-1 justify-start gap-2 whitespace-normal text-left";
@@ -77,6 +105,8 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   const { result, sections } = view;
   const overall = data?.overall;
   const scan = data?.scan;
+  const scoreCard = riskCardAppearance(revised ? null : result.classification);
+  const originalRiskBadge = riskBadgeAppearance(result.classification);
   const scanSection = <div className="overflow-hidden rounded-xl border border-border">
     <div className={`${summaryRowClass} ${expanded === "face_scan" ? "bg-muted/40" : ""}`}>
       <Button variant="ghost" className={summaryToggleClass} aria-expanded={expanded === "face_scan"} aria-controls="score-section-face_scan" onPress={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>{expanded === "face_scan" ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}<assessmentSectionIcons.face_scan className="size-4 shrink-0" aria-hidden="true" />Face scan</Button>
@@ -90,11 +120,11 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   return <section className="my-5 min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6" aria-label="Assessment score review">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="assessment-summary-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">Assessment summary</h2><span className="text-sm text-muted-foreground">{record.progress.answered}/{record.progress.required} required answers complete</span></div>
     {record.progress.answered === record.progress.required && coverage.answered < coverage.total && <p className="mt-2 text-sm text-muted-foreground">Some optional questions remain unanswered.</p>}
-    <div className={`my-5 flex flex-wrap gap-4 rounded-xl border p-4 ${riskCardClasses[revised ? "neutral" : result.classification?.color ?? "neutral"]}`}>
-      <div className="min-w-44 flex-1"><p className="text-sm text-muted-foreground">Final NIQ score</p><p className="mt-1 text-3xl font-semibold tabular-nums">{points(result.score)}</p>{result.classification && <p className={`mt-2 ${riskBadgeClass(result.classification)}`}>{result.classification.label} · NIQ</p>}</div>
+    <div {...scoreCard}>
+      <div className="min-w-44 flex-1"><p className="text-sm text-muted-foreground">Final NIQ score</p><p className="mt-1 text-3xl font-semibold tabular-nums">{points(result.score)}</p>{result.classification && <p className={`mt-2 ${originalRiskBadge.className}`} style={originalRiskBadge.style}>{result.classification.label} · NIQ</p>}</div>
       {revised && overall && <div className="min-w-44 flex-1 border-t border-border pt-4 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0"><p className="text-sm text-muted-foreground">Reviewed score</p><p className="mt-1 text-3xl font-semibold tabular-nums text-brand-ink">{points(overall.reviewedPoints)}</p><p className="text-xs text-muted-foreground">{overall.overridden ? "Total override" : "From section scores"}</p>
         <p className="mt-1 text-sm" role="status">{data?.risk?.classification && ["ORIGINAL", "CONFIRMED"].includes(data.risk.status)
-          ? <span className={riskBadgeClass(data.risk.classification)}>{data.risk.classification.label} · NIQ{data.risk.status === "ORIGINAL" ? " (original restored)" : ""}</span>
+          ? <span {...riskBadgeAppearance(data.risk.classification)}>{data.risk.classification.label} · NIQ{data.risk.status === "ORIGINAL" ? " (original restored)" : ""}</span>
           : data?.risk?.status === "UNAVAILABLE" ? "Risk assessment unavailable" : "Risk assessment pending"}</p>
       </div>}
     </div>
