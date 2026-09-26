@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ComboBox, ComboBoxStateContext, Group, ListBox, ListBoxItem, Popover } from "react-aria-components";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { Input } from "./input";
@@ -16,9 +16,10 @@ export type SearchComboboxProps = {
   onChange: (value: string) => void; disabled?: boolean; required?: boolean;
   invalid?: boolean; describedBy?: string; placeholder?: string;
   customValue?: string; onCreate?: (text: string) => void; large?: boolean;
+  renderIcon?: (optionId: string) => ReactNode; primaryHighlight?: boolean;
 };
 /** One themed, keyboard-operable search menu; custom values require an explicit Use action. */
-export function SearchCombobox({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder = "Search or select…", customValue, onCreate, large = false }: SearchComboboxProps) {
+export function SearchCombobox({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder = "Search or select…", customValue, onCreate, large = false, renderIcon, primaryHighlight = false }: SearchComboboxProps) {
   const selectedLabel = options.find(option => option.id === value)?.label || "";
   const [search, setSearch] = useState(selectedLabel);
   useEffect(() => setSearch(selectedLabel), [selectedLabel, value]);
@@ -26,12 +27,15 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
   const matches = options.filter(option => matchesComboboxSearch(option.label, query));
   const canCreate = Boolean(onCreate && query && !options.some(option => option.label.toLocaleLowerCase() === query.toLocaleLowerCase()) && query !== customValue);
   const items = [...(search === selectedLabel ? options : matches), ...(canCreate ? [{ id: "__custom__", label: `Use “${query}” as Other` }] : [])];
+  const selectedIcon = renderIcon && value && search === selectedLabel ? renderIcon(value) : null;
+  const highlightClass = primaryHighlight ? "data-focused:bg-primary data-focused:text-primary-foreground data-hovered:bg-primary data-hovered:text-primary-foreground data-selected:bg-primary data-selected:text-primary-foreground" : "data-focused:bg-accent data-focused:text-accent-foreground";
   return <ComboBox data-slot="search-combobox" aria-label={label} isDisabled={disabled} isRequired={required} isInvalid={invalid} allowsCustomValue allowsEmptyCollection menuTrigger="manual"
     selectedKey={value} inputValue={search} onInputChange={setSearch} items={items}
     onSelectionChange={key => { if (key === null) return; if (key === "__custom__") { onCreate?.(query); setSearch(selectedLabel); } else { onChange(String(key)); setSearch(options.find(option => option.id === key)?.label || ""); } }}
     onBlur={() => setSearch(selectedLabel)} className="w-full min-w-0">
     <ComboBoxStateContext.Consumer>{state => <>
     <Group className={`flex items-center rounded-lg border border-input bg-background focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30 ${large ? "min-h-12" : "min-h-11"}`}>
+      {selectedIcon && <span className="ml-2 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-brand-ink" aria-hidden="true">{selectedIcon}</span>}
       <Input onClick={() => state?.open()} onInput={() => state?.open()} id={id} aria-describedby={describedBy} maxLength={2000} placeholder={placeholder} onKeyDown={event => {
         // React Aria commits a highlighted option itself. Enter without one is
         // also an explicit acceptance of the visible custom-answer action.
@@ -46,9 +50,12 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
     </Group>
     <Popover placement="bottom start" offset={4} className="z-50 flex max-h-[var(--available-height,18rem)] flex-col w-(--trigger-width) max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg">
       <ListBox<ComboboxOption> className="themed-scrollbar min-h-0 max-h-72 overflow-y-auto overscroll-contain p-1.5 outline-none" renderEmptyState={() => <p className="p-3 text-sm text-muted-foreground">No matching options</p>}>
-        {option => <ListBoxItem id={option.id} textValue={option.label} className={`flex cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 outline-none data-focused:bg-accent data-focused:text-accent-foreground data-selected:font-medium ${large ? "min-h-12 text-base" : "min-h-11 text-sm"}`}>
-          {({ isSelected }) => <><span className="break-words">{option.label}</span>{isSelected && <Check className="size-4 shrink-0" />}</>}
-        </ListBoxItem>}
+        {option => {
+          const icon = renderIcon?.(option.id);
+          return <ListBoxItem id={option.id} textValue={option.label} className={`flex cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 outline-none data-selected:font-medium ${highlightClass} ${large ? "min-h-12 text-base" : "min-h-11 text-sm"}`}>
+            {({ isSelected, isFocused, isHovered }) => <><span className="flex min-w-0 items-center gap-3">{icon && <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${primaryHighlight && (isSelected || isFocused || isHovered) ? "bg-primary-foreground/25 text-primary-foreground" : "bg-primary/10 text-brand-ink"}`} aria-hidden="true">{icon}</span>}<span className="break-words">{option.label}</span></span>{isSelected && <Check className="size-4 shrink-0" />}</>}
+          </ListBoxItem>;
+        }}
       </ListBox>
       {items.length > 6 && <p className="shrink-0 border-t border-border px-3 py-2 text-xs text-muted-foreground">{items.length} options · Scroll to see more</p>}
     </Popover>
