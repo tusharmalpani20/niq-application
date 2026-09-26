@@ -25,6 +25,11 @@ test("shows optional-answer subtotal separately from complete required questionn
   expect(html).not.toContain("Rule checksum");
   expect(html).not.toContain("Result reference");
 });
+test("retains the scoring service's derived protein result for the answer summary", () => {
+  const value = record.result as Record<string, unknown>;
+  const view = assessmentResultView({ ...record, result: { ...value, derived: { weightLossPercent: null, proteinAdequacy: "adequate" } } });
+  expect(view?.result.derived?.proteinAdequacy).toBe("adequate");
+});
 test("rejects inconsistent persisted results instead of showing fabricated totals", () => {
   const value = record.result as Record<string, unknown>;
   expect(assessmentResultView({ ...record, result: { ...value, score: 1 } })).toBeNull();
