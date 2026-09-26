@@ -24,11 +24,11 @@ export function ClinicalReviewQueue({ user, query, state }: { user: Authenticate
     return () => { clearTimeout(timer); controller.abort(); };
   }, [user.organizationId, query, state, page, retry]);
   const columns: DataTableColumn<ClinicalReviewQueueItem>[] = [
-    { id: "reference", header: "Assessment", cell: ({ row }) => <Link className="hover:underline" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> },
-    { id: "patient", header: "Patient", cell: ({ row }) => <div className="grid gap-1"><span>{row.original.patient.displayName}</span><span className="text-xs text-muted-foreground">{row.original.patient.reference}</span></div> },
+    { id: "reference", header: "Assessment", cell: ({ row }) => <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> },
+    { id: "patient", header: "Patient", cell: ({ row }) => <div className="grid gap-1"><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${row.original.patient.reference}`}>{row.original.patient.displayName}</Link><span className="text-xs text-muted-foreground">{row.original.patient.reference}</span></div> },
     { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "—" },
     { id: "stage", header: "Stage", cell: ({ row }) => clinicalReviewLabels[row.original.review.state] },
-    { id: "owner", header: "Responsible person", cell: ({ row }) => row.original.review.correctionPerson?.displayName ?? row.original.review.assignee?.displayName ?? "Unassigned" },
+    { id: "owner", header: "Assigned to", cell: ({ row }) => row.original.review.correctionPerson ? `Corrections: ${row.original.review.correctionPerson.displayName}` : row.original.review.assignee ? `Reviewer: ${row.original.review.assignee.displayName}` : "Awaiting reviewer" },
     { id: "sent", header: "Sent for review", cell: ({ row }) => row.original.review.submittedAt ? new Date(row.original.review.submittedAt).toLocaleDateString("en-GB") : "—" },
   ];
   const empty = <div className="table-empty-content">{loading ? <p role="status">Loading clinical reviews…</p> : error ? <><p role="alert">{error}</p><Button variant="outline" onPress={() => setRetry(value => value + 1)}>Retry</Button></> : <p>No clinical reviews match these filters.</p>}</div>;
