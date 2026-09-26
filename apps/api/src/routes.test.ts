@@ -28,7 +28,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     getScoringOrganizationInfo: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], getFacilityPerformance: async () => ({}), updateFacility: async () => ({}),
     updatePatient: async () => ({}), correctPatientMrn: async () => ({}), correctPatientDob: async () => ({}), updateOrganizationUser: async () => ({}),
-    createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [], getOverviewRisk: async () => ({ highRiskPatients: 0, highRiskPatients30DaysAgo: 0, assessedPatients: 0 }),
+    createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [], getOverviewRisk: async () => ({ highRiskPatients: 0, highRiskPatients30DaysAgo: 0, assessedPatients: 0, categories: { low: 0, moderate: 0, high: 0 }, highRiskAssessments: [] }), getOverviewActivity: async () => ({ items: [] }),
     invitationAccess: async () => ({ allFacilities: true }), manageUserInvitation: async () => ({ invitation: {}, token: "replacement-token" }),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
     ...overrides,
@@ -307,7 +307,7 @@ describe("local authentication routes", () => {
       service: fakeService({ getOverviewRisk: async (actor, organizationId) => {
         expect(actor).toEqual(principal);
         expect(organizationId).toBe(principal.organizationId);
-        return { highRiskPatients: 2, highRiskPatients30DaysAgo: 3, assessedPatients: 5 };
+        return { highRiskPatients: 2, highRiskPatients30DaysAgo: 3, assessedPatients: 5, categories: { low: 2, moderate: 1, high: 2 }, highRiskAssessments: [] };
       } }),
     });
     const url = `/v1/organizations/${principal.organizationId}/overview-risk`;
@@ -315,7 +315,26 @@ describe("local authentication routes", () => {
     const response = await app.request(url, { headers: { cookie: "niq_session=valid-session" } });
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(await response.json()).toEqual({ highRiskPatients: 2, highRiskPatients30DaysAgo: 3, assessedPatients: 5 });
+    expect(await response.json()).toEqual({ highRiskPatients: 2, highRiskPatients30DaysAgo: 3, assessedPatients: 5, categories: { low: 2, moderate: 1, high: 2 }, highRiskAssessments: [] });
+  });
+
+  test("returns only requested personal assessment activity through the tenant boundary", async () => {
+    const event = { id: principal.membershipId, assessmentId: principal.membershipId, action: "ASSESSMENT_CREATED" as const, occurredAt: new Date("2026-09-24T08:30:00.000Z") };
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({ getOverviewActivity: async (actor, organizationId, from, to) => {
+        expect(actor).toEqual(principal);
+        expect(organizationId).toBe(principal.organizationId);
+        expect(from.toISOString()).toBe("2026-08-31T18:30:00.000Z");
+        expect(to.toISOString()).toBe("2026-09-30T18:30:00.000Z");
+        return { items: [event] };
+      } }),
+    });
+    const url = `/v1/organizations/${principal.organizationId}/overview-activity?from=2026-08-31T18%3A30%3A00.000Z&to=2026-09-30T18%3A30%3A00.000Z`;
+    expect((await app.request(url)).status).toBe(401);
+    const response = await app.request(url, { headers: { cookie: "niq_session=valid-session" } });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(await response.json()).toEqual({ items: [{ ...event, occurredAt: event.occurredAt.toISOString() }] });
   });
 
   test("resolves an organization detail by its URL name", async () => {

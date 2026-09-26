@@ -175,6 +175,13 @@ export function createApp(dependencies: AppDependencies) {
     context.header("Cache-Control", "private, no-store");
     return context.json(await dependencies.service!.getOverviewRisk(context.get("principal"), context.req.valid("param").organizationId));
   });
+  app.get("/v1/organizations/:organizationId/overview-activity", zValidator("param", idParamsSchema, validationFailure), zValidator("query", z.object({ from: z.iso.datetime({ offset: true }), to: z.iso.datetime({ offset: true }) }), validationFailure), async (context) => {
+    const { from, to } = context.req.valid("query");
+    const start = new Date(from), end = new Date(to);
+    if (end <= start || end.getTime() - start.getTime() > 32 * 24 * 60 * 60 * 1000) throw new ServiceError("VALIDATION_ERROR", "Choose a calendar month to view.");
+    context.header("Cache-Control", "private, no-store");
+    return context.json(await dependencies.service!.getOverviewActivity(context.get("principal"), context.req.valid("param").organizationId, start, end));
+  });
   app.get("/v1/organizations/:organizationId/users", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json({ items: await dependencies.service!.listUsers(context.get("principal"), context.req.valid("param").organizationId) }));
   app.get("/v1/organizations/:organizationId/invitation-access", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json(await dependencies.service!.invitationAccess(context.get("principal"), context.req.valid("param").organizationId)));
   for (const action of ["revoke", "regenerate"] as const) {

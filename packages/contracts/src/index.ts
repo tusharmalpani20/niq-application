@@ -46,6 +46,17 @@ export const overviewRiskSchema = z.object({
   highRiskPatients: z.number().int().nonnegative(),
   highRiskPatients30DaysAgo: z.number().int().nonnegative(),
   assessedPatients: z.number().int().nonnegative(),
+  categories: z.object({ low: z.number().int().nonnegative(), moderate: z.number().int().nonnegative(), high: z.number().int().nonnegative() }),
+  highRiskAssessments: z.array(z.object({ patientId: idSchema, assessmentId: idSchema })),
+});
+
+export const overviewActivitySchema = z.object({
+  items: z.array(z.object({
+    id: idSchema,
+    assessmentId: idSchema,
+    action: z.enum(["ASSESSMENT_CREATED", "ASSESSMENT_SUBMITTED", "CLINICAL_REVIEW_COMPLETE"]),
+    occurredAt: z.coerce.date(),
+  })),
 });
 
 export const signInRequestSchema = z.object({

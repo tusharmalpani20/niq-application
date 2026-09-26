@@ -4,7 +4,7 @@ import { formatAssessmentReference, hasPermission, type AssessmentSummary, type 
 import type { ApplicationConfig } from "@niq/application-config";
 import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CorrectPatientDob, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
-import { and, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "../db/client";
 import {
@@ -930,6 +930,29 @@ export class PostgresApplicationService implements ApplicationService {
       if (!encrypted) throw new ServiceError("CONFLICT", "Assessment review data could not be read.");
       return JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key));
     });
+  }
+  async getOverviewActivity(actor: Principal, organizationId: string, from: Date, to: Date) {
+    this.ensureOrganizationAccess(actor, organizationId, "assessments.read");
+    if (actor.platformRole !== "USER") throw new ServiceError("FORBIDDEN", "Personal activity requires a signed-in organization member.");
+    const actions = ["ASSESSMENT_CREATED", "ASSESSMENT_SUBMITTED", "CLINICAL_REVIEW_COMPLETE"] as const;
+    const rows = await this.db.select({
+      id: auditEvents.id,
+      assessmentId: auditEvents.assessmentId,
+      action: auditEvents.action,
+      occurredAt: auditEvents.occurredAt,
+    }).from(auditEvents)
+      .innerJoin(assessments, and(eq(assessments.organizationId, auditEvents.organizationId), eq(assessments.id, auditEvents.assessmentId)))
+      .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
+      .where(and(
+        eq(auditEvents.organizationId, organizationId),
+        eq(auditEvents.actorMembershipId, actor.membershipId),
+        inArray(auditEvents.action, [...actions]),
+        gte(auditEvents.occurredAt, from), lt(auditEvents.occurredAt, to),
+        eq(patients.isArchived, false),
+        facilityAccessCondition(actor, organizationId, patients.homeFacilityId),
+        facilityAccessCondition(actor, organizationId, assessments.facilityId),
+      )).orderBy(desc(auditEvents.occurredAt));
+    return { items: rows.filter((row): row is typeof row & { assessmentId: string; action: typeof actions[number] } => !!row.assessmentId && actions.includes(row.action as typeof actions[number])) };
   }
   async invitationAccess(actor: Principal, organizationId: string) {
     this.ensureOrganizationAccess(actor, organizationId, "users.manage");
