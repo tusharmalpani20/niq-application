@@ -26,8 +26,7 @@ export function ClinicalReviewQueue({ user, query, state, canCreate, onViewAsses
     const timer = setTimeout(() => {
       const params = new URLSearchParams({ page: String(page), pageSize: "10" });
       if (query.trim()) params.set("search", query.trim());
-      if (state === "mine-active") { params.set("mine", "true"); params.set("state", "IN_REVIEW"); }
-      else if (state !== "all") params.set(state === "mine" ? "mine" : "state", state === "mine" ? "true" : state);
+      if (state !== "all") params.set("state", state);
       listClinicalReviews(user.organizationId, params, controller.signal).then(next => { if (!controller.signal.aborted) { setData(next); setError(""); } }).catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Clinical reviews could not be loaded."); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     }, 150);
     return () => { clearTimeout(timer); controller.abort(); };
