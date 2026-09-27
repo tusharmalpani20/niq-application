@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { faceScanContextSchema, type AssessmentWorkflow, type FaceScanList, type FaceScanSession, type FaceScanSignal } from "@niq/application-contracts";
+import { faceScanContextSchema, hasUsableFaceScan, type AssessmentWorkflow, type FaceScanList, type FaceScanSession, type FaceScanSignal } from "@niq/application-contracts";
 import { Armchair, History, Info, PersonStanding, ScanFace } from "lucide-react";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -32,11 +32,12 @@ export function missingScanInputs(record: AssessmentWorkflow): MissingScanInput[
   });
   return parsed.success ? [] : parsed.error.issues.map(issue => issue.path[0]).filter((field): field is MissingScanInput => field === "dob" || field === "gender" || field === "heightCm" || field === "weightKg");
 }
-export function AssessmentFaceScan({ organizationId, record, active, disabled, beforeStart, onMissingInputs, onBusyChange, onStatusChange, onSessionChange, captureFactory = createCaptureController }: {
+export function AssessmentFaceScan({ organizationId, record, active, disabled, beforeStart, onMissingInputs, onBusyChange, onStatusChange, onSessionChange, onAccessChange, captureFactory = createCaptureController }: {
   organizationId: string; record: AssessmentWorkflow; active: boolean; disabled: boolean;
   beforeStart: () => Promise<AssessmentWorkflow | null>; onBusyChange: (value: boolean) => void; onStatusChange: (value: string) => void;
   onMissingInputs?: (fields: MissingScanInput[]) => void;
   onSessionChange?: (session: FaceScanSession | null) => void;
+  onAccessChange?: (enabled: boolean | null) => void;
   captureFactory?: typeof createCaptureController;
 }) {
   const [data, setData] = useState<FaceScanList | null>(null);
@@ -62,6 +63,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const session = data?.sessions.find(item => item.id === data.currentSessionId) ?? null;
   const previousSessions = data?.sessions.filter(item => item.id !== data.currentSessionId) ?? [];
   useEffect(() => { onSessionChange?.(session); }, [session, onSessionChange]);
+  useEffect(() => { onAccessChange?.(stale ? null : data?.enabled ?? null); }, [data?.enabled, stale, onAccessChange]);
   useEffect(() => { setRescanRequested(false); }, [session?.id]);
   const changedScanInputs = session?.state === "COMPLETED" ? [
     session.context.dob !== record.patient.dateOfBirth ? "date of birth" : null,
@@ -71,7 +73,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   ].filter(Boolean) : [];
   const blocked = phase !== "idle";
   const rejected = session?.state === "RECONCILIATION_REQUIRED" && session.failureCode === "PROVIDER_REJECTED";
-  const statusLabel = phase === "capturing" ? "Capturing scan" : phase === "preparing" ? "Preparing scan" : phase === "uploading" ? "Uploading scan" : session ? rejected ? "Scan failed" : session.state === "REQUESTED" && record.status !== "DRAFT" ? "Scan not completed" : labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable";
+  const statusLabel = phase === "capturing" ? "Capturing scan" : phase === "preparing" ? "Preparing scan" : phase === "uploading" ? "Uploading scan" : session ? rejected ? "Scan failed" : session.state === "COMPLETED" && !hasUsableFaceScan(session) ? "Scan result unavailable" : session.state === "REQUESTED" && record.status !== "DRAFT" ? "Scan not completed" : labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable";
   const selectedPosture = session?.state === "REQUESTED" ? session.context.posture : posture;
   const consentReady = consentApproval?.assessmentId === record.id && consentApproval.approved;
   const handleConsentApproval = useCallback((approved: boolean) => setConsentApproval({ assessmentId: record.id, approved }), [record.id]);
@@ -227,7 +229,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {session?.state === "PROCESSING" && <p className="text-sm text-muted-foreground">Your scan is being processed. You can continue filling in the form and return here for the result.</p>}
     {session?.state === "FAILED" && <p className="text-sm text-muted-foreground">The scan didn’t finish. Please try again.</p>}
     {session?.state === "EXPIRED" && <p className="text-sm text-muted-foreground">The attempt started on {new Date(session.createdAt).toLocaleString()} ended before analysis, so there is no measurement from that attempt. This record remains in the scan history. A new scan would measure the patient at a new time.</p>}
-    {session?.state === "COMPLETED" && record.status === "DRAFT" && <p className="text-sm text-muted-foreground">The saved face scan is retained. Scan again only if a new measurement is needed.</p>}
+    {session?.state === "COMPLETED" && record.status === "DRAFT" && <p className="text-sm text-muted-foreground">{hasUsableFaceScan(session) ? "The saved face scan is retained. Scan again only if a new measurement is needed." : "This scan did not produce a usable result. Scan again before submitting the assessment."}</p>}
     {changedScanInputs.length > 0 && <p role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm">The saved scan used different {changedScanInputs.join(", ")}. Its results still reflect the original scan details shown below; changing questionnaire answers does not update those results.</p>}
     {session && <FaceScanResults session={session}/>}
     {previousSessions.length > 0 && <section aria-label="Scan history" className="space-y-2">

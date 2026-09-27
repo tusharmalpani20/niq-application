@@ -18,6 +18,14 @@ function questionnaire(){
  for(const[id,dependencies]of Object.entries({treatment_status:["palliative_status","palliative_timing"],previous_surgeries:["previous_surgery_count"],weight_loss:["previous_weight_kg","current_weight_kg"],protein_intake:["dietary_intake"]}))fields.find(f=>f.id===id)!.dependencies=dependencies;
  return{formatVersion:2,profile:"NIQ_FINAL_ASSESSMENT",sections,supportingInputs:["palliative_status","palliative_timing","previous_surgery_count","previous_weight_kg","current_weight_kg","dietary_intake"].map(id=>({id,label:id,kind:id.includes("weight")||id.endsWith("count")?"number":"select",required:false,options:[{id:"post_treatment",label:"Post treatment",help:""}]}))};
 }
+const faceScanOrganizationInfo = {
+ organization: {id:"01J00000000000000000000001",name:"Fixture",status:"ACTIVE"},
+ deployment: {id:"01J00000000000000000000002",mode:"NIQ_HOSTED",environment:"test",status:"ACTIVE"},
+ services: {scoring:{enabled:true},faceScan:{enabled:true}},
+ limits: {scoresPerMonth:1000,faceScansPerMonth:1000},
+ usage: {period:"2026-09",scores:0,faceScans:0},
+ updatedAt:"2026-09-27T00:00:00.000Z",unavailableFields:["limits.users"]
+};
 test("missing birth date and contact remain missing",()=>expect(patientAnswers({id:"p",reference:"P",displayName:"Test",dateOfBirth:null as any,gender:"UNKNOWN",homeFacility:null},new Date())).toMatchObject({age:null,gender:null,contact:""}));
 test("rejection guidance excludes unknown paths and upstream private text",()=>{
  const manifest=buildAssessmentForm(questionnaire());
@@ -28,6 +36,17 @@ test("scoring contradictions use generic local guidance",()=>{
  const manifest=buildAssessmentForm(questionnaire());
  expect(assessmentRejectionIssues(manifest,[{path:"answers.dietary_symptoms",code:"CONTRADICTORY_ANSWER",message:"private upstream answer"}])).toEqual([
   {fieldId:"dietary_symptoms",message:"Choose compatible answers for this question."}]);
+});
+test("face scan access follows the organization's service setting",async()=>{
+ const workflow=Object.create(AssessmentWorkflowService.prototype) as AssessmentWorkflowService;
+ Object.defineProperty(workflow,"config",{value:{FACE_SCAN_ENABLED:true},configurable:true});
+ const transport=(enabled:boolean):Awaited<ReturnType<AssessmentWorkflowService["transport"]>>=>({identity:{origin:"http://scoring.example.test",deploymentId:"deployment",scoringOrganizationId:"scoring-org"},baseUrl:"http://scoring.example.test",credential:"mock",requestId:"test",timeoutMs:1000,fetcher:async()=>Response.json({...faceScanOrganizationInfo,services:{...faceScanOrganizationInfo.services,faceScan:{enabled}}})});
+ workflow.transport=async()=>transport(true);
+ expect(await workflow.faceScanEnabled("organization",{requestId:"test"})).toBe(true);
+ workflow.transport=async()=>transport(false);
+ expect(await workflow.faceScanEnabled("organization",{requestId:"test"})).toBe(false);
+ Object.defineProperty(workflow,"config",{value:{FACE_SCAN_ENABLED:false}});
+ expect(await workflow.faceScanEnabled("organization",{requestId:"test"})).toBe(false);
 });
 // Must point ONLY to an isolated, migrated disposable database.
 describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQL lifecycle",()=>{
@@ -132,6 +151,10 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
    expect((await service.read(actor,org,id)).reports[0]!.files).toHaveLength(1);
  });
  test("uncertain scoring freezes edits and preserves retry key",async()=>{let record=await service.read(actor,org,id);
+  const scanRequiredWorkflow=new AssessmentWorkflowService({db,applicationService:service.applicationService,config:{...service.config,FACE_SCAN_ENABLED:true},fetcher:async()=>Response.json(faceScanOrganizationInfo)});
+  const requiredScanSections=[...record.manifest.sections.map(section=>section.id),"face-scan","attachments"];
+  await expect(scanRequiredWorkflow.submit(actor,org,id,{revision:record.revision,reviewToken:record.reviewToken,attestation:{statementVersion:1,reviewedSectionIds:requiredScanSections,confirmed:true}},context)).rejects.toMatchObject({code:"VALIDATION_ERROR",message:"A usable face scan result is required before submitting this assessment."});
+  expect((await service.read(actor,org,id)).status).toBe("DRAFT");
   const sections=[...record.manifest.sections.map(section=>section.id),"face-scan","attachments"];
   await expect(service.submit(actor,org,id,{revision:record.revision,reviewToken:record.reviewToken,attestation:{statementVersion:1,reviewedSectionIds:sections.slice(1),confirmed:true}},context)).rejects.toMatchObject({code:"VALIDATION_ERROR"});
   await expect(service.submit(actor,org,id,{revision:record.revision,reviewToken:"0".repeat(64),attestation:{statementVersion:1,reviewedSectionIds:sections,confirmed:true}},context)).rejects.toMatchObject({code:"CONFLICT"});
@@ -216,7 +239,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   const scanAssessment=(await service.initialize(actor,org,{patientId:patient,requestKey:"face-scan-assessment-12345"},context)).assessmentId!;
   let draft=await service.read(actor,org,scanAssessment);
   draft=await service.save(actor,org,scanAssessment,{revision:draft.revision,answers:{height_cm:170,current_weight_kg:65}},context);
-  const enabled=new AssessmentWorkflowService({db,applicationService:service.applicationService,config:{...service.config,FACE_SCAN_ENABLED:true}});
+  const enabled=new AssessmentWorkflowService({db,applicationService:service.applicationService,config:{...service.config,FACE_SCAN_ENABLED:true},fetcher:async()=>Response.json(faceScanOrganizationInfo)});
   let remote:any;let uncertain=true;let calls=0;
   const scans=new AssessmentFaceScanService(enabled,async(url,init)=>{
    calls++;const request=new URL(String(url));
@@ -233,7 +256,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   const first=await scans.start(actor,org,scanAssessment,input,context);expect(first.failureCode).toBe("RECONCILIATION_REQUIRED");expect(first.state).toBe("RECONCILIATION_REQUIRED");
   const replay=await scans.start(actor,org,scanAssessment,input,context);expect(replay.id).toBe(first.id);expect(replay.failureCode).toBeNull();
   await expect(scans.start(actor,org,scanAssessment,{...input,requestKey:"another-tab-operation-12345"},context)).rejects.toMatchObject({code:"CONFLICT",details:{currentSessionId:first.id}});
-  expect((await scans.list(actor,org,scanAssessment)).sessions).toHaveLength(1);
+  expect((await scans.list(actor,org,scanAssessment,context)).sessions).toHaveLength(1);
   await expect(scans.get({...actor,organizationId:other},org,scanAssessment,first.id)).rejects.toMatchObject({code:"FORBIDDEN"});
   await expect(scans.get(actor,org,id,first.id)).rejects.toMatchObject({code:"NOT_FOUND"});
   remote={...remote,state:"EXPIRED",updatedAt:new Date().toISOString()};
@@ -272,7 +295,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   const repaired=await scans.get(actor,org,scanAssessment,first.id);
   expect(repaired.score?.points).toBe(1);expect(repaired.failureCode).toBeNull();
   expect(repaired.result).toEqual(originalResult);expect(repaired.completedAt).toBe(originalCompletion);
-  expect((await scans.list(actor,org,scanAssessment)).currentSessionId).toBe(first.id);
+  expect((await scans.list(actor,org,scanAssessment,context)).currentSessionId).toBe(first.id);
   const callsAfterRepair=calls;
   remote={...remote,score:{status:"SCORED",points:99,ruleVersionId:"changed-rule"}};
   expect((await scans.get(actor,org,scanAssessment,first.id)).score?.points).toBe(1);
@@ -286,7 +309,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  test("face scan definitive setup rejection releases slot while unknown outcome retains it",async()=>{
   const assessment=(await service.initialize(actor,org,{patientId:patient,requestKey:"scan-rejection-assessment-12345"},context)).assessmentId!;
   const draft=await service.save(actor,org,assessment,{revision:0,answers:{height_cm:170,current_weight_kg:65}},context);
-  const enabled=new AssessmentWorkflowService({db,applicationService:service.applicationService,config:{...service.config,FACE_SCAN_ENABLED:true}});
+  const enabled=new AssessmentWorkflowService({db,applicationService:service.applicationService,config:{...service.config,FACE_SCAN_ENABLED:true},fetcher:async()=>Response.json(faceScanOrganizationInfo)});
   let outcome="FACE_SCAN_DISABLED";
   const scans=new AssessmentFaceScanService(enabled,async()=>{if(outcome==="unknown")throw new Error("timeout");return Response.json({error:outcome},{status:outcome==="UNAUTHORIZED"?401:503});});
   const input={revision:draft.revision,posture:"resting" as const,requestKey:"rejected-face-scan-12345"};
@@ -298,7 +321,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   expect(uncertain.id).not.toBe(rejected.id);expect(uncertain.state).toBe("RECONCILIATION_REQUIRED");
   // Creation timestamps can precede older attempts after lock waits or clock changes.
   await db.update(tables.assessmentFaceScans).set({createdAt:new Date("2000-01-01T00:00:00Z")}).where(eq(tables.assessmentFaceScans.id,uncertain.id));
-  expect((await scans.list(actor,org,assessment)).currentSessionId).toBe(uncertain.id);
+  expect((await scans.list(actor,org,assessment,context)).currentSessionId).toBe(uncertain.id);
   outcome="UNAUTHORIZED";
   const prior=await scans.row(org,assessment,uncertain.id);
   // A stale caller snapshot must not turn a later rejected replay into a definite first rejection.

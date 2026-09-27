@@ -3,7 +3,7 @@ import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
-import { buildAssessmentForm, getAssessmentCompletion, projectScoreReviews, type AssessmentScoreResult, type AssessmentWorkflow, type MembershipRole } from "@niq/application-contracts";
+import { buildAssessmentForm, getAssessmentCompletion, projectScoreReviews, type AssessmentScoreResult, type AssessmentWorkflow, type FaceScanSession, type MembershipRole } from "@niq/application-contracts";
 import { assessmentQuestionnaireFixture } from "./test-fixture";
 import { AssessmentEditorPage } from "./AssessmentEditorPage";
 
@@ -15,7 +15,7 @@ function recordFixture(): AssessmentWorkflow {
     patient: { id: "patient-a", reference: "PAT-1", displayName: "Test patient", dateOfBirth: "2006-01-01", gender: "FEMALE", phone: "1234567890", homeFacility: { id: "facility-a", name: "Chennai" } },
     createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 }
-async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{url: string; method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}, locator = "assessment-a", submittedResult?: AssessmentScoreResult, role: MembershipRole = "OTHER_MEDICAL", scanEnabled = false) {
+async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{url: string; method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}, locator = "assessment-a", submittedResult?: AssessmentScoreResult, role: MembershipRole = "OTHER_MEDICAL", scanEnabled = false, startAtFaceScan = false, scanSession: FaceScanSession | null = null) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["FocusEvent", "window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -38,7 +38,7 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
       if (method === "POST" && String(_url).endsWith("/request")) consentCurrent = { id: "consent", method: "LINK", provenance: "SIMULATED", status: "APPROVED", requestedAt: new Date().toISOString(), respondedAt: new Date().toISOString(), createdAt: new Date().toISOString(), fileName: null, mediaType: null, size: null };
       return Response.json({ current: consentCurrent, demoEnabled: true });
     }
-    if (scanEnabled && String(_url).endsWith("/face-scans")) return Response.json({ enabled: true, currentSessionId: null, sessions: [] });
+    if (String(_url).endsWith("/face-scans")) return Response.json({ enabled: scanEnabled, currentSessionId: scanSession?.id ?? null, sessions: scanSession ? [scanSession] : [] });
     if (String(_url).endsWith("/clinical-review")) return Response.json({ assessmentId:record.id, revision:0, scoreRevision:0, cycle:0, state:"NOT_SUBMITTED", allowedActions:[], history:[], canAdjustScores:role !== "ORGANIZATION_ADMIN", canEditDraft:record.canEditDraft ?? true });
     if (String(_url).endsWith("/score-reviews") && record.result) return Response.json(projectScoreReviews(record.result, []));
     if (method === "POST" && String(_url).endsWith("/submit") && submittedResult) record = { ...record, status: "SCORED", result: submittedResult };
@@ -54,7 +54,7 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
     if (method === "DELETE") record = { ...record, reports: [], revision: record.revision + 1 };
     return Response.json(record);
   }) as typeof fetch;
-  const router = createMemoryRouter([{ element: <Outlet context={{ userId: "user-a", organizationId: "org-a", role }} />, children: [{ path: "/assessments", element: <p>Assessment list</p> }, { path: "/assessments/:assessmentId", element: <AssessmentEditorPage /> }, { path: "/patients/:id", element: <p>Patient record</p> }] }], { initialEntries: [`/assessments/${locator}`] });
+  const router = createMemoryRouter([{ element: <Outlet context={{ userId: "user-a", organizationId: "org-a", role }} />, children: [{ path: "/assessments", element: <p>Assessment list</p> }, { path: "/assessments/:assessmentId", element: <AssessmentEditorPage /> }, { path: "/patients/:id", element: <p>Patient record</p> }] }], { initialEntries: [{ pathname: `/assessments/${locator}`, state: startAtFaceScan ? { startAtFaceScan: true } : null }] });
   const root = createRoot(document.getElementById("root")!);
   async function click(label: string) {
     const button = [...document.querySelectorAll("button")].filter(item => (item.textContent?.trim() === label || item.getAttribute("aria-label") === label || item.getAttribute("aria-label")?.startsWith(`${label}: `))).at(-1);
@@ -69,6 +69,11 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key]; }
   }
 }
+test("new assessment opens directly on face scan after personal details", async () => harness(async () => {
+  expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Face scan");
+  expect(document.querySelector('nav[aria-label="Assessment sections"] button[aria-current="step"]')?.textContent).toContain("Face scan");
+}, {}, "assessment-a", undefined, "OTHER_MEDICAL", false, true));
+
 test("resumed real draft shows profile context read-only and saves dirty choices with revision", async () => harness(async ({ requests, click }) => {
   expect(document.body.textContent).toContain("Test patient");
   expect(document.querySelector("#assessment-field-contact input")).toBeNull();
@@ -314,6 +319,33 @@ test("changing stage clears hidden site and details even after saving", async ()
   expect(document.querySelector('#assessment-field-metastasis_other')).toBeNull();
 }, { answers: { ...recordFixture().answers, stage: "stage_metastatic", metastasis_site: "others", metastasis_other: "Old detail" } }));
 
+
+test("an organization with face scan access cannot submit before completing a scan", async () => harness(async ({ click, requests }) => {
+  await click("Review & score");
+  expect(document.body.textContent).toContain("Complete the required face scan");
+  await click("Submit and request score");
+  expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Face scan");
+  expect(document.querySelector('[aria-label="Verify assessment before scoring"]')).toBeNull();
+  expect(requests.some(request => request.method === "POST" && request.url.endsWith("/submit"))).toBe(false);
+}, {}, "assessment-a", undefined, "OTHER_MEDICAL", true));
+
+test("a completed capture without usable scoring stays in draft", async () => {
+  const scanSession: FaceScanSession = {
+    id: "scan-a", state: "COMPLETED", createdAt: "2026-09-27T00:00:00Z", updatedAt: "2026-09-27T00:01:00Z", completedAt: "2026-09-27T00:01:00Z",
+    context: { dob: "2006-01-01", gender: "female", heightCm: 165, weightKg: 60, posture: "resting", employeeId: "fixture" },
+    failureCode: "SCORE_MAPPING_UNAVAILABLE",
+    result: { schemaVersion: 1, providerScanId: "provider-a", wellnessScore: 70, healthRiskScore: null, vitals: { heartRate: 70, oxygenSaturation: null, respiratoryRate: null, systolic: null, diastolic: null }, physiologicalScore: null, mentalWellbeingScore: null },
+    score: null,
+  };
+  await harness(async ({ click, requests }) => {
+    await click("Review & score");
+    expect(document.body.textContent).toContain("The face scan finished without a usable result. Try again.");
+    await click("Submit and request score");
+    expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Face scan");
+    expect(document.querySelector('[aria-label="Verify assessment before scoring"]')).toBeNull();
+    expect(requests.some(request => request.method === "POST" && request.url.endsWith("/submit"))).toBe(false);
+  }, {}, "assessment-a", undefined, "OTHER_MEDICAL", true, false, scanSession);
+});
 
 test("submission requires every section review and final confirmation", async () => {
   const result: AssessmentScoreResult = { formatVersion: 2, profile: "NIQ_FINAL_ASSESSMENT", complete: true, score: 3, classification: { id: "low", label: "Low", interpretation: "" }, components: recordFixture().manifest.sections.flatMap(section => section.fields.filter(field => field.owner === "scoring").map(field => ({ id: field.id, sectionId: section.id, label: field.label, points: field.id === "stage" ? 3 : null, status: field.id === "stage" ? "answered" as const : "unanswered" as const }))), version: "version-a", checksum: "a".repeat(64), resultReference: "result-a", calculatedAt: "2026-09-22T00:00:00Z", clinicalUsePermitted: true };

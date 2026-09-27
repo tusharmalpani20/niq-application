@@ -80,7 +80,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   const projection={id:scanId,state:"COMPLETED",context:{dob:"2000-01-01",gender:"female",heightCm:170,weightKg:65,posture:"resting",employeeId:"operator"},createdAt:"2026-09-20T00:00:00Z",updatedAt:"2026-09-20T00:00:00Z",completedAt:"2026-09-20T00:00:00Z",failureCode:null,result:{schemaVersion:1,providerScanId:scanId,wellnessScore:85,healthRiskScore:15,physiologicalScore:null,mentalWellbeingScore:null,vitals:{heartRate:82,oxygenSaturation:99,respiratoryRate:16,systolic:124,diastolic:79}},score:{status:"SCORED",points:8}};
   await db.insert(t.assessmentFaceScans).values({id:scanId,organizationId:org,assessmentId:id,revision:0,cycle:0,requestKey:createEntityId(),connection:{},snapshot:workflow.seal(projection.context),projection:workflow.seal(projection),state:"COMPLETED",isCurrent:true,active:false});
   await command(creator,id,"RETURN_TO_DRAFT",{assigneeId:creator.membershipId,reason:"Correct unrelated answers"});
-  expect((await new AssessmentFaceScanService(workflow).list(creator,org,id)).currentSessionId).toBe(scanId);
+  expect((await new AssessmentFaceScanService(workflow).list(creator,org,id,context)).currentSessionId).toBe(scanId);
   const [scan]=await db.select().from(t.assessmentFaceScans).where(eq(t.assessmentFaceScans.id,scanId));
   expect(scan!.cycle).toBe(0);expect(workflow.unseal<typeof projection>(scan!.projection)).toEqual(projection);
   const [row]=await db.select().from(t.assessments).where(eq(t.assessments.id,id));

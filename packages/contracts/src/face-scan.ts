@@ -74,6 +74,11 @@ export const faceScanListSchema = z.object({
   currentSessionId: z.string().nullable()
 });
 export type FaceScanSession = z.infer<typeof faceScanSessionSchema>;
+
+/** A finished capture only satisfies required scanning when it can be used in scoring. */
+export function hasUsableFaceScan(session: FaceScanSession | null | undefined): boolean {
+  return session?.state === "COMPLETED" && session.failureCode === null && session.result !== null && session.score?.status === "SCORED";
+}
 export type FaceScanSignal = z.infer<typeof faceScanSignalSchema>;
 export type FaceScanContext = z.infer<typeof faceScanContextSchema>;
 export type FaceScanList = z.infer<typeof faceScanListSchema>;

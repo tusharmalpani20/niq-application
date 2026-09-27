@@ -104,14 +104,14 @@ export class AssessmentFaceScanService {
       throw new ServiceError("NOT_FOUND", "Scan not found.");
     return row;
   }
-  async list(actor: Principal, org: string, assessment: string) {
+  async list(actor: Principal, org: string, assessment: string, context: RequestContext) {
     await this.workflow.authorize(actor, org, assessment);
     const rows = await this.db.select().from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId, org), eq(assessmentFaceScans.assessmentId, assessment))).orderBy(desc(assessmentFaceScans.createdAt), desc(assessmentFaceScans.id));
-    const enabled = this.workflow.config.FACE_SCAN_ENABLED;
+    const enabled = await this.workflow.faceScanEnabled(org, context);
     return {
       enabled,
       ...(!enabled ? {
-        reason: "Face scan is not enabled for this deployment."
+        reason: "Face scan is not enabled for this organization."
       } : {}),
       sessions: rows.map(row => this.dto(row)),
       currentSessionId: rows.find(row => row.isCurrent)?.id ?? null

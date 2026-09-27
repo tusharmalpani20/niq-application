@@ -1,7 +1,7 @@
 import { hasPermission, type MembershipRole } from "@niq/application-contracts";
-import { assessmentFieldError, clearInactiveAssessmentAnswers, getAssessmentCompletion, getAssessmentAnswerCoverage, getReportSubmissionIssues, isAssessmentFieldApplicable, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FaceScanSession, type FormAnswer, type FormAnswers } from "@niq/application-contracts";
+import { assessmentFieldError, clearInactiveAssessmentAnswers, getAssessmentCompletion, getAssessmentAnswerCoverage, getReportSubmissionIssues, hasUsableFaceScan, isAssessmentFieldApplicable, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FaceScanSession, type FormAnswer, type FormAnswers } from "@niq/application-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Navigate, Link, useOutletContext, useParams } from "react-router-dom";
+import { Navigate, Link, useLocation, useOutletContext, useParams } from "react-router-dom";
 import { PatientHeader } from "@/components/PatientHeader";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight, ScanFace, Star } from "lucide-react";
@@ -30,13 +30,14 @@ export function AssessmentEditorPage() {
   return <AssessmentEditor key={`${user.userId}:${user.organizationId}:${assessmentId}`} organizationId={user.organizationId} userId={user.userId} assessmentId={assessmentId} role={user.role} />;
 }
 function AssessmentEditor({ organizationId, userId, assessmentId, role }: { organizationId: string; userId: string; assessmentId: string; role: MembershipRole }) {
+  const location = useLocation();
   const [record, setRecord] = useState<AssessmentWorkflow | null>(null);
   const clinical = useClinicalReview(organizationId, record?.id);
   const [reviewBusy, setReviewBusy] = useState(false);
   useEffect(() => { if (record) void clinical.refresh(); }, [record?.status, record?.revision, clinical.refresh]);
   const [answers, setAnswers] = useState<FormAnswers>({});
   const [measurementUnits, setMeasurementUnits] = useState<MeasurementUnits>(metricUnits);
-  const [sectionId, setSectionId] = useState("personal_details");
+  const [sectionId, setSectionId] = useState(() => location.state?.startAtFaceScan === true ? "face_scan" : "personal_details");
   const [error, setError] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [checkedSections, setCheckedSections] = useState<string[]>([]);
@@ -50,6 +51,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   const [scanBusy, setScanBusy] = useState(false);
   const [scanStatus, setScanStatus] = useState("Face scan unavailable");
   const [scanSession, setScanSession] = useState<FaceScanSession | null>(null);
+  const [scanAccess, setScanAccess] = useState<boolean | null>(null);
   const [showScoredAnswers, setShowScoredAnswers] = useState(false);
   const [reportDirty, setReportDirty] = useState(false);
   const [conflict, setConflict] = useState(false);
@@ -159,6 +161,13 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     const invalid = validateAssessmentAnswers(record.manifest, answers, { requireComplete: true });
     setErrors(invalid);
     if (Object.keys(invalid).length) { setError("Complete required fields before requesting a score."); return; }
+    if (scanAccess === null) { setError("Face scan access could not be checked. Refresh the scan status before submitting."); return; }
+    if (scanAccess && !hasUsableFaceScan(scanSession)) {
+      setSectionId("face_scan");
+      setError("A usable face scan result is required before submitting this assessment. If the scan has finished without a result, try again.");
+      requestAnimationFrame(() => document.getElementById("assessment-section-heading")?.focus());
+      return;
+    }
     const incompleteIndex = record.reports.findIndex(report => getReportSubmissionIssues(report).length > 0);
     if (incompleteIndex !== -1) {
       const issues = getReportSubmissionIssues(record.reports[incompleteIndex]!);
@@ -259,7 +268,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     }
     if (showSubmissionIssues || sectionId === "review") {
       if (record.reports.some(report => getReportSubmissionIssues(report).length > 0)) issueSections.add("reports");
-      if (record.submission?.status === "REJECTED" && record.submission.failureCode === "FACE_SCAN_UNAVAILABLE") issueSections.add("face_scan");
+      if ((scanAccess && !hasUsableFaceScan(scanSession)) || (record.submission?.status === "REJECTED" && record.submission.failureCode === "FACE_SCAN_UNAVAILABLE")) issueSections.add("face_scan");
     }
   }
   const attachmentCounts = { reports: record.reports.length, files: record.reports.reduce((total, report) => total + report.files.filter(file => file.status === "READY").length, 0) };
@@ -290,10 +299,10 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     <div className={`grid min-w-0 border-x border-border bg-card @min-[48rem]:grid-cols-[250px_minmax(0,1fr)] ${separatedEditor ? "rounded-t-xl border-t" : ""}`}>
       <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} scores={sectionScores} scanStatus={scanStepStatus} attachmentCounts={attachmentCounts} issueSections={issueSections} disabled={locked} onSelect={id => { void selectSection(id); }} />
       <div className="min-w-0 p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 id="assessment-section-heading" tabIndex={-1} className="flex scroll-mt-40 items-center gap-2 text-xl font-semibold outline-none">{sectionId === "face_scan" && <ScanFace className="size-5 shrink-0 text-primary" aria-hidden="true" />}{tabs[index]?.title}</h2>{sectionId === "reports" && <span className="text-xs text-muted-foreground tabular-nums">{attachmentCounts.files} {attachmentCounts.files === 1 ? "file" : "files"} uploaded</span>}{sectionCoverage && <span className="text-xs text-muted-foreground">{sectionCoverage.answered}/{sectionCoverage.total} answered · {sectionCoverage.percent ?? 0}%</span>}</div>
-        {(record.result === null || showScoredAnswers) && <AssessmentFaceScan organizationId={organizationId} record={{ ...record, answers }} active={sectionId === "face_scan"} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onMissingInputs={showMissingScanInputs} onBusyChange={setScanBusy} onStatusChange={setScanStatus} onSessionChange={setScanSession}/>}
+        {(record.result === null || showScoredAnswers) && <AssessmentFaceScan organizationId={organizationId} record={{ ...record, answers }} active={sectionId === "face_scan"} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onMissingInputs={showMissingScanInputs} onBusyChange={setScanBusy} onStatusChange={setScanStatus} onSessionChange={setScanSession} onAccessChange={setScanAccess}/>}
         {section && <section><AssessmentFields heightSourceDate={record.heightSource?.recordedAt} section={section} answers={answers} errors={visibleErrors} readOnly={!editable || locked} measurementUnits={measurementUnits} onMeasurementUnitsChange={changeMeasurementUnits} patientReference={record.patient.reference} canEditPatient={hasPermission(role, "patients.edit")} canCorrectDob={role === "ORGANIZATION_ADMIN"} onEditContact={editable ? () => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); } : undefined} onChange={changeAnswer} /></section>}
         <div hidden={sectionId !== "reports"}>{(record.result === null || showScoredAnswers) && <AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!hasPermission(role, "reports.manage") || !editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />}</div>
-        {sectionId === "review" && <AssessmentReview record={record} answers={answers} scanStatus={scanStepStatus} scanSession={scanSession} organizationId={organizationId} assessmentId={internalId} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}
+        {sectionId === "review" && <AssessmentReview record={record} answers={answers} scanStatus={scanStepStatus} scanSession={scanSession} scanRequired={scanAccess === true} organizationId={organizationId} assessmentId={internalId} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}
       </div>
     </div>
     <footer className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border border-border bg-card px-4 py-3 sm:px-5">

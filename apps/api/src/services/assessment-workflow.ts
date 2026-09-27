@@ -1,7 +1,7 @@
 import { appendAssessmentHistory, assertCorrectionOwner, reviewState } from "./clinical-review-state";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { ApplicationConfig } from "@niq/application-config";
-import { hasPermission, type Permission, formatAssessmentReference, clearInactiveAssessmentAnswers, buildAssessmentForm, upgradeDraftAssessmentForm, getAssessmentCompletion, getScoringAssessmentAnswers, validateAssessmentAnswers, type FormAnswers, type AssessmentFormManifest } from "@niq/application-contracts";
+import { hasPermission, hasUsableFaceScan, type Permission, formatAssessmentReference, clearInactiveAssessmentAnswers, buildAssessmentForm, upgradeDraftAssessmentForm, getAssessmentCompletion, getScoringAssessmentAnswers, validateAssessmentAnswers, type FormAnswers, type AssessmentFormManifest, type FaceScanSession } from "@niq/application-contracts";
 import type { AssessmentWorkflow, AssessmentPatient, AssessmentInitialization, AssessmentReport, AssessmentSubmitInput, AssessmentSubmissionAttestation, AssessmentScoreResult } from "../../../../packages/contracts/src/assessment-workflow";
 import { createEntityId, selectAssessmentHeight } from "@niq/application-domain";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
@@ -14,6 +14,7 @@ import type { ApplicationService, Principal, RequestContext } from "./applicatio
 import { ServiceError } from "./application";
 import { facilityAccessCondition } from "./facility-access";
 import { requestAssessmentScoringStart, requestAssessmentScoringCalculate, requestAssessmentRiskCategories, AssessmentScoringRequestError, type AssessmentScoringStart } from "./assessment-scoring";
+import { requestScoringOrganizationInfo, ScoringOrganizationInfoRequestError } from "./scoring-organization-info";
 import { AssessmentReportWorkflow } from "./assessment-workflow-reports";
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -64,6 +65,15 @@ export class AssessmentWorkflowService {
     const identity={origin:new URL(this.config.SCORING_API_URL).origin,deploymentId:connection.deploymentId,scoringOrganizationId:connection.scoringOrganizationId};
     if(pinned&&JSON.stringify(identity)!==JSON.stringify(pinned)) throw new ServiceError("CONFLICT","The scoring connection changed. Restore the original deployment to continue this assessment.");
     return {identity,baseUrl:this.config.SCORING_API_URL,credential:decryptCredential(connection.encryptedCredential,connection.credentialIv,this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY),requestId:context.requestId,timeoutMs:this.config.SCORING_TIMEOUT_MS,fetcher:this.fetcher};
+  }
+  async faceScanEnabled(organizationId:string,context:RequestContext):Promise<boolean> {
+    if(!this.config.FACE_SCAN_ENABLED) return false;
+    const transport=await this.transport(organizationId,context);
+    try { return (await requestScoringOrganizationInfo(transport)).services.faceScan.enabled; }
+    catch(error) {
+      if(error instanceof ScoringOrganizationInfoRequestError && error.reason==="disabled") return false;
+      throw new ServiceError("SCORING_UNAVAILABLE","Face scan access could not be checked. Try again before submitting.");
+    }
   }
   async initialize(actor:Principal,organizationId:string,input:{patientId:string;requestKey:string},context:RequestContext):Promise<AssessmentInitialization> {
     this.clinicalActor(actor,organizationId,"assessments.create");
@@ -193,11 +203,14 @@ export class AssessmentWorkflowService {
   }
   async submit(actor:Principal,organizationId:string,id:string,input:AssessmentSubmitInput,context:RequestContext) {
     this.clinicalActor(actor,organizationId,"assessments.submit");
+    const submissionRow=await this.authorize(actor,organizationId,id);
+    const scanRequired=submissionRow.status==="DRAFT" && await this.faceScanEnabled(organizationId,context);
     // A scan that has not finished is not part of the score. Cancel it before freezing the scoring request.
     // Provider I/O stays outside the assessment transaction; the original review token is checked again below.
     let scanBeforeCancellation: Awaited<ReturnType<AssessmentWorkflowService["reviewScan"]>> = null;
     const [openScan]=await this.db.select({id:assessmentFaceScans.id}).from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId,organizationId),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true),eq(assessmentFaceScans.active,true)));
     if(openScan) {
+      if(scanRequired) throw new ServiceError("VALIDATION_ERROR","Complete the required face scan before submitting this assessment.");
       const row=await this.authorize(actor,organizationId,id);
       if(row.status==="DRAFT") {
         this.editable(row,input.revision,actor);
@@ -242,8 +255,10 @@ export class AssessmentWorkflowService {
       const manifest=await this.reports.submissionManifest(tx,organizationId,id);
       const submissionId=createEntityId();
       const [currentScan]=await tx.select({remoteId:assessmentFaceScans.remoteId,state:assessmentFaceScans.state,projection:assessmentFaceScans.projection}).from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId,organizationId),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true)));
-      const scoredScan=currentScan?.projection?this.unseal<{score?:{status?:string}}>(currentScan.projection):null;
-      const frozen={...state,manifest:form,patient,answers,cycle:row.cycle,faceScanSessionId:currentScan?.state==="COMPLETED"&&scoredScan?.score?.status==="SCORED"?currentScan.remoteId:null};
+      const scanSession=currentScan?.projection?this.unseal<FaceScanSession>(currentScan.projection):null;
+      const usableScan=Boolean(currentScan?.state==="COMPLETED" && currentScan.remoteId && hasUsableFaceScan(scanSession));
+      if(scanRequired && !usableScan) throw new ServiceError("VALIDATION_ERROR","A usable face scan result is required before submitting this assessment.");
+      const frozen={...state,manifest:form,patient,answers,cycle:row.cycle,faceScanSessionId:usableScan?currentScan!.remoteId:null};
       const attestation:AssessmentSubmissionAttestation={submissionId,cycle:row.cycle,revision:row.revision,confirmedAt:new Date().toISOString(),actorMembershipId:actor.membershipId,actorDisplayName:actor.displayName,statementVersion:input.attestation.statementVersion,reviewedSectionIds:expectedSections};
       await tx.insert(assessmentSubmissions).values({id:submissionId,organizationId,assessmentId:id,revision:row.revision,snapshot:this.seal({...frozen,reports:manifest}),attestation:this.seal(attestation),idempotencyKey:submissionId});
       await tx.insert(scoringRequests).values({id:submissionId,organizationId,assessmentId:id,idempotencyKey:submissionId,requestedVersion:state.binding.version});

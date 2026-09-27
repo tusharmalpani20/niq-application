@@ -1,4 +1,4 @@
-import { assessmentFieldError, getAssessmentAnswerCoverage, getReportSubmissionIssues, isAssessmentFieldApplicable, type AssessmentWorkflow, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
+import { assessmentFieldError, getAssessmentAnswerCoverage, getReportSubmissionIssues, hasUsableFaceScan, isAssessmentFieldApplicable, type AssessmentWorkflow, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
 import { Fragment, useState, type ReactNode } from "react";
 import { assessmentResultView, sectionScoreLabel } from "./AssessmentResult";
 import { FaceScanResults } from "./FaceScanResults";
@@ -20,7 +20,7 @@ function ReviewSection({ id, title, summary, open, onToggle, children }: { id: s
   </div>;
 }
 
-export function AssessmentReview({ record, answers, scanStatus, scanSession, organizationId, assessmentId, onSection }: { record: AssessmentWorkflow; answers: FormAnswers; scanStatus: string; scanSession: FaceScanSession | null; organizationId: string; assessmentId: string; onSection: (id: string, fieldId?: string) => void }) {
+export function AssessmentReview({ record, answers, scanStatus, scanSession, scanRequired = false, organizationId, assessmentId, onSection }: { record: AssessmentWorkflow; answers: FormAnswers; scanStatus: string; scanSession: FaceScanSession | null; scanRequired?: boolean; organizationId: string; assessmentId: string; onSection: (id: string, fieldId?: string) => void }) {
   const scored = assessmentResultView(record);
   const completion = getAssessmentAnswerCoverage(record.manifest, answers);
   const missing = record.manifest.sections.flatMap(section => section.fields.filter(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers) && assessmentFieldError(field, answers[field.id])).map(field => ({ sectionId: section.id, field, error: assessmentFieldError(field, answers[field.id]) })));
@@ -30,9 +30,10 @@ export function AssessmentReview({ record, answers, scanStatus, scanSession, org
     return issues.length ? [{ index: index + 1, issues }] : [];
   });
   const scanRejected = record.submission?.status === "REJECTED" && record.submission.failureCode === "FACE_SCAN_UNAVAILABLE";
-  const blocked = missing.length > 0 || incompleteReports.length > 0 || scanRejected;
-  const issueCount = missing.length + incompleteReports.length + (scanRejected ? 1 : 0);
-  const [expanded, setExpanded] = useState<string | null>(missing[0]?.sectionId ?? (incompleteReports.length ? "reports" : scanRejected ? "face_scan" : null));
+  const scanMissing = scanRequired && !hasUsableFaceScan(scanSession);
+  const blocked = missing.length > 0 || incompleteReports.length > 0 || scanRejected || scanMissing;
+  const issueCount = missing.length + incompleteReports.length + (scanRejected || scanMissing ? 1 : 0);
+  const [expanded, setExpanded] = useState<string | null>(missing[0]?.sectionId ?? (incompleteReports.length ? "reports" : scanRejected || scanMissing ? "face_scan" : null));
   return <div className="grid min-w-0 gap-4">
     {!scored && <section className={`rounded-xl border p-4 ${blocked ? "border-destructive/40 bg-destructive/5" : "border-primary/25 bg-primary/5"}`}>
       <div className="flex items-center gap-2">{blocked ? <CircleAlert className="size-5 text-destructive" aria-hidden="true"/> : <CheckCircle2 className="size-5 text-primary" aria-hidden="true"/>}<h3 className={`font-semibold ${blocked ? "text-destructive" : ""}`}>{blocked ? `${issueCount} ${issueCount === 1 ? "item needs" : "items need"} attention before submission` : "Ready to submit"}</h3></div>
@@ -42,6 +43,7 @@ export function AssessmentReview({ record, answers, scanStatus, scanSession, org
           {missing.map(({ sectionId, field, error }) => <li key={field.id}><Button className="h-auto min-h-14 w-full justify-between gap-3 whitespace-normal border-destructive/25 bg-card px-3 py-2 text-left hover:bg-destructive/5" variant="outline" onPress={() => onSection(sectionId, field.id)}><span className="grid gap-0.5"><span className="text-xs font-normal text-muted-foreground">{record.manifest.sections.find(section => section.id === sectionId)?.title}</span><span className="font-medium text-destructive">{field.label}: {error === "Required" ? "Not answered" : error}</span></span><span className="flex shrink-0 items-center gap-1 text-xs text-destructive">Fix answer <ArrowRight className="size-4" aria-hidden="true"/></span></Button></li>)}
           {incompleteReports.map(({ index, issues }) => <li key={index}><Button className="h-auto min-h-14 w-full justify-between gap-3 whitespace-normal border-destructive/25 bg-card px-3 py-2 text-left hover:bg-destructive/5" variant="outline" onPress={() => onSection("reports")}><span className="font-medium text-destructive">Report {index} needs {issues.map(issue => issue === "name" ? "a report name" : issue === "date" ? "a date" : "an uploaded file").join(" and ")}</span><span className="flex shrink-0 items-center gap-1 text-xs text-destructive">Fix report <ArrowRight className="size-4" aria-hidden="true"/></span></Button></li>)}
           {scanRejected && <li><Button className="h-auto min-h-14 w-full justify-between gap-3 whitespace-normal border-destructive/25 bg-card px-3 py-2 text-left hover:bg-destructive/5" variant="outline" onPress={() => onSection("face_scan")}><span className="font-medium text-destructive">The selected face scan could not be used for scoring.</span><span className="flex shrink-0 items-center gap-1 text-xs text-destructive">Review scan <ArrowRight className="size-4" aria-hidden="true"/></span></Button></li>}
+          {scanMissing && !scanRejected && <li><Button className="h-auto min-h-14 w-full justify-between gap-3 whitespace-normal border-destructive/25 bg-card px-3 py-2 text-left hover:bg-destructive/5" variant="outline" onPress={() => onSection("face_scan")}><span className="font-medium text-destructive">{scanSession?.state === "COMPLETED" ? "The face scan finished without a usable result. Try again." : "Complete the required face scan."}</span><span className="flex shrink-0 items-center gap-1 text-xs text-destructive">Go to Face scan <ArrowRight className="size-4" aria-hidden="true"/></span></Button></li>}
         </ul>
       </> : <p className="mt-2 text-sm text-muted-foreground">Required answers are complete.{!record.reports.length && " Attachments are optional."}</p>}
     </section>}
