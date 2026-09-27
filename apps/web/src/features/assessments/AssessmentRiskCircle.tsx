@@ -35,7 +35,7 @@ export function AssessmentRiskCircle({ score, classification, categories, formCo
       <p className="mt-1 text-2xl font-semibold" style={{ color: selectedColor }}>{classification?.label ?? "No risk category"}</p>
       {classification?.interpretation && <p className="mt-2 max-w-prose text-sm text-muted-foreground">{classification.interpretation}</p>}
       {score !== null && formCoverage?.percent !== null && formCoverage?.percent !== undefined && <p className="mt-4 inline-block max-w-full rounded-lg border border-border bg-card px-3 py-2 text-sm leading-6">
-        At the time of scoring, <strong className="tabular-nums">{formCoverage.answered} of {formCoverage.total}</strong> questions were answered (<strong className="tabular-nums">{formCoverage.percent}%</strong>).
+        This score was calculated when <strong className="tabular-nums">{formCoverage.answered} of {formCoverage.total}</strong> assessment questions were answered (<strong className="tabular-nums">{formCoverage.percent}%</strong>).
       </p>}
     </div>
   </div>;
