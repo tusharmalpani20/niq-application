@@ -119,7 +119,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     finally { operation.current = false; setBusy(false); }
   }
   function checkSection(id: string) {
-    if (!record.manifest.sections.some(section => section.id === id)) return;
+    if (!record || !record.manifest.sections.some(section => section.id === id)) return;
     setCheckedSections(current => current.includes(id) ? current : [...current, id]);
     setLastCheckedSectionId(id);
   }

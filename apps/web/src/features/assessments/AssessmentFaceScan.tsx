@@ -213,10 +213,12 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     finally { if (alive.current) setPhase("idle"); inFlight.current = false; }
   }
   const canStart = !session || terminal.has(session.state) || session.state === "REQUESTED";
+  const noRecordedScan = !!data && record.status !== "DRAFT" && !session && data.sessions.length === 0;
   return <div hidden={!active} className="space-y-5">
     {!data && !stale && <p role="status">Loading face scan…</p>}
     {stale && <div role="alert" className="space-y-2"><p>Scan status could not be refreshed. Any accepted scan continues processing.</p><Button variant="outline" onPress={() => { void refresh().catch(() => setStale(true)); }}>Refresh scan status</Button></div>}
-    {data && !data.enabled && <div className="py-6 text-center"><ScanFace className="mx-auto mb-3 size-8 text-brand-ink" aria-hidden="true"/><h3 className="font-semibold">Face scan is not available yet</h3><p className="mt-2 text-sm text-muted-foreground">You can continue with the questionnaire. Face scanning does not affect its completion.</p></div>}
+    {data && !data.enabled && !noRecordedScan && <div className="py-6 text-center"><ScanFace className="mx-auto mb-3 size-8 text-brand-ink" aria-hidden="true"/><h3 className="font-semibold">Face scan is not available yet</h3><p className="mt-2 text-sm text-muted-foreground">You can continue with the questionnaire. Face scanning does not affect its completion.</p></div>}
+    {noRecordedScan && <p className="py-4 text-sm text-muted-foreground">No face scan was done for this assessment.</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {session && !(session.state === "COMPLETED" && session.result) && <p role="status" className="font-medium">{statusLabel}{stale ? " · Last known status" : ""}</p>}
     {session?.state === "RECONCILIATION_REQUIRED" && <p className="text-sm text-muted-foreground">{rejected ? "The scan could not be processed. Please contact support before trying again. You can continue filling in the form." : "Your scan result is not available. You can continue filling in the form. Please contact support before trying another scan."}</p>}

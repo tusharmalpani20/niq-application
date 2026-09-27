@@ -121,6 +121,16 @@ test("a scored assessment does not ask clinicians to cancel an unfinished scan",
  expect(requests.some(request => request.path.endsWith("/cancel"))).toBe(false);
 }, { existing: session, status: "SCORED" }));
 
+test("a scored assessment with no scan explains that none was done", async () => harness(async ({ requests }) => {
+  expect(document.body.textContent).toContain("No face scan was done for this assessment.");
+  expect(requests.some(request => request.path.includes("/face-scans"))).toBe(true);
+}, { status: "SCORED" }));
+
+test("a scored assessment without a scan stays clear when scanning is now unavailable", async () => harness(async () => {
+  expect(document.body.textContent).toContain("No face scan was done for this assessment.");
+  expect(document.body.textContent).not.toContain("Face scan is not available yet");
+}, { status: "SCORED", enabled: false }));
+
 test("explains an expired attempt and retains earlier attempts in scan history", async () => harness(async ({ starts }) => {
   expect(document.body.textContent).toContain("No scan result");
   expect(document.body.textContent).toContain("ended before analysis");
