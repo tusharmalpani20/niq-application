@@ -41,7 +41,7 @@ test("open-assessment link shows only drafts and assessments ready for scoring",
     expect(table?.textContent).not.toContain("ASM-000003");
     expect(table?.querySelector('[data-status="draft"]')?.getAttribute("style")).toContain("var(--surface-subtle)");
     expect(table?.querySelector('[data-status="draft"] .status-dot')?.getAttribute("style")).toContain("var(--client-muted)");
-    expect(document.body.textContent).toContain("2 total");
+    expect(document.body.textContent).toContain("Page 1 of 1");
   });
 });
 
@@ -74,7 +74,7 @@ test("facility work link applies both facility and work status filters", async (
     for (const reference of ["ASM-000001", "ASM-000002", "ASM-000003", "ASM-000004"]) expect(table?.textContent).toContain(reference);
     expect(table?.textContent).not.toContain("ASM-000005");
     expect(table?.textContent).not.toContain("ASM-000006");
-    expect(document.body.textContent).toContain("4 total");
+    expect(document.body.textContent).toContain("Page 1 of 1");
     expect(document.querySelector('[aria-label="Filter by status"]')?.textContent).toContain("Assessment and review work");
   });
 });
@@ -92,7 +92,7 @@ test("completed-this-month link excludes older completions and unfinished assess
     expect(table?.textContent).toContain("ASM-000001");
     expect(table?.textContent).not.toContain("ASM-000002");
     expect(table?.textContent).not.toContain("ASM-000003");
-    expect(document.body.textContent).toContain("1 total");
+    expect(document.querySelector('[data-slot="tabs-trigger"][data-selected]')?.textContent).toContain("Completed");
   });
 });
 
@@ -143,7 +143,7 @@ test("my assessment actions link shows the same assigned work as the overview", 
     expect(table?.textContent).toContain("ASM-000003");
     expect(table?.textContent).not.toContain("ASM-000002");
     expect(table?.querySelector('a[aria-label="Send for review ASM-000003"]')).not.toBeNull();
-    expect(document.body.textContent).toContain("2 total");
+    expect(document.querySelector('[data-slot="tabs-trigger"][data-selected]')?.textContent).toContain("My work");
   });
 });
 
@@ -163,6 +163,33 @@ test("quick-action links filter to the matching assigned assessments", async () 
     const table = document.querySelector('[aria-label="Assessments"]');
     expect(table?.textContent).toContain("ASM-000003");
     expect(table?.textContent).not.toContain("ASM-000001");
+  });
+});
+
+test("my work separates drafts, corrections, and ready-to-send assessments from reviews and completed work", async () => {
+  const items = [
+    { ...records[0], myAction: "EDIT_DRAFT" },
+    { ...records[0], id: `${id.slice(0, -1)}4`, reference: "ASM-000004", myAction: "CORRECT_DRAFT" },
+    { ...records[2], myAction: "SEND_FOR_REVIEW" },
+    { ...records[1], status: "UNDER_REVIEW" },
+    { ...records[1], id: `${id.slice(0, -1)}5`, reference: "ASM-000005", status: "COMPLETED", completedAt: date },
+  ];
+  await renderAssessments("/assessments?tab=my-work", items, async () => {
+    const table = document.querySelector('[aria-label="Assessments"]');
+    expect(table?.textContent).toContain("ASM-000001");
+    expect(table?.textContent).toContain("ASM-000004");
+    expect(table?.textContent).toContain("ASM-000003");
+    expect(table?.textContent).not.toContain("ASM-000002");
+    expect(table?.textContent).not.toContain("ASM-000005");
+    expect(table?.querySelector('[data-status="needs-correction"]')).not.toBeNull();
+    expect(table?.querySelector('[data-status="ready-to-send"]')).not.toBeNull();
+    expect(document.querySelector('[data-slot="tabs-list"]')?.textContent).toMatch(/All assessments\s*5.*My work\s*3.*Completed\s*1/);
+    const completedTab = Array.from(document.querySelectorAll<HTMLElement>('[data-slot="tabs-trigger"]')).find(item => item.textContent?.includes("Completed"));
+    expect(completedTab).toBeDefined();
+    await act(async () => { completedTab?.click(); });
+    const completedTable = document.querySelector('[aria-label="Assessments"]');
+    expect(completedTable?.textContent).toContain("ASM-000005");
+    expect(completedTable?.textContent).not.toContain("ASM-000001");
   });
 });
 

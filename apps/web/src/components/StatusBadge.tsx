@@ -2,6 +2,8 @@ import { Badge } from "@/components/ui/badge";
 
 const accents: Record<string, string> = {
   Draft: "var(--client-muted)",
+  "Needs correction": "var(--danger)",
+  "Ready to send": "var(--primary)",
   "Ready for scoring": "var(--primary)",
   "Pending scoring": "var(--primary)",
   "Scoring unavailable": "var(--danger)",
