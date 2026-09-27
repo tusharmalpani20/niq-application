@@ -417,7 +417,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
     @apply font-sans;
   }
 }
-.assessment-workflow [id^="assessment-field-"] { scroll-margin-top: 10rem; }
+.assessment-progress-sticky { top: calc(5.25rem + env(safe-area-inset-top)); }
+.assessment-workflow [id^="assessment-field-"],
+.assessment-workflow #assessment-section-heading { scroll-margin-top: 13rem; }
+@media (max-width: 640px) {
+  .assessment-progress-sticky { top: calc(4.5rem + env(safe-area-inset-top)); }
+}
 
 /* Page and nested scrollbars share the active organization/platform theme. */
 * {
