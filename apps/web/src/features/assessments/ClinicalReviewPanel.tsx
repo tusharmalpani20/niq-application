@@ -72,7 +72,7 @@ export function ClinicalReviewPanel({ organizationId, assessmentId, review, atte
 }) {
   const [action, setAction] = useState<Action | null>(null);
   return <section aria-label="Clinical review" className="my-5 rounded-xl border border-border bg-card p-4 sm:p-6">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">Clinical review</h2>{review && <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-medium">{reviewStatusLabel(review)}</span>}</div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">Clinical review</h2>{review && review.state !== "NOT_SUBMITTED" && <span className="text-sm text-muted-foreground">{reviewStatusLabel(review)}</span>}</div>
     {loading && <p className="mt-3 text-sm" role="status">Loading review…</p>}
     {error && <div role="alert" className="mt-3 text-sm text-destructive">{error}<Button variant="link" isDisabled={blocked || loading} onPress={() => { void onRefresh(); }}>Reload review</Button></div>}
     {review && <>

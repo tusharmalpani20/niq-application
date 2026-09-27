@@ -27,7 +27,7 @@ test("clinical actions follow server permissions and block while another edit is
  expect(buttons.find(button=>button.textContent==="Complete review")?.disabled).toBe(true);
 }, {blocked:true}));
 test("a scored assessment not yet sent uses the pre-review correction label", async()=>harness(async({click,posts})=>{
- expect(document.body.textContent).toContain("Not sent for clinical review");
+ expect(document.body.textContent).not.toContain("Not sent for clinical review");
  expect(document.body.textContent).toContain("Ask the person who created this assessment to open it and select Send for clinical review.");
  expect(document.body.textContent).toContain("Reopen for corrections");
  expect(document.body.textContent).not.toContain("Return to draft");
