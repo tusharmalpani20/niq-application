@@ -768,11 +768,12 @@ export class PostgresApplicationService implements ApplicationService {
     if (!facility) throw new ServiceError("NOT_FOUND", "Facility not found.");
     const now = new Date();
     const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const previousCutoff = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
     const [completed, scored, scans, riskRows] = await Promise.all([
       this.db.select({ completedAt: assessments.completedAt }).from(assessments)
         .where(and(eq(assessments.organizationId, organizationId), eq(assessments.facilityId, facilityId), eq(assessments.status, "COMPLETED"))),
       this.db.select({ scoredAt: assessments.scoredAt }).from(assessments)
-        .where(and(eq(assessments.organizationId, organizationId), eq(assessments.facilityId, facilityId), gte(assessments.scoredAt, cutoff))),
+        .where(and(eq(assessments.organizationId, organizationId), eq(assessments.facilityId, facilityId), gte(assessments.scoredAt, previousCutoff))),
       this.db.select({ projection: assessmentFaceScans.projection }).from(assessmentFaceScans)
         .innerJoin(assessments, and(eq(assessments.organizationId, assessmentFaceScans.organizationId), eq(assessments.id, assessmentFaceScans.assessmentId)))
         .where(and(eq(assessmentFaceScans.organizationId, organizationId), eq(assessments.facilityId, facilityId), eq(assessmentFaceScans.state, "COMPLETED"))),
@@ -790,6 +791,7 @@ export class PostgresApplicationService implements ApplicationService {
     });
     const completedDates = completed.flatMap(row => row.completedAt ? [row.completedAt] : []);
     const within30Days = (date: Date) => date >= cutoff && date <= now;
+    const inPrevious30Days = (date: Date) => date >= previousCutoff && date < cutoff;
     const risk = countOverviewRisk(riskRows, value => {
       const encrypted = (value as { encrypted?: string })?.encrypted;
       if (!encrypted) throw new ServiceError("CONFLICT", "Assessment review data could not be read.");
@@ -800,6 +802,7 @@ export class PostgresApplicationService implements ApplicationService {
       assessments: facilityTrend(completedDates, now, facility.timezone),
       faceScans: facilityTrend(scanDates, now, facility.timezone),
       last30Days: { scored: scored.filter(row => row.scoredAt && within30Days(row.scoredAt)).length, completed: completedDates.filter(within30Days).length, faceScans: scanDates.filter(within30Days).length },
+      previous30Days: { scored: scored.filter(row => row.scoredAt && inPrevious30Days(row.scoredAt)).length, faceScans: scanDates.filter(inPrevious30Days).length },
       risk: { assessedPatients: risk.assessedPatients, categories: risk.categories },
     };
   }

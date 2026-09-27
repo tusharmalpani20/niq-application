@@ -241,6 +241,7 @@ const facilityTrendSchema = z.object({
 export const facilityPerformanceSchema = z.object({
   timezone: z.string(), assessments: facilityTrendSchema, faceScans: facilityTrendSchema,
   last30Days: z.object({ scored: z.number().int().nonnegative(), completed: z.number().int().nonnegative(), faceScans: z.number().int().nonnegative() }),
+  previous30Days: z.object({ scored: z.number().int().nonnegative(), faceScans: z.number().int().nonnegative() }),
   risk: z.object({ assessedPatients: z.number().int().nonnegative(), categories: z.object({ low: z.number().int().nonnegative(), moderate: z.number().int().nonnegative(), high: z.number().int().nonnegative() }) }),
 });
 export type FacilityPerformance = z.infer<typeof facilityPerformanceSchema>;
