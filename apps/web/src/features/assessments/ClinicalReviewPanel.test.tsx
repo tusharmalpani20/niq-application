@@ -36,7 +36,7 @@ test("a scored assessment not yet sent uses the pre-review correction label", as
  expect(posts).toHaveLength(0);
 },{review:{...review,state:"NOT_SUBMITTED",allowedActions:["RETURN_TO_DRAFT"]}}));
 test("the original creator sees how to send a scored assessment", async()=>harness(async()=>{
- expect(document.body.textContent).toContain("Select Send for clinical review to place this assessment in the review queue.");
+ expect(document.body.textContent).toContain("Ready for review. Send this assessment to the clinical review queue.");
  expect([...document.querySelectorAll("button")].some(button=>button.textContent==="Send for clinical review")).toBe(true);
 },{review:{...review,state:"NOT_SUBMITTED",allowedActions:["SEND"]}}));
 test("completed review has no mutation actions and displays final remark",async()=>harness(async()=>{

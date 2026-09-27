@@ -72,23 +72,27 @@ export function ClinicalReviewPanel({ organizationId, assessmentId, review, atte
 }) {
   const [action, setAction] = useState<Action | null>(null);
   return <section aria-label="Clinical review" className="my-5 rounded-xl border border-border bg-card p-4 sm:p-6">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl">Clinical review</h2>{review && <span className="text-sm text-muted-foreground">{reviewStatusLabel(review)}</span>}</div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">Clinical review</h2>{review && <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-medium">{reviewStatusLabel(review)}</span>}</div>
     {loading && <p className="mt-3 text-sm" role="status">Loading review…</p>}
     {error && <div role="alert" className="mt-3 text-sm text-destructive">{error}<Button variant="link" isDisabled={blocked || loading} onPress={() => { void onRefresh(); }}>Reload review</Button></div>}
     {review && <>
-      {review.assignee && <p className="mt-3 text-sm">Reviewer: {review.assignee.displayName}</p>}
-      {review.correctionPerson && review.state !== "AWAITING_RESUBMISSION" && <p className="mt-3 text-sm">Corrections assigned to: {review.correctionPerson.displayName}</p>}
-      {review.returnReason && review.state === "RETURNED" && <div className="mt-3 rounded-lg bg-muted p-3 text-sm"><p>{previouslySent(review) ? "Return reason" : "Correction reason"}</p><p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{review.returnReason}</p></div>}
-      {review.state === "NOT_SUBMITTED" && <p className="mt-3 text-sm text-muted-foreground">{review.allowedActions.includes("SEND")
-        ? "Select Send for clinical review to place this assessment in the review queue."
-        : "Ask the person who created this assessment to open it and select Send for clinical review."}</p>}
-      {review.state === "QUEUED" && <p className="mt-3 text-sm text-muted-foreground">An eligible clinician can claim this review.</p>}
-      {review.state === "RETURNED" && <p className="mt-3 text-sm text-muted-foreground">The clinician assigned to corrections updates the questionnaire, requests a new score, then {previouslySent(review) ? "resends" : "sends"} it for clinical review.</p>}
-      {review.state === "AWAITING_RESUBMISSION" && <p className="mt-3 text-sm text-muted-foreground">Scoring is complete. {review.correctionPerson?.displayName ?? "The clinician assigned to corrections"} can {previouslySent(review) ? "resend" : "send"} this assessment for clinical review.</p>}
-      {review.state === "COMPLETED" && <div className="mt-3 text-sm"><p>This review is final and cannot be reopened.</p>{review.finalRemark && <p className="mt-2 whitespace-pre-wrap break-words">{review.finalRemark}</p>}</div>}
-      {review.riskClassificationPending && <p className="mt-3 text-sm text-muted-foreground">NIQ must confirm the current reviewed risk before this review can be completed. Check the assessment summary below.</p>}
-      {blocked && !!review.allowedActions?.length && <p className="mt-3 text-sm text-muted-foreground">Finish or cancel your current changes before changing the review workflow.</p>}
-      <div className="mt-4 flex flex-wrap gap-2">{review.allowedActions?.map(next => <Button key={next} variant={["SEND", "CLAIM", "RESEND", "COMPLETE"].includes(next) ? "default" : "outline"} isDisabled={blocked || loading || !!error || !!action || (next === "COMPLETE" && review.riskClassificationPending === true)} onPress={() => setAction(next)}>{actionLabel(next, review)}</Button>)}</div>
+      <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1 space-y-2 text-sm">
+          {review.assignee && <p>Reviewer: {review.assignee.displayName}</p>}
+          {review.correctionPerson && review.state !== "AWAITING_RESUBMISSION" && <p>Corrections assigned to: {review.correctionPerson.displayName}</p>}
+          {review.returnReason && review.state === "RETURNED" && <div className="rounded-lg bg-muted p-3"><p>{previouslySent(review) ? "Return reason" : "Correction reason"}</p><p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{review.returnReason}</p></div>}
+          {review.state === "NOT_SUBMITTED" && <p className="text-muted-foreground">{review.allowedActions.includes("SEND")
+            ? "Ready for review. Send this assessment to the clinical review queue."
+            : "Ask the person who created this assessment to open it and select Send for clinical review."}</p>}
+          {review.state === "QUEUED" && <p className="text-muted-foreground">An eligible clinician can claim this review.</p>}
+          {review.state === "RETURNED" && <p className="text-muted-foreground">The clinician assigned to corrections updates the questionnaire, requests a new score, then {previouslySent(review) ? "resends" : "sends"} it for clinical review.</p>}
+          {review.state === "AWAITING_RESUBMISSION" && <p className="text-muted-foreground">Scoring is complete. {review.correctionPerson?.displayName ?? "The clinician assigned to corrections"} can {previouslySent(review) ? "resend" : "send"} this assessment for clinical review.</p>}
+          {review.state === "COMPLETED" && <div><p>This review is final and cannot be reopened.</p>{review.finalRemark && <p className="mt-2 whitespace-pre-wrap break-words">{review.finalRemark}</p>}</div>}
+          {review.riskClassificationPending && <p className="text-muted-foreground">NIQ must confirm the current reviewed risk before this review can be completed. Check the assessment summary below.</p>}
+          {blocked && !!review.allowedActions?.length && <p className="text-muted-foreground">Finish or cancel your current changes before changing the review workflow.</p>}
+        </div>
+        {!!review.allowedActions?.length && <div className="flex flex-wrap items-center gap-2 lg:max-w-[55%] lg:justify-end">{review.allowedActions.map(next => <Button key={next} variant={["SEND", "CLAIM", "RESEND", "COMPLETE"].includes(next) ? "default" : "outline"} isDisabled={blocked || loading || !!error || !!action || (next === "COMPLETE" && review.riskClassificationPending === true)} onPress={() => setAction(next)}>{actionLabel(next, review)}</Button>)}</div>}
+      </div>
       <ReviewHistory history={review.history ?? []} attestations={attestations} />
       {action && <ClinicalReviewCommandDialog key={action} action={action} review={review} organizationId={organizationId} assessmentId={assessmentId} blocked={blocked || loading || !!error || (action === "COMPLETE" && review.riskClassificationPending === true)} onClose={() => setAction(null)} onChanged={onChanged} onRefresh={onRefresh} onBusyChange={onBusyChange} />}
     </>}
