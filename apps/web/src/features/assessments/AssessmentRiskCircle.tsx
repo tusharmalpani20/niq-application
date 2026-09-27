@@ -1,4 +1,4 @@
-import type { AssessmentScoreResult } from "@niq/application-contracts";
+import type { AssessmentAnswerCoverage, AssessmentScoreResult } from "@niq/application-contracts";
 
 type Classification = AssessmentScoreResult["classification"];
 
@@ -11,11 +11,11 @@ function categoryColor(color: string | undefined): string {
   return color?.startsWith("#") ? color : presetColors[color ?? ""] ?? "#64748b";
 }
 
-export function AssessmentRiskCircle({ score, classification, categories, formCompletionPercent }: {
+export function AssessmentRiskCircle({ score, classification, categories, formCoverage }: {
   score: number | null;
   classification: Classification;
   categories?: AssessmentScoreResult["riskCategories"];
-  formCompletionPercent?: number | null;
+  formCoverage?: Pick<AssessmentAnswerCoverage, "answered" | "total" | "percent">;
 }) {
   const selectedColor = categoryColor(classification?.color ?? categories?.find(band => band.id === classification?.id)?.color);
   const radius = 64;
@@ -34,8 +34,8 @@ export function AssessmentRiskCircle({ score, classification, categories, formCo
       <p className="text-sm text-muted-foreground">Final NIQ score</p>
       <p className="mt-1 text-2xl font-semibold" style={{ color: selectedColor }}>{classification?.label ?? "No risk category"}</p>
       {classification?.interpretation && <p className="mt-2 max-w-prose text-sm text-muted-foreground">{classification.interpretation}</p>}
-      {score !== null && formCompletionPercent !== null && formCompletionPercent !== undefined && <p className="mt-4 inline-flex flex-wrap items-baseline justify-center gap-x-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm sm:justify-start">
-        <span>Score based on answers from a</span><strong className="text-base tabular-nums">{formCompletionPercent}% complete form</strong>
+      {score !== null && formCoverage?.percent !== null && formCoverage?.percent !== undefined && <p className="mt-4 inline-block max-w-full rounded-lg border border-border bg-card px-3 py-2 text-sm leading-6">
+        When this score was calculated, <strong className="tabular-nums">{formCoverage.answered} of {formCoverage.total}</strong> form questions were answered (<strong className="tabular-nums">{formCoverage.percent}%</strong>).
       </p>}
     </div>
   </div>;
