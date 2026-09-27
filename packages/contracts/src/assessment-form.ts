@@ -2,7 +2,7 @@ import { z } from "zod";
 import { cancerTypeOptions } from "./assessment-form-options";
 
 export const ASSESSMENT_ANSWER_TEXT_LIMIT = 2000;
-export const ASSESSMENT_FORM_VERSION = "niq-final-overlay-v1";
+export const ASSESSMENT_FORM_VERSION = "niq-final-overlay-v2";
 export type FormAnswer = string | number | string[] | null;
 export type FormAnswers = Record<string, FormAnswer>;
 export type FormField = {
@@ -69,7 +69,7 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
   add("disease_status",
     app("cancer_type", "Type of cancer", "select", "F15:F38", { options: cancerTypeOptions }),
     app("cancer_type_other", "Specify cancer type", "text", "H15", { required: true, visibleWhen: [when("cancer_type", "cancer_other")] }),
-    app("metastasis_site", "Metastasis site", "select", "F42:H46", { options: choices(["Brain", "Liver", "Lung", "Bone", "Others"]), visibleWhen: [when("stage", "stage_metastatic")] }),
+    app("metastasis_site", "Metastasis site", "select", "F42:H46", { required: true, options: choices(["Brain", "Liver", "Lung", "Bone", "Others"]), visibleWhen: [when("stage", "stage_metastatic")] }),
     app("metastasis_other", "Specify metastasis site", "text", "H42", { required: true, visibleWhen: [when("stage", "stage_metastatic"), when("metastasis_site", "others")] }));
   add("treatment",
     app("surgery_date", "Surgery date", "date", "H54", { required: true, visibleWhen: [when("cancer_surgical_status", "cancer_surgical_status_done")] }),
@@ -103,4 +103,16 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
   sections.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
   for (const section of sections) section.fields.sort((a, b) => Number(a.source.match(/\d+/)?.[0]) - Number(b.source.match(/\d+/)?.[0]));
   return { version: ASSESSMENT_FORM_VERSION, sections };
+}
+
+/** Apply the new conditional requirement to open drafts without changing submitted snapshots. */
+export function upgradeDraftAssessmentForm(manifest: AssessmentFormManifest): AssessmentFormManifest {
+  if (manifest.version !== "niq-final-overlay-v1") return manifest;
+  return {
+    version: ASSESSMENT_FORM_VERSION,
+    sections: manifest.sections.map(section => ({
+      ...section,
+      fields: section.fields.map(field => field.id === "metastasis_site" ? { ...field, required: true } : field),
+    })),
+  };
 }

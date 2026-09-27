@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { isAssessmentFieldApplicable, getEffectiveAssessmentAnswers, validateAssessmentAnswers } from "./assessment-form-validation";
-import { buildAssessmentForm } from "./assessment-form";
+import { buildAssessmentForm, upgradeDraftAssessmentForm } from "./assessment-form";
 function fixture() {
   const field = (id: string, type: string) => ({ id, type, label: id, options: type === "calculated" || type === "derived" ? [] : [{ id: `${id}_yes`, label: "Yes" }], dependencies: [] as string[] });
   const q = { formatVersion: 2, profile: "NIQ_FINAL_ASSESSMENT", sections: [
@@ -47,6 +47,7 @@ test("every workbook conditional detail is required only while its parent path i
   const fields = form.sections.flatMap(section => section.fields);
   const cases = [
     ["cancer_type_other", { cancer_type: "cancer_other" }, "Other cancer"],
+    ["metastasis_site", { stage: "stage_metastatic" }, "brain"],
     ["metastasis_other", { stage: "stage_metastatic", metastasis_site: "others" }, "Other site"],
     ["surgery_date", { cancer_surgical_status: "cancer_surgical_status_done" }, "2026-01-01"],
     ["planned_surgery_date", { cancer_surgical_status: "cancer_surgical_status_planned" }, "2026-10-01"],
@@ -67,4 +68,24 @@ test("every workbook conditional detail is required only while its parent path i
   expect(isAssessmentFieldApplicable(timing, { palliative_status: "post_treatment" })).toBe(false);
   const site = fields.find(field => field.id === "metastasis_other")!;
   expect(isAssessmentFieldApplicable(site, { metastasis_site: "others" })).toBe(false);
+});
+
+test("existing drafts gain the conditional metastasis requirement without changing the stored manifest", () => {
+  const current = buildAssessmentForm(fixture());
+  const legacy = {
+    ...current,
+    version: "niq-final-overlay-v1",
+    sections: current.sections.map(section => ({
+      ...section,
+      fields: section.fields.map(field => field.id === "metastasis_site" ? { ...field, required: false } : field),
+    })),
+  };
+  const upgraded = upgradeDraftAssessmentForm(legacy);
+  expect(validateAssessmentAnswers(legacy, { stage: "stage_metastatic" }, { requireComplete: true }).metastasis_site).toBeUndefined();
+  expect(validateAssessmentAnswers(upgraded, { stage: "stage_metastatic" }, { requireComplete: true }).metastasis_site).toBe("Required");
+  expect(validateAssessmentAnswers(upgraded, { stage: "stage_metastatic" }).metastasis_site).toBeUndefined();
+  expect(validateAssessmentAnswers(upgraded, { stage: null }, { requireComplete: true }).metastasis_site).toBeUndefined();
+  expect(upgraded.version).toBe(current.version);
+  expect(upgradeDraftAssessmentForm(upgraded)).toBe(upgraded);
+  expect(legacy.sections.flatMap(section => section.fields).find(field => field.id === "metastasis_site")?.required).toBe(false);
 });

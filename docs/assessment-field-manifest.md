@@ -1,8 +1,8 @@
-# Final assessment overlay v1
+# Final assessment overlay v2
 
 Source: `../../../Document Recieved/Final NIQ Assessment Form_with section_field_details.xlsx`, Sheet1 A2:H157. Runtime cell references: `packages/contracts/src/assessment-form.ts`; exact 24 cancer options: `assessment-form-options.ts`.
 
-Version: `niq-final-overlay-v1`. Scoring fields and options come exclusively from persisted public format-2 NIQ_FINAL_ASSESSMENT metadata. No scoring points, cutoffs or formulas are imported. Requiredness follows workbook column C: personal fields required, scoring entries optional. Explicit conditional detail requirements follow column H. Contact is required (Sheet1 B7/C7) and reads the patient profile as confirmed by the user. It is read-only in the assessment. Missing contact prompts an explicit patient-profile update before submission.
+Version: `niq-final-overlay-v2`. Scoring fields and options come exclusively from persisted public format-2 NIQ_FINAL_ASSESSMENT metadata. No scoring points, cutoffs or formulas are imported. Requiredness follows workbook column C: personal fields required, scoring entries optional. Explicit conditional detail requirements follow column H. When stage is metastatic, the application also requires a metastasis site. Selecting Others requires a site description. Open v1 drafts receive this rule when read, saved or submitted; historical submitted snapshots keep their original manifest. Contact is required (Sheet1 B7/C7) and reads the patient profile as confirmed by the user. It is read-only in the assessment. Missing contact prompts an explicit patient-profile update before submission.
 
 | Section | Source | Fields |
 | --- | --- | --- |
