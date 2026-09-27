@@ -109,6 +109,17 @@ test("completed overview card opens all completed assessments", async () => {
   });
 });
 
+test("a scoring issue remains visible when opened from an older status link", async () => {
+  const items = [{ ...records[0], status: "SCORING_UNAVAILABLE" }, records[1]!];
+  await renderAssessments("/assessments?status=SCORING_UNAVAILABLE", items, () => {
+    const table = document.querySelector('[aria-label="Assessments"]');
+    expect(table?.textContent).toContain("ASM-000001");
+    expect(table?.textContent).toContain("Scoring unavailable");
+    expect(table?.textContent).not.toContain("ASM-000002");
+    expect(document.querySelector('button[aria-label="Clear Scoring unavailable filter"]')).not.toBeNull();
+  });
+});
+
 test("clinical reviews tab shows its unfiltered total", async () => {
   await renderAssessments("/assessments?tab=clinical-reviews&review=QUEUED", records, () => {
     expect(document.querySelector('[data-slot="tabs-list"]')?.textContent).toMatch(/Clinical reviews\s*2/);
