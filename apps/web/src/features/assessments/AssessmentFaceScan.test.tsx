@@ -7,6 +7,7 @@ import { AssessmentFaceScan, type MissingScanInput } from "./AssessmentFaceScan"
 import { createCaptureController, type CaptureSDK } from "./careplix-capture";
 
 const session: FaceScanSession = { id: "session", state: "REQUESTED", context: { dob: "1990-01-01", gender: "female", heightCm: 170, weightKg: 70, posture: "resting", employeeId: "employee" }, createdAt: "2026-09-20T12:00:00.000Z", updatedAt: "2026-09-20T12:00:00.000Z", completedAt: null, failureCode: null, result: null, score: null };
+const usableSession: FaceScanSession = { ...session, state: "COMPLETED", completedAt: "2026-09-20T12:01:00.000Z", result: { schemaVersion: 1, providerScanId: "scan", wellnessScore: 70, healthRiskScore: null, vitals: { heartRate: 70, oxygenSaturation: null, respiratoryRate: null, systolic: null, diastolic: null }, physiologicalScore: null, mentalWellbeingScore: null }, score: { status: "SCORED", points: 1 } };
 async function harness(run: (ctx: { click: (text: string) => Promise<void>; startScan: (label?: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null; status?: AssessmentWorkflow["status"] } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "https://niq.test", pretendToBeVisual: true });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
@@ -106,6 +107,19 @@ test("shows position and stillness guidance below the camera image", async () =>
   expect(preview?.querySelector('[role="status"]')?.textContent).toBe("Please move a bit closer to the screen.");
   await frame("25% Completed");
   expect(preview?.querySelector('[role="status"]')?.textContent).toBe("Hold still and keep your face in view.");
+}));
+test("capture uses an uncropped full-screen camera view with a visible cancel control", async () => harness(async ({ consent, startScan, click }) => {
+  await consent(); await startScan();
+  const overlay = document.querySelector<HTMLElement>(".face-scan-capture-overlay");
+  const canvas = overlay?.querySelector<HTMLCanvasElement>('canvas[aria-label="Camera scan preview"]');
+  expect(overlay?.parentElement).toBe(document.body);
+  expect(overlay?.hidden).toBe(false);
+  expect(canvas?.classList.contains("object-contain")).toBe(true);
+  expect(overlay?.textContent).toContain("Cancel capture");
+  expect(document.body.style.overflow).toBe("hidden");
+  await click("Cancel capture");
+  expect(overlay?.hidden).toBe(true);
+  expect(document.body.style.overflow).toBe("");
 }));
 test("lost upload response reconciles accepted scan without another capture", async () => harness(async ({ consent, startScan, click, finish, starts, requests }) => {
   await consent(); await startScan(); await finish();
@@ -220,7 +234,7 @@ test("completed scan keeps rescan setup closed until explicitly requested", asyn
   await click("Keep current results");
   expect(document.querySelector('section[aria-label="Patient consent"]')).toBeNull();
   expect(document.body.textContent).toContain("Scan again");
-}, { existing: { ...session, state: "COMPLETED" } }));
+}, { existing: usableSession }));
 
 
 test("retained scan stays visible without requiring another capture", async () => harness(async ({ starts, requests }) => {
@@ -230,7 +244,7 @@ test("retained scan stays visible without requiring another capture", async () =
   expect(document.body.textContent).not.toContain("Start face scan");
   expect(starts()).toBe(0);
   expect(requests.every(request => request.body === null)).toBe(true);
-}, { existing: { ...session, state: "COMPLETED" } }));
+}, { existing: usableSession }));
 
 test("changed weight flags the retained scan without replacing it", async () => harness(async ({ starts }) => {
   expect(document.body.textContent).toContain("The saved scan used different weight.");

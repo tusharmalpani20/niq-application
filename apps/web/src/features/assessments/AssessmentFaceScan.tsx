@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { faceScanContextSchema, hasUsableFaceScan, type AssessmentWorkflow, type FaceScanList, type FaceScanSession, type FaceScanSignal } from "@niq/application-contracts";
 import { Armchair, History, Info, PersonStanding, ScanFace } from "lucide-react";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
@@ -139,6 +140,12 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   useEffect(() => { onBusyChange(blocked); return () => onBusyChange(false); }, [blocked, onBusyChange]);
   useEffect(() => { onStatusChange(statusLabel); }, [statusLabel, onStatusChange]);
   useEffect(() => {
+    if (phase !== "capturing" && phase !== "preparing") return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [phase]);
+  useEffect(() => {
     if (phase !== "capturing") return;
     function hidden() {
       if (document.visibilityState === "hidden") { controller.current.cancel(); setPhase("idle"); setError("Capture stopped because this page was hidden. Return to this page and click Resume capture. Keep it visible and focused until capture finishes."); }
@@ -241,15 +248,15 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
           : <p className="text-sm text-muted-foreground">This attempt did not produce a measurement.</p>}</div>
       </details>)}
     </section>}
-    <div hidden={phase !== "capturing" && phase !== "preparing"} className="overflow-hidden rounded-lg bg-muted">
-      <div className="relative aspect-video w-full overflow-hidden">
-        <video ref={video} autoPlay muted playsInline className="absolute size-px opacity-0" aria-hidden="true"/>
-        <canvas ref={canvas} className="absolute inset-0 size-full -scale-x-100 object-cover object-center" aria-label="Camera scan preview"/>
+    {createPortal(<div hidden={phase !== "capturing" && phase !== "preparing"} className="face-scan-capture-overlay" role="dialog" aria-modal="true" aria-label="Face scan camera">
+      <div className="face-scan-capture-panel">
+        <div className="face-scan-capture-header"><ScanFace className="size-5 shrink-0" aria-hidden="true"/><span>Face scan</span>{phase === "capturing" && <Button variant="outline" className="ml-auto" onPress={() => { void cancel(); }}>Cancel capture</Button>}</div>
+        <div className="face-scan-camera"><video ref={video} autoPlay muted playsInline className="absolute size-px opacity-0" aria-hidden="true"/><canvas ref={canvas} className="size-full -scale-x-100 object-contain object-center" aria-label="Camera scan preview"/></div>
+        <div className="face-scan-capture-details">
+          {phase === "capturing" ? <><p role="status" aria-live="polite" className="text-center text-base font-medium">{/^\d+% Completed$/i.test(guidance) ? "Hold still and keep your face in view." : guidance}</p><Progress aria-label="Face scan capture progress" value={progress} className="[&_[data-slot=progress-track]]:h-2.5 [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-indicator]]:duration-300"><ProgressLabel>Capturing scan</ProgressLabel><ProgressValue className="font-semibold" /></Progress>{lowPerformance && <p className="text-center text-sm">Device performance is limited. Keep other applications closed during capture.</p>}</> : <p role="status" className="text-center text-base font-medium">Preparing camera…</p>}
+        </div>
       </div>
-      {phase === "capturing" && <div className="flex min-h-14 items-center justify-center px-3 py-2"><div className="flex w-fit max-w-full items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-center text-sm font-medium leading-snug text-foreground shadow-sm" role="status" aria-live="polite"><ScanFace className="size-4 shrink-0" aria-hidden="true"/><span className="sm:whitespace-nowrap">{/^\d+% Completed$/i.test(guidance) ? "Hold still and keep your face in view." : guidance}</span></div></div>}
-    </div>
-    {phase === "capturing" && <div className="space-y-3"><Progress aria-label="Face scan capture progress" value={progress} className="[&_[data-slot=progress-track]]:h-2.5 [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-indicator]]:duration-300"><ProgressLabel>Capturing scan</ProgressLabel><ProgressValue className="font-semibold text-brand-ink" /></Progress>{lowPerformance && <p className="text-sm text-muted-foreground">Device performance is limited. Keep other applications closed during capture.</p>}<Button variant="outline" onPress={() => { void cancel(); }}>Cancel capture</Button></div>}
-    {phase === "preparing" && <p role="status">Preparing scan…</p>}
+    </div>, document.body)}
     {phase === "uploading" && <p role="status">Uploading scan. Keep this page open until the upload is confirmed.</p>}
     {phase === "upload_failed" && <div className="flex flex-wrap gap-3"><Button onPress={() => { const pending = pendingSignal.current; if (pending) void upload(pending.sessionId, pending.signal); }}>Retry upload</Button><Button variant="outline" onPress={() => { void cancel(); }}>Discard local capture</Button></div>}
     {data?.enabled && session?.state === "COMPLETED" && !rescanRequested && phase === "idle" && record.status === "DRAFT" && <Button variant="outline" isDisabled={disabled || stale} onPress={() => { setPosture(""); setRescanRequested(true); }}>Scan again</Button>}

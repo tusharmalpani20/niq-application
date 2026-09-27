@@ -419,6 +419,51 @@ button, a { -webkit-tap-highlight-color: transparent; }
   }
 }
 .assessment-progress-sticky { top: calc(5.25rem + env(safe-area-inset-top)); }
+.face-scan-capture-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  height: 100vh;
+  height: 100dvh;
+  background: #08181f;
+  color: #fff;
+}
+.face-scan-capture-overlay[hidden] { display: none; }
+.face-scan-capture-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 48rem);
+  min-height: 0;
+  height: 100%;
+}
+.face-scan-capture-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: .6rem;
+  padding: calc(.75rem + env(safe-area-inset-top)) 1rem .75rem;
+  font-weight: 650;
+}
+.face-scan-capture-header button { min-height: 2.75rem; color: var(--foreground); }
+.face-scan-camera {
+  position: relative;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  place-items: center;
+  overflow: hidden;
+  background: #020b0f;
+}
+.face-scan-camera canvas { display: block; max-width: 100%; max-height: 100%; }
+.face-scan-capture-details {
+  display: grid;
+  flex: none;
+  gap: .75rem;
+  padding: .9rem 1rem calc(1rem + env(safe-area-inset-bottom));
+}
+.face-scan-capture-details [data-slot="progress-value"] { color: #fff; }
 .assessment-section-list {
   top: calc(11rem + env(safe-area-inset-top));
   max-height: calc(100dvh - 17rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
