@@ -7,10 +7,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { useUnsavedFormClose } from "@/components/useUnsavedFormClose";
 import { changeClinicalReview, clinicalActionLabels, clinicalReviewLabels, getClinicalReviewers } from "./clinical-review-api";
 import { AssessmentRequestError } from "./workflow-api";
+import { ArrowRightLeft, CircleCheck, ClipboardPen, RotateCcw, Send, UserRoundCheck, UserRoundMinus, type LucideIcon } from "lucide-react";
 
 type Action = ClinicalReviewAction["action"];
 export const recipientActions: Action[] = ["TRANSFER", "RETURN_TO_DRAFT", "REASSIGN_CORRECTION"];
 const noteActions: Action[] = [...recipientActions, "RELEASE", "COMPLETE"];
+const actionIcons: Record<Action, LucideIcon> = {
+  SEND: Send, CLAIM: UserRoundCheck, TRANSFER: ArrowRightLeft, RELEASE: UserRoundMinus,
+  RETURN_TO_DRAFT: RotateCcw, REASSIGN_CORRECTION: ClipboardPen, RESEND: Send, COMPLETE: CircleCheck,
+};
+const reviewActionOrder: Action[] = ["RETURN_TO_DRAFT", "COMPLETE", "TRANSFER", "RELEASE"];
 const automaticCancellationMessage = "The face scan is still open. Automatic cancellation was not confirmed; try again when its status updates.";
 function previouslySent(review: ClinicalReview) {
   return !!review.submittedAt || review.history.some(event => event.action === "SEND" || event.action === "RESEND");
@@ -21,7 +27,9 @@ function reopeningBeforeReview(review: ClinicalReview) {
 function actionLabel(action: Action, review: ClinicalReview) {
   if (action === "RESEND" && !previouslySent(review)) return clinicalActionLabels.SEND;
   if (action === "RETURN_TO_DRAFT" && reopeningBeforeReview(review)) return "Reopen for corrections";
-  return action === "TRANSFER" && !review.assignee ? "Assign reviewer" : clinicalActionLabels[action];
+  if (action === "TRANSFER") return review.assignee ? "Change reviewer" : "Assign reviewer";
+  if (action === "RELEASE") return "Unassign myself";
+  return clinicalActionLabels[action];
 }
 function reviewStatusLabel(review: ClinicalReview) {
   if (review.state === "RETURNED" && !previouslySent(review)) return "Reopened for corrections";
@@ -71,13 +79,18 @@ export function ClinicalReviewPanel({ organizationId, assessmentId, review, atte
   onRefresh: () => Promise<unknown>; onChanged: () => Promise<unknown>; onBusyChange: (busy: boolean) => void;
 }) {
   const [action, setAction] = useState<Action | null>(null);
+  const actionButton = (next: Action) => {
+    if (!review) return null;
+    const ActionIcon = actionIcons[next];
+    return <Button key={next} className="min-h-11" variant={["SEND", "CLAIM", "RESEND", "COMPLETE"].includes(next) ? "default" : "outline"} isDisabled={blocked || loading || !!error || !!action || (next === "COMPLETE" && review.riskClassificationPending === true)} onPress={() => setAction(next)}><ActionIcon className="size-4" aria-hidden="true" />{actionLabel(next, review)}</Button>;
+  };
   return <section aria-label="Clinical review" className="my-5 rounded-xl border border-border bg-card p-4 sm:p-6">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">Clinical review</h2>{review && review.state !== "NOT_SUBMITTED" && <span className="text-sm text-muted-foreground">{reviewStatusLabel(review)}</span>}</div>
     {loading && <p className="mt-3 text-sm" role="status">Loading review…</p>}
     {error && <div role="alert" className="mt-3 text-sm text-destructive">{error}<Button variant="link" isDisabled={blocked || loading} onPress={() => { void onRefresh(); }}>Reload review</Button></div>}
     {review && <>
-      <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 flex-1 space-y-2 text-sm">
+      <div className="mt-4 space-y-4">
+        <div className="space-y-2 text-sm">
           {review.assignee && <p>Reviewer: {review.assignee.displayName}</p>}
           {review.correctionPerson && review.state !== "AWAITING_RESUBMISSION" && <p>Corrections assigned to: {review.correctionPerson.displayName}</p>}
           {review.returnReason && review.state === "RETURNED" && <div className="rounded-lg bg-muted p-3"><p>{previouslySent(review) ? "Return reason" : "Correction reason"}</p><p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{review.returnReason}</p></div>}
@@ -91,7 +104,7 @@ export function ClinicalReviewPanel({ organizationId, assessmentId, review, atte
           {review.riskClassificationPending && <p className="text-muted-foreground">NIQ must confirm the current reviewed risk before this review can be completed. Check the assessment summary below.</p>}
           {blocked && !!review.allowedActions?.length && <p className="text-muted-foreground">Finish or cancel your current changes before changing the review workflow.</p>}
         </div>
-        {!!review.allowedActions?.length && <div className="flex flex-wrap items-center gap-2 lg:max-w-[55%] lg:justify-end">{review.allowedActions.map(next => <Button key={next} variant={["SEND", "CLAIM", "RESEND", "COMPLETE"].includes(next) ? "default" : "outline"} isDisabled={blocked || loading || !!error || !!action || (next === "COMPLETE" && review.riskClassificationPending === true)} onPress={() => setAction(next)}>{actionLabel(next, review)}</Button>)}</div>}
+        {!!review.allowedActions?.length && <div className="flex flex-wrap gap-2">{(review.state === "IN_REVIEW" ? [...review.allowedActions].sort((a, b) => reviewActionOrder.indexOf(a) - reviewActionOrder.indexOf(b)) : review.allowedActions).map(actionButton)}</div>}
       </div>
       <ReviewHistory history={review.history ?? []} attestations={attestations} />
       {action && <ClinicalReviewCommandDialog key={action} action={action} review={review} organizationId={organizationId} assessmentId={assessmentId} blocked={blocked || loading || !!error || (action === "COMPLETE" && review.riskClassificationPending === true)} onClose={() => setAction(null)} onChanged={onChanged} onRefresh={onRefresh} onBusyChange={onBusyChange} />}

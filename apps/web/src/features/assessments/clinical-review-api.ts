@@ -12,6 +12,6 @@ export const clinicalReviewLabels: Record<ClinicalReview["state"], string> = {
   RETURNED: "Returned for correction", AWAITING_RESUBMISSION: "Awaiting resubmission", COMPLETED: "Completed",
 };
 export const clinicalActionLabels: Record<ClinicalReviewAction["action"], string> = {
-  SEND: "Send for clinical review", CLAIM: "Claim review", TRANSFER: "Transfer review", RELEASE: "Release to queue",
-  RETURN_TO_DRAFT: "Return to draft", REASSIGN_CORRECTION: "Reassign correction", RESEND: "Resend for clinical review", COMPLETE: "Complete review",
+  SEND: "Send for clinical review", CLAIM: "Claim review", TRANSFER: "Transfer review", RELEASE: "Release review",
+  RETURN_TO_DRAFT: "Return for corrections", REASSIGN_CORRECTION: "Reassign correction", RESEND: "Resend for clinical review", COMPLETE: "Complete review",
 };

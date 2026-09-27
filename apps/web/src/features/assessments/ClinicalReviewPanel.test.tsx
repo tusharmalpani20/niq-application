@@ -26,6 +26,10 @@ test("clinical actions follow server permissions and block while another edit is
  const buttons=[...document.querySelectorAll("button")];expect(buttons.some(button=>button.textContent==="Claim review")).toBe(false);
  expect(buttons.find(button=>button.textContent==="Complete review")?.disabled).toBe(true);
 }, {blocked:true}));
+test("review actions are all visible together with plain labels", async()=>harness(async()=>{
+  expect([...document.querySelectorAll("button")].map(button=>button.textContent)).toEqual(["Return for corrections", "Complete review", "Change reviewer", "Unassign myself"]);
+  expect(document.querySelectorAll("details")).toHaveLength(0);
+}));
 test("a scored assessment not yet sent uses the pre-review correction label", async()=>harness(async({click,posts})=>{
  expect(document.body.textContent).not.toContain("Not sent for clinical review");
  expect(document.body.textContent).toContain("Ask the person who created this assessment to open it and select Send for clinical review.");
@@ -47,7 +51,7 @@ test("completion requires a final remark and confirms permanent completion",asyn
  expect([...document.querySelectorAll("button")].filter(b=>b.textContent==="Complete review").at(-1)?.disabled).toBe(true);
 }));
 test("transfer does not silently select someone and needs an eligible recipient",async()=>harness(async({click,posts})=>{
- await click("Transfer review");expect(document.body.textContent).toContain("No eligible people");expect(document.querySelector('input[role="combobox"]')?.getAttribute("value")).toBe("");expect(posts).toHaveLength(0);
+ await click("Change reviewer");expect(document.body.textContent).toContain("No eligible people");expect(document.querySelector('input[role="combobox"]')?.getAttribute("value")).toBe("");expect(posts).toHaveLength(0);
 }));
 test("completion sends both revisions and a replay key with the required remark",async()=>harness(async({click,type,posts,changed})=>{
  await click("Complete review");await type("Review finished");await click("Complete review");
@@ -73,17 +77,17 @@ test("cancel after adding a remark offers keep editing instead of silently dismi
 test("reload after a recipient conflict removes people who are no longer eligible", async () => {
   let eligible = true;
   await harness(async ({ click, type, posts }) => {
-    await click("Return to draft");
+    await click("Return for corrections");
     expect(document.querySelector<HTMLInputElement>('input[role="combobox"]')?.value).toContain("Original creator");
     await type("Please correct these answers");
-    await click("Return to draft");
+    await click("Return for corrections");
     expect(posts).toHaveLength(1);
     eligible = false;
     await click("Reload review");
     expect(document.querySelector<HTMLInputElement>('input[role="combobox"]')?.value).toBe("");
     expect(document.body.textContent).toContain("No eligible people");
     expect(document.querySelector("textarea")?.value).toBe("Please correct these answers");
-    await click("Return to draft");
+    await click("Return for corrections");
     expect(posts).toHaveLength(1);
   }, { conflict: true, review: { ...review, defaultCorrectionPersonId: "creator" }, recipients: () => eligible ? [{ membershipId: "creator", displayName: "Original creator", role: "DOCTOR" }] : [] });
 });
@@ -92,7 +96,7 @@ test("completion waits for reviewed risk confirmation while handover remains ava
  expect(document.body.textContent).toContain("NIQ must confirm the current reviewed risk");
  const buttons=[...document.querySelectorAll("button")];
  expect(buttons.find(b=>b.textContent==="Complete review")?.disabled).toBe(true);
- expect(buttons.find(b=>b.textContent==="Transfer review")?.disabled).toBe(false);
+ expect(buttons.find(b=>b.textContent==="Change reviewer")?.disabled).toBe(false);
  await click("Complete review");
  expect(document.querySelector("textarea")).toBeNull();expect(posts).toHaveLength(0);
 },{review:{...review,riskClassificationPending:true}}));
@@ -130,7 +134,7 @@ test("a correction before the first review has its own stage and reason labels",
 }, {review:{...review,state:"RETURNED",correctionPerson:review.assignee,returnReason:"Fix an answer",allowedActions:[]}}));
 
 test("one review history disclosure shows every event without a same-person arrow", async()=>harness(async()=>{
-  const history = document.querySelector("details");
+  const history = [...document.querySelectorAll("details")].find(item => item.querySelector("summary")?.textContent?.includes("Assessment history"));
   expect(history?.querySelector("summary")?.textContent).toBe("Assessment history (2)");
   history?.querySelector("summary")?.click();
   expect(history?.open).toBe(true);
@@ -149,7 +153,7 @@ test("one review history disclosure shows every event without a same-person arro
 ]}}));
 
 test("scoring confirmations and clinical decisions share one dated history", async()=>harness(async()=>{
-  const history = document.querySelector("details");
+  const history = [...document.querySelectorAll("details")].find(item => item.querySelector("summary")?.textContent?.includes("Assessment history"));
   expect(history?.querySelector("summary")?.textContent).toBe("Assessment history (2)");
   const events = history?.querySelectorAll("li");
   expect(events).toHaveLength(2);
