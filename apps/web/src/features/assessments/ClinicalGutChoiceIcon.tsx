@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import {
   ArrowLeftRight, CircleCheck,
-  Bubbles, CalendarDays, CircleMinus, Clock3, Flame, Frown, Timer,
+  Bubbles, CalendarDays, CircleMinus, Clock3,
   Utensils, Waves, type LucideIcon,
 } from "lucide-react";
 
@@ -15,9 +15,6 @@ const appetiteUtensils = <>
 const icons: Record<string, LucideIcon> = {
   appetite_status_normal: Utensils,
   gastrointestinal_symptoms_bloating: Bubbles,
-  gastrointestinal_symptoms_acidity_reflux: Flame,
-  gastrointestinal_symptoms_nausea: Frown,
-  gastrointestinal_symptoms_early_satiety: Timer,
   normal: CircleCheck,
   constipation: Clock3,
   diarrhoea: Waves,
@@ -27,6 +24,18 @@ const icons: Record<string, LucideIcon> = {
 };
 
 const drawings: Record<string, ReactNode> = {
+  gastrointestinal_symptoms_acidity_reflux: <>
+    <path d="M8 3v5c0 1.6-.8 2.4-2.2 3.3A5.2 5.2 0 0 0 3.5 16c0 3 2.3 5 5.5 5 4 0 7-3 7-6v-4c0-2-1.4-3-3-3h-2V3" />
+    <path d="M20 14V5m-3 3 3-3 3 3" />
+  </>,
+  gastrointestinal_symptoms_nausea: <>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M8 10h1m6 0h1M7.5 16c1.2-1.2 2.4 1.2 3.6 0s2.4-1.2 3.6 0 2.4 1.2 3.6 0" />
+  </>,
+  gastrointestinal_symptoms_early_satiety: <>
+    <circle cx="13" cy="12" r="8" />
+    <path d="M13 4v8l5.5 5.5M3 5v7m2-7v7m-1 0v8" />
+  </>,
   appetite_status_reduced: <>
     <g transform="translate(0 2) scale(.72)">{appetiteUtensils}</g>
     <path d="M20 5v14m-3-3 3 3 3-3" />
@@ -58,10 +67,8 @@ const drawings: Record<string, ReactNode> = {
     <path d="m18 3 .5 1.5L20 5l-1.5.5L18 7" />
   </>,
   gastrointestinal_symptoms_dysphagia: <>
-    <path d="M3 6c2.5-2 5.5-3 9-3s6.5 1 9 3c-2.5 2.5-5.5 4-9 4S5.5 8.5 3 6Z" />
-    <path d="M3 6h18" />
-    <path d="M12 11v5m-2-2 2 2 2-2" />
-    <path d="M7 20h10" />
+    <path d="M4 21v-5a8 8 0 0 1 13.5-5.8L20 13l-2.5 1.5V17a2 2 0 0 1-2 2H13v2" />
+    <path d="M11 10h1m4 5v4m-2-2 2 2 2-2" />
   </>,
   gastrointestinal_symptoms_pain_while_eating: <>
     <path d="M4 3v6m3-6v6M4 9h3m-1.5 0v12" />
