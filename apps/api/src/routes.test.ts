@@ -36,6 +36,33 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
 }
 
 describe("local authentication routes", () => {
+  test("rejects authenticated mutations from missing or sibling origins", async () => {
+    let revoked = 0;
+    let tenantInvitations = 0;
+    let signedOut = 0;
+    const app = createApp({
+      allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({
+        revokePlatformAdministratorInvitation: async () => { revoked++; },
+        manageUserInvitation: async () => { tenantInvitations++; return { invitation: {}, token: "replacement-token" }; },
+        signOut: async () => { signedOut++; },
+      }),
+    });
+    const invitation = "/v1/platform/administrators/invitations/01J00000000000000000000004/revoke";
+    const tenantInvitation = `/v1/organizations/${principal.organizationId}/invitations/01J00000000000000000000004/revoke`;
+    for (const origin of [undefined, "http://sibling.localhost:5173"]) {
+      const headers = { cookie: "niq_session=valid-session", ...(origin ? { origin } : {}) };
+      expect((await app.request(invitation, { method: "POST", headers })).status).toBe(403);
+      expect((await app.request(tenantInvitation, { method: "POST", headers })).status).toBe(403);
+      expect((await app.request("/v1/auth/sign-out", { method: "POST", headers })).status).toBe(403);
+    }
+    expect(revoked).toBe(0);
+    expect(tenantInvitations).toBe(0);
+    expect(signedOut).toBe(0);
+    expect((await app.request(invitation, { method: "POST", headers: { cookie: "niq_session=valid-session", origin: "http://localhost:5173" } })).status).toBe(204);
+    expect(revoked).toBe(1);
+  });
+
   test("validates personal assessment priority changes within the authenticated tenant", async () => {
     const assessmentId = "01J00000000000000000000004";
     const calls: boolean[] = [];
@@ -72,7 +99,7 @@ describe("local authentication routes", () => {
         expect(organizationId).toBe(principal.organizationId); expect(membershipId).toBe(principal.membershipId); expect(input.role).toBe("DOCTOR"); userCalls++; return {};
       },
     }) });
-    const request = (path: string, method: string, input: unknown, cookie = "niq_session=valid-session") => app.request(`/v1/organizations/${principal.organizationId}/${path}`, { method, headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(input) });
+    const request = (path: string, method: string, input: unknown, cookie = "niq_session=valid-session") => app.request(`/v1/organizations/${principal.organizationId}/${path}`, { method, headers: { origin: "http://localhost:5173", cookie, "content-type": "application/json" }, body: JSON.stringify(input) });
     const patient = { name: "Patient", homeFacilityId: principal.organizationId, gender: "UNKNOWN", phone: "9012345678", email: "" };
     expect((await request("patients/PAT-2", "PATCH", patient)).status).toBe(200);
     expect((await request("patients/PAT-2", "PATCH", { ...patient, medicalRecordNumber: "CHANGED" })).status).toBe(400);
@@ -105,7 +132,7 @@ describe("local authentication routes", () => {
       },
     }) });
     const request = (mimeType: string, cookie = "niq_session=valid-session") => app.request("/v1/organizations/" + principal.organizationId, {
-      method: "PATCH", headers: { cookie, "content-type": "application/json" },
+      method: "PATCH", headers: { origin: "http://localhost:5173", cookie, "content-type": "application/json" },
       body: JSON.stringify({ logo: { ...logo, mimeType } }),
     });
     expect((await request("image/png")).status).toBe(200);
@@ -122,7 +149,7 @@ describe("local authentication routes", () => {
       },
     }) });
     const response = await app.request(`/v1/organizations/${principal.organizationId}`, {
-      method: "PATCH", headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      method: "PATCH", headers: { origin: "http://localhost:5173", cookie: "niq_session=valid-session", "content-type": "application/json" },
       body: JSON.stringify({ logoObjectKey: null }),
     });
     expect(response.status).toBe(200);
@@ -208,7 +235,7 @@ describe("local authentication routes", () => {
     });
     const response = await app.request(`/v1/organizations/${principal.organizationId}/facilities`, {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: "niq_session=valid-session" },
+      headers: { origin: "http://localhost:5173", "content-type": "application/json", cookie: "niq_session=valid-session" },
       body: JSON.stringify({ name: "Chennai Central", code: "CHE", timezone: "Asia/Kolkata" }),
     });
     expect(response.status).toBe(201);
@@ -245,7 +272,7 @@ describe("local authentication routes", () => {
     };
     const response = await app.request(`/v1/organizations/${principal.organizationId}/patients`, {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: "niq_session=valid-session" },
+      headers: { origin: "http://localhost:5173", "content-type": "application/json", cookie: "niq_session=valid-session" },
       body: JSON.stringify(patientInput),
     });
     expect(response.status).toBe(201);
@@ -253,7 +280,7 @@ describe("local authentication routes", () => {
     expect(observedMedicalRecordNumber).toBe("MRN-1001");
     const withoutPhone = await app.request(`/v1/organizations/${principal.organizationId}/patients`, {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: "niq_session=valid-session" },
+      headers: { origin: "http://localhost:5173", "content-type": "application/json", cookie: "niq_session=valid-session" },
       body: JSON.stringify({ ...patientInput, phone: "" }),
     });
     expect(withoutPhone.status).toBe(400);
@@ -393,7 +420,7 @@ describe("local authentication routes", () => {
     expect((await listResponse.json()).items).toHaveLength(1);
     const inviteResponse = await app.request("/v1/platform/administrators/invitations", {
       method: "POST",
-      headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      headers: { origin: "http://localhost:5173", cookie: "niq_session=valid-session", "content-type": "application/json" },
       body: JSON.stringify({ email: "second.admin@niq.test" }),
     });
     expect(inviteResponse.status).toBe(201);
@@ -415,7 +442,7 @@ describe("local authentication routes", () => {
         },
         revokePlatformAdministratorInvitation: async (_actor, invitationId) => { expect(invitationId).toBe(id); revoked++; },
       }) });
-      const request = (action: string, invitationId = id, cookie = "niq_session=valid-session") => app.request(`/v1/platform/administrators/invitations/${invitationId}/${action}`, { method: "POST", headers: { cookie } });
+      const request = (action: string, invitationId = id, cookie = "niq_session=valid-session") => app.request(`/v1/platform/administrators/invitations/${invitationId}/${action}`, { method: "POST", headers: { origin: "http://localhost:5173", cookie } });
       const response = await request("regenerate");
       expect(response.status).toBe(200);
       expect((await response.json()).activationToken).toBe(exposeDevelopmentTokens ? "rotated-secret" : undefined);
@@ -440,7 +467,7 @@ describe("local authentication routes", () => {
           return { invitation: { id }, ...(action === "regenerate" ? { token: "new-tenant-secret" } : {}) };
         },
       }) });
-      const request = (action: string, invitationId = id, cookie = "niq_session=valid-session") => app.request(`/v1/organizations/${principal.organizationId}/invitations/${invitationId}/${action}`, { method: "POST", headers: { cookie } });
+      const request = (action: string, invitationId = id, cookie = "niq_session=valid-session") => app.request(`/v1/organizations/${principal.organizationId}/invitations/${invitationId}/${action}`, { method: "POST", headers: { origin: "http://localhost:5173", cookie } });
       const response = await request("regenerate");
       expect(response.status).toBe(200);
       expect((await response.json()).activationToken).toBe(exposeDevelopmentTokens ? "new-tenant-secret" : undefined);
@@ -473,7 +500,7 @@ describe("local authentication routes", () => {
     const membershipId = "01J00000000000000000000009";
     const response = await app.request(`/v1/platform/administrators/${membershipId}`, {
       method: "PATCH",
-      headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      headers: { origin: "http://localhost:5173", cookie: "niq_session=valid-session", "content-type": "application/json" },
       body: JSON.stringify({ active: false }),
     });
     expect(response.status).toBe(200);
@@ -486,7 +513,7 @@ describe("local authentication routes", () => {
     const app = createApp({ allowedOrigin: "https://app.example.com", authMode: "local", checkDatabase: async () => true, service: fakeService() });
     const response = await app.request(`/v1/organizations/${principal.organizationId}/invitations`, {
       method: "POST",
-      headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      headers: { origin: "https://app.example.com", cookie: "niq_session=valid-session", "content-type": "application/json" },
       body: JSON.stringify({ email: "user@example.com", role: "OTHER_MEDICAL", facilityIds: [] }),
     });
     expect(response.status).toBe(201);
@@ -507,7 +534,7 @@ describe("local authentication routes", () => {
     });
     const response = await app.request("/v1/organizations/onboard", {
       method: "POST",
-      headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      headers: { origin: "http://localhost:5173", cookie: "niq_session=valid-session", "content-type": "application/json" },
       body: JSON.stringify({
         legalName: "Example Health Network Private Limited",
         displayName: "Example Health Network",
@@ -539,7 +566,7 @@ describe("local authentication routes", () => {
     });
     const response = await app.request(`/v1/organizations/${principal.organizationId}/scoring/activate`, {
       method: "POST",
-      headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      headers: { origin: "http://localhost:5173", cookie: "niq_session=valid-session", "content-type": "application/json" },
       body: JSON.stringify({ activationToken: `niq_act_${"x".repeat(48)}` }),
     });
     expect(response.status).toBe(201);
@@ -560,7 +587,7 @@ describe("local authentication routes", () => {
     });
     const response = await app.request(`/v1/organizations/${principal.organizationId}/scoring/activate`, {
       method: "POST",
-      headers: { cookie: "niq_session=valid-session", "content-type": "application/json" },
+      headers: { origin: "http://localhost:5173", cookie: "niq_session=valid-session", "content-type": "application/json" },
       body: JSON.stringify({ activationToken: `niq_act_${"x".repeat(48)}` }),
     });
     expect(response.status).toBe(503);
@@ -599,7 +626,7 @@ describe("local authentication routes", () => {
     });
     const response = await app.request(`/v1/organizations/${principal.organizationId}/scoring/connection`, {
       method: "DELETE",
-      headers: { cookie: "niq_session=valid-session" },
+      headers: { origin: "http://localhost:5173", cookie: "niq_session=valid-session" },
     });
     expect(response.status).toBe(204);
     expect(disconnectedOrganization).toBe(principal.organizationId);
