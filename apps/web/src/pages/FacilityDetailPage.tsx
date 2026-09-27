@@ -50,7 +50,7 @@ export function FacilityDetailPage() {
       if (!active) return;
       const facility = facilities.find(item => item.id === facilityLocator || item.code.toLowerCase() === facilityLocator?.toLowerCase());
       if (!facility) { setState("missing"); return; }
-      const performance = canManageUsers ? await getFacilityPerformance(user.organizationId, facility.id).catch(() => null) : null;
+      const performance = canOpenAssessment ? await getFacilityPerformance(user.organizationId, facility.id).catch(() => null) : null;
       if (!active) return;
       setOverview({
         facility,
@@ -63,13 +63,18 @@ export function FacilityDetailPage() {
       if (`/facilities/${encodeURIComponent(facilityLocator ?? "")}` !== facilityUrl(facility)) navigate(facilityUrl(facility), { replace: true });
     }).catch(() => { if (active) setState("error"); });
     return () => { active = false; };
-  }, [user.organizationId, canManageUsers, facilityLocator, navigate, reload]);
+  }, [user.organizationId, canManageUsers, canOpenAssessment, facilityLocator, navigate, reload]);
 
   if (state === "loading") return <p role="status">Loading facility…</p>;
   if (state === "missing") return <Alert><AlertDescription>Facility not found or you do not have access. <Link to="/facilities">Back to facilities</Link></AlertDescription></Alert>;
   if (state === "error" || !overview) return <Alert variant="destructive"><AlertDescription>Facility overview could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button></AlertDescription></Alert>;
 
   const { facility, patients, assessments, team, performance } = overview;
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const inLast30Days = (date: Date) => date >= cutoff && date <= now;
+  const newPatients = patients.filter(item => inLast30Days(item.createdAt)).length;
+  const completed = assessments.filter(item => item.status === "COMPLETED" && item.completedAt && inLast30Days(item.completedAt)).length;
   const open = assessments.filter(item => openAssessmentStatuses.has(item.status));
   const underReview = assessments.filter(item => item.status === "UNDER_REVIEW");
   const needsAttention = assessments.filter(item => item.status === "SCORING_UNAVAILABLE");
@@ -94,13 +99,14 @@ export function FacilityDetailPage() {
     </header>
 
     {facility.status !== "ACTIVE" && <Alert className="mb-5"><AlertDescription>This facility is deactivated. Existing patient and assessment records remain available.</AlertDescription></Alert>}
-    <section aria-label="Facility at a glance" className={`grid gap-4 sm:grid-cols-2${canManageUsers ? " lg:grid-cols-3" : ""}`}>
-      <Metric label="Patients" value={patients.length} detail="Home facility is here" />
+    <section aria-label="Facility at a glance" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Metric label="Patients" value={patients.length} detail="With this home facility" />
+      <Metric label="New patients" value={newPatients} detail="Registered in the past 30 days" />
+      <Metric label="Assessments completed" value={completed} detail="At this facility in the past 30 days" />
       <Metric label="Open assessments" value={open.length} detail="Draft or ready for scoring" />
-      {canManageUsers && <Metric label="Enabled team members" value={team?.length ?? "—"} detail={team ? "Members with access to this facility" : "Team information unavailable"} />}
     </section>
 
-    {canManageUsers && (performance ? <FacilityPerformance performance={performance} facilityId={facility.id} /> : <section className="surface mt-6 p-5" aria-label="Facility performance"><h2 className="font-semibold">This month</h2><p className="mt-2 text-sm text-muted-foreground">Performance data could not be loaded. Refresh this page to try again.</p></section>)}
+    {canOpenAssessment && (performance ? <FacilityPerformance performance={performance} facilityId={facility.id} /> : <section className="surface mt-6 p-5" aria-label="Facility performance"><h2 className="font-semibold">Scoring and patient categories</h2><p className="mt-2 text-sm text-muted-foreground">Facility performance data could not be loaded. Refresh this page to try again.</p></section>)}
 
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
       <section className="surface p-5" aria-label="Facility assessment work">
@@ -114,7 +120,7 @@ export function FacilityDetailPage() {
     </div>
 
     {canManageUsers && <section className="surface table-surface mt-4" aria-label="Facility team">
-      <div className="flex flex-wrap items-start justify-between gap-2 px-5 pt-5"><h2 className="font-semibold">Team with access</h2><Link className="text-sm text-primary hover:underline" to="/users">Manage users</Link></div>
+      <div className="flex flex-wrap items-start justify-between gap-2 px-5 pt-5"><div><h2 className="font-semibold">Team with access</h2><p className="mt-1 text-sm text-muted-foreground">{team ? `${team.length} enabled members` : "Team information unavailable"}</p></div><Link className="text-sm text-primary hover:underline" to="/users">Manage users</Link></div>
       {team === null ? <p className="p-5 text-sm text-muted-foreground">Team information could not be loaded.</p> : visibleTeam.length ? <>
         <div className="mobile-card-list">{visibleTeam.map(item => <article className="mobile-data-card" key={item.membershipId}><strong>{item.displayName}</strong><span>{item.email}</span><span>{membershipRoleLabels[item.role]}</span></article>)}</div>
         <div className="desktop-table p-5"><DataTable label="Facility team members" columns={teamColumns} data={visibleTeam} /></div>
