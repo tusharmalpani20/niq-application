@@ -225,7 +225,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
     <Tabs selectedKey={patientTab} onSelectionChange={(key) => setPatientTab(String(key))} className="organization-detail-tabs gap-5">
       <TabsList variant="line" aria-label="Patient record" className="w-full justify-start gap-5 border-b p-0">
         <TabsTrigger id="details" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Details</TabsTrigger>
-        <TabsTrigger id="assessments" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Assessments {historyState === "ready" && <span className="patient-tab-count">{history.length}</span>}</TabsTrigger>
+        <TabsTrigger id="assessments" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Assessments {historyState === "ready" && <span className="ml-2 text-xs">{history.length}</span>}</TabsTrigger>
       </TabsList>
       <TabsContent id="details">
         <LatestAssessment history={history} state={historyState} canRead={canReadAssessment} canEdit={canEditAssessment} />
