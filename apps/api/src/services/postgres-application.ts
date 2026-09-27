@@ -602,6 +602,8 @@ export class PostgresApplicationService implements ApplicationService {
     this.ensureOrganizationAccess(actor, organizationId);
     const [organization] = await this.db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1);
     if (!organization) throw new ServiceError("NOT_FOUND", "Organization not found.");
+    const canReadInvitations = actor.platformRole === "NIQ_ADMIN" || hasPermission(actor.role, "users.manage");
+    const canReadScoringConnection = actor.platformRole === "NIQ_ADMIN" || hasPermission(actor.role, "scoring.manage");
     const [entitlements, organizationInvitations, scoringConnectionsForOrganization] = await Promise.all([
       this.db.select({
         userLimit: organizationEntitlements.userLimit,
@@ -611,10 +613,14 @@ export class PostgresApplicationService implements ApplicationService {
         sql`${organizationEntitlements.effectiveFrom} <= now()`,
         sql`(${organizationEntitlements.effectiveUntil} IS NULL OR ${organizationEntitlements.effectiveUntil} > now())`,
       )).orderBy(desc(organizationEntitlements.effectiveFrom), desc(organizationEntitlements.createdAt)).limit(1),
-      this.db.select({ id: invitations.id, email: invitations.email, role: invitations.role, status: invitations.status, expiresAt: invitations.expiresAt })
-        .from(invitations).where(eq(invitations.organizationId, organizationId)).orderBy(desc(invitations.createdAt)),
-      this.db.select({ deploymentId: scoringConnections.deploymentId, scoringOrganizationId: scoringConnections.scoringOrganizationId, keyVersion: scoringConnections.keyVersion, activatedAt: scoringConnections.activatedAt })
-        .from(scoringConnections).where(eq(scoringConnections.organizationId, organizationId)).limit(1),
+      canReadInvitations
+        ? this.db.select({ id: invitations.id, email: invitations.email, role: invitations.role, status: invitations.status, expiresAt: invitations.expiresAt })
+          .from(invitations).where(eq(invitations.organizationId, organizationId)).orderBy(desc(invitations.createdAt))
+        : Promise.resolve([]),
+      canReadScoringConnection
+        ? this.db.select({ deploymentId: scoringConnections.deploymentId, scoringOrganizationId: scoringConnections.scoringOrganizationId, keyVersion: scoringConnections.keyVersion, activatedAt: scoringConnections.activatedAt })
+          .from(scoringConnections).where(eq(scoringConnections.organizationId, organizationId)).limit(1)
+        : Promise.resolve([]),
     ]);
     return {
       organization,
@@ -754,8 +760,11 @@ export class PostgresApplicationService implements ApplicationService {
   }
   async createFacility(actor: Principal, organizationId: string, input: CreateFacility, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, "facilities.manage");
-    const [result] = await this.db.insert(facilities).values({ id: createEntityId(), organizationId, ...input, code: input.code.toUpperCase() }).returning();
-    await this.audit(this.db, organizationId, context, "FACILITY_CREATED", "facility", result?.id, actor); return result;
+    return this.db.transaction(async (tx) => {
+      const [result] = await tx.insert(facilities).values({ id: createEntityId(), organizationId, ...input, code: input.code.toUpperCase() }).returning();
+      await this.audit(tx, organizationId, context, "FACILITY_CREATED", "facility", result?.id, actor);
+      return result;
+    });
   }
   async listFacilities(actor: Principal, organizationId: string) {
     this.ensureOrganizationAccess(actor, organizationId, "facilities.read");
@@ -809,9 +818,12 @@ export class PostgresApplicationService implements ApplicationService {
   async updateFacility(actor: Principal, organizationId: string, facilityId: string, input: UpdateFacility, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, "facilities.manage");
     const values = { ...input, ...(input.code ? { code: input.code.toUpperCase() } : {}), updatedAt: new Date() };
-    const [result] = await this.db.update(facilities).set(values).where(and(eq(facilities.organizationId, organizationId), eq(facilities.id, facilityId), facilityAccessCondition(actor, organizationId, facilities.id))).returning();
-    if (!result) throw new ServiceError("NOT_FOUND", "Facility not found.");
-    await this.audit(this.db, organizationId, context, "FACILITY_UPDATED", "facility", facilityId, actor, { fields: Object.keys(input) }); return result;
+    return this.db.transaction(async (tx) => {
+      const [result] = await tx.update(facilities).set(values).where(and(eq(facilities.organizationId, organizationId), eq(facilities.id, facilityId), facilityAccessCondition(actor, organizationId, facilities.id))).returning();
+      if (!result) throw new ServiceError("NOT_FOUND", "Facility not found.");
+      await this.audit(tx, organizationId, context, "FACILITY_UPDATED", "facility", facilityId, actor, { fields: Object.keys(input) });
+      return result;
+    });
   }
   async updatePatient(actor: Principal, organizationId: string, patientLocator: string, input: UpdatePatient, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, "patients.edit");

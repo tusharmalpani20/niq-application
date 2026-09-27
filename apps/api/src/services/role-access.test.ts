@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { ApplicationConfig } from "@niq/application-config";
 import { membershipRoles } from "@niq/application-contracts";
 import type { Database } from "../db/client";
-import { facilityMemberships, organizationMemberships, users } from "../db/schema";
+import { facilityMemberships, invitations, organizationEntitlements, organizationMemberships, organizations, scoringConnections, users } from "../db/schema";
 import type { Principal } from "./application";
 import { PostgresApplicationService } from "./postgres-application";
 import { AssessmentWorkflowService } from "./assessment-workflow";
@@ -41,6 +41,38 @@ for (const role of ["DOCTOR", "NUTRITIONIST", "OTHER_MEDICAL", "SUPPORT"] as con
   await expect(service.listUsers({ ...actor, role }, "org")).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(service.setUserActive({ ...actor, role }, "org", "other", false, { requestId: "audit" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(service.createFacility({ ...actor, role }, "org", {} as any, { requestId: "audit" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+});
+
+test("organization details hide invitations and scoring connections from support", async () => {
+  const queried: unknown[] = [];
+  const records = new Map<unknown, unknown[]>([
+    [organizations, [{ id: "org", displayName: "Example" }]],
+    [organizationEntitlements, [{ userLimit: 10, effectiveFrom: new Date() }]],
+    [invitations, [{ id: "invite", email: "invitee@example.test", role: "DOCTOR", status: "PENDING", expiresAt: new Date() }]],
+    [scoringConnections, [{ deploymentId: "deployment", scoringOrganizationId: "scoring-org", keyVersion: "v1", activatedAt: new Date() }]],
+  ]);
+  const db = {
+    select: () => ({ from(table: unknown) {
+      queried.push(table);
+      const rows = records.get(table) ?? [];
+      const query = {
+        where: () => query,
+        orderBy: () => query,
+        limit: async () => rows,
+        then: (resolve: (value: unknown[]) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(rows).then(resolve, reject),
+      };
+      return query;
+    } }),
+  } as unknown as Database;
+  const service = new PostgresApplicationService(db, config, { deliver: async () => {} });
+  const support = await service.getOrganization({ ...actor, role: "SUPPORT" }, "org");
+  expect(support.invitations).toEqual([]);
+  expect(support.scoringConnection).toBeNull();
+  expect(queried).not.toContain(invitations);
+  expect(queried).not.toContain(scoringConnections);
+  const admin = await service.getOrganization({ ...actor, role: "ORGANIZATION_ADMIN" }, "org");
+  expect(admin.invitations).toHaveLength(1);
+  expect(admin.scoringConnection?.deploymentId).toBe("deployment");
 });
 
 test("support cannot read facility clinical performance", async () => {
