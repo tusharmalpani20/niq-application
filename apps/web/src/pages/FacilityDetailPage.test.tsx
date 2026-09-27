@@ -54,7 +54,9 @@ async function renderDetail(role: MembershipRole, verify: (body: HTMLElement, re
 test("admin sees facility metrics, assigned team, and management actions", async () => {
   await renderDetail("ORGANIZATION_ADMIN", (body, requested, path) => {
     expect(path).toBe("/facilities/hyd");
-    expect(body.querySelector('[aria-label="Facility at a glance"]')?.textContent).toContain("New patients1");
+    expect(body.querySelector('[aria-label="Facility at a glance"]')?.textContent).toContain("Total patients1");
+    expect(body.querySelector('[aria-label="Facility at a glance"]')?.textContent).toContain("Patients registered1");
+    expect(body.querySelector('a[href="/patients?facility=' + facilityId + '"] [aria-label^="Up"]')).toBeNull();
     expect(body.querySelector('[aria-label="Facility at a glance"]')?.textContent).toContain("Assessments completed0");
     expect(body.querySelector('[aria-label="Facility at a glance"] [aria-label="Up 1"]')).not.toBeNull();
     expect(body.querySelector('[aria-label="Facility at a glance"] [aria-label="No change 0"]')).not.toBeNull();
@@ -73,8 +75,8 @@ test("admin sees facility metrics, assigned team, and management actions", async
     expect(body.querySelector('[aria-label="Facility performance"]')?.textContent).toContain("Face scans completed3");
     expect(body.querySelector('[aria-label="Facility performance"] [aria-label="Up 300 percent"]')).not.toBeNull();
     expect(body.querySelector('[aria-label="Facility performance"] [aria-label="Down 40 percent"]')).not.toBeNull();
-    expect(body.querySelector('[aria-label="Patient risk categories"]')?.textContent).toContain("3 assessed patients");
-    expect(body.querySelector('[aria-label="Patient risk categories"]')?.textContent).toContain("High risk1");
+    expect(body.querySelector('[aria-label="Patient risk categories"] [role="img"]')?.getAttribute("aria-label")).toContain("3 assessed patients");
+    expect(body.querySelector('[aria-label="Patient risk categories"] [role="img"]')?.getAttribute("aria-label")).toContain("High risk: 1");
   });
 });
 
