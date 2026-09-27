@@ -1,4 +1,4 @@
-import { ArrowDownRight, BatteryLow, BicepsFlexed, CircleCheck, DropletOff, Wind, type LucideIcon } from "lucide-react";
+import { BicepsFlexed, CircleCheck, DropletOff, MoonStar, Wind, type LucideIcon } from "lucide-react";
 import { ClinicalGutChoiceIcon } from "./ClinicalGutChoiceIcon";
 
 // Shared symptoms keep the same pictogram wherever they appear in the assessment.
@@ -18,16 +18,13 @@ const icons: Record<string, LucideIcon> = {
   dietary_symptoms_no_problem: CircleCheck,
   dietary_symptoms_dry_mouth: DropletOff,
   dietary_symptoms_smells_bother: Wind,
-  dietary_symptoms_fatigue: BatteryLow,
+  dietary_symptoms_fatigue: MoonStar,
+  dietary_symptoms_muscle_loss: BicepsFlexed,
 };
 
 export function DietarySymptomIcon({ type }: { type: string }) {
   const shared = sharedSymptoms[type];
   if (shared) return <ClinicalGutChoiceIcon type={shared} />;
-  if (type === "dietary_symptoms_muscle_loss") return <span data-dietary-symptom-icon={type} className="relative size-6 shrink-0" aria-hidden="true">
-    <BicepsFlexed className="absolute left-0 top-0 size-5" strokeWidth={1.75} />
-    <ArrowDownRight className="absolute bottom-0 right-0 size-3" strokeWidth={2.25} />
-  </span>;
   const Icon = icons[type];
   return Icon ? <Icon data-dietary-symptom-icon={type} className="size-6 shrink-0" strokeWidth={1.75} aria-hidden="true" /> : null;
 }

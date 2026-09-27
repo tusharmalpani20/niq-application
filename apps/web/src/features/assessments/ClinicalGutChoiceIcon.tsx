@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import {
   ArrowLeftRight, CircleCheck,
   Bubbles, CalendarDays, CircleMinus, Clock3,
-  Utensils, Waves, type LucideIcon,
+  Utensils, type LucideIcon,
 } from "lucide-react";
 
 /** Decorative cues for appetite and gut choices; the labels carry the clinical meaning. */
@@ -17,13 +17,17 @@ const icons: Record<string, LucideIcon> = {
   gastrointestinal_symptoms_bloating: Bubbles,
   normal: CircleCheck,
   constipation: Clock3,
-  diarrhoea: Waves,
   alternating: ArrowLeftRight,
   daily: CalendarDays,
   __none__: CircleMinus,
 };
 
 const drawings: Record<string, ReactNode> = {
+  diarrhoea: <>
+    <path d="M4 5v7a3 3 0 0 0 3 3h2M20 5v7a3 3 0 0 1-3 3h-2" />
+    <path d="M4 5h5v4H7M20 5h-5v4h2" />
+    <path d="M12 12v9m-3-3 3 3 3-3" />
+  </>,
   gastrointestinal_symptoms_acidity_reflux: <>
     <path d="M8 3v5c0 1.6-.8 2.4-2.2 3.3A5.2 5.2 0 0 0 3.5 16c0 3 2.3 5 5.5 5 4 0 7-3 7-6v-4c0-2-1.4-3-3-3h-2V3" />
     <path d="M20 14V5m-3 3 3-3 3 3" />
