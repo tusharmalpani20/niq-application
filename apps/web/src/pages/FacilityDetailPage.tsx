@@ -16,6 +16,7 @@ import { assessmentStatusLabels } from "../lib/patient-display";
 import { FacilityDialog } from "./FacilitiesPage";
 import { FacilityPerformance } from "./FacilityPerformance";
 import { OverviewStatCard } from "./OverviewStatCard";
+import { overviewGrowth, periodGrowth } from "./overview-growth";
 import { facilityUrl } from "../lib/facility-url";
 
 type FacilityOverview = { facility: Facility; patients: Patient[]; assessments: AssessmentSummary[]; team: OrganizationUser[] | null; performance: Performance | null };
@@ -69,9 +70,15 @@ export function FacilityDetailPage() {
   const { facility, patients, assessments, team, performance } = overview;
   const now = new Date();
   const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const previousCutoff = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
   const inLast30Days = (date: Date) => date >= cutoff && date <= now;
-  const newPatients = patients.filter(item => inLast30Days(item.createdAt)).length;
-  const completed = assessments.filter(item => item.status === "COMPLETED" && item.completedAt && inLast30Days(item.completedAt)).length;
+  const inPrevious30Days = (date: Date) => date >= previousCutoff && date < cutoff;
+  const patientGrowth = overviewGrowth(patients.map(item => item.createdAt), now);
+  const newPatients = patientGrowth.added;
+  const previousPatients = patients.filter(item => inPrevious30Days(item.createdAt)).length;
+  const completionDates = assessments.flatMap(item => item.status === "COMPLETED" && item.completedAt ? [item.completedAt] : []);
+  const completed = completionDates.filter(inLast30Days).length;
+  const previousCompleted = completionDates.filter(inPrevious30Days).length;
   const open = assessments.filter(item => openAssessmentStatuses.has(item.status));
   const underReview = assessments.filter(item => item.status === "UNDER_REVIEW");
   const needsAttention = assessments.filter(item => item.status === "SCORING_UNAVAILABLE");
@@ -97,9 +104,9 @@ export function FacilityDetailPage() {
 
     {facility.status !== "ACTIVE" && <Alert className="mb-5"><AlertDescription>This facility is deactivated. Existing patient and assessment records remain available.</AlertDescription></Alert>}
     <section aria-label="Facility at a glance" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-      <OverviewStatCard label="Patients" value={patients.length} icon={UsersRound} detail="With this home facility" to={`/patients?facility=${facility.id}`} />
-      <OverviewStatCard label="New patients" value={newPatients} icon={UserRoundPlus} detail="Registered in the past 30 days" />
-      <OverviewStatCard label="Assessments completed" value={completed} icon={ClipboardCheck} detail="Here in the past 30 days" to={`/assessments?facility=${facility.id}&status=COMPLETED`} />
+      <OverviewStatCard label="Patients" value={patients.length} icon={UsersRound} trend={{ change: patientGrowth.added, percent: patientGrowth.percent, increaseIsGood: true }} detail="vs 30 days ago" to={`/patients?facility=${facility.id}`} />
+      <OverviewStatCard label="New patients" value={newPatients} icon={UserRoundPlus} trend={periodGrowth(newPatients, previousPatients)} detail="vs previous 30 days" />
+      <OverviewStatCard label="Assessments completed" value={completed} icon={ClipboardCheck} trend={periodGrowth(completed, previousCompleted)} detail="vs previous 30 days" to={`/assessments?facility=${facility.id}&status=COMPLETED`} />
       <OverviewStatCard label="Open assessments" value={open.length} icon={ClipboardList} detail="Draft or ready for scoring" to={`/assessments?facility=${facility.id}&status=OPEN`} />
     </section>
 

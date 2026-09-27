@@ -34,6 +34,7 @@ async function renderDetail(role: MembershipRole, verify: (body: HTMLElement, re
       assessments: { months: ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"].map((month, index) => ({ month, count: index === 5 ? 2 : 0 })), previous: { count: 0, through: "2026-08-24" } },
       faceScans: { months: ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"].map((month, index) => ({ month, count: index === 5 ? 3 : 0 })), previous: { count: 0, through: "2026-08-24" } },
       last30Days: { scored: 4, completed: 2, faceScans: 3 },
+      previous30Days: { scored: 1, faceScans: 5 },
       risk: { assessedPatients: 3, categories: { low: 1, moderate: 1, high: 1 } },
     });
     return Response.json({}, { status: 404 });
@@ -55,6 +56,8 @@ test("admin sees facility metrics, assigned team, and management actions", async
     expect(path).toBe("/facilities/hyd");
     expect(body.querySelector('[aria-label="Facility at a glance"]')?.textContent).toContain("New patients1");
     expect(body.querySelector('[aria-label="Facility at a glance"]')?.textContent).toContain("Assessments completed0");
+    expect(body.querySelector('[aria-label="Facility at a glance"] [aria-label="Up 1"]')).not.toBeNull();
+    expect(body.querySelector('[aria-label="Facility at a glance"] [aria-label="No change 0"]')).not.toBeNull();
     expect(body.querySelector('[aria-label="Facility team"]')?.textContent).toContain("Example Doctor");
     expect(body.querySelector('[aria-label="Facility team"]')?.textContent).toContain("1 enabled members");
     expect(body.querySelector('[aria-label="Facility team"]')?.textContent).not.toContain("Other Doctor");
@@ -68,6 +71,8 @@ test("admin sees facility metrics, assigned team, and management actions", async
     expect(requested.some(url => url.endsWith(`/facilities/${facilityId}/performance`))).toBe(true);
     expect(body.querySelector('[aria-label="Facility performance"]')?.textContent).toContain("Assessments scored4");
     expect(body.querySelector('[aria-label="Facility performance"]')?.textContent).toContain("Face scans completed3");
+    expect(body.querySelector('[aria-label="Facility performance"] [aria-label="Up 300 percent"]')).not.toBeNull();
+    expect(body.querySelector('[aria-label="Facility performance"] [aria-label="Down 40 percent"]')).not.toBeNull();
     expect(body.querySelector('[aria-label="Patient risk categories"]')?.textContent).toContain("3 assessed patients");
     expect(body.querySelector('[aria-label="Patient risk categories"]')?.textContent).toContain("High risk1");
   });
