@@ -133,6 +133,8 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   const afterReview=await assessment();
   await command(creator,afterReview,"SEND");
   expect((await reviews.queue(admin,org,{page:1,pageSize:1000})).items.find(item=>item.assessmentId===afterReview)?.review.state).toBe("QUEUED");
+  expect((await reviews.queue(admin,org,{page:1,pageSize:1000,facilityId:facility})).items.some(item=>item.assessmentId===afterReview)).toBe(true);
+  expect((await reviews.queue(admin,org,{page:1,pageSize:1000,facilityId:otherFacility})).items.some(item=>item.assessmentId===afterReview)).toBe(false);
   await command(nurse,afterReview,"CLAIM");
   expect((await reviews.queue(admin,org,{page:1,pageSize:1000,state:"IN_REVIEW"})).items.find(item=>item.assessmentId===afterReview)?.review.state).toBe("IN_REVIEW");
   await command(admin,afterReview,"RETURN_TO_DRAFT",{assigneeId:creator.membershipId,reason:"Correct after review"});

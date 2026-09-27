@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { AuthenticatedUser, ClinicalReviewQueue as Queue, ClinicalReviewQueueItem } from "@niq/application-contracts";
 import { ChevronRight } from "lucide-react";
@@ -7,30 +7,52 @@ import { DataTable, type DataTableColumn } from "@/components/DataTable";
 import { ClinicalReviewEmptyIllustration } from "@/components/ClinicalReviewEmptyIllustration";
 import { RouterButtonLink } from "@/components/RouterButtonLink";
 import { StatusBadge } from "@/components/StatusBadge";
-import { clinicalReviewLabels, listClinicalReviews } from "./clinical-review-api";
+import { AssessmentRequestError } from "./workflow-api";
+import { changeClinicalReview, clinicalReviewLabels, listClinicalReviews } from "./clinical-review-api";
 
 const reviewStage = (item: ClinicalReviewQueueItem) => item.review.state === "RETURNED" && !item.review.submittedAt ? "Reopened for corrections" : clinicalReviewLabels[item.review.state];
 const reviewOwner = (item: ClinicalReviewQueueItem) => item.review.correctionPerson ? `Corrections: ${item.review.correctionPerson.displayName}` : item.review.assignee ? `Reviewer: ${item.review.assignee.displayName}` : "Awaiting reviewer";
 const reviewDate = (item: ClinicalReviewQueueItem) => item.review.submittedAt ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(item.review.submittedAt)) : "—";
 const openReview = (item: ClinicalReviewQueueItem) => <RouterButtonLink variant="ghost" size="icon" to={`/assessments/${item.reference}`} aria-label={`Open clinical review ${item.reference}`} title="Open clinical review"><ChevronRight className="size-4" aria-hidden="true" /></RouterButtonLink>;
 
-export function ClinicalReviewQueue({ user, query, state, canCreate, onViewAssessments }: { user: AuthenticatedUser; query: string; state: string; canCreate: boolean; onViewAssessments: () => void }) {
+export function ClinicalReviewQueue({ user, query, facilityId, state, canCreate, onViewAssessments }: { user: AuthenticatedUser; query: string; facilityId: string; state: string; canCreate: boolean; onViewAssessments: () => void }) {
   const [data, setData] = useState<Queue | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
-  useEffect(() => { setPage(1); }, [query, state]);
+  const [claiming, setClaiming] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState("");
+  const claimKeys = useRef(new Map<string, string>());
+  const claim = async (item: ClinicalReviewQueueItem) => {
+    setClaiming(item.assessmentId); setClaimError("");
+    const key = claimKeys.current.get(item.assessmentId) ?? crypto.randomUUID();
+    claimKeys.current.set(item.assessmentId, key);
+    try {
+      await changeClinicalReview(user.organizationId, item.assessmentId, { action: "CLAIM", expectedRevision: item.review.revision, expectedScoreRevision: item.review.scoreRevision, requestKey: key });
+      claimKeys.current.delete(item.assessmentId);
+      setRetry(value => value + 1);
+    } catch (cause) {
+      if (cause instanceof AssessmentRequestError && cause.status === 409) {
+        claimKeys.current.delete(item.assessmentId);
+        setRetry(value => value + 1);
+      }
+      setClaimError(cause instanceof Error ? cause.message : "Could not claim this review. Please try again.");
+    } finally { setClaiming(null); }
+  };
+  const reviewActions = (item: ClinicalReviewQueueItem) => <div className="flex items-center justify-end gap-2">{item.review.state === "QUEUED" && item.review.allowedActions?.includes("CLAIM") && <Button variant="outline" size="sm" isDisabled={claiming !== null} onPress={() => { void claim(item); }}>{claiming === item.assessmentId ? "Claiming…" : "Claim"}</Button>}{openReview(item)}</div>;
+  useEffect(() => { setPage(1); }, [query, facilityId, state]);
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setData(null);
     const timer = setTimeout(() => {
       const params = new URLSearchParams({ page: String(page), pageSize: "10" });
       if (query.trim()) params.set("search", query.trim());
+      if (facilityId !== "all") params.set("facilityId", facilityId);
       if (state !== "all") params.set("state", state);
       listClinicalReviews(user.organizationId, params, controller.signal).then(next => { if (!controller.signal.aborted) { setData(next); setError(""); } }).catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Clinical reviews could not be loaded."); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     }, 150);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [user.organizationId, query, state, page, retry]);
+  }, [user.organizationId, query, facilityId, state, page, retry]);
   const columns: DataTableColumn<ClinicalReviewQueueItem>[] = [
     { id: "reference", header: "Assessment", cell: ({ row }) => <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> },
     { id: "patient", header: "Patient", cell: ({ row }) => <div className="grid gap-1"><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${row.original.patient.reference}`}>{row.original.patient.displayName}</Link><span className="text-xs text-muted-foreground">{row.original.patient.reference}</span></div> },
@@ -38,12 +60,13 @@ export function ClinicalReviewQueue({ user, query, state, canCreate, onViewAsses
     { id: "stage", header: "Stage", cell: ({ row }) => <StatusBadge status={reviewStage(row.original)} /> },
     { id: "owner", header: "Assigned to", cell: ({ row }) => reviewOwner(row.original) },
     { id: "sent", header: "Sent for review", cell: ({ row }) => reviewDate(row.original) },
-    { id: "actions", header: () => <span className="block text-right">Action</span>, cell: ({ row }) => <div className="flex justify-end">{openReview(row.original)}</div> },
+    { id: "actions", header: () => <span className="block text-right">Action</span>, cell: ({ row }) => reviewActions(row.original) },
   ];
-  const unfilteredEmpty = !loading && !error && !data?.total && !query.trim() && state === "all";
+  const unfilteredEmpty = !loading && !error && !data?.total && !query.trim() && facilityId === "all" && state === "all";
   const empty = <div className={`table-empty-content${unfilteredEmpty ? " illustrated-empty-state" : ""}`}>{loading ? <p role="status">Loading clinical reviews…</p> : error ? <><p role="alert">{error}</p><Button variant="outline" onPress={() => setRetry(value => value + 1)}>Retry</Button></> : unfilteredEmpty ? <><ClinicalReviewEmptyIllustration /><strong>No clinical reviews yet</strong><span>Reviews will appear after an assessment is sent for review.</span><div className="flex flex-wrap justify-center gap-2">{canCreate && <RouterButtonLink to="/assessments/new">New assessment</RouterButtonLink>}<Button variant="outline" onPress={onViewAssessments}>View assessments</Button></div></> : <p>No clinical reviews match these filters.</p>}</div>;
   return <div className="space-y-4">
-    <section className="surface table-surface"><div className="mobile-card-list">{data?.items.length ? data.items.map(item => <article className="mobile-data-card" key={item.assessmentId}><div><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${item.reference}`}>{item.reference}</Link><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${item.patient.reference}`}>{item.patient.displayName}</Link><span>{item.patient.reference}</span></div><StatusBadge status={reviewStage(item)} /><span>{item.facility?.name ?? "No facility"} · {reviewOwner(item)}</span><span>Sent for review: {reviewDate(item)}</span><div className="flex justify-end">{openReview(item)}</div></article>) : empty}</div><div className="desktop-table p-5"><DataTable columns={columns} data={data?.items ?? []} label="Clinical reviews" emptyContent={empty} /></div></section>
+    {claimError && <p role="alert" className="text-sm text-destructive">{claimError}</p>}
+    <section className="surface table-surface"><div className="mobile-card-list">{data?.items.length ? data.items.map(item => <article className="mobile-data-card" key={item.assessmentId}><div><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${item.reference}`}>{item.reference}</Link><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${item.patient.reference}`}>{item.patient.displayName}</Link><span>{item.patient.reference}</span></div><StatusBadge status={reviewStage(item)} /><span>{item.facility?.name ?? "No facility"} · {reviewOwner(item)}</span><span>Sent for review: {reviewDate(item)}</span>{reviewActions(item)}</article>) : empty}</div><div className="desktop-table p-5"><DataTable columns={columns} data={data?.items ?? []} label="Clinical reviews" emptyContent={empty} /></div></section>
     {!!data?.total && data.total > data.pageSize && <div className="flex items-center justify-center gap-3"><Button variant="outline" size="sm" isDisabled={loading || page <= 1} onPress={() => setPage(value => value - 1)}>Previous</Button><span className="text-sm text-muted-foreground" role="status">Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="outline" size="sm" isDisabled={loading || page * data.pageSize >= data.total} onPress={() => setPage(value => value + 1)}>Next</Button></div>}
   </div>;
 }
