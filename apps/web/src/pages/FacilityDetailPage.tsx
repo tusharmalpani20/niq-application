@@ -1,6 +1,6 @@
 import { hasPermission, membershipRoleLabels } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility, FacilityPerformance as Performance, OrganizationUser, Patient } from "@niq/application-contracts";
-import { Pencil, Power } from "lucide-react";
+import { ClipboardCheck, ClipboardList, Pencil, Power, UserRoundPlus, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -15,14 +15,11 @@ import { openAssessmentStatuses } from "../lib/assessment-work";
 import { assessmentStatusLabels } from "../lib/patient-display";
 import { FacilityDialog } from "./FacilitiesPage";
 import { FacilityPerformance } from "./FacilityPerformance";
+import { OverviewStatCard } from "./OverviewStatCard";
 import { facilityUrl } from "../lib/facility-url";
 
 type FacilityOverview = { facility: Facility; patients: Patient[]; assessments: AssessmentSummary[]; team: OrganizationUser[] | null; performance: Performance | null };
 const dateLabel = (date: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
-
-function Metric({ label, value, detail }: { label: string; value: number | string; detail: string }) {
-  return <div className="surface p-5"><p className="text-sm text-muted-foreground">{label}</p><strong className="mt-3 block text-3xl font-semibold">{value}</strong><p className="mt-1 text-xs text-muted-foreground">{detail}</p></div>;
-}
 
 export function FacilityDetailPage() {
   const user = useOutletContext<AuthenticatedUser>();
@@ -99,11 +96,11 @@ export function FacilityDetailPage() {
     </header>
 
     {facility.status !== "ACTIVE" && <Alert className="mb-5"><AlertDescription>This facility is deactivated. Existing patient and assessment records remain available.</AlertDescription></Alert>}
-    <section aria-label="Facility at a glance" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <Metric label="Patients" value={patients.length} detail="With this home facility" />
-      <Metric label="New patients" value={newPatients} detail="Registered in the past 30 days" />
-      <Metric label="Assessments completed" value={completed} detail="At this facility in the past 30 days" />
-      <Metric label="Open assessments" value={open.length} detail="Draft or ready for scoring" />
+    <section aria-label="Facility at a glance" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <OverviewStatCard label="Patients" value={patients.length} icon={UsersRound} detail="With this home facility" to={`/patients?facility=${facility.id}`} />
+      <OverviewStatCard label="New patients" value={newPatients} icon={UserRoundPlus} detail="Registered in the past 30 days" />
+      <OverviewStatCard label="Assessments completed" value={completed} icon={ClipboardCheck} detail="Here in the past 30 days" to={`/assessments?facility=${facility.id}&status=COMPLETED`} />
+      <OverviewStatCard label="Open assessments" value={open.length} icon={ClipboardList} detail="Draft or ready for scoring" to={`/assessments?facility=${facility.id}&status=OPEN`} />
     </section>
 
     {canOpenAssessment && (performance ? <FacilityPerformance performance={performance} facilityId={facility.id} /> : <section className="surface mt-6 p-5" aria-label="Facility performance"><h2 className="font-semibold">Scoring and patient categories</h2><p className="mt-2 text-sm text-muted-foreground">Facility performance data could not be loaded. Refresh this page to try again.</p></section>)}

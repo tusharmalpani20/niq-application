@@ -1,18 +1,6 @@
 import type { FacilityPerformance as Performance } from "@niq/application-contracts";
 import { Activity, ScanFace } from "lucide-react";
-import { Link } from "react-router-dom";
-
-type Trend = Performance["assessments"];
-const monthLabel = (month: string) => new Intl.DateTimeFormat(undefined, { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`));
-
-function UsageCard({ label, count, trend, to, icon: Icon }: { label: string; count: number; trend: Trend; to: string; icon: typeof Activity }) {
-  const maximum = Math.max(1, ...trend.months.map(item => item.count));
-  const points = trend.months.map((item, index) => `${3 + index * 21},${44 - item.count / maximum * 40}`).join(" ");
-  return <Link to={to} className="surface flex min-h-40 flex-col justify-between gap-3 p-5 no-underline transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary">
-    <div className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{label}</span><span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Icon className="size-5" aria-hidden="true" /></span></div>
-    <div className="flex items-end justify-between gap-3"><div><strong className="block text-3xl font-semibold tabular-nums">{count}</strong><span className="text-xs text-muted-foreground">Past 30 days</span></div><div className="text-right"><span className="text-[11px] text-muted-foreground">6-month trend</span><svg role="img" aria-label={`${label}, monthly trend: ${trend.months.map(item => `${monthLabel(item.month)} ${item.count}`).join(", ")}`} viewBox="0 0 112 48" className="h-10 w-28 shrink-0 text-primary"><polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" /></svg></div></div>
-  </Link>;
-}
+import { OverviewStatCard } from "./OverviewStatCard";
 
 export function FacilityPerformance({ performance, facilityId }: { performance: Performance; facilityId: string }) {
   const categories = [
@@ -23,9 +11,9 @@ export function FacilityPerformance({ performance, facilityId }: { performance: 
   const total = performance.risk.assessedPatients;
   return <section className="mt-6" aria-label="Facility performance">
     <div className="mb-3"><h2 className="font-semibold">Scoring and face scans</h2><p className="text-sm text-muted-foreground">Completed activity at this facility in the past 30 days</p></div>
-    <div className="grid gap-4 sm:grid-cols-2">
-      <UsageCard label="Assessments scored" count={performance.last30Days.scored} trend={performance.assessments} to={`/assessments?facility=${facilityId}`} icon={Activity} />
-      <UsageCard label="Face scans completed" count={performance.last30Days.faceScans} trend={performance.faceScans} to={`/assessments?facility=${facilityId}`} icon={ScanFace} />
+    <div className="grid grid-cols-2 gap-3 sm:gap-4">
+      <OverviewStatCard label="Assessments scored" value={performance.last30Days.scored} detail="Past 30 days" icon={Activity} to={`/assessments?facility=${facilityId}`} />
+      <OverviewStatCard label="Face scans completed" value={performance.last30Days.faceScans} detail="Past 30 days" icon={ScanFace} />
     </div>
     <section className="surface mt-4 p-5" aria-label="Patient risk categories">
       <div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="font-semibold">Patient risk categories</h2><p className="mt-1 text-sm text-muted-foreground">Latest completed assessment per patient at this facility</p></div><span className="text-sm text-muted-foreground">{total} assessed {total === 1 ? "patient" : "patients"}</span></div>
