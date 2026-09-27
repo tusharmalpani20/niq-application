@@ -5,7 +5,7 @@ import { assessmentStatusSchema, hasPermission } from "@niq/application-contract
 import type { AssessmentSummary, AuthenticatedUser, ClinicalReview, Facility } from "@niq/application-contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
-import { ClipboardCheck, Clock3, Download, Eye, Pencil, Search, Send, Star, TriangleAlert, X } from "lucide-react";
+import { ClipboardCheck, Clock3, Download, Eye, Pencil, Search, Send, Star, TriangleAlert, UserRoundCheck, X } from "lucide-react";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -212,7 +212,7 @@ export function AssessmentsPage() {
   };
   const claimButton = (record: AssessmentSummary) => {
     const review = reviewById[record.id];
-    return tab === "assessments" && review?.state === "QUEUED" && review.allowedActions.includes("CLAIM") && <Button variant="outline" size="sm" isDisabled={claiming !== null} onPress={() => { void claimReview(record, review); }}>{claiming === record.id ? "Claiming…" : "Claim"}</Button>;
+    return tab === "assessments" && review?.state === "QUEUED" && review.allowedActions.includes("CLAIM") && <Button variant="outline" size="sm" isDisabled={claiming !== null} onPress={() => { void claimReview(record, review); }}><UserRoundCheck className="size-4" aria-hidden="true" />{claiming === record.id ? "Claiming…" : "Claim"}</Button>;
   };
   const columns: Array<DataTableColumn<AssessmentSummary>> = [
     { id: "reference", header: "Assessment", cell: ({ row }) => canOpen ? <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> : row.original.reference },
@@ -221,7 +221,7 @@ export function AssessmentsPage() {
     { id: "created", header: "Started", cell: ({ row }) => <DateDisplay value={row.original.createdAt} /> },
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentListStatus(row.original, tab)} /> },
   ];
-  if (canOpen) columns.push({ id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-2">{priorityButton(row.original)}{claimButton(row.original)}{openButton(row.original)}{downloadButton(row.original)}</div> });
+  if (canOpen) columns.push({ id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-2">{claimButton(row.original)}{openButton(row.original)}{downloadButton(row.original)}{priorityButton(row.original)}</div> });
   const hasFilters = query.trim() || facility !== "all" || status !== "all";
   const quickFilter = tab === "assessments" ? quickFilterLabels[status] : undefined;
   const emptyContent = <div className={`table-empty-content${loadState === "ready" && !hasFilters ? " illustrated-empty-state" : ""}`}>{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : tab === "my-work" ? <><AssessmentEmptyIllustration /><strong>Nothing needs your action</strong><span>Drafts, corrections, and assessments ready to send will appear here.</span></> : tab === "completed" ? <><AssessmentEmptyIllustration /><strong>No completed assessments yet</strong><span>Completed assessments will appear here.</span></> : <><AssessmentEmptyIllustration /><strong>No assessments to display</strong><span>Assessments will appear here when available.</span>{canCreate && <RouterButtonLink to="/assessments/new">New assessment</RouterButtonLink>}</>}</div>;
@@ -230,10 +230,9 @@ export function AssessmentsPage() {
     <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card list-mobile-card" key={record.id}>
       <div className="mobile-card-heading">
         <div className="mobile-card-primary">{canOpen ? <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}<Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${record.patient.reference}`}>{record.patient.displayName}</Link><span>{record.patient.reference}</span></div>
-        {canOpen && priorityButton(record)}
       </div>
       <div className="mobile-card-meta"><StatusBadge status={assessmentListStatus(record, tab)}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></div>
-      {canOpen && <div className="mobile-card-actions flex flex-wrap justify-end gap-2">{claimButton(record)}{openButton(record)}{downloadButton(record)}</div>}
+      {canOpen && <div className="mobile-card-actions flex flex-wrap items-center justify-end gap-2">{claimButton(record)}{openButton(record)}{downloadButton(record)}{priorityButton(record)}</div>}
     </article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
   </>;

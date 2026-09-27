@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { AuthenticatedUser, ClinicalReviewQueue as Queue, ClinicalReviewQueueItem } from "@niq/application-contracts";
-import { Eye } from "lucide-react";
+import { Eye, UserRoundCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/DataTable";
 import { ClinicalReviewEmptyIllustration } from "@/components/ClinicalReviewEmptyIllustration";
@@ -40,7 +40,7 @@ export function ClinicalReviewQueue({ user, query, facilityId, state, canCreate,
       setClaimError(cause instanceof Error ? cause.message : "Could not claim this review. Please try again.");
     } finally { setClaiming(null); }
   };
-  const reviewActions = (item: ClinicalReviewQueueItem) => <div className="flex items-center justify-end gap-2">{item.review.state === "QUEUED" && item.review.allowedActions?.includes("CLAIM") && <Button variant="outline" size="sm" isDisabled={claiming !== null} onPress={() => { void claim(item); }}>{claiming === item.assessmentId ? "Claiming…" : "Claim"}</Button>}{openReview(item)}</div>;
+  const reviewActions = (item: ClinicalReviewQueueItem) => <div className="flex items-center justify-end gap-2">{item.review.state === "QUEUED" && item.review.allowedActions?.includes("CLAIM") && <Button variant="outline" size="sm" isDisabled={claiming !== null} onPress={() => { void claim(item); }}><UserRoundCheck className="size-4" aria-hidden="true" />{claiming === item.assessmentId ? "Claiming…" : "Claim"}</Button>}{openReview(item)}</div>;
   useEffect(() => { setPage(1); }, [query, facilityId, state]);
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setData(null);
