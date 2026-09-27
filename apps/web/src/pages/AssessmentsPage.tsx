@@ -5,7 +5,7 @@ import { assessmentStatusSchema, hasPermission } from "@niq/application-contract
 import type { AssessmentSummary, AuthenticatedUser, Facility } from "@niq/application-contracts";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
-import { ChevronRight, Search, Star, X } from "lucide-react";
+import { ClipboardCheck, Clock3, Download, Eye, Pencil, Search, Send, Star, TriangleAlert, X } from "lucide-react";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -70,10 +70,10 @@ const matchesStatus = (record: AssessmentSummary, status: string, now: Date) => 
 };
 const assessmentListStatus = (record: AssessmentSummary) => record.myAction === "CORRECT_DRAFT" ? "Needs correction" : record.myAction === "SEND_FOR_REVIEW" ? "Ready to send" : assessmentStatusLabels[record.status];
 const assessmentActionLabel = (record: AssessmentSummary) => {
-  if (record.myAction === "CORRECT_DRAFT") return "Continue corrections";
-  if (record.myAction === "SEND_FOR_REVIEW") return "Send for review";
+  if (record.myAction === "CORRECT_DRAFT") return "Make corrections";
+  if (record.myAction === "SEND_FOR_REVIEW") return "Review & send";
   switch (record.status) {
-    case "DRAFT": return "Open draft";
+    case "DRAFT": return "Continue draft";
     case "READY_FOR_SCORING": return "Review answers";
     case "SCORING_PENDING": return "View progress";
     case "SCORING_UNAVAILABLE": return "Review issue";
@@ -81,6 +81,17 @@ const assessmentActionLabel = (record: AssessmentSummary) => {
     case "UNDER_REVIEW": return "View review";
     case "COMPLETED": return "View result";
     case "VOIDED": return "View assessment";
+  }
+};
+const assessmentActionIcon = (record: AssessmentSummary) => {
+  if (record.myAction === "SEND_FOR_REVIEW") return Send;
+  if (record.myAction === "CORRECT_DRAFT") return Pencil;
+  switch (record.status) {
+    case "DRAFT": return Pencil;
+    case "READY_FOR_SCORING": return ClipboardCheck;
+    case "SCORING_PENDING": return Clock3;
+    case "SCORING_UNAVAILABLE": return TriangleAlert;
+    default: return Eye;
   }
 };
 
@@ -114,7 +125,12 @@ export function AssessmentsPage() {
     finally { setPriorityBusy(null); }
   };
   const priorityButton = (record: AssessmentSummary) => <Button variant="ghost" size="icon" className={record.isPriority ? "text-amber-600" : "text-muted-foreground"} aria-label={`${record.isPriority ? "Remove priority from" : "Mark as priority"} ${record.reference}`} aria-pressed={record.isPriority} isDisabled={priorityBusy !== null} onPress={() => { void togglePriority(record); }}><Star className={`size-4 ${record.isPriority ? "fill-current" : ""}`} aria-hidden="true" /></Button>;
-  const openButton = (record: AssessmentSummary) => <RouterButtonLink variant="ghost" size="icon" to={`/assessments/${record.reference}`} aria-label={`${assessmentActionLabel(record)} ${record.reference}`} title={assessmentActionLabel(record)}><ChevronRight className="size-4" aria-hidden="true" /></RouterButtonLink>;
+  const openButton = (record: AssessmentSummary) => {
+    const ActionIcon = assessmentActionIcon(record);
+    return <RouterButtonLink variant="outline" size="sm" className="whitespace-nowrap" to={`/assessments/${record.reference}`} aria-label={`${assessmentActionLabel(record)} ${record.reference}`}><ActionIcon className="size-4" aria-hidden="true" />{assessmentActionLabel(record)}</RouterButtonLink>;
+  };
+  // The report is not generated yet; keep its future entry point visible without promising a download.
+  const downloadButton = (record: AssessmentSummary) => record.status === "COMPLETED" && <span title="PDF reports are not available yet"><Button variant="outline" size="sm" isDisabled aria-label={`Download PDF for ${record.reference} (not yet available)`}><Download className="size-4" aria-hidden="true" />Download PDF</Button></span>;
   const selectTab = (next: AssessmentTab) => {
     setTab(next);
     setPage(1);
@@ -168,7 +184,7 @@ export function AssessmentsPage() {
     { id: "created", header: "Started", cell: ({ row }) => <DateDisplay value={row.original.createdAt} /> },
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentListStatus(row.original)} /> },
   ];
-  if (canOpen) columns.push({ id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-1">{priorityButton(row.original)}{openButton(row.original)}</div> });
+  if (canOpen) columns.push({ id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-2">{priorityButton(row.original)}{openButton(row.original)}{downloadButton(row.original)}</div> });
   const hasFilters = query.trim() || facility !== "all" || status !== "all";
   const quickFilter = tab === "assessments" ? quickFilterLabels[status] : undefined;
   const emptyContent = <div className={`table-empty-content${loadState === "ready" && !hasFilters ? " illustrated-empty-state" : ""}`}>{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : tab === "my-work" ? <><AssessmentEmptyIllustration /><strong>Nothing needs your action</strong><span>Drafts, corrections, and assessments ready to send will appear here.</span></> : tab === "completed" ? <><AssessmentEmptyIllustration /><strong>No completed assessments yet</strong><span>Completed assessments will appear here.</span></> : <><AssessmentEmptyIllustration /><strong>No assessments to display</strong><span>Assessments will appear here when available.</span>{canCreate && <RouterButtonLink to="/assessments/new">New assessment</RouterButtonLink>}</>}</div>;
@@ -177,9 +193,10 @@ export function AssessmentsPage() {
     <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card list-mobile-card" key={record.id}>
       <div className="mobile-card-heading">
         <div className="mobile-card-primary">{canOpen ? <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}<Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${record.patient.reference}`}>{record.patient.displayName}</Link><span>{record.patient.reference}</span></div>
-        {canOpen && <div className="mobile-card-actions">{priorityButton(record)}{openButton(record)}</div>}
+        {canOpen && priorityButton(record)}
       </div>
       <div className="mobile-card-meta"><StatusBadge status={assessmentListStatus(record)}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></div>
+      {canOpen && <div className="mobile-card-actions flex flex-wrap justify-end gap-2">{openButton(record)}{downloadButton(record)}</div>}
     </article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
   </>;
@@ -194,7 +211,7 @@ export function AssessmentsPage() {
       {tab !== "clinical-reviews" ? <>
       <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { const selected = String(key); setFacility(selected); setSearchParams(params => { if (selected === "all") params.delete("facility"); else params.set("facility", selected); return params; }); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
       <Select key={tab} aria-label={tab === "my-work" ? "Filter my work" : tab === "completed" ? "Filter completed assessments" : "Filter by status"} selectedKey={quickFilter ? "all" : status} onSelectionChange={(key) => { const selected = String(key); setStatus(selected); setSearchParams(params => { const updated = new URLSearchParams(params); if (selected === "all") updated.delete("status"); else updated.set("status", selected); if (tab !== "assessments") updated.set("tab", tab); return updated; }); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{tab === "my-work" ? <><SelectItem id="all">All my work</SelectItem><SelectItem id="EDIT_DRAFT">My drafts</SelectItem><SelectItem id="CORRECT_DRAFT">Corrections to make</SelectItem><SelectItem id="SEND_FOR_REVIEW">Ready to send</SelectItem></> : tab === "completed" ? <><SelectItem id="all">All completed</SelectItem><SelectItem id="COMPLETED_THIS_MONTH">Completed this month</SelectItem></> : <><SelectItem id="all">All statuses</SelectItem>{statusFilterIds.map(id => <SelectItem id={id} key={id}>{assessmentStatusLabels[id]}</SelectItem>)}</>}</SelectContent></Select>
-      </> : <Select aria-label="Review stage" selectedKey={reviewState} onSelectionChange={key => setReviewState(String(key))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All clinical reviews</SelectItem><SelectItem id="QUEUED">Awaiting reviewer</SelectItem><SelectItem id="IN_REVIEW">In review</SelectItem><SelectItem id="RETURNED">Returned for correction</SelectItem><SelectItem id="AWAITING_RESUBMISSION">Awaiting resubmission</SelectItem></SelectContent></Select>}
+      </> : <Select aria-label="Review stage" selectedKey={reviewState} onSelectionChange={key => setReviewState(String(key))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All clinical reviews</SelectItem><SelectItem id="QUEUED">Awaiting reviewer</SelectItem><SelectItem id="IN_REVIEW">In review</SelectItem></SelectContent></Select>}
     </div>
     {quickFilter && <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground"><span>Showing {quickFilter.toLowerCase()}</span><Button variant="ghost" size="sm" aria-label={`Clear ${quickFilter} filter`} onPress={() => setSearchParams(params => { const updated = new URLSearchParams(params); updated.delete("status"); return updated; })}><X className="size-4" aria-hidden="true" />Clear</Button></div>}
     <TabsContent id="assessments">{tab === "assessments" && assessmentContent}</TabsContent>

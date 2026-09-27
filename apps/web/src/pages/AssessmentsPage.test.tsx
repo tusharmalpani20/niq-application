@@ -154,7 +154,7 @@ test("my assessment actions link shows the same assigned work as the overview", 
     expect(table?.textContent).toContain("ASM-000001");
     expect(table?.textContent).toContain("ASM-000003");
     expect(table?.textContent).not.toContain("ASM-000002");
-    expect(table?.querySelector('a[aria-label="Send for review ASM-000003"]')).not.toBeNull();
+    expect(table?.querySelector('a[aria-label="Review & send ASM-000003"]')).not.toBeNull();
     expect(document.querySelector('[data-slot="tabs-trigger"][data-selected]')?.textContent).toContain("My work");
   });
 });
@@ -208,12 +208,25 @@ test("my work separates drafts, corrections, and ready-to-send assessments from 
 test("assessment rows offer a status-aware action to open the assessment", async () => {
   await renderAssessments("/assessments", records, () => {
     const table = document.querySelector('[aria-label="Assessments"]');
-    const openDraft = table?.querySelector('a[aria-label="Open draft ASM-000001"]');
+    const openDraft = table?.querySelector('a[aria-label="Continue draft ASM-000001"]');
     expect(openDraft?.getAttribute("href")).toBe("/assessments/ASM-000001");
-    expect(openDraft?.getAttribute("title")).toBe("Open draft");
-    expect(openDraft?.textContent).toBe("");
-    expect(openDraft?.querySelector("svg.lucide-chevron-right")).not.toBeNull();
+    expect(openDraft?.textContent).toBe("Continue draft");
+    expect(openDraft?.querySelector("svg.lucide-pencil")).not.toBeNull();
     expect(table?.querySelector('a[aria-label="Review answers ASM-000002"]')).not.toBeNull();
     expect(table?.querySelector('a[aria-label="View score ASM-000003"]')).not.toBeNull();
+    expect(table?.querySelector('button[aria-label^="Download PDF"]')).toBeNull();
+  });
+});
+
+test("completed assessments show a PDF download entry point until reports are available", async () => {
+  const completed = { ...records[0]!, status: "COMPLETED", completedAt: date };
+  await renderAssessments("/assessments?tab=completed", [completed], () => {
+    const table = document.querySelector('[aria-label="Assessments"]');
+    expect(table?.querySelector('a[aria-label="View result ASM-000001"]')?.textContent).toBe("View result");
+    expect(table?.querySelector('a[aria-label="View result ASM-000001"] svg.lucide-eye')).not.toBeNull();
+    const download = table?.querySelector<HTMLButtonElement>('button[aria-label="Download PDF for ASM-000001 (not yet available)"]');
+    expect(download?.textContent).toContain("Download PDF");
+    expect(download?.disabled).toBe(true);
+    expect(document.querySelector('.mobile-card-list button[aria-label="Download PDF for ASM-000001 (not yet available)"]')).not.toBeNull();
   });
 });
