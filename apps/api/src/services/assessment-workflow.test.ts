@@ -316,6 +316,10 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   const rejected=await scans.start(actor,org,assessment,input,context);
   expect(rejected.state).toBe("FAILED");expect(rejected.failureCode).toBe("FACE_SCAN_DISABLED");
   expect((await scans.row(org,assessment,rejected.id)).active).toBe(false);
+  outcome="FACE_SCAN_MAPPING_UNAVAILABLE";
+  const unmapped=await scans.start(actor,org,assessment,{...input,requestKey:"unmapped-face-scan-12345"},context);
+  expect(unmapped.state).toBe("FAILED");expect(unmapped.failureCode).toBe("FACE_SCAN_MAPPING_UNAVAILABLE");
+  expect((await scans.row(org,assessment,unmapped.id)).active).toBe(false);
   outcome="unknown";
   const uncertain=await scans.start(actor,org,assessment,{...input,requestKey:"uncertain-face-scan-12345"},context);
   expect(uncertain.id).not.toBe(rejected.id);expect(uncertain.state).toBe("RECONCILIATION_REQUIRED");

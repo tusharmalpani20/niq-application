@@ -19,7 +19,7 @@ type Identity = {
 };
 const sameFields = <T extends object>(left: T, right: T, keys: readonly (keyof T)[]) => keys.every(key => left[key] === right[key]);
 const contextKeys = ["dob", "gender", "heightCm", "weightKg", "posture", "employeeId"] as const;
-const definiteCreateRejections = new Set(["FACE_SCAN_DISABLED", "UNAUTHORIZED", "CLIENT_NOT_ALLOWED", "CAPABILITY_DISABLED", "MONTHLY_LIMIT_REACHED", "INVALID_REQUEST"]);
+const definiteCreateRejections = new Set(["FACE_SCAN_DISABLED", "FACE_SCAN_MAPPING_UNAVAILABLE", "UNAUTHORIZED", "CLIENT_NOT_ALLOWED", "CAPABILITY_DISABLED", "MONTHLY_LIMIT_REACHED", "INVALID_REQUEST"]);
 class FaceScanRejection extends ServiceError {
   constructor(readonly rejectionCode: string) {
     super("SCORING_UNAVAILABLE", "Scoring did not accept this scan. Review availability and saved inputs before starting again.");
