@@ -6,6 +6,7 @@ export function carePlixDevice(userAgent: string): NonNullable<FaceScanSignal["d
 }
 
 type Frame = { message: string; progress: number; type: string; isLiteMode: boolean; isThrottling: boolean };
+export type ScanCamera = "front" | "back";
 export interface CaptureSDK {
   facescan: {
     onFrame(callback: (frame: Frame) => void): void;
@@ -21,7 +22,34 @@ const errorMessages: Record<string, string> = {
   CMUSR01: "Camera access is unavailable. Allow camera access and check that another app is not using it.",
   CMUSR02: "Capture stopped because the scan window lost focus. Click Resume capture and keep this page focused. Do not click the chat panel, another tab or another app until capture finishes.",
   CMSCN01: "The camera signal could not be captured. Please try again.",
+  CMSEL01: "The back camera could not be selected. Choose the front camera or check this device's camera permissions.",
 };
+
+function requestBackCamera() {
+  const devices = navigator.mediaDevices;
+  if (!devices?.getUserMedia) throw new Error("Camera selection is unavailable in this browser.");
+  const previous = Object.getOwnPropertyDescriptor(devices, "getUserMedia");
+  const getUserMedia = devices.getUserMedia.bind(devices);
+  let applied = false;
+  let restored = false;
+  const restore = () => {
+    if (restored) return;
+    restored = true;
+    if (previous) Object.defineProperty(devices, "getUserMedia", previous);
+    else Reflect.deleteProperty(devices, "getUserMedia");
+  };
+  // CarePlix 1.3.0 hardcodes facingMode: "user". Intercept only that request,
+  // then immediately restore the browser method so other camera uses are unaffected.
+  const replacement: MediaDevices["getUserMedia"] = constraints => {
+    const video = constraints?.video;
+    if (!video || typeof video !== "object" || video.facingMode !== "user") return getUserMedia(constraints);
+    restore();
+    applied = true;
+    return getUserMedia({ ...constraints, video: { ...video, facingMode: { exact: "environment" } } });
+  };
+  Object.defineProperty(devices, "getUserMedia", { configurable: true, writable: true, value: replacement });
+  return { restore, wasApplied: () => applied };
+}
 
 // The SDK singleton survives component unmounts, so its startup barrier must too.
 let startup: Promise<void> = Promise.resolve();
@@ -32,8 +60,10 @@ export function createCaptureController(load: () => Promise<CaptureSDK> = () => 
   let sdk: CaptureSDK | null = null;
   let video: HTMLVideoElement | null = null;
   let watchdog: ReturnType<typeof setTimeout> | undefined;
+  let backCamera: ReturnType<typeof requestBackCamera> | null = null;
   function stopCamera() {
     clearTimeout(watchdog);
+    backCamera?.restore(); backCamera = null;
     try { sdk?.facescan.stopScan(); } catch { /* Track cleanup must still run after SDK errors. */ }
     const stream = video?.srcObject as MediaStream | null;
     stream?.getTracks?.().forEach(track => track.stop());
@@ -42,7 +72,7 @@ export function createCaptureController(load: () => Promise<CaptureSDK> = () => 
   function cancel() { generation++; stopCamera(); }
   async function start(elements: { video: HTMLVideoElement; canvas: HTMLCanvasElement }, callbacks: {
     frame: (frame: Frame) => void; finish: (signal: FaceScanSignal) => void; error: (message: string) => void;
-  }) {
+  }, camera: ScanCamera = "front") {
     cancel();
     const current = generation;
     video = elements.video;
@@ -60,17 +90,20 @@ export function createCaptureController(load: () => Promise<CaptureSDK> = () => 
       sdk = await load();
       if (!active()) return;
       sdk.facescan.onFrame(frame => { if (active()) callbacks.frame({ ...frame, progress: Math.max(0, Math.min(100, Number.isFinite(frame.progress) ? frame.progress : 0)) }); });
-      sdk.facescan.onError((_error, code) => fail(code));
+      sdk.facescan.onError((_error, code) => fail(camera === "back" && code === "CMUSR01" ? "CMSEL01" : code));
       sdk.facescan.onScanFinish(signal => {
         if (!active()) return;
         settled = true; stopCamera(); callbacks.finish({ ...signal, schemaVersion: 1, device: carePlixDevice(navigator.userAgent) });
       });
       // Local watchdog only cancels capture; it does not assert provider failure or billability.
       watchdog = setTimeout(() => fail("FCSCN01"), 180_000);
+      if (camera === "back") backCamera = requestBackCamera();
       startup = sdk.facescan.startScan({ videoElement: elements.video, canvasElement: elements.canvas, scanDuration: 30, tryHDCamera: false });
       await startup;
+      if (camera === "back" && active() && !backCamera?.wasApplied()) { fail("CMSEL01"); return; }
+      backCamera?.restore(); backCamera = null;
       if (!active()) stopCamera();
-    } catch { startup = Promise.resolve(); fail("CMUSR01"); }
+    } catch { startup = Promise.resolve(); fail(camera === "back" ? "CMSEL01" : "CMUSR01"); }
   }
   return { start, cancel };
 }

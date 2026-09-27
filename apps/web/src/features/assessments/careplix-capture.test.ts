@@ -60,6 +60,46 @@ test("requests a 30-second camera capture", async () => {
   controller.cancel();
 });
 
+test("back camera selection changes only the SDK camera request and restores the browser method", async () => {
+  const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  let requested: MediaStreamConstraints | undefined;
+  const getUserMedia = async (constraints: MediaStreamConstraints) => { requested = constraints; return {} as MediaStream; };
+  const mediaDevices = { getUserMedia };
+  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { userAgent: "iPhone", mediaDevices } });
+  try {
+    const f = fixture(async () => { await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: "user", height: { ideal: 360 } } }); });
+    const controller = createCaptureController(async () => f.sdk);
+    let error = "";
+    await controller.start(f.elements, { frame: () => {}, finish: () => {}, error: message => { error = message; } }, "back");
+    expect(error).toBe("");
+    expect(requested?.video).toEqual({ facingMode: { exact: "environment" }, height: { ideal: 360 } });
+    expect(mediaDevices.getUserMedia).toBe(getUserMedia);
+    controller.cancel();
+  } finally {
+    if (previousNavigator) Object.defineProperty(globalThis, "navigator", previousNavigator);
+    else Reflect.deleteProperty(globalThis, "navigator");
+  }
+});
+
+test("back camera selection fails clearly if the SDK does not request its expected camera", async () => {
+  const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const getUserMedia = async () => ({} as MediaStream);
+  const mediaDevices = { getUserMedia };
+  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { userAgent: "iPhone", mediaDevices } });
+  try {
+    const f = fixture();
+    const controller = createCaptureController(async () => f.sdk);
+    let error = "";
+    await controller.start(f.elements, { frame: () => {}, finish: () => {}, error: message => { error = message; } }, "back");
+    expect(error).toContain("back camera");
+    expect(mediaDevices.getUserMedia).toBe(getUserMedia);
+    controller.cancel();
+  } finally {
+    if (previousNavigator) Object.defineProperty(globalThis, "navigator", previousNavigator);
+    else Reflect.deleteProperty(globalThis, "navigator");
+  }
+});
+
 test("SDK focus loss explains how to resume and never submits partial signal", async () => {
   const f = fixture(), controller = createCaptureController(async () => f.sdk);
   let message = "", results = 0;
