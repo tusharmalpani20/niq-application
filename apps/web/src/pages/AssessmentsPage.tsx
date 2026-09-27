@@ -230,9 +230,9 @@ export function AssessmentsPage() {
     <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card list-mobile-card" key={record.id}>
       <div className="mobile-card-heading">
         <div className="mobile-card-primary">{canOpen ? <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}<Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${record.patient.reference}`}>{record.patient.displayName}</Link><span>{record.patient.reference}</span></div>
+        {canOpen && <div className="mobile-card-actions">{claimButton(record)}{openButton(record)}{downloadButton(record)}{priorityButton(record)}</div>}
       </div>
       <div className="mobile-card-meta"><StatusBadge status={assessmentListStatus(record, tab)}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></div>
-      {canOpen && <div className="mobile-card-actions flex flex-wrap items-center justify-end gap-2">{claimButton(record)}{openButton(record)}{downloadButton(record)}{priorityButton(record)}</div>}
     </article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
   </>;
