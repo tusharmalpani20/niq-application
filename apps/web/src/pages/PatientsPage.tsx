@@ -2,7 +2,7 @@ import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility, Patient } from "@niq/application-contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
-import { Pencil, Search } from "lucide-react";
+import { ArrowDownUp, Pencil, Search } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -117,7 +117,7 @@ export function PatientsPage() {
     <div className="patient-filter-bar">
       <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { const selected = String(key); setFacility(selected); setSearchParams(params => { if (selected === "all") params.delete("facility"); else params.set("facility", selected); return params; }); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilityOptions.map((item) => <SelectItem key={item.id} id={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
       <Select aria-label="Filter by gender" selectedKey={gender} onSelectionChange={(key) => { setGender(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All genders</SelectItem><SelectItem id="Female">Female</SelectItem><SelectItem id="Male">Male</SelectItem><SelectItem id="Other">Other</SelectItem><SelectItem id="Unknown">Unknown</SelectItem></SelectContent></Select>
-      <Select aria-label="Sort patients" selectedKey={sort} onSelectionChange={(key) => { setSort(String(key) as PatientSort); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="registered-newest">Registered: newest first</SelectItem><SelectItem id="registered-oldest">Registered: oldest first</SelectItem><SelectItem id="assessment-newest" isDisabled={assessmentState !== "ready"}>Last assessment: newest first</SelectItem><SelectItem id="assessment-oldest" isDisabled={assessmentState !== "ready"}>Last assessment: oldest first</SelectItem></SelectContent></Select>
+      <div className="patient-sort-control"><span className="patient-sort-label"><ArrowDownUp aria-hidden="true" className="size-4" />Sort by</span><Select aria-label="Sort patients" selectedKey={sort} onSelectionChange={(key) => { setSort(String(key) as PatientSort); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="registered-newest">Registration date: newest first</SelectItem><SelectItem id="registered-oldest">Registration date: oldest first</SelectItem><SelectItem id="assessment-newest" isDisabled={assessmentState !== "ready"}>Last assessment: newest first</SelectItem><SelectItem id="assessment-oldest" isDisabled={assessmentState !== "ready"}>Last assessment: oldest first</SelectItem></SelectContent></Select></div>
     </div>
     {assessmentState === "error" && <Alert><AlertDescription>Assessment history could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button></AlertDescription></Alert>}
     <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><article className="mobile-data-card list-mobile-card" key={patient.id}>
