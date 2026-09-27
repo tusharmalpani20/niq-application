@@ -43,6 +43,7 @@
 .client-workspace .mobile-data-card .patient-list-name { color: var(--primary); }
 .client-workspace .list-mobile-card .mobile-card-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: .4rem; }
 .client-workspace .list-mobile-card .mobile-card-heading > .mobile-card-actions { margin-left: auto; }
+.client-workspace .list-mobile-card .assessment-card-actions > a { width: 9.5rem; justify-content: center; }
 .client-workspace .list-mobile-card .mobile-card-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem .65rem; }
 :root:is([data-app-area="platform"], [data-app-area="client"]) .onboarding-tabs [role="tab"][data-disabled] { opacity: 1; color: var(--muted-foreground); }
 :is(.admin-workspace, .client-workspace) .invite-summary strong { overflow-wrap: anywhere; }
