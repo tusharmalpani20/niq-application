@@ -39,6 +39,8 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   const [sectionId, setSectionId] = useState("personal_details");
   const [error, setError] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [checkedSections, setCheckedSections] = useState<string[]>([]);
+  const [lastCheckedSectionId, setLastCheckedSectionId] = useState<string | null>(null);
   const [showSubmissionIssues, setShowSubmissionIssues] = useState(false);
   const [scanCorrection, setScanCorrection] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -116,11 +118,22 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     } catch (cause) { handleError(cause); return null; }
     finally { operation.current = false; setBusy(false); }
   }
+  function checkSection(id: string) {
+    if (!record.manifest.sections.some(section => section.id === id)) return;
+    setCheckedSections(current => current.includes(id) ? current : [...current, id]);
+    setLastCheckedSectionId(id);
+  }
+  async function saveCurrentSection() {
+    if (await persist()) checkSection(sectionId);
+  }
   async function selectSection(id: string, save = false, fieldId?: string) {
     if (busy || reportBusy || scanBusy) return;
     if (id === "review") setShowSubmissionIssues(true);
     setShowScoredAnswers(true);
-    if (save && editable && dirty && !await persist()) return;
+    if (save && editable) {
+      if (dirty && !await persist()) return;
+      checkSection(sectionId);
+    }
     setSectionId(id); setError("");
     requestAnimationFrame(() => (document.getElementById(fieldId ? `assessment-field-${fieldId}` : "assessment-section-heading") ?? document.getElementById("assessment-section-heading"))?.focus());
   }
@@ -214,20 +227,33 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   const tabs = record.manifest.sections.flatMap(section => [{ id: section.id, title: section.title }, ...(section.id === "personal_details" ? [{ id: "face_scan", title: "Face scan" }] : [])]).concat([{ id: "reports", title: "Attachments" }, { id: "review", title: "Review & score" }]);
   const sectionCoverage = coverage.sections.find(item => item.id === sectionId);
   const section = record.manifest.sections.find(item => item.id === sectionId);
+  const checkedSection = record.manifest.sections.find(item => item.id === lastCheckedSectionId);
+  const missingCheckedIds = new Set(progress.sections.find(item => item.id === lastCheckedSectionId)?.missingFieldIds ?? []);
+  const missingCheckedFields = checkedSection?.fields.filter(field => missingCheckedIds.has(field.id)) ?? [];
+  const missingCheckedLabels = missingCheckedFields.map(field => field.label);
+  const missingCheckedNames = missingCheckedLabels.length < 2 ? missingCheckedLabels[0] : `${missingCheckedLabels.slice(0, -1).join(", ")} and ${missingCheckedLabels.at(-1)}`;
+  const missingCurrentIds = new Set(progress.sections.find(item => item.id === sectionId)?.missingFieldIds ?? []);
+  const visibleErrors = { ...errors };
+  if (checkedSections.includes(sectionId)) for (const field of section?.fields ?? []) {
+    if (missingCurrentIds.has(field.id)) visibleErrors[field.id] ??= "Required";
+  }
   const index = tabs.findIndex(tab => tab.id === sectionId);
   const locked = busy || reportBusy || scanBusy || reviewBusy || conflict;
   const scanStepStatus = scanStatus === "Scan complete" ? "Done" : scanStatus === "Face scan ready" ? "Pending" : scanStatus === "Capturing scan" ? "Capturing" : scanStatus === "Preparing scan" ? "Preparing" : scanStatus === "Uploading scan" ? "Uploading" : scanStatus.replace(/^Face scan |^Scan /, "");
   const issueSections = new Set<string>();
-  if ((showSubmissionIssues || sectionId === "review") && !scored) {
+  if (!scored) {
     for (const section of record.manifest.sections) {
+      if (!showSubmissionIssues && sectionId !== "review" && !checkedSections.includes(section.id)) continue;
       if (section.fields.some(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers) && assessmentFieldError(field, answers[field.id]))) issueSections.add(section.id);
     }
-    if (record.reports.some(report => getReportSubmissionIssues(report).length > 0)) issueSections.add("reports");
-    if (record.submission?.status === "REJECTED" && record.submission.failureCode === "FACE_SCAN_UNAVAILABLE") issueSections.add("face_scan");
+    if (showSubmissionIssues || sectionId === "review") {
+      if (record.reports.some(report => getReportSubmissionIssues(report).length > 0)) issueSections.add("reports");
+      if (record.submission?.status === "REJECTED" && record.submission.failureCode === "FACE_SCAN_UNAVAILABLE") issueSections.add("face_scan");
+    }
   }
   const attachmentCounts = { reports: record.reports.length, files: record.reports.reduce((total, report) => total + report.files.filter(file => file.status === "READY").length, 0) };
   const separatedEditor = record.result !== null || clinical.review?.state === "RETURNED" || !!clinical.error
-    || !!error || (!scanCorrection && Object.keys(errors).length > 0)
+    || !!error || missingCheckedFields.length > 0 || (!scanCorrection && Object.keys(errors).length > 0)
     || (["SCORING_PENDING", "SCORING_UNAVAILABLE"].includes(record.status) && !record.result);
   return <div className="assessment-workflow @container">
     <PatientHeader compact patient={record.patient} assessmentLabel={`${record.reference} · ${record.status === "DRAFT" ? "Draft" : record.status.replaceAll("_", " ").toLowerCase()} assessment`} action={<div className="flex flex-wrap items-center gap-3"><Button variant="outline" size="sm" className={record.isPriority ? "border-amber-300 bg-amber-50 text-amber-800" : ""} aria-pressed={record.isPriority} isDisabled={priorityBusy} onPress={() => { void togglePriority(); }}><Star className={`size-4 ${record.isPriority ? "fill-current" : ""}`} aria-hidden="true" />{record.isPriority ? "Priority" : "Mark priority"}</Button><span className="text-xs text-muted-foreground" role="status">{dirty ? "Unsaved changes" : notice || `Saved ${new Date(record.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span></div>} />
@@ -238,6 +264,11 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
       <p className="mt-2 truncate text-xs text-muted-foreground">{record.patient.displayName} · {record.patient.reference} <span className="mx-1">·</span> {progress.answered}/{progress.required} required answers complete</p>
     </div>
     </div>
+    {missingCheckedFields.length > 0 && <div role="status" className="mb-4 rounded-lg border border-primary/25 bg-primary/5 p-4 text-sm">
+      <p className="font-medium">{checkedSection?.title} still needs {missingCheckedFields.length} required {missingCheckedFields.length === 1 ? "answer" : "answers"}.</p>
+      <p className="mt-1 text-muted-foreground">{missingCheckedNames}. You can finish {missingCheckedFields.length === 1 ? "it" : "them"} before submitting.</p>
+      {checkedSection?.id !== sectionId && <Button variant="link" className="mt-1 h-auto px-0" onPress={() => { void selectSection(checkedSection!.id); }}>Return to {checkedSection?.title}</Button>}
+    </div>}
     {error && <div role="alert" className="mb-4 rounded-lg border border-destructive/30 p-4"><p>{error}</p>{conflict && <Button className="mt-2" variant="outline" onPress={() => setDiscardOpen(true)}>Load saved version</Button>}</div>}
     {!scanCorrection && Object.keys(errors).length > 0 && <div className="mb-4 rounded-lg border border-destructive/30 p-4"><strong>Check these fields</strong><ul className="mt-2 list-inside list-disc">{Object.entries(errors).map(([id, message]) => { const owner = record.manifest.sections.find(item => item.fields.some(field => field.id === id)); const field = owner?.fields.find(item => item.id === id); return <li key={id}><button className="text-brand-ink underline" onClick={() => { if (owner) void selectSection(owner.id, false, id); }}>{field?.label ?? "Questionnaire"}: {message}</button></li>; })}</ul></div>}
     {["SCORING_PENDING", "SCORING_UNAVAILABLE"].includes(record.status) && !record.result && <div className="mb-5 rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "Administrator review needed" : record.status === "SCORING_PENDING" ? "Scoring result pending" : "Scoring needs attention"}</h2><p className="my-2 text-sm text-muted-foreground">{record.submission?.status === "RECONCILIATION_REQUIRED" ? "The scoring service has not confirmed this request. An organisation administrator must check it. Your submitted answers and reports remain preserved." : "The submitted assessment is preserved. Retry checks the same scoring request."}</p>{record.submission?.status === "RECONCILIATION_REQUIRED" ? hasPermission(role, "assessments.reconcile") && <Button variant="outline" isDisabled={busy} onPress={() => { void retry(true); }}>Check original scoring request</Button> : hasPermission(role, "assessments.submit") && <Button variant="outline" isDisabled={busy} onPress={() => { void retry(); }}>Retry scoring</Button>}</div>}
@@ -249,14 +280,14 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
       <AssessmentSectionNavigation tabs={tabs} selected={sectionId} coverage={coverage} scores={sectionScores} scanStatus={scanStepStatus} attachmentCounts={attachmentCounts} issueSections={issueSections} disabled={locked} onSelect={id => { void selectSection(id); }} />
       <div className="min-w-0 p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-center justify-between gap-2"><h2 id="assessment-section-heading" tabIndex={-1} className="flex scroll-mt-40 items-center gap-2 text-xl font-semibold outline-none">{sectionId === "face_scan" && <ScanFace className="size-5 shrink-0 text-primary" aria-hidden="true" />}{tabs[index]?.title}</h2>{sectionId === "reports" && <span className="text-xs text-muted-foreground tabular-nums">{attachmentCounts.files} {attachmentCounts.files === 1 ? "file" : "files"} uploaded</span>}{sectionCoverage && <span className="text-xs text-muted-foreground">{sectionCoverage.answered}/{sectionCoverage.total} answered · {sectionCoverage.percent ?? 0}%</span>}</div>
         {(record.result === null || showScoredAnswers) && <AssessmentFaceScan organizationId={organizationId} record={{ ...record, answers }} active={sectionId === "face_scan"} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onMissingInputs={showMissingScanInputs} onBusyChange={setScanBusy} onStatusChange={setScanStatus} onSessionChange={setScanSession}/>}
-        {section && <section><AssessmentFields heightSourceDate={record.heightSource?.recordedAt} section={section} answers={answers} errors={errors} readOnly={!editable || locked} measurementUnits={measurementUnits} onMeasurementUnitsChange={changeMeasurementUnits} patientReference={record.patient.reference} canEditPatient={hasPermission(role, "patients.edit")} canCorrectDob={role === "ORGANIZATION_ADMIN"} onEditContact={editable ? () => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); } : undefined} onChange={(id, value) => { setAnswers(current => clearInactiveAssessmentAnswers(record.manifest, { ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
+        {section && <section><AssessmentFields heightSourceDate={record.heightSource?.recordedAt} section={section} answers={answers} errors={visibleErrors} readOnly={!editable || locked} measurementUnits={measurementUnits} onMeasurementUnitsChange={changeMeasurementUnits} patientReference={record.patient.reference} canEditPatient={hasPermission(role, "patients.edit")} canCorrectDob={role === "ORGANIZATION_ADMIN"} onEditContact={editable ? () => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); } : undefined} onChange={(id, value) => { setAnswers(current => clearInactiveAssessmentAnswers(record.manifest, { ...current, [id]: value })); setNotice(""); setErrors(current => { const next = { ...current }; delete next[id]; return next; }); }} /></section>}
         <div hidden={sectionId !== "reports"}>{(record.result === null || showScoredAnswers) && <AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!hasPermission(role, "reports.manage") || !editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />}</div>
         {sectionId === "review" && <AssessmentReview record={record} answers={answers} scanStatus={scanStepStatus} scanSession={scanSession} organizationId={organizationId} assessmentId={internalId} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}
       </div>
     </div>
     <footer className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border border-border bg-card px-4 py-3 sm:px-5">
       <Button variant="outline" className="h-10" isDisabled={index <= 0 || locked} onPress={() => { void selectSection(tabs[index - 1]!.id); }}><ArrowLeft aria-hidden="true"/>Back</Button>
-      <div className="flex flex-wrap gap-2">{editable && <Button variant="outline" className="h-10" isDisabled={locked || !dirty} onPress={() => { void persist(); }}>{busy ? "Saving…" : "Save"}</Button>}{index < tabs.length - 1 ? <Button className="h-10" isDisabled={locked} onPress={() => { void selectSection(tabs[index + 1]!.id, true); }}>Continue<ArrowRight aria-hidden="true"/></Button> : editable && hasPermission(role, "assessments.submit") && <Button className="h-10" isDisabled={locked || reportDirty || progress.percent !== 100} onPress={() => { void openVerification(); }}>Submit and request score<ArrowRight aria-hidden="true"/></Button>}</div>
+      <div className="flex flex-wrap gap-2">{editable && <Button variant="outline" className="h-10" isDisabled={locked || !dirty} onPress={() => { void saveCurrentSection(); }}>{busy ? "Saving…" : "Save"}</Button>}{index < tabs.length - 1 ? <Button className="h-10" isDisabled={locked} onPress={() => { void selectSection(tabs[index + 1]!.id, true); }}>Continue<ArrowRight aria-hidden="true"/></Button> : editable && hasPermission(role, "assessments.submit") && <Button className="h-10" isDisabled={locked || reportDirty || progress.percent !== 100} onPress={() => { void openVerification(); }}>Submit and request score<ArrowRight aria-hidden="true"/></Button>}</div>
     </footer>
     </div>
     {contactOpen && <Dialog isOpen isDismissable={!busy} showCloseButton={!busy} ariaLabel="Update patient contact" onOpenChange={open => { if (!busy) setContactOpen(open); }}><DialogTitle>Patient contact</DialogTitle><p className="text-sm text-muted-foreground">This number is saved to the patient's profile.</p><form className="mt-4 grid gap-4" onSubmit={event => { event.preventDefault(); void updateContact(); }}><label className="grid gap-2 text-sm font-medium">Phone number<Input autoFocus type="tel" value={phone} onChange={event => setPhone(event.target.value)} disabled={busy}/></label>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<div className="flex justify-end gap-2"><Button variant="outline" isDisabled={busy} onPress={() => setContactOpen(false)}>Cancel</Button><Button type="submit" isDisabled={busy || !phone.trim()}>Save contact</Button></div></form></Dialog>}

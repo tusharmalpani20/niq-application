@@ -139,6 +139,27 @@ test("review highlights the section with a blocking answer until it is corrected
   await click("50 kg");
   expect(nav.querySelector('button[aria-label="Personal details; needs attention"]')).toBeNull();
 }, { answers: { ...recordFixture().answers, current_weight_kg: null } }));
+test("Continue identifies missing required answers without blocking draft navigation", async () => harness(async ({ click }) => {
+  await click("Continue");
+  expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Face scan");
+  expect(document.querySelector('button[aria-label="Personal details; needs attention"]')?.getAttribute("data-has-issue")).toBe("true");
+  expect([...document.querySelectorAll('[role="status"]')].some(item => item.textContent?.includes("Personal details still needs 2 required answers"))).toBe(true);
+  expect(document.body.textContent).toContain("Height and Current weight");
+  await click("Personal details; needs attention");
+  expect(document.getElementById("assessment-field-height_cm-error")?.textContent).toBe("Required");
+  expect(document.getElementById("assessment-field-current_weight_kg-error")?.textContent).toBe("Required");
+  await click("160 cm");
+  await click("50 kg");
+  expect(document.querySelector('button[aria-label="Personal details; needs attention"]')).toBeNull();
+  expect(document.body.textContent).not.toContain("Personal details still needs");
+}, { answers: { ...recordFixture().answers, height_cm: null, current_weight_kg: null } }));
+test("Save keeps an incomplete draft and points to its missing answer", async () => harness(async ({ click, requests }) => {
+  await click("160 cm");
+  await click("Save");
+  expect(requests.some(request => request.method === "PATCH")).toBe(true);
+  expect(document.body.textContent).toContain("Personal details still needs 1 required answer");
+  expect(document.getElementById("assessment-field-current_weight_kg-error")?.textContent).toBe("Required");
+}, { answers: { ...recordFixture().answers, height_cm: null, current_weight_kg: null } }));
 test("scan prerequisites open the missing inputs with inline errors and no summary box", async () => harness(async ({ click, requests }) => {
   await click("Face scan");
   await act(async () => {
