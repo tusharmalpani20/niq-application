@@ -1,8 +1,9 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
-import { hasPermission, type MembershipRole } from "@niq/application-contracts";
+import { formatAssessmentReference, hasPermission, type MembershipRole } from "@niq/application-contracts";
 import { clinicalReviewActionSchema, type ClinicalReviewAction, type ClinicalReview, type ClinicalReviewer, type ClinicalReviewQueue, type ClinicalReviewQueueItem } from "../../../../packages/contracts/src/clinical-review";
-import { assessments, assessmentHistory, assessmentSubmissions, assessmentScoreReviews, assessmentFaceScans, organizationMemberships, users, patients } from "../db/schema";
+import { assessments, assessmentHistory, assessmentSubmissions, assessmentScoreReviews, assessmentFaceScans, assessmentPriorities, facilities, organizationMemberships, users, patients } from "../db/schema";
+import { decryptPatientData, patientDataKey } from "../security/patient-data";
 import { ServiceError, type Principal, type RequestContext } from "./application";
 import type { AssessmentWorkflowService, WorkflowExecutor, WorkflowRow, StoredWorkflow } from "./assessment-workflow";
 import { facilityAccessCondition } from "./facility-access";
@@ -48,10 +49,30 @@ export class ClinicalReviewService {
  async read(actor:Principal,org:string,id:string){await this.actor(actor,org);return this.projection(actor,await this.service.authorize(actor,org,id));}
  async queue(actor:Principal,org:string,query:{page:number;pageSize:number;search?:string;facilityId?:string;state?:string;mine?:boolean}):Promise<ClinicalReviewQueue>{
   await this.actor(actor,org);await this.service.applicationService.getOrganization(actor,org);
-  const rows=await this.service.db.select({row:assessments}).from(assessments).innerJoin(patients,and(eq(patients.id,assessments.patientId),eq(patients.organizationId,org))).where(and(eq(assessments.organizationId,org),eq(assessments.status,"UNDER_REVIEW"),query.facilityId?eq(assessments.facilityId,query.facilityId):undefined,sql`${assessments.clinicalReview} is not null`,facilityAccessCondition(actor,org,assessments.facilityId),facilityAccessCondition(actor,org,patients.homeFacilityId)));
-  const listed=await this.service.applicationService.listAssessments(actor,org) as Array<{id:string;reference:string;patient:ClinicalReviewQueueItem["patient"];facility:ClinicalReviewQueueItem["facility"];isPriority:boolean}>;
-  const items=[];for(const {row} of rows){const item=listed.find(i=>i.id===row.id);if(!item)continue;const review=await this.projection(actor,row,this.service.db,false);if(review.state!=="QUEUED"&&review.state!=="IN_REVIEW")continue;if(query.state&&query.state!==review.state)continue;if(query.mine&&review.assignee?.membershipId!==actor.membershipId)continue;const search=query.search?.trim().toLowerCase();if(search&&!`${item.reference} ${item.patient.reference} ${item.patient.displayName} ${item.facility?.name??""}`.toLowerCase().includes(search))continue;items.push({assessmentId:row.id,reference:item.reference,patient:item.patient,facility:item.facility,isPriority:item.isPriority,review});}
-  items.sort((a,b)=>(b.review.submittedAt??"").localeCompare(a.review.submittedAt??""));return {items:items.slice((query.page-1)*query.pageSize,query.page*query.pageSize),total:items.length,page:query.page,pageSize:query.pageSize};
+  const empty=():ClinicalReviewQueue=>({items:[],total:0,page:query.page,pageSize:query.pageSize});
+  if(query.state&&!(["QUEUED","IN_REVIEW"] as string[]).includes(query.state))return empty();
+  if(query.mine&&query.state==="QUEUED")return empty();
+  const base=and(eq(assessments.organizationId,org),eq(assessments.status,"UNDER_REVIEW"),query.facilityId?eq(assessments.facilityId,query.facilityId):undefined,sql`${assessments.clinicalReview} is not null`,facilityAccessCondition(actor,org,assessments.facilityId),facilityAccessCondition(actor,org,patients.homeFacilityId),query.state==="QUEUED"?sql`${assessments.assignedToMembershipId} is null`:undefined,query.state==="IN_REVIEW"?sql`${assessments.assignedToMembershipId} is not null`:undefined,query.mine?eq(assessments.assignedToMembershipId,actor.membershipId):undefined);
+  const search=query.search?.trim().toLowerCase();let matchingIds:string[]|undefined;
+  if(search){
+   // Names are encrypted, so search only lightweight queue candidates before paging.
+   const candidates=await this.service.db.select({id:assessments.id,serialNumber:assessments.serialNumber,patientPrefix:patients.referencePrefix,patientSerial:patients.serialNumber,profile:patients.encryptedProfile,facilityName:facilities.name}).from(assessments).innerJoin(patients,and(eq(patients.id,assessments.patientId),eq(patients.organizationId,org))).leftJoin(facilities,and(eq(facilities.organizationId,org),eq(facilities.id,assessments.facilityId))).where(base);
+   const key=patientDataKey(this.service.config.PATIENT_DATA_ENCRYPTION_KEY,this.service.config.SESSION_SECRET);
+   matchingIds=candidates.filter(row=>{
+    const name=(JSON.parse(decryptPatientData(row.profile,key)) as {name:string}).name;
+    return `${formatAssessmentReference(row.serialNumber)} ${row.patientPrefix}-${row.patientSerial} ${name} ${row.facilityName??""}`.toLowerCase().includes(search);
+   }).map(row=>row.id);
+   if(!matchingIds.length)return empty();
+  }
+  const where=and(base,matchingIds?inArray(assessments.id,matchingIds):undefined);
+  const [{total}={total:0}]=await this.service.db.select({total:count()}).from(assessments).innerJoin(patients,and(eq(patients.id,assessments.patientId),eq(patients.organizationId,org))).where(where);
+  if(!total)return empty();
+  // SEND/RESEND history tracks submission order without decrypting every review.
+  const submittedAt=sql<Date>`(select max(h.created_at) from assessment_history h where h.organization_id=${org} and h.assessment_id=${assessments.id} and h.kind in ('SEND','RESEND'))`;
+  const rows=await this.service.db.select({row:assessments,patientPrefix:patients.referencePrefix,patientSerial:patients.serialNumber,patientProfile:patients.encryptedProfile,facilityId:facilities.id,facilityName:facilities.name,priorityId:assessmentPriorities.assessmentId}).from(assessments).innerJoin(patients,and(eq(patients.id,assessments.patientId),eq(patients.organizationId,org))).leftJoin(facilities,and(eq(facilities.organizationId,org),eq(facilities.id,assessments.facilityId))).leftJoin(assessmentPriorities,and(eq(assessmentPriorities.organizationId,org),eq(assessmentPriorities.assessmentId,assessments.id),eq(assessmentPriorities.membershipId,actor.membershipId))).where(where).orderBy(desc(submittedAt),desc(assessments.id)).limit(query.pageSize).offset((query.page-1)*query.pageSize);
+  const key=patientDataKey(this.service.config.PATIENT_DATA_ENCRYPTION_KEY,this.service.config.SESSION_SECRET);
+  const items:ClinicalReviewQueueItem[]=await Promise.all(rows.map(async ({row,patientPrefix,patientSerial,patientProfile,facilityId,facilityName,priorityId})=>({assessmentId:row.id,reference:formatAssessmentReference(row.serialNumber),patient:{id:row.patientId,reference:`${patientPrefix}-${patientSerial}`,displayName:(JSON.parse(decryptPatientData(patientProfile,key)) as {name:string}).name},facility:facilityId&&facilityName?{id:facilityId,name:facilityName}:null,isPriority:priorityId!==null,review:await this.projection(actor,row,this.service.db,false)})));
+  return {items,total,page:query.page,pageSize:query.pageSize};
  }
  async command(actor:Principal,org:string,id:string,raw:ClinicalReviewAction,context:RequestContext){
   const parsed=clinicalReviewActionSchema.safeParse(raw);if(!parsed.success)throw new ServiceError("VALIDATION_ERROR","Complete the required clinical review fields.");const input=parsed.data;

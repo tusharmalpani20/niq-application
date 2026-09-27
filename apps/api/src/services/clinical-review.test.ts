@@ -153,6 +153,22 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   await command(nurse,afterReview,"COMPLETE",{remark:"Reviewed correction"});
   expect((await reviews.queue(admin,org,{page:1,pageSize:1000})).items.some(item=>item.assessmentId===afterReview)).toBe(false);
  });
+ test("queue pages in submission order and searches encrypted patient names",async()=>{
+  const first=await assessment(),second=await assessment();
+  await command(creator,first,"SEND");await command(creator,second,"SEND");
+  const all=await reviews.queue(admin,org,{page:1,pageSize:1000,facilityId:facility});
+  const firstPage=await reviews.queue(admin,org,{page:1,pageSize:1,facilityId:facility});
+  const secondPage=await reviews.queue(admin,org,{page:2,pageSize:1,facilityId:facility});
+  expect(firstPage.total).toBe(all.total);
+  expect(firstPage.items[0]?.assessmentId).toBe(all.items[0]!.assessmentId);
+  expect(secondPage.items[0]?.assessmentId).toBe(all.items[1]!.assessmentId);
+  const matching=await reviews.queue(admin,org,{page:1,pageSize:1000,search:"synthetic patient",facilityId:facility});
+  expect(matching.total).toBe(all.total);
+  expect(matching.items.some(item=>item.assessmentId===first)).toBe(true);
+  expect(matching.items.some(item=>item.assessmentId===second)).toBe(true);
+  const byReference=await reviews.queue(admin,org,{page:1,pageSize:10,search:all.items[0]!.reference});
+  expect(byReference.items.map(item=>item.assessmentId)).toEqual([all.items[0]!.assessmentId]);
+ });
  test("completion versus adjustment serializes to a consistent final result",async()=>{
   const id=await assessment();await command(creator,id,"SEND");await command(nurse,id,"CLAIM");const state=await reviews.read(nurse,org,id);
   const result=await Promise.allSettled([
