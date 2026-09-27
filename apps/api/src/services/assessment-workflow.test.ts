@@ -67,6 +67,12 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
    const record=await service.read(actor,organizationId,assessmentId);
    return service.submit(actor,organizationId,assessmentId,{revision,reviewToken:record.reviewToken,attestation:{statementVersion:1,reviewedSectionIds:[...record.manifest.sections.map(section=>section.id),"face-scan","attachments"],confirmed:true}},context);
  };
+ const approveScanConsent=async(assessmentId:string)=>{
+   const [assessment]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,assessmentId));
+   await db.insert(tables.faceScanConsents).values({id:createEntityId(),organizationId:org,assessmentId,
+     patientId:patient,actorId:membership,cycle:assessment!.cycle,method:"LINK",provenance:"SIMULATED",
+     status:"APPROVED",requestedAt:new Date(),respondedAt:new Date()});
+ };
  afterAll(async()=>{await client.end();if(root)await rm(root,{recursive:true,force:true});});
  test("initialization is durable and idempotent, health snapshots encrypted",async()=>{const a=await service.initialize(actor,org,{patientId:patient,requestKey:"init-request-key-12345"},context);expect(a.status).toBe("READY");id=a.assessmentId!;expect((await service.initialize(actor,org,{patientId:patient,requestKey:"init-request-key-12345"},context)).assessmentId).toBe(id);expect(starts).toBe(1);expect(JSON.stringify((await db.select().from(tables.assessments).where(eq(tables.assessments.id,id)))[0]!.workflow)).not.toContain("Fixture Patient");});
  test("readable references retain tenant and facility authorization",async()=>{
@@ -239,6 +245,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   const scanAssessment=(await service.initialize(actor,org,{patientId:patient,requestKey:"face-scan-assessment-12345"},context)).assessmentId!;
   let draft=await service.read(actor,org,scanAssessment);
   draft=await service.save(actor,org,scanAssessment,{revision:draft.revision,answers:{height_cm:170,current_weight_kg:65}},context);
+  await approveScanConsent(scanAssessment);
   const enabled=new AssessmentWorkflowService({db,applicationService:service.applicationService,config:{...service.config,FACE_SCAN_ENABLED:true},fetcher:async()=>Response.json(faceScanOrganizationInfo)});
   let remote:any;let uncertain=true;let calls=0;
   const scans=new AssessmentFaceScanService(enabled,async(url,init)=>{
@@ -309,6 +316,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  test("face scan definitive setup rejection releases slot while unknown outcome retains it",async()=>{
   const assessment=(await service.initialize(actor,org,{patientId:patient,requestKey:"scan-rejection-assessment-12345"},context)).assessmentId!;
   const draft=await service.save(actor,org,assessment,{revision:0,answers:{height_cm:170,current_weight_kg:65}},context);
+  await approveScanConsent(assessment);
   const enabled=new AssessmentWorkflowService({db,applicationService:service.applicationService,config:{...service.config,FACE_SCAN_ENABLED:true},fetcher:async()=>Response.json(faceScanOrganizationInfo)});
   let outcome="FACE_SCAN_DISABLED";
   const scans=new AssessmentFaceScanService(enabled,async()=>{if(outcome==="unknown")throw new Error("timeout");return Response.json({error:outcome},{status:outcome==="UNAUTHORIZED"?401:503});});
