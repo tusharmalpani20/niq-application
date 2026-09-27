@@ -762,16 +762,23 @@ export class PostgresApplicationService implements ApplicationService {
     return this.db.select().from(facilities).where(and(eq(facilities.organizationId, organizationId), facilityAccessCondition(actor, organizationId, facilities.id))).orderBy(facilities.name);
   }
   async getFacilityPerformance(actor: Principal, organizationId: string, facilityId: string) {
-    this.ensureOrganizationAccess(actor, organizationId, "users.manage");
+    this.ensureOrganizationAccess(actor, organizationId, "assessments.read");
     const [facility] = await this.db.select({ id: facilities.id, timezone: facilities.timezone }).from(facilities)
       .where(and(eq(facilities.organizationId, organizationId), eq(facilities.id, facilityId), facilityAccessCondition(actor, organizationId, facilities.id))).limit(1);
     if (!facility) throw new ServiceError("NOT_FOUND", "Facility not found.");
-    const [completed, scans] = await Promise.all([
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const [completed, scored, scans, riskRows] = await Promise.all([
       this.db.select({ completedAt: assessments.completedAt }).from(assessments)
         .where(and(eq(assessments.organizationId, organizationId), eq(assessments.facilityId, facilityId), eq(assessments.status, "COMPLETED"))),
+      this.db.select({ scoredAt: assessments.scoredAt }).from(assessments)
+        .where(and(eq(assessments.organizationId, organizationId), eq(assessments.facilityId, facilityId), gte(assessments.scoredAt, cutoff))),
       this.db.select({ projection: assessmentFaceScans.projection }).from(assessmentFaceScans)
         .innerJoin(assessments, and(eq(assessments.organizationId, assessmentFaceScans.organizationId), eq(assessments.id, assessmentFaceScans.assessmentId)))
         .where(and(eq(assessmentFaceScans.organizationId, organizationId), eq(assessments.facilityId, facilityId), eq(assessmentFaceScans.state, "COMPLETED"))),
+      this.db.select({ id: assessments.id, patientId: assessments.patientId, completedAt: assessments.completedAt, clinicalReview: assessments.clinicalReview }).from(assessments)
+        .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
+        .where(and(eq(assessments.organizationId, organizationId), eq(assessments.facilityId, facilityId), eq(assessments.status, "COMPLETED"), eq(patients.isArchived, false), facilityAccessCondition(actor, organizationId, patients.homeFacilityId))),
     ]);
     const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
     const scanDates = scans.flatMap(({ projection }) => {
@@ -781,11 +788,19 @@ export class PostgresApplicationService implements ApplicationService {
       if (!session.completedAt) throw new ServiceError("CONFLICT", "Scan completion date could not be read.");
       return [new Date(session.completedAt)];
     });
-    const now = new Date();
+    const completedDates = completed.flatMap(row => row.completedAt ? [row.completedAt] : []);
+    const within30Days = (date: Date) => date >= cutoff && date <= now;
+    const risk = countOverviewRisk(riskRows, value => {
+      const encrypted = (value as { encrypted?: string })?.encrypted;
+      if (!encrypted) throw new ServiceError("CONFLICT", "Assessment review data could not be read.");
+      return JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key));
+    }, now);
     return {
       timezone: facility.timezone,
-      assessments: facilityTrend(completed.flatMap(row => row.completedAt ? [row.completedAt] : []), now, facility.timezone),
+      assessments: facilityTrend(completedDates, now, facility.timezone),
       faceScans: facilityTrend(scanDates, now, facility.timezone),
+      last30Days: { scored: scored.filter(row => row.scoredAt && within30Days(row.scoredAt)).length, completed: completedDates.filter(within30Days).length, faceScans: scanDates.filter(within30Days).length },
+      risk: { assessedPatients: risk.assessedPatients, categories: risk.categories },
     };
   }
   async updateFacility(actor: Principal, organizationId: string, facilityId: string, input: UpdateFacility, context: RequestContext) {

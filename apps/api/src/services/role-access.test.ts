@@ -41,7 +41,11 @@ for (const role of ["DOCTOR", "NUTRITIONIST", "OTHER_MEDICAL", "SUPPORT"] as con
   await expect(service.listUsers({ ...actor, role }, "org")).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(service.setUserActive({ ...actor, role }, "org", "other", false, { requestId: "audit" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(service.createFacility({ ...actor, role }, "org", {} as any, { requestId: "audit" })).rejects.toMatchObject({ code: "FORBIDDEN" });
-  await expect(service.getFacilityPerformance({ ...actor, role }, "org", "facility")).rejects.toMatchObject({ code: "FORBIDDEN" });
+});
+
+test("support cannot read facility clinical performance", async () => {
+  const service = new PostgresApplicationService({} as Database, config, { deliver: async () => {} });
+  await expect(service.getFacilityPerformance({ ...actor, role: "SUPPORT" }, "org", "facility")).rejects.toMatchObject({ code: "FORBIDDEN" });
 });
 
 test("facility performance rejects a different organization before querying", async () => {

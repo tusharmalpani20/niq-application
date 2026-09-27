@@ -238,7 +238,11 @@ const facilityTrendSchema = z.object({
   months: z.array(z.object({ month: z.string().regex(/^\d{4}-\d{2}$/), count: z.number().int().nonnegative() })).length(6),
   previous: z.object({ count: z.number().int().nonnegative(), through: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).nullable(),
 });
-export const facilityPerformanceSchema = z.object({ timezone: z.string(), assessments: facilityTrendSchema, faceScans: facilityTrendSchema });
+export const facilityPerformanceSchema = z.object({
+  timezone: z.string(), assessments: facilityTrendSchema, faceScans: facilityTrendSchema,
+  last30Days: z.object({ scored: z.number().int().nonnegative(), completed: z.number().int().nonnegative(), faceScans: z.number().int().nonnegative() }),
+  risk: z.object({ assessedPatients: z.number().int().nonnegative(), categories: z.object({ low: z.number().int().nonnegative(), moderate: z.number().int().nonnegative(), high: z.number().int().nonnegative() }) }),
+});
 export type FacilityPerformance = z.infer<typeof facilityPerformanceSchema>;
 
 export const createInvitationSchema = z.object({
