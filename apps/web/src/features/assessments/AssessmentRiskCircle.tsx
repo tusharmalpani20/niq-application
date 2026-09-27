@@ -1,4 +1,4 @@
-import type { AssessmentScoreResult } from "@niq/application-contracts";
+import type { AssessmentAnswerCoverage, AssessmentScoreResult } from "@niq/application-contracts";
 
 type Classification = AssessmentScoreResult["classification"];
 
@@ -11,16 +11,13 @@ function categoryColor(color: string | undefined): string {
   return color?.startsWith("#") ? color : presetColors[color ?? ""] ?? "#64748b";
 }
 
-export function AssessmentRiskCircle({ score, classification, categories, scoringAnswers }: {
+export function AssessmentRiskCircle({ score, classification, categories, formCoverage }: {
   score: number | null;
   classification: Classification;
   categories?: AssessmentScoreResult["riskCategories"];
-  scoringAnswers?: AssessmentScoreResult["components"];
+  formCoverage?: Pick<AssessmentAnswerCoverage, "answered" | "total" | "percent">;
 }) {
   const selectedColor = categoryColor(classification?.color ?? categories?.find(band => band.id === classification?.id)?.color);
-  const answered = scoringAnswers?.filter(component => component.status === "answered").length ?? 0;
-  const total = scoringAnswers?.length ?? 0;
-  const percent = total ? Math.floor(answered / total * 100) : null;
   const radius = 64;
   return <div className="grid min-w-0 items-center gap-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-8">
     <div data-risk-circle className="relative mx-auto grid size-40 place-items-center sm:size-44" role="img" aria-label={`${score ?? "No"} points, ${classification?.label ?? "no risk category"}`}>
@@ -37,8 +34,8 @@ export function AssessmentRiskCircle({ score, classification, categories, scorin
       <p className="text-sm text-muted-foreground">Final NIQ score</p>
       <p className="mt-1 text-2xl font-semibold" style={{ color: selectedColor }}>{classification?.label ?? "No risk category"}</p>
       {classification?.interpretation && <p className="mt-2 max-w-prose text-sm text-muted-foreground">{classification.interpretation}</p>}
-      {score !== null && percent !== null && <p className="mt-4 inline-block max-w-full rounded-lg border border-border bg-card px-3 py-2 text-sm leading-6">
-        {answered > 0 ? <>This score used answers from <strong className="tabular-nums">{answered} of {total}</strong> scoring questions (<strong className="tabular-nums">{percent}%</strong>).</> : <>No questionnaire answers contributed to this score (<strong className="tabular-nums">0 of {total}; 0%</strong>).</>}
+      {score !== null && formCoverage?.percent !== null && formCoverage?.percent !== undefined && <p className="mt-4 inline-block max-w-full rounded-lg border border-border bg-card px-3 py-2 text-sm leading-6">
+        This assessment was scored with <strong className="tabular-nums">{formCoverage.answered} of {formCoverage.total}</strong> questions answered (<strong className="tabular-nums">{formCoverage.percent}%</strong>).
       </p>}
     </div>
   </div>;

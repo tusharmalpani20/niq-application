@@ -122,7 +122,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="assessment-summary-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">Assessment summary</h2><span className="text-sm text-muted-foreground">{record.progress.answered}/{record.progress.required} required answers complete</span></div>
     {record.progress.answered === record.progress.required && coverage.answered < coverage.total && <p className="mt-2 text-sm text-muted-foreground">Some optional questions remain unanswered.</p>}
     <div {...scoreCard}>
-      <div className="min-w-44 flex-1"><AssessmentRiskCircle score={result.score} classification={result.classification} categories={result.riskCategories} scoringAnswers={result.components} /></div>
+      <div className="min-w-44 flex-1"><AssessmentRiskCircle score={result.score} classification={result.classification} categories={result.riskCategories} formCoverage={coverage} /></div>
       {revised && overall && <div className="min-w-44 flex-1 border-t border-border pt-4 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0"><p className="text-sm text-muted-foreground">Reviewed score</p><p className="mt-1 text-3xl font-semibold tabular-nums text-brand-ink">{points(overall.reviewedPoints)}</p><p className="text-xs text-muted-foreground">{overall.overridden ? "Total override" : "From section scores"}</p>
         <p className="mt-1 text-sm" role="status">{data?.risk?.classification && ["ORIGINAL", "CONFIRMED"].includes(data.risk.status)
           ? <span {...riskBadgeAppearance(data.risk.classification)}>{data.risk.classification.label}{data.risk.status === "ORIGINAL" ? " (original restored)" : ""}</span>
