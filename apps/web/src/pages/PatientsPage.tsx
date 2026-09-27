@@ -213,10 +213,20 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
       </TabsList>
       <TabsContent id="details">
         <PatientAssessmentOverview history={history} state={historyState} organizationId={user.organizationId} canRead={canReadAssessment} canEdit={canEditAssessment} />
-        <div className="admin-detail-grid">
-          <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Patient information</h2><dl className="patient-definition"><div><dt>Medical record number</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span className="min-w-0 break-all">{patient.medicalRecordNumber}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct medical record number" onPress={() => setCorrectingMrn(true)}><Pencil className="size-4" /></Button><Tooltip>Correct MRN</Tooltip></TooltipTrigger>}</dd></div><div><dt>Date of birth</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct date of birth" onPress={() => setCorrectingDob(true)}><Pencil className="size-4" /></Button><Tooltip>Correct DOB</Tooltip></TooltipTrigger>}</dd></div><div><dt>Gender</dt><dd>{genderLabel(patient.gender)}</dd></div><div><dt>Registered</dt><dd>{formatPatientDate(patient.createdAt)}</dd></div></dl></Card>
-          <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Care and contact</h2><dl className="patient-definition"><div><dt>Home facility</dt><dd>{patient.homeFacility?.name ?? "—"}</dd></div><div><dt>Mobile number</dt><dd>{patient.phone || "Not provided"}</dd></div><div><dt>Email address</dt><dd>{patient.email || "Not provided"}</dd></div></dl></Card>
-        </div>
+        <Card className="surface gap-0 p-0">
+          <div className="border-b border-border px-5 py-4 sm:px-6"><h2 className="text-lg font-semibold">Patient details</h2></div>
+          <div className="grid min-w-0 md:grid-cols-2">
+            <section className="min-w-0 px-5 py-4 sm:px-6 md:border-r md:border-border" aria-labelledby="patient-identity-heading">
+              <h3 id="patient-identity-heading" className="mb-2 text-sm font-semibold text-foreground">Identity</h3>
+              <dl className="patient-definition m-0"><div><dt>Medical record number</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span className="min-w-0 break-all">{patient.medicalRecordNumber}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct medical record number" onPress={() => setCorrectingMrn(true)}><Pencil className="size-4" /></Button><Tooltip>Correct MRN</Tooltip></TooltipTrigger>}</dd></div><div><dt>Date of birth</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct date of birth" onPress={() => setCorrectingDob(true)}><Pencil className="size-4" /></Button><Tooltip>Correct DOB</Tooltip></TooltipTrigger>}</dd></div><div><dt>Gender</dt><dd>{genderLabel(patient.gender)}</dd></div></dl>
+            </section>
+            <section className="min-w-0 border-t border-border px-5 py-4 sm:px-6 md:border-t-0" aria-labelledby="patient-contact-heading">
+              <h3 id="patient-contact-heading" className="mb-2 text-sm font-semibold text-foreground">Care and contact</h3>
+              <dl className="patient-definition m-0"><div><dt>Home facility</dt><dd>{patient.homeFacility?.name ?? "—"}</dd></div><div><dt>Mobile number</dt><dd>{patient.phone || "Not provided"}</dd></div><div><dt>Email address</dt><dd>{patient.email || "Not provided"}</dd></div></dl>
+            </section>
+          </div>
+          <p className="m-0 border-t border-border bg-muted/20 px-5 py-3 text-xs text-muted-foreground sm:px-6">Registered <time dateTime={patient.createdAt.toISOString()}>{formatPatientDate(patient.createdAt)}</time></p>
+        </Card>
       </TabsContent>
       <TabsContent id="assessments">
         <Card className="surface p-5">
