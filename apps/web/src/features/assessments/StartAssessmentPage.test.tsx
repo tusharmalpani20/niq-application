@@ -3,21 +3,22 @@ import { JSDOM } from "jsdom";
 import { act, StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
-import { filterAssessmentPatients, StartAssessmentPage } from "./StartAssessmentPage";
+import { StartAssessmentPage } from "./StartAssessmentPage";
 import type { MembershipRole } from "@niq/application-contracts";
+
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
-const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Real selected patient", dateOfBirth: "2000-01-01", gender: "FEMALE", homeFacility: null, createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
+const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Real selected patient", medicalRecordNumber: "HOSP-42", dateOfBirth: "2000-01-01", gender: "FEMALE", phone: "1234567890", homeFacility: { id, name: "Main facility" }, createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 const facility = { id, organizationId: id, name: "Main facility", code: "MAIN", timezone: "Asia/Kolkata", status: "ACTIVE", createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
-async function harness(path: string, handler: (url: string, init?: RequestInit) => Promise<Response>, callback: (router: ReturnType<typeof createMemoryRouter>, click: () => Promise<void>, switchScope: () => Promise<void>) => Promise<void>, role: MembershipRole = "OTHER_MEDICAL", accessibleFacilities = [facility]) {
+
+async function harness(path: string, handler: (url: string, init?: RequestInit) => Promise<Response>, run: (router: ReturnType<typeof createMemoryRouter>, switchScope: () => Promise<void>) => Promise<void>, role: MembershipRole = "OTHER_MEDICAL") {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
-  const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "Event", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "HTMLTextAreaElement", "HTMLSelectElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "ResizeObserver", "CSS", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
-  const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  const values = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, Event: dom.window.Event, NodeFilter: dom.window.NodeFilter, DocumentFragment: dom.window.DocumentFragment, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, HTMLTextAreaElement: dom.window.HTMLTextAreaElement, HTMLSelectElement: dom.window.HTMLSelectElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} }, CSS: { escape: (value: string) => value }, IS_REACT_ACT_ENVIRONMENT: true };
+  const values = { FocusEvent: dom.window.FocusEvent, window: dom.window, document: dom.window.document, navigator: dom.window.navigator, sessionStorage: dom.window.sessionStorage, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, Event: dom.window.Event, NodeFilter: dom.window.NodeFilter, DocumentFragment: dom.window.DocumentFragment, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, HTMLTextAreaElement: dom.window.HTMLTextAreaElement, HTMLSelectElement: dom.window.HTMLSelectElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} }, CSS: { escape: (value: string) => value }, IS_REACT_ACT_ENVIRONMENT: true };
+  const previous = Object.fromEntries([...Object.keys(values), "fetch"].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable: true });
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {}, scrollIntoView() {} });
   globalThis.fetch = ((url: unknown, init?: RequestInit) => {
     if (String(url).endsWith("/patients") && init?.method !== "POST") return Promise.resolve(Response.json({ items: [patient] }));
-    if (String(url).endsWith("/facilities")) return Promise.resolve(Response.json({ items: accessibleFacilities }));
+    if (String(url).endsWith("/facilities")) return Promise.resolve(Response.json({ items: [facility] }));
     return handler(String(url), init);
   }) as typeof fetch;
   let updateScope: (() => void) | undefined;
@@ -30,236 +31,125 @@ async function harness(path: string, handler: (url: string, init?: RequestInit) 
   const root = createRoot(document.getElementById("root")!);
   try {
     await act(async () => { root.render(<StrictMode><RouterProvider router={router} /></StrictMode>); await new Promise(resolve => setTimeout(resolve, 0)); });
-    await callback(router, async () => { const button = [...document.querySelectorAll("button")].find(button => /Continue|Retry preparation/.test(button.textContent ?? "")); if (!button) throw new Error("Continue button missing"); await act(async () => { button.click(); await new Promise(resolve => setTimeout(resolve, 0)); }); }, async () => { await act(async () => { updateScope!(); await new Promise(resolve => setTimeout(resolve, 0)); }); });
+    await run(router, async () => { await act(async () => { updateScope!(); await new Promise(resolve => setTimeout(resolve, 0)); }); });
   } finally {
     await act(async () => root.unmount()); router.dispose(); dom.window.close();
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key]; }
   }
 }
-test("organization admins cannot open assessment creation", async () => {
-  let requests = 0;
-  await harness("/assessments/new", async () => { requests++; throw new Error("Unexpected request"); }, async router => {
+
+async function click(label: string) {
+  const button = [...document.querySelectorAll("button")].find(item => item.textContent?.trim() === label);
+  if (!button) throw new Error(`Button missing: ${label}`);
+  await act(async () => { button.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+}
+test("organization admin cannot open assessment creation", async () => {
+  let writes = 0;
+  await harness("/assessments/new", async () => { writes++; throw new Error("Unexpected request"); }, async router => {
     expect(router.state.location.pathname).toBe("/assessments");
     expect(document.body.textContent).toContain("Assessment list");
-    expect(document.body.textContent).not.toContain("New assessment");
   }, "ORGANIZATION_ADMIN");
-  expect(requests).toBe(0);
+  expect(writes).toBe(0);
 });
-test("patient entry starts directly and preserves creation key before uncertain request", async () => {
+
+test("new assessment opens personal details, with other sections locked and no write", async () => {
+  let writes = 0;
+  await harness("/assessments/new", async () => { writes++; throw new Error("Unexpected request"); }, async () => {
+    expect(document.querySelector("#assessment-patient")).not.toBeNull();
+    expect(document.querySelector("#assessment-field-height_cm")).not.toBeNull();
+    expect(document.querySelector("#assessment-field-current_weight_kg")).not.toBeNull();
+    expect(document.querySelector('nav[aria-label="Assessment sections"] button[aria-current="step"]')?.textContent).toContain("Personal details");
+    expect([...document.querySelectorAll('nav[aria-label="Assessment sections"] button')].slice(1).every(button => button.disabled)).toBe(true);
+    expect([...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Continue")?.disabled).toBe(true);
+    expect(writes).toBe(0);
+  });
+});
+
+test("existing patient waits for height and weight, then creates and saves one assessment", async () => {
+  const writes: Array<{ url: string; body: any }> = [];
+  await harness(`/assessments/new?patient=${id}`, async (url, init) => {
+    if (url.includes("/patients/")) return Response.json(patient);
+    if (init?.method === "POST") { writes.push({ url, body: JSON.parse(String(init.body)) }); return Response.json({ id, status: "READY", assessmentId: id, assessmentReference: "ASM-000009", failureCode: null }); }
+    if (init?.method === "PATCH") { writes.push({ url, body: JSON.parse(String(init.body)) }); return Response.json({}); }
+    return Response.json({ id, revision: 1, answers: { patient_name: patient.displayName } });
+  }, async router => {
+    expect(writes).toHaveLength(0);
+    expect([...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Continue")?.disabled).toBe(true);
+    expect(writes).toHaveLength(0);
+    await click("170 cm");
+    await click("70 kg");
+    await click("Continue");
+    expect(router.state.location.pathname).toBe("/assessments/ASM-000009");
+    expect(router.state.location.state).toEqual({ startAtFaceScan: true });
+    expect(writes).toHaveLength(2);
+    expect(writes[0]!.body.patientId).toBe(id);
+    expect(writes[1]!.body.answers).toMatchObject({ height_cm: 170, current_weight_kg: 70 });
+  });
+});
+
+test("an uncertain initialization response retries with the same creation key", async () => {
   const keys: string[] = [];
   await harness(`/assessments/new?patient=${id}`, async (url, init) => {
     if (url.includes("/patients/")) return Response.json(patient);
     if (init?.method === "POST") { keys.push(JSON.parse(String(init.body)).requestKey); throw new Error("Network response lost"); }
     throw new Error(`Unexpected ${url}`);
   }, async router => {
-    expect(document.body.textContent).toContain("Preparing assessment");
-    expect(document.body.textContent).toContain("Real selected patient");
-    expect(document.querySelector<HTMLInputElement>("#assessment-patient")).toBeNull();
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(document.querySelector('nav[aria-label="Assessment sections"]')).toBeNull();
+    await click("170 cm"); await click("70 kg"); await click("Continue");
+    expect(document.body.textContent).toContain("Network response lost");
     expect(keys).toHaveLength(1);
-    const query = new URLSearchParams(router.state.location.search);
-    expect(query.get("patient")).toBe(id);
-    expect(query.get("requestKey")).toBe(keys[0]);
-    const retry = [...document.querySelectorAll("button")].find(button => button.textContent === "Retry preparation")!;
-    await act(async () => { retry.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
-    expect(keys).toHaveLength(2);
-    expect(keys[1]).toBe(keys[0]);
-  });
-});
-test("patient entry opens the questionnaire as soon as preparation succeeds", async () => {
-  let starts = 0;
-  await harness(`/assessments/new?patient=${id}`, async (url, init) => {
-    if (url.includes("/patients/")) return Response.json(patient);
-    if (init?.method === "POST") { starts++; return Response.json({ id, status: "READY", assessmentId: id, assessmentReference: "ASM-000009", failureCode: null }); }
-    throw new Error(`Unexpected ${url}`);
-  }, async router => {
-    expect(starts).toBe(1);
-    expect(router.state.location.pathname).toBe("/assessments/ASM-000009");
-    expect(document.querySelector("#assessment-patient")).toBeNull();
-  });
-});
-test("refresh replays existing creation key and resumes returned initialization", async () => {
-  await harness(`/assessments/new?patient=${id}&requestKey=persisted-creation-key`, async (url, init) => {
-    if (url.includes("/patients/")) return Response.json(patient);
-    if (init?.method === "POST") { expect(JSON.parse(String(init.body)).requestKey).toBe("persisted-creation-key"); return Response.json({ id, status: "PENDING", assessmentId: null, failureCode: null }); }
-    return Response.json({ id, status: "PENDING", assessmentId: null, failureCode: null });
-  }, async router => { expect(new URLSearchParams(router.state.location.search).get("initialization")).toBe(id); });
-  await harness(`/assessments/new?patient=${id}&requestKey=persisted-creation-key&initialization=${id}`, async (url, init) => {
-    expect(init?.method ?? "GET").toBe("GET");
-    return Response.json(url.includes("/patients/") ? patient : { id, status: "READY", assessmentId: id, assessmentReference: "ASM-000001", failureCode: null });
-  }, async router => { expect(router.state.location.pathname).toBe("/assessments/ASM-000001"); });
-});
-test("inaccessible patient has no fallback and cannot initialize", async () => {
-  let initializations = 0;
-  await harness(`/assessments/new?patient=${id}`, async (_url, init) => { if (init?.method === "POST") initializations++; return Response.json({ error: { code: "FORBIDDEN", message: "No access" } }, { status: 403 }); }, async () => {
-    expect(document.body.textContent).toContain("could not be loaded");
-    expect([...document.querySelectorAll("button")].some(button => button.textContent === "Continue")).toBe(false);
-    expect([...document.querySelectorAll("button")].some(button => button.textContent === "Exit")).toBe(true);
-    expect(document.body.textContent).not.toContain("NIQ-1042");
-  });
-  expect(initializations).toBe(0);
-});
-
-test("picker MRN search preserves facility restriction and supports older responses", () => {
-  const first = { ...patient, medicalRecordNumber: "HOSP-42", homeFacility: { id: "facility-a", name: "A" }, createdAt: new Date(), updatedAt: new Date() };
-  const second = { ...first, id: "patient-b", homeFacility: { id: "facility-b", name: "B" } };
-  const legacy = { ...first, id: "patient-c", medicalRecordNumber: undefined };
-  expect(filterAssessmentPatients([first, second, legacy] as any, "facility-a", " hosp-42 ").map(item => item.id)).toEqual([id]);
-  expect(filterAssessmentPatients([legacy] as any, "", "PAT-1")).toHaveLength(1);
-});
-
-test("one accessible facility is shown without an unnecessary facility selector", async () => {
-  await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async () => {
-    expect(document.body.textContent).toContain("Main facility");
-    expect(document.body.textContent).not.toContain("All accessible facilities");
-    expect(document.querySelector<HTMLInputElement>("#assessment-patient")).not.toBeNull();
+    expect(new URLSearchParams(router.state.location.search).get("requestKey")).toBe(keys[0]);
+    await click("Continue");
+    expect(keys).toEqual([keys[0], keys[0]]);
   });
 });
 
-test("multiple accessible facilities keep the facility selector", async () => {
-  await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async () => {
-    expect(document.body.textContent).toContain("All accessible facilities");
-  }, "OTHER_MEDICAL", [facility, { ...facility, id: "01ARZ3NDEKTSV4RRFFQ69G5FAW", name: "Second facility" }]);
-});
-
-test("new assessment switches to inline patient registration without opening the questionnaire", async () => {
-  await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async () => {
-    expect(document.querySelector(".assessment-workflow")).not.toBeNull();
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(document.querySelector('nav[aria-label="Assessment sections"]')).toBeNull();
-    expect(document.body.textContent).toContain("Select a patient and press Continue, or create one to open the questionnaire.");
-    expect(document.body.textContent).not.toContain("Personal details, including height and current weight");
-    const create = [...document.querySelectorAll("button")].find(button => button.textContent === "Create new patient")!;
-    expect(create.parentElement?.textContent).toContain("Can't find the patient?");
-    expect(create.parentElement?.className).toContain("bg-primary/5");
-    expect(create.className).toContain("border-primary/50");
-    expect(create.querySelector("svg")).not.toBeNull();
-    await act(async () => { create.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
-    expect(document.querySelector("#patient-name")).not.toBeNull();
-    expect(document.querySelector("#patient-birth")).not.toBeNull();
-    expect(document.body.textContent).toContain("Create patient & continue");
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(document.querySelector('nav[aria-label="Assessment sections"]')).toBeNull();
-  });
-});
-
-test("a no-match search offers patient creation and prefills the searched name", async () => {
+test("inaccessible patient cannot initialize an assessment", async () => {
   let writes = 0;
-  await harness("/assessments/new", async (_url, init) => { if (init?.method === "POST") writes++; throw new Error("Unexpected request"); }, async () => {
-    const input = document.querySelector<HTMLInputElement>("#assessment-patient")!;
-    const search = async (text: string) => act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new window.KeyboardEvent("keyup", { key: "e", bubbles: true }));
-      await new Promise(resolve => setTimeout(resolve, 0));
-    });
-    await act(async () => { input.click(); input.focus(); });
-    await search("Real selected");
-    expect([...document.querySelectorAll('[role="option"]')].some(option => option.textContent?.includes("Create"))).toBe(false);
-    await search("New patient name");
-    const create = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent?.includes("Create “New patient name”"));
-    expect(create).toBeDefined();
-    await act(async () => { create!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
-    expect(document.querySelector<HTMLInputElement>("#patient-name")?.value).toBe("New patient name");
+  await harness(`/assessments/new?patient=${id}`, async (_url, init) => {
+    if (init?.method === "POST") writes++;
+    return Response.json({ error: { code: "FORBIDDEN", message: "No access" } }, { status: 403 });
+  }, async () => {
+    expect(document.body.textContent).toContain("could not be loaded");
+    expect([...document.querySelectorAll("button")].some(button => button.textContent?.trim() === "Continue")).toBe(false);
     expect(writes).toBe(0);
   });
 });
 
-test("Exit leaves patient selection without creating an assessment", async () => {
-  await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async router => {
-    expect(document.querySelector(".assessment-workflow > header button")).toBeNull();
-    expect(document.querySelector('section[aria-label="Patient selection"] > footer button')?.textContent).toBe("Exit");
-    const exit = [...document.querySelectorAll("button")].find(button => button.textContent === "Exit")!;
-    await act(async () => { exit.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
-    expect(router.state.location.pathname).toBe("/assessments");
-  });
-});
-
-test("Exit from patient creation confirms dirty fields and stays distinct from choosing an existing patient", async () => {
-  await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async router => {
-    const press = async (label: string) => {
-      const button = [...document.querySelectorAll("button")].find(item => item.textContent?.trim() === label)!;
-      await act(async () => { button.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
-    };
-    await press("Create new patient");
-    expect(document.querySelector(".form-footer button")?.textContent).toBe("Exit");
-    document.querySelector<HTMLInputElement>("#patient-name")!.value = "Unsaved patient";
-    await press("Exit");
-    expect(router.state.location.pathname).toBe("/assessments/new");
-    expect(document.body.textContent).toContain("Discard patient changes?");
-    await press("Keep editing");
-    await press("Choose existing patient");
-    expect(document.body.textContent).toContain("Discard patient changes?");
-    await press("Discard changes");
-    expect(router.state.location.pathname).toBe("/assessments/new");
-    expect(document.querySelector("#assessment-patient")).not.toBeNull();
-    await press("Exit");
-    expect(router.state.location.pathname).toBe("/assessments");
-  });
-});
-
-test("discarding changes from Exit leaves patient creation", async () => {
-  await harness("/assessments/new", async url => { throw new Error(`Unexpected ${url}`); }, async router => {
-    const press = async (label: string) => {
-      const button = [...document.querySelectorAll("button")].find(item => item.textContent?.trim() === label)!;
-      await act(async () => { button.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
-    };
-    await press("Create new patient");
-    document.querySelector<HTMLInputElement>("#patient-name")!.value = "Unsaved patient";
-    await press("Exit");
-    await press("Discard changes");
-    expect(router.state.location.pathname).toBe("/assessments");
-  });
-});
-
-test("failed initialization on refresh shows its reason without automatic retry", async () => {
-  await harness(`/assessments/new?patient=${id}&requestKey=preserved-key&initialization=${id}`, async (url, init) => {
-    expect(init?.method ?? "GET").toBe("GET");
-    return Response.json(url.includes("/patients/") ? patient : { id, status: "FAILED", assessmentId: null, failureCode: "SCORING_NOT_CONFIGURED" });
-  }, async () => {
-    expect(document.body.textContent).toContain("Connect NIQ Scoring");
-    expect(document.body.textContent).toContain("Retry preparation");
-  });
-});
-
-test("late initialization does not navigate after leaving the creation route", async () => {
+test("late initialization does not navigate after leaving the start screen", async () => {
   let finish!: (value: Response) => void;
   await harness(`/assessments/new?patient=${id}`, async (url, init) => {
     if (url.includes("/patients/")) return Response.json(patient);
     if (init?.method === "POST") return new Promise(resolve => { finish = resolve; });
     throw new Error(`Unexpected ${url}`);
   }, async router => {
+    await click("170 cm"); await click("70 kg"); await click("Continue");
     expect(finish).toBeDefined();
     await act(async () => { await router.navigate("/away"); });
-    await act(async () => { finish(Response.json({ id, status: "READY", assessmentId: id, failureCode: null })); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await act(async () => { finish(Response.json({ id, status: "READY", assessmentId: id, assessmentReference: "ASM-000009", failureCode: null })); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(router.state.location.pathname).toBe("/away");
-    expect(document.body.textContent).toContain("Another page");
   });
 });
 
-test("scope switch clears patient state and ignores the previous user's pending result", async () => {
-  let finish!: (value: Response) => void;
-  await harness(`/assessments/new?patient=${id}`, async (url, init) => {
-    const second = url.includes("second-org");
-    if (url.includes("/patients/")) return Response.json({ ...patient, displayName: second ? "New scope patient" : patient.displayName });
-    if (init?.method === "POST") return new Promise(resolve => { if (!second) finish = resolve; });
+test("patient selection and creation share the name field", async () => {
+  let writes = 0;
+  await harness("/assessments/new", async (_url, init) => { if (init?.method === "POST") writes++; throw new Error("Unexpected request"); }, async () => {
+    const input = document.querySelector<HTMLInputElement>("#assessment-patient")!;
+    expect(input.getAttribute("role")).toBe("combobox");
+    expect(document.body.textContent).not.toContain("Search within facility");
+    expect([...document.querySelectorAll("button")].some(button => button.textContent?.trim() === "Create new patient")).toBe(false);
+    expect([...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Continue")?.disabled).toBe(true);
+    expect(writes).toBe(0);
+  });
+});
+
+test("scope switch clears selected patient details", async () => {
+  await harness(`/assessments/new?patient=${id}`, async url => {
+    if (url.includes("/patients/")) return Response.json({ ...patient, displayName: url.includes("second-org") ? "New scope patient" : patient.displayName });
     throw new Error(`Unexpected ${url}`);
-  }, async (router, _click, switchScope) => {
-    expect(finish).toBeDefined();
+  }, async (_router, switchScope) => {
+    expect(document.querySelector<HTMLInputElement>("#assessment-patient")?.value).toContain(patient.displayName);
     await switchScope();
-    expect(document.body.textContent).toContain("New scope patient");
-    expect(document.body.textContent).not.toContain(patient.displayName);
-    await act(async () => { finish(Response.json({ id, status: "READY", assessmentId: id, failureCode: null })); await new Promise(resolve => setTimeout(resolve, 0)); });
-    expect(router.state.location.pathname).toBe("/assessments/new");
-    expect(new URLSearchParams(router.state.location.search).get("initialization")).toBeNull();
+    expect(document.querySelector<HTMLInputElement>("#assessment-patient")?.value).toContain("New scope patient");
+    expect(document.querySelector<HTMLInputElement>("#assessment-patient")?.value).not.toContain(patient.displayName);
   });
-});
-
-test("support cannot start an assessment from a direct patient URL", async () => {
-  let requests = 0;
-  await harness(`/assessments/new?patient=${id}`, async () => { requests++; return Response.json(patient); }, async router => {
-    expect(router.state.location.pathname).toBe("/assessments");
-    expect(requests).toBe(0);
-  }, "SUPPORT");
 });

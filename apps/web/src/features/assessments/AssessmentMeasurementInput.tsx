@@ -76,7 +76,7 @@ export function AssessmentMeasurementInput({ id, label, kind, value, unit, showQ
       : heightCmQuickValues.map(cm => ({ label: `${cm} cm`, value: cm, draft: [String(cm), ""] }))
     : unit === "lb" ? weightLbQuickValues.map(lb => ({ label: `${lb} lb`, value: poundsToKg(lb), draft: [String(lb), ""] }))
       : weightKgQuickValues.map(kg => ({ label: `${kg} kg`, value: kg, draft: [String(kg), ""] }));
-  return <div className="space-y-2">
+  return <div className="grid gap-3">
     {imperialHeight ? <div className="grid grid-cols-2 gap-3">
       <div className="relative"><Input id={id} aria-label="Height feet" type="number" inputMode="numeric" min={0} step={1} className="min-h-12 bg-background pr-9 md:text-base" disabled={disabled} aria-required={required} aria-invalid={invalid || invalidInches} aria-describedby={describedBy} value={draft[0]} onKeyDown={blockMinusKey} onChange={event => change(0, event.currentTarget)} /><span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">ft</span></div>
       <div className="relative"><Input id={`${id}-inches`} aria-label="Height inches" type="number" inputMode="decimal" min={0} max={11.99} step="any" className="min-h-12 bg-background pr-9 md:text-base" disabled={disabled} aria-invalid={invalid || invalidInches} value={draft[1]} onKeyDown={blockMinusKey} onChange={event => change(1, event.currentTarget)} /><span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">in</span></div>

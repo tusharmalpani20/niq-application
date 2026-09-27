@@ -16,14 +16,17 @@ export type SearchComboboxProps = {
   onChange: (value: string) => void; disabled?: boolean; required?: boolean;
   invalid?: boolean; describedBy?: string; placeholder?: string;
   customValue?: string; onCreate?: (text: string) => void; large?: boolean;
+  inputValue?: string; onInputValueChange?: (text: string) => void;
   createWhenNoMatches?: boolean; createOptionLabel?: (text: string) => string;
   renderIcon?: (optionId: string) => ReactNode; primaryHighlight?: boolean;
 };
 /** One themed, keyboard-operable search menu; custom values require an explicit Use action. */
-export function SearchCombobox({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder = "Search or select…", customValue, onCreate, createWhenNoMatches = false, createOptionLabel, large = false, renderIcon, primaryHighlight = false }: SearchComboboxProps) {
+export function SearchCombobox({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder = "Search or select…", customValue, onCreate, inputValue, onInputValueChange, createWhenNoMatches = false, createOptionLabel, large = false, renderIcon, primaryHighlight = false }: SearchComboboxProps) {
   const selectedLabel = options.find(option => option.id === value)?.label || "";
-  const [search, setSearch] = useState(selectedLabel);
-  useEffect(() => setSearch(selectedLabel), [selectedLabel, value]);
+  const [internalSearch, setInternalSearch] = useState(selectedLabel);
+  const search = inputValue ?? internalSearch;
+  const setSearch = (next: string) => { if (inputValue === undefined) setInternalSearch(next); else onInputValueChange?.(next); };
+  useEffect(() => setInternalSearch(selectedLabel), [selectedLabel, value]);
   const query = search.trim();
   const matches = options.filter(option => matchesComboboxSearch(option.label, query));
   const canCreate = Boolean(onCreate && query && (!createWhenNoMatches || matches.length === 0) && !options.some(option => option.label.toLocaleLowerCase() === query.toLocaleLowerCase()) && query !== customValue);
@@ -31,8 +34,8 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
   const selectedIcon = renderIcon && value && search === selectedLabel ? renderIcon(value) : null;
   return <ComboBox data-slot="search-combobox" aria-label={label} isDisabled={disabled} isRequired={required} isInvalid={invalid} allowsCustomValue allowsEmptyCollection menuTrigger="manual"
     selectedKey={value} inputValue={search} onInputChange={setSearch} items={items}
-    onSelectionChange={key => { if (key === null) return; if (key === "__custom__") { onCreate?.(query); setSearch(selectedLabel); } else { onChange(String(key)); setSearch(options.find(option => option.id === key)?.label || ""); } }}
-    onBlur={() => setSearch(selectedLabel)} className="w-full min-w-0">
+    onSelectionChange={key => { if (key === null) return; if (key === "__custom__") { onCreate?.(query); if (inputValue === undefined) setSearch(selectedLabel); } else { onChange(String(key)); setSearch(options.find(option => option.id === key)?.label || ""); } }}
+    onBlur={() => { if (inputValue === undefined) setSearch(selectedLabel); }} className="w-full min-w-0">
     <ComboBoxStateContext.Consumer>{state => <>
     <Group data-slot="combobox-control" className={`flex items-center rounded-lg border border-input bg-background ${primaryHighlight ? "focus-within:bg-primary/10" : ""} ${large ? "min-h-12" : "min-h-11"}`}>
       {selectedIcon && <span className={`ml-2.5 flex size-9 shrink-0 items-center justify-center rounded-lg ${primaryHighlight ? "bg-primary text-primary-foreground shadow-sm" : "bg-primary/10 text-brand-ink"}`} aria-hidden="true">{selectedIcon}</span>}
@@ -45,7 +48,7 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
           state?.setSelectedKey("__custom__");
           state?.close();
         }
-      }} className={`${large ? "h-12 md:text-base" : "h-11"} border-0 bg-transparent shadow-none focus-visible:ring-0`} />
+      }} className={`${large ? "h-12 md:text-base" : "h-11"} border-0 bg-transparent shadow-none focus-visible:border-0 focus-visible:ring-0`} />
       <Button variant="ghost" size="icon" className="mr-1 size-10" aria-label={`Show ${label} options`}><ChevronsUpDown className="size-4" /></Button>
     </Group>
     <Popover placement="bottom start" offset={4} className="z-50 flex max-h-[var(--available-height,18rem)] flex-col w-(--trigger-width) max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg">
