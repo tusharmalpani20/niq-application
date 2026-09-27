@@ -295,6 +295,39 @@ test("selecting a calendar date shows only activity from that local day", async 
   ] });
 });
 
+test("calendar markers always follow the legend order", async () => {
+  const day = new Date();
+  const at = (hour: number) => new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour).toISOString();
+  await renderOverview("DOCTOR", body => {
+    const calendar = body.querySelector('[aria-label="My assessment activity"]')!;
+    const dateButton = calendar.querySelector('button[aria-label*="1 assessment, 3 milestones"]')!;
+    const colors = [...dateButton.querySelectorAll(':scope > span:last-child > span')].map(marker =>
+      [...marker.classList].find(name => name.startsWith("bg-")));
+    expect(colors).toEqual(["bg-slate-400", "bg-primary", "bg-amber-500"]);
+  }, { activity: [
+    { id, assessmentId: id, action: "CLINICAL_REVIEW_COMPLETE", occurredAt: at(11) },
+    { id: `${id.slice(0, -1)}B`, assessmentId: id, action: "ASSESSMENT_CREATED", occurredAt: at(9) },
+    { id: `${id.slice(0, -1)}C`, assessmentId: id, action: "ASSESSMENT_SUBMITTED", occurredAt: at(10) },
+  ] });
+});
+
+test("daily assessment rows follow the same activity order", async () => {
+  const day = new Date();
+  const at = (hour: number) => new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour).toISOString();
+  const records = ["A", "B", "C"].map((suffix, index) => ({
+    ...assessment, id: `${id.slice(0, -1)}${suffix}`, reference: `ASM-${String(index + 1).padStart(6, "0")}`, myAction: null,
+  }));
+  await renderOverview("DOCTOR", body => {
+    const calendar = body.querySelector('[aria-label="My assessment activity"]')!;
+    expect([...calendar.querySelectorAll('a[href^="/assessments/ASM-"]')].map(link => link.getAttribute("href")))
+      .toEqual(["/assessments/ASM-000001", "/assessments/ASM-000002", "/assessments/ASM-000003"]);
+  }, { assessments: records, activity: [
+    { id: `${id.slice(0, -1)}D`, assessmentId: records[2]!.id, action: "CLINICAL_REVIEW_COMPLETE", occurredAt: at(11) },
+    { id: `${id.slice(0, -1)}E`, assessmentId: records[0]!.id, action: "ASSESSMENT_CREATED", occurredAt: at(9) },
+    { id: `${id.slice(0, -1)}F`, assessmentId: records[1]!.id, action: "ASSESSMENT_SUBMITTED", occurredAt: at(10) },
+  ] });
+});
+
 test("changing month selects its latest active day instead of an empty first day", async () => {
   const now = new Date();
   const previousMonthActivity = new Date(now.getFullYear(), now.getMonth() - 1, 12, 10);

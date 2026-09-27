@@ -40,7 +40,9 @@ function groupAssessmentActivity(items: Activity[]): AssessmentDayActivity[] {
     }
   }
   return [...groups.values()].map(group => ({ ...group, milestones: group.milestones.sort((a, b) => actionSequence.indexOf(a.action) - actionSequence.indexOf(b.action)) }))
-    .sort((a, b) => b.latestAt.getTime() - a.latestAt.getTime());
+    .sort((a, b) => actionSequence.indexOf(a.milestones[0]!.action) - actionSequence.indexOf(b.milestones[0]!.action)
+      || b.latestAt.getTime() - a.latestAt.getTime()
+      || a.assessmentId.localeCompare(b.assessmentId));
 }
 
 export function AssessmentActivityCalendar({ organizationId, assessments }: { organizationId: string; assessments: AssessmentSummary[] }) {
@@ -88,12 +90,13 @@ export function AssessmentActivityCalendar({ organizationId, assessments }: { or
         <div className="mt-2 grid grid-cols-7 gap-1">{Array.from({ length: firstWeekday }, (_, index) => <span key={`pad-${index}`} />)}{Array.from({ length: daysInMonth }, (_, index) => {
           const date = new Date(month.getFullYear(), month.getMonth(), index + 1);
           const events = visibleItems.filter(item => dayKey(item.occurredAt) === dayKey(date));
+          const eventActions = new Set(events.map(event => event.action));
           const active = selected !== null && dayKey(date) === dayKey(selected);
           const assessmentCount = new Set(events.map(event => event.assessmentId)).size;
           const dateLabel = date.toLocaleDateString(undefined, { dateStyle: "full" });
-          return <button key={index} type="button" aria-label={assessmentCount ? `${dateLabel}, ${assessmentCount} ${assessmentCount === 1 ? "assessment" : "assessments"}, ${events.length} ${events.length === 1 ? "milestone" : "milestones"}` : dateLabel} aria-pressed={active} className={`flex aspect-square flex-col items-center justify-center rounded-lg text-sm hover:bg-primary/10 ${active ? "bg-primary text-primary-foreground hover:bg-primary" : ""}`} onClick={() => selectDate(date)}><span>{index + 1}</span><span className="mt-0.5 flex min-h-2 gap-0.5">{[...new Set(events.map(event => event.action))].map(action => <span key={action} className={`size-2 rounded-full ${actions[action].color} ${active ? "ring-1 ring-white" : ""}`} />)}</span></button>;
+          return <button key={index} type="button" aria-label={assessmentCount ? `${dateLabel}, ${assessmentCount} ${assessmentCount === 1 ? "assessment" : "assessments"}, ${events.length} ${events.length === 1 ? "milestone" : "milestones"}` : dateLabel} aria-pressed={active} className={`flex aspect-square flex-col items-center justify-center rounded-lg text-sm hover:bg-primary/10 ${active ? "bg-primary text-primary-foreground hover:bg-primary" : ""}`} onClick={() => selectDate(date)}><span>{index + 1}</span><span className="mt-0.5 flex min-h-2 gap-0.5">{actionSequence.filter(action => eventActions.has(action)).map(action => <span key={action} className={`size-2 rounded-full ${actions[action].color} ${active ? "ring-1 ring-white" : ""}`} />)}</span></button>;
         })}</div>
-        <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">{Object.entries(actions).map(([key, value]) => <span key={key} className="flex items-center gap-1"><i aria-hidden="true" className={`size-2 rounded-full ${value.color}`} />{value.label}</span>)}</div>
+        <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">{actionSequence.map(action => <span key={action} className="flex items-center gap-1"><i aria-hidden="true" className={`size-2 rounded-full ${actions[action].color}`} />{actions[action].label}</span>)}</div>
       </div>
       <div className="flex min-w-0 flex-col"><div className="mb-3"><h3 className="font-semibold">{selected ? selected.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h3><p className="text-sm text-muted-foreground">{loading ? "Loading activity…" : `${selectedAssessments.length} ${selectedAssessments.length === 1 ? "assessment" : "assessments"}${selectedItems.length ? ` · ${selectedItems.length} ${selectedItems.length === 1 ? "milestone" : "milestones"}` : ""}`}</p></div>
         {loading ? <p className="text-sm text-muted-foreground">Loading activity…</p> : error ? <p role="alert" className="text-sm text-muted-foreground">Activity could not be loaded for this month.</p> : selectedAssessments.length ? <>
