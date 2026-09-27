@@ -160,6 +160,22 @@ test("Save keeps an incomplete draft and points to its missing answer", async ()
   expect(document.body.textContent).toContain("Personal details still needs 1 required answer");
   expect(document.getElementById("assessment-field-current_weight_kg-error")?.textContent).toBe("Required");
 }, { answers: { ...recordFixture().answers, height_cm: null, current_weight_kg: null } }));
+test("changing surgical status waits until Save or Continue to reveal the required date", async () => harness(async ({ click }) => {
+  await click("Treatment");
+  await click("Continue");
+  await click("Back");
+  await act(async () => document.querySelector<HTMLInputElement>('input[value="cancer_surgical_status_planned"]')!.click());
+  expect(document.querySelector('button[aria-label="Treatment; needs attention"]')).toBeNull();
+  expect(document.getElementById("assessment-field-planned_surgery_date-error")).toBeNull();
+  await click("Save");
+  expect(document.querySelector('button[aria-label="Treatment; needs attention"]')).not.toBeNull();
+  expect(document.getElementById("assessment-field-planned_surgery_date-error")?.textContent).toBe("Required");
+  await act(async () => document.querySelector<HTMLInputElement>('input[value="cancer_surgical_status_done"]')!.click());
+  expect(document.querySelector('button[aria-label="Treatment; needs attention"]')).toBeNull();
+  expect(document.getElementById("assessment-field-surgery_date-error")).toBeNull();
+  await click("Continue");
+  expect(document.querySelector('button[aria-label="Treatment; needs attention"]')).not.toBeNull();
+}, { answers: { ...recordFixture().answers, cancer_surgical_status: "cancer_surgical_status_not_required" } }));
 test("scan prerequisites open the missing inputs with inline errors and no summary box", async () => harness(async ({ click, requests }) => {
   await click("Face scan");
   await act(async () => {
