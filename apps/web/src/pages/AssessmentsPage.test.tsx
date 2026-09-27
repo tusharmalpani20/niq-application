@@ -293,6 +293,9 @@ test("assessment rows offer a status-aware action to open the assessment", async
     expect(table?.querySelector('a[aria-label="Review answers ASM-000002"]')).not.toBeNull();
     expect(table?.querySelector('a[aria-label="View score ASM-000003"]')).not.toBeNull();
     expect(table?.querySelector('button[aria-label^="Download PDF"]')).toBeNull();
+    const mobileCards = [...document.querySelectorAll('.assessment-mobile-card')];
+    expect(mobileCards).toHaveLength(3);
+    expect(mobileCards.every(card => card.querySelector('.assessment-card-footer > a') && card.querySelector('.mobile-card-heading button[aria-label*="priority"]'))).toBe(true);
   });
 });
 
@@ -305,6 +308,6 @@ test("completed assessments show a PDF download entry point until reports are av
     const download = table?.querySelector<HTMLButtonElement>('button[aria-label="Download PDF for ASM-000001 (not yet available)"]');
     expect(download?.textContent).toContain("Download PDF");
     expect(download?.disabled).toBe(true);
-    expect(document.querySelector('.mobile-card-list button[aria-label="Download PDF for ASM-000001 (not yet available)"]')).not.toBeNull();
+    expect(document.querySelector('.assessment-mobile-card .assessment-card-secondary button[aria-label="Download PDF for ASM-000001 (not yet available)"]')).not.toBeNull();
   });
 });
