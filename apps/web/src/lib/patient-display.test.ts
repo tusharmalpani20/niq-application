@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AssessmentSummary } from "@niq/application-contracts";
-import { latestAssessmentDates, patientAgeLabel } from "./patient-display";
+import { latestAssessmentDates, patientAgeLabel, sortPatientRows } from "./patient-display";
 
 describe("patient display", () => {
   const now = new Date(2026, 8, 19);
@@ -22,5 +22,17 @@ describe("patient display", () => {
     expect(dates.get("a")?.toISOString()).toBe("2026-09-19T00:00:00.000Z");
     expect(dates.get("b")?.toISOString()).toBe("2026-09-10T00:00:00.000Z");
     expect(dates.has("c")).toBe(false);
+  });
+  test("sorts registration dates and assessment dates before pagination", () => {
+    const rows = [
+      { reference: "PAT-1", createdAt: new Date("2026-09-01"), lastAssessment: new Date("2026-09-20") },
+      { reference: "PAT-2", createdAt: new Date("2026-09-10"), lastAssessment: null },
+      { reference: "PAT-3", createdAt: new Date("2026-09-05"), lastAssessment: new Date("2026-09-15") },
+    ];
+    expect(sortPatientRows(rows, "registered-newest").map(row => row.reference)).toEqual(["PAT-2", "PAT-3", "PAT-1"]);
+    expect(sortPatientRows(rows, "registered-oldest").map(row => row.reference)).toEqual(["PAT-1", "PAT-3", "PAT-2"]);
+    expect(sortPatientRows(rows, "assessment-newest").map(row => row.reference)).toEqual(["PAT-1", "PAT-3", "PAT-2"]);
+    expect(sortPatientRows(rows, "assessment-oldest").map(row => row.reference)).toEqual(["PAT-3", "PAT-1", "PAT-2"]);
+    expect(rows.map(row => row.reference)).toEqual(["PAT-1", "PAT-2", "PAT-3"]);
   });
 });

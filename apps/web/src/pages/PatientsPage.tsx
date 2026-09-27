@@ -25,7 +25,7 @@ import { Icon } from "../lib/icons";
 
 import { DateDisplay } from "../components/DateDisplay";
 import { StatusBadge } from "../components/StatusBadge";
-import { patientAgeLabel, latestAssessmentDates, assessmentStatusLabels } from "../lib/patient-display";
+import { patientAgeLabel, latestAssessmentDates, assessmentStatusLabels, sortPatientRows, type PatientSort } from "../lib/patient-display";
 
 const pageSize = 10;
 type PatientRow = { id: string; reference: string; displayName: string; age: string; createdAt: Date; gender: string; facility: string; facilityId: string | null; lastAssessment: Date | null };
@@ -54,12 +54,14 @@ export function PatientsPage() {
   const [query, setQuery] = useState("");
   const [facility, setFacility] = useState(() => searchParams.get("facility") ?? "all");
   const [gender, setGender] = useState("all");
+  const [sort, setSort] = useState<PatientSort>("registered-newest");
   const [page, setPage] = useState(1);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
   const [assessmentState, setAssessmentState] = useState<"loading" | "ready" | "error">("loading");
   const [reload, setReload] = useState(0);
   useEffect(() => { setFacility(searchParams.get("facility") ?? "all"); setPage(1); }, [searchParams]);
+  useEffect(() => { if (assessmentState === "error" && sort.startsWith("assessment-")) setSort("registered-newest"); }, [assessmentState, sort]);
   const patientRecords = useMemo(() => { const dates = latestAssessmentDates(assessments); return patients.map(patient => patientRow(patient, dates)); }, [patients, assessments]);
   useEffect(() => {
     let active = true;
@@ -79,14 +81,14 @@ export function PatientsPage() {
   }, [user.organizationId, reload]);
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return patientRecords.filter((patient) => {
+    return sortPatientRows(patientRecords.filter((patient) => {
       const createdAt = patient.createdAt;
       const now = new Date();
       if (registeredThisMonth && (!createdAt || createdAt.getFullYear() !== now.getFullYear() || createdAt.getMonth() !== now.getMonth())) return false;
       const matchesQuery = !normalizedQuery || `${patient.reference} ${patient.displayName} ${patient.facility}`.toLowerCase().includes(normalizedQuery);
       return matchesQuery && (facility === "all" || patient.facilityId === facility) && (gender === "all" || patient.gender === gender);
-    });
-  }, [facility, gender, patientRecords, patients, query, registeredThisMonth]);
+    }), sort);
+  }, [facility, gender, patientRecords, query, registeredThisMonth, sort]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const visiblePatients = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -115,6 +117,7 @@ export function PatientsPage() {
     <div className="patient-filter-bar">
       <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { const selected = String(key); setFacility(selected); setSearchParams(params => { if (selected === "all") params.delete("facility"); else params.set("facility", selected); return params; }); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilityOptions.map((item) => <SelectItem key={item.id} id={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
       <Select aria-label="Filter by gender" selectedKey={gender} onSelectionChange={(key) => { setGender(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All genders</SelectItem><SelectItem id="Female">Female</SelectItem><SelectItem id="Male">Male</SelectItem><SelectItem id="Other">Other</SelectItem><SelectItem id="Unknown">Unknown</SelectItem></SelectContent></Select>
+      <Select aria-label="Sort patients" selectedKey={sort} onSelectionChange={(key) => { setSort(String(key) as PatientSort); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="registered-newest">Registered: newest first</SelectItem><SelectItem id="registered-oldest">Registered: oldest first</SelectItem><SelectItem id="assessment-newest" isDisabled={assessmentState !== "ready"}>Last assessment: newest first</SelectItem><SelectItem id="assessment-oldest" isDisabled={assessmentState !== "ready"}>Last assessment: oldest first</SelectItem></SelectContent></Select>
     </div>
     {assessmentState === "error" && <Alert><AlertDescription>Assessment history could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button></AlertDescription></Alert>}
     <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><article className="mobile-data-card list-mobile-card" key={patient.id}>
