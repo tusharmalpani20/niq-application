@@ -272,6 +272,10 @@
 :root[data-app-area="client"] .clinical-form label { font-size: .875rem; }
 :root[data-app-area="client"] .form-footer { gap: .75rem; }
 @media (max-width: 640px) {
+  .client-workspace .mobile-list-surface { border: 0; background: transparent; box-shadow: none; }
+  .client-workspace .mobile-list-surface .mobile-card-list { padding: 0; }
+  .client-workspace .mobile-list-surface .mobile-data-card { background: var(--surface); }
+  .client-workspace .mobile-list-surface .table-empty-content { border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); padding: 1rem; }
   .client-workspace .patient-filter-bar { grid-template-columns: minmax(0, 1fr); }
   .client-workspace .patient-sort-control { justify-self: stretch; border-top: 1px solid var(--border); padding-top: .75rem; }
   .client-workspace .patient-sort-control [data-slot="select"] { width: 100%; }
