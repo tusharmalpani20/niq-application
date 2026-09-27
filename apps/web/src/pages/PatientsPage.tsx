@@ -16,6 +16,7 @@ import { PatientForm, PatientFormDialog } from "../components/PatientForm";
 import { CorrectPatientMrnDialog } from "../components/CorrectPatientMrnDialog";
 import { CorrectPatientDobDialog } from "../components/CorrectPatientDobDialog";
 import { PatientHeader } from "../components/PatientHeader";
+import { PatientAssessmentOverview } from "../components/PatientAssessmentOverview";
 import { PatientEmptyIllustration } from "../components/PatientEmptyIllustration";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
@@ -141,23 +142,6 @@ export function PatientDetailPage() {
   return <PatientDetailView key={`${user.organizationId}:${user.userId}:${user.membershipId}:${user.role}:${patientLocator}`} user={user} patientLocator={patientLocator} />;
 }
 
-function LatestAssessment({ history, state, canRead, canEdit }: { history: AssessmentSummary[]; state: "loading" | "ready" | "error"; canRead: boolean; canEdit: boolean }) {
-  const navigate = useNavigate();
-  const latest = history[0];
-  const actionLabel = canEdit && (latest?.status === "DRAFT" || latest?.status === "READY_FOR_SCORING") ? "Continue assessment" : "Open assessment";
-  return <section className="surface mb-5 p-5" aria-label="Latest assessment">
-    <h2 className="font-semibold">Latest assessment</h2>
-    {state === "loading" ? <p className="mt-3 text-sm text-muted-foreground">Loading assessment history…</p>
-      : state === "error" ? <p className="mt-3 text-sm text-muted-foreground">Assessment history is unavailable.</p>
-      : !latest ? <p className="mt-3 text-sm text-muted-foreground">No assessments yet.</p>
-      : <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><span className="font-medium">{latest.reference}</span><StatusBadge status={assessmentStatusLabels[latest.status]} /></div>
-          <p className="text-sm text-muted-foreground">{latest.facility?.name ?? "No facility"} · Started <DateDisplay value={latest.createdAt} />{latest.completedAt && <> · Completed <DateDisplay value={latest.completedAt} /></>}</p></div>
-        {canRead && <TooltipTrigger><Button variant="outline" size="icon-lg" className="size-10 shrink-0" aria-label={actionLabel} onPress={() => navigate(`/assessments/${latest.reference}`)}><Icon name="arrow" size={20} /></Button><Tooltip>{actionLabel}</Tooltip></TooltipTrigger>}
-      </div>}
-  </section>;
-}
-
 function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; patientLocator: string }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -228,7 +212,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
         <TabsTrigger id="assessments" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Assessments {historyState === "ready" && <span className="ml-2 text-xs">{history.length}</span>}</TabsTrigger>
       </TabsList>
       <TabsContent id="details">
-        <LatestAssessment history={history} state={historyState} canRead={canReadAssessment} canEdit={canEditAssessment} />
+        <PatientAssessmentOverview history={history} state={historyState} organizationId={user.organizationId} canRead={canReadAssessment} canEdit={canEditAssessment} />
         <div className="admin-detail-grid">
           <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Patient information</h2><dl className="patient-definition"><div><dt>Medical record number</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span className="min-w-0 break-all">{patient.medicalRecordNumber}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct medical record number" onPress={() => setCorrectingMrn(true)}><Pencil className="size-4" /></Button><Tooltip>Correct MRN</Tooltip></TooltipTrigger>}</dd></div><div><dt>Date of birth</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct date of birth" onPress={() => setCorrectingDob(true)}><Pencil className="size-4" /></Button><Tooltip>Correct DOB</Tooltip></TooltipTrigger>}</dd></div><div><dt>Gender</dt><dd>{genderLabel(patient.gender)}</dd></div><div><dt>Registered</dt><dd>{formatPatientDate(patient.createdAt)}</dd></div></dl></Card>
           <Card className="surface admin-detail-card"><h2 className="card-heading-divider">Care and contact</h2><dl className="patient-definition"><div><dt>Home facility</dt><dd>{patient.homeFacility?.name ?? "—"}</dd></div><div><dt>Mobile number</dt><dd>{patient.phone || "Not provided"}</dd></div><div><dt>Email address</dt><dd>{patient.email || "Not provided"}</dd></div></dl></Card>
