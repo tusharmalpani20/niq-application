@@ -54,6 +54,6 @@ export function AssessmentSectionNavigation({ tabs, selected, coverage, scores =
         </SelectPopover>
       </Select>
     </div>
-    <div className="sticky top-28 hidden gap-1 px-4 py-3 @min-[48rem]:grid">{items}</div>
+    <div className="assessment-section-list sticky hidden gap-1 overflow-x-hidden overflow-y-auto px-4 py-3 @min-[48rem]:grid">{items}</div>
   </nav>;
 }

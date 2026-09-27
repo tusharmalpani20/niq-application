@@ -418,6 +418,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
   }
 }
 .assessment-progress-sticky { top: calc(5.25rem + env(safe-area-inset-top)); }
+.assessment-section-list {
+  top: calc(11rem + env(safe-area-inset-top));
+  max-height: calc(100dvh - 17rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+}
 .assessment-workflow [id^="assessment-field-"],
 .assessment-workflow #assessment-section-heading { scroll-margin-top: 13rem; }
 @media (max-width: 640px) {
