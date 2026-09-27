@@ -121,7 +121,7 @@ export function PatientsPage() {
     </div>
     {assessmentState === "error" && <Alert><AlertDescription>Assessment history could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button></AlertDescription></Alert>}
     <section className="surface table-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><article className="mobile-data-card list-mobile-card" key={patient.id}>
-      <div className="mobile-card-heading"><Link className="group mobile-card-primary min-w-0 flex-1" to={`/patients/${patient.reference}`}><span className="font-normal text-primary group-hover:underline group-focus-visible:underline">{patient.displayName}</span><span>{patient.reference} · {patient.age ?? "—"} · {patient.gender}</span></Link><div className="mobile-card-actions">{editAction(patient)}</div></div>
+      <div className="mobile-card-heading"><Link className="group mobile-card-primary min-w-0 flex-1" to={`/patients/${patient.reference}`}><span className="patient-list-name font-normal group-hover:underline group-focus-visible:underline">{patient.displayName}</span><span>{patient.reference} · {patient.age ?? "—"} · {patient.gender}</span></Link><div className="mobile-card-actions">{editAction(patient)}</div></div>
       <span>{patient.facility}</span>
     </article>) : emptyContent}</div>
       <div className="desktop-table p-5"><DataTable columns={columns} data={visiblePatients} label="Patients" emptyContent={emptyContent} /></div>

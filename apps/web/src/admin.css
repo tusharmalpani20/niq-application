@@ -40,6 +40,7 @@
 .client-workspace .list-mobile-card { gap: .7rem; padding: .9rem; }
 .client-workspace .list-mobile-card .mobile-card-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .5rem; min-width: 0; }
 .client-workspace .list-mobile-card .mobile-card-primary { display: grid; min-width: 0; gap: .2rem; overflow-wrap: anywhere; }
+.client-workspace .mobile-data-card .patient-list-name { color: var(--primary); }
 .client-workspace .list-mobile-card .mobile-card-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: .4rem; }
 .client-workspace .list-mobile-card .mobile-card-heading > .mobile-card-actions { margin-left: auto; }
 .client-workspace .list-mobile-card .mobile-card-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem .65rem; }
