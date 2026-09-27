@@ -50,6 +50,16 @@ test("historical results without saved ranges still show the saved category", as
  expect(document.body.textContent).not.toContain("Risk categories");
 }));
 
+test("score card shows form completion at scoring separately from NIQ points", async()=>harness(async({rerender})=>{
+ expect(document.body.textContent).toContain("Score calculated when the form was100% complete(2/2 questions answered)");
+ const partial = { ...record, manifest: { ...record.manifest, sections: record.manifest.sections.map(section => section.id === "personal_details" ? {
+   ...section, fields: [...section.fields, { id: "optional_note", label: "Optional note", kind: "text", owner: "application", required: false, source: "test" }],
+ } : section) } } as AssessmentWorkflow;
+ await rerender(partial);
+ expect(document.body.textContent).toContain("Score calculated when the form was66% complete(2/3 questions answered)");
+ expect(document.querySelector('[data-risk-circle]')?.getAttribute("aria-label")).toBe("8 points, Low");
+}));
+
 test("summary keeps scored answers readable without score edit controls", async () => harness(async ({ click, posts }) => {
   expect(document.body.textContent).not.toContain("Reviewed score");
   expect(document.body.textContent).not.toContain("Answers and original NIQ scores stay unchanged.");

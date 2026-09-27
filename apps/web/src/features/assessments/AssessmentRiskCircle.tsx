@@ -1,4 +1,4 @@
-import type { AssessmentScoreResult } from "@niq/application-contracts";
+import type { AssessmentAnswerCoverage, AssessmentScoreResult } from "@niq/application-contracts";
 
 type Classification = AssessmentScoreResult["classification"];
 
@@ -11,10 +11,11 @@ function categoryColor(color: string | undefined): string {
   return color?.startsWith("#") ? color : presetColors[color ?? ""] ?? "#64748b";
 }
 
-export function AssessmentRiskCircle({ score, classification, categories }: {
+export function AssessmentRiskCircle({ score, classification, categories, formCoverage }: {
   score: number | null;
   classification: Classification;
   categories?: AssessmentScoreResult["riskCategories"];
+  formCoverage?: Pick<AssessmentAnswerCoverage, "answered" | "total" | "percent">;
 }) {
   const selectedColor = categoryColor(classification?.color ?? categories?.find(band => band.id === classification?.id)?.color);
   const radius = 64;
@@ -33,6 +34,9 @@ export function AssessmentRiskCircle({ score, classification, categories }: {
       <p className="text-sm text-muted-foreground">Final NIQ score</p>
       <p className="mt-1 text-2xl font-semibold" style={{ color: selectedColor }}>{classification?.label ?? "No risk category"}</p>
       {classification?.interpretation && <p className="mt-2 max-w-prose text-sm text-muted-foreground">{classification.interpretation}</p>}
+      {score !== null && formCoverage?.percent !== null && formCoverage?.percent !== undefined && <p className="mt-4 inline-flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-1 rounded-lg border border-border bg-card px-3 py-2 text-sm sm:justify-start">
+        <span>Score calculated when the form was</span><strong className="text-base tabular-nums">{formCoverage.percent}% complete</strong><span className="text-muted-foreground">({formCoverage.answered}/{formCoverage.total} questions answered)</span>
+      </p>}
     </div>
   </div>;
 }
