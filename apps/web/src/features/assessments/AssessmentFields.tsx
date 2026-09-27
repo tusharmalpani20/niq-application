@@ -24,6 +24,7 @@ import { DietaryStatusIcon } from "./DietaryStatusIcon";
 import { DietarySymptomIcon } from "./DietarySymptomIcon";
 import { formatGenderAnswer } from "./formatGenderAnswer";
 import { PatientGenderIcon } from "../../components/PatientGenderIcon";
+import { assessmentOptionLabel } from "./assessmentOptionLabel";
 export { assessmentNumericInput } from "./assessmentNumericInput";
 
 export type AssessmentFieldsProps = {
@@ -82,7 +83,7 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
       const selected = Array.isArray(value) ? value : [];
       const decoratedLongChoices = intakeChoiceFields.has(field.id) || field.id === "co_morbidities" || field.id === "gastrointestinal_symptoms" || field.id === "dietary_symptoms";
       const longChoiceIcon = (optionId: string) => field.id === "co_morbidities" ? <HealthHistoryChoiceIcon type={optionId} /> : field.id === "gastrointestinal_symptoms" ? <ClinicalGutChoiceIcon type={optionId} /> : field.id === "dietary_symptoms" ? <DietarySymptomIcon type={optionId} /> : <MedicationSupplementIcon type={optionId} />;
-      const allOptions = [...(field.options ?? []), ...(explicitNoneFields.has(field.id) ? [{ id: "__none__", label: "None" }] : [])];
+      const allOptions = [...(field.options ?? []).map(option => ({ ...option, label: assessmentOptionLabel(field, option.id) })), ...(explicitNoneFields.has(field.id) ? [{ id: "__none__", label: "None" }] : [])];
       if (allOptions.length <= 6) return <fieldset id={id} key={field.id} tabIndex={-1} aria-describedby={error ? errorId : undefined} aria-invalid={Boolean(error)} className="col-[1/-1] min-w-0 space-y-3">
         <legend className="mb-2 w-full text-base font-medium"><span className="flex min-h-8 items-center justify-between gap-2"><span>{label}{required}</span>{reset}</span></legend>
         <MultipleChoiceGroup label={label} options={allOptions} value={Array.isArray(value) && !selected.length && explicitNoneFields.has(field.id) ? ["__none__"] : selected} disabled={readOnly} iconTiles={field.id === "tumour_type" || field.id === "current_cancer_treatment"} renderIcon={field.id === "tumour_type" ? optionId => <TumourTypeIcon type={optionId} /> : field.id === "current_cancer_treatment" ? optionId => <TreatmentChoiceIcon type={optionId} /> : undefined} onChange={next => {
@@ -90,14 +91,14 @@ export function AssessmentFields({ section, answers, onChange, errors, readOnly,
           else { const choices = next.filter(id => id !== "__none__"); onChange(field.id, choices.length ? choices : next.includes("__none__") ? [] : null); }
         }} />{errorMarkup}
       </fieldset>;
-      const options = (field.options || []).filter(option => !selected.includes(option.id));
+      const options = (field.options || []).filter(option => !selected.includes(option.id)).map(option => ({ ...option, label: assessmentOptionLabel(field, option.id) }));
       if (explicitNoneFields.has(field.id)) options.push({ id: "__none__", label: "None" });
       return <fieldset id={id} key={field.id} tabIndex={-1} disabled={readOnly} aria-describedby={error ? errorId : undefined} aria-invalid={Boolean(error)} className="col-[1/-1] min-w-0 space-y-3">
         <legend className="mb-2 w-full text-base font-medium"><span className="flex min-h-8 items-center justify-between gap-2"><span>{label}{required}</span>{reset}</span></legend>
         {Array.isArray(value) && <div className="flex flex-wrap items-center gap-2">{selected.length ? selected.map(item => <span key={item} className="inline-flex max-w-full items-center rounded-full border border-primary/20 bg-primary/5 pl-3 text-base">
           {decoratedLongChoices && <span className="mr-2 text-primary" aria-hidden="true">{longChoiceIcon(item)}</span>}
-          <span className="break-words">{field.options?.find(option => option.id === item)?.label || item}</span>
-          <Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove ${field.options?.find(option => option.id === item)?.label || item}`} onPress={() => onChange(field.id, selected.length === 1 ? null : selected.filter(choice => choice !== item))}><X className="size-3.5" /></Button>
+          <span className="break-words">{assessmentOptionLabel(field, item)}</span>
+          <Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove ${assessmentOptionLabel(field, item)}`} onPress={() => onChange(field.id, selected.length === 1 ? null : selected.filter(choice => choice !== item))}><X className="size-3.5" /></Button>
         </span>) : explicitNoneFields.has(field.id) ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 pl-3 text-base">{decoratedLongChoices && <span className="mr-2 text-primary" aria-hidden="true">{longChoiceIcon("__none__")}</span>}None<Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove None from ${field.label}`} onPress={() => onChange(field.id, null)}><X className="size-3.5" /></Button></span> : <span className="text-base text-muted-foreground">No selections</span>}</div>}
         {!readOnly && <div className="max-w-md"><SearchCombobox large key={JSON.stringify(value)} label={`Add ${field.label.toLowerCase()}`} placeholder={`Add ${field.label.toLowerCase()}…`} options={options} value={null} onChange={choice => onChange(field.id, choice === "__none__" ? [] : addAssessmentMultiChoice(selected, choice))} invalid={Boolean(error)} describedBy={error ? errorId : undefined} renderIcon={decoratedLongChoices ? longChoiceIcon : undefined} primaryHighlight={decoratedLongChoices} /></div>}
         {errorMarkup}

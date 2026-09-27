@@ -2,16 +2,17 @@ import { assessmentFieldError, calculateAssessmentWeightChange, isAssessmentFiel
 import { assessmentFieldGroups } from "./AssessmentFields";
 import { assessmentOptionIcon } from "./assessmentOptionIcon";
 import { formatGenderAnswer } from "./formatGenderAnswer";
+import { assessmentOptionLabel } from "./assessmentOptionLabel";
 
 function AnswerValue({ field, answers }: { field: FormField; answers: FormAnswers }) {
   const value = answers[field.id];
   const empty = value === null || value === undefined || value === "" || typeof value === "string" && !value.trim();
   const display = empty ? "Not answered" : Array.isArray(value)
-    ? value.length ? value.map(id => field.options?.find(option => option.id === id)?.label ?? id).join(", ") : "None"
-    : field.options?.find(option => option.id === value)?.label ?? (field.id === "gender" && typeof value === "string" ? formatGenderAnswer(value) : String(value));
+    ? value.length ? value.map(id => assessmentOptionLabel(field, id)).join(", ") : "None"
+    : field.options?.some(option => option.id === value) ? assessmentOptionLabel(field, String(value)) : field.id === "gender" && typeof value === "string" ? formatGenderAnswer(value) : String(value);
   const error = assessmentFieldError(field, value);
   const choiceIds = Array.isArray(value) ? value : typeof value === "string" && field.options?.some(option => option.id === value) ? [value] : [];
-  const visualChoices = choiceIds.map(id => ({ id, label: field.options?.find(option => option.id === id)?.label ?? id, icon: assessmentOptionIcon(field.id, id) }));
+  const visualChoices = choiceIds.map(id => ({ id, label: assessmentOptionLabel(field, id), icon: assessmentOptionIcon(field.id, id) }));
 
   return <span className={`min-w-0 break-words ${error ? "text-destructive" : ""}`}>
     {visualChoices.some(choice => choice.icon) ? <span className="flex flex-wrap gap-2">{visualChoices.map(choice => <span key={choice.id} className="inline-flex max-w-full items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 py-1 pl-1 pr-2.5 text-sm font-medium"><span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary [&_svg]:size-5" aria-hidden="true">{choice.icon}</span><span className="break-words">{choice.label}</span></span>)}</span> : <>{display}{field.unit && !empty && ` ${field.unit}`}</>}

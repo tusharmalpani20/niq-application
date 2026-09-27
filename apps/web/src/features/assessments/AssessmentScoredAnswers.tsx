@@ -12,6 +12,7 @@ import { DietaryIntakeIcon } from "./DietaryIntakeIcon";
 import { DietaryStatusIcon } from "./DietaryStatusIcon";
 import { DietarySymptomIcon } from "./DietarySymptomIcon";
 import { formatGenderAnswer } from "./formatGenderAnswer";
+import { assessmentOptionLabel } from "./assessmentOptionLabel";
 
 const diseaseFields = new Set(["stage", "metastasis_site", "relapse_status"]);
 const treatmentFields = new Set(["treatment_status", "palliative_status", "palliative_timing", "cancer_surgical_status", "current_cancer_treatment"]);
@@ -56,9 +57,9 @@ function scoredAnswer(field: FormField, answers: FormAnswers, item?: AssessmentS
   }
   const raw = answers[field.id];
   if (raw === undefined || raw === null || raw === "") return "Not answered";
-  if (Array.isArray(raw)) return raw.length ? raw.map(value => field.options?.find(option => option.id === value)?.label ?? value).join(", ") : "None";
-  const label = field.options?.find(option => option.id === raw)?.label
-    ?? (field.id === "gender" && typeof raw === "string" ? formatGenderAnswer(raw) : String(raw));
+  if (Array.isArray(raw)) return raw.length ? raw.map(value => assessmentOptionLabel(field, value)).join(", ") : "None";
+  const label = field.options?.some(option => option.id === raw) ? assessmentOptionLabel(field, String(raw))
+    : field.id === "gender" && typeof raw === "string" ? formatGenderAnswer(raw) : String(raw);
   return field.unit ? `${label} ${field.unit}` : label;
 }
 
@@ -89,7 +90,7 @@ export function AssessmentScoredAnswers({ fields, answers, components, derived, 
           </div>
           {selected ? <div className="mt-2 flex flex-wrap gap-2">{(selected.length ? selected : ["__none__"]).map(optionId => {
             const optionIcon = answerIcon(field.id, optionId);
-            const label = optionId === "__none__" ? "None" : field.options?.find(option => option.id === optionId)?.label ?? optionId;
+            const label = optionId === "__none__" ? "None" : assessmentOptionLabel(field, optionId);
             return <span key={optionId} className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm text-foreground">
               {optionIcon && <span className="shrink-0 text-primary" aria-hidden="true">{optionIcon}</span>}<span className="break-words">{label}</span>
             </span>;

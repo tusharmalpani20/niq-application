@@ -29,12 +29,14 @@ const drawings: Record<string, ReactNode> = {
     <path d="M20 14V5m-3 3 3-3 3 3" />
   </>,
   gastrointestinal_symptoms_nausea: <>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M8 10h1m6 0h1M7.5 16c1.2-1.2 2.4 1.2 3.6 0s2.4-1.2 3.6 0 2.4 1.2 3.6 0" />
+    <circle cx="11" cy="12" r="8" />
+    <path d="m7 9 2 1m4 0 2-1M7 16l2-1 2 1 2-1 2 1" />
+    <path d="M20 6c0 1.2-.7 2-1.5 2S17 7.2 17 6c0-.8 1.5-3 1.5-3S20 5.2 20 6Z" />
   </>,
   gastrointestinal_symptoms_early_satiety: <>
     <circle cx="13" cy="12" r="8" />
-    <path d="M13 4v8l5.5 5.5M3 5v7m2-7v7m-1 0v8" />
+    <ellipse cx="13" cy="11" rx="2.5" ry="1.5" />
+    <path d="m11 16 1.5 1.5 3-3M3 5v7m2-7v7m-1 0v8" />
   </>,
   appetite_status_reduced: <>
     <g transform="translate(0 2) scale(.72)">{appetiteUtensils}</g>
@@ -68,7 +70,9 @@ const drawings: Record<string, ReactNode> = {
   </>,
   gastrointestinal_symptoms_dysphagia: <>
     <path d="M4 21v-5a8 8 0 0 1 13.5-5.8L20 13l-2.5 1.5V17a2 2 0 0 1-2 2H13v2" />
-    <path d="M11 10h1m4 5v4m-2-2 2 2 2-2" />
+    <path d="M11 10h1" />
+    <circle cx="17" cy="19" r="3" />
+    <circle cx="17" cy="19" r="1" fill="currentColor" stroke="none" />
   </>,
   gastrointestinal_symptoms_pain_while_eating: <>
     <path d="M4 3v6m3-6v6M4 9h3m-1.5 0v12" />
