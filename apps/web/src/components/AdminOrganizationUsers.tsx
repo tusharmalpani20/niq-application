@@ -42,7 +42,7 @@ export function AdminOrganizationUsers({ users }: { users: OrganizationUser[] })
     {users.length === 0 ? <EmptyState title="No users" description="This organization does not have any users yet." /> : filteredUsers.length === 0 ? <EmptyState title="No matching users" description="Try a different name, email, or role." /> : <div className="p-5 pt-0"><DataTable columns={columns} data={visibleUsers} label="Organization users" /></div>}
     {filteredUsers.length > pageSize && <Pagination className="pb-4" aria-label="Users pagination"><PaginationContent>
       <PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem>
-      <PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filteredUsers.length} total</span></PaginationItem>
+      <PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount}</span></PaginationItem>
       <PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem>
     </PaginationContent></Pagination>}
   </section>;

@@ -150,7 +150,7 @@ export function AdminOrganizationsPage() {
       </section>
       {organizations.length > 0 && filteredOrganizations.length > 0 && <Pagination aria-label="Organizations pagination"><PaginationContent>
         <PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem>
-        <PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount} · {filteredOrganizations.length} total</span></PaginationItem>
+        <PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount}</span></PaginationItem>
         <PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem>
       </PaginationContent></Pagination>}
     </div>}
