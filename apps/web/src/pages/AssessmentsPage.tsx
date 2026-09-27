@@ -5,7 +5,7 @@ import { assessmentStatusSchema, hasPermission } from "@niq/application-contract
 import type { AssessmentSummary, AuthenticatedUser, Facility } from "@niq/application-contracts";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
-import { ChevronRight, Search, Star } from "lucide-react";
+import { ChevronRight, Search, Star, X } from "lucide-react";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -32,9 +32,13 @@ const initialStatus = (params: URLSearchParams) => {
 };
 const tabStatus = (params: URLSearchParams, tab: AssessmentTab) => {
   const status = initialStatus(params);
-  if (tab === "my-work" && status === "MY_ACTIONS") return "all";
-  if (tab === "completed" && status === "COMPLETED") return "all";
+  if (tab === "my-work") return ["EDIT_DRAFT", "CORRECT_DRAFT", "SEND_FOR_REVIEW"].includes(status) ? status : "all";
+  if (tab === "completed") return status === "COMPLETED_THIS_MONTH" ? status : "all";
   return status;
+};
+const quickFilterLabels: Record<string, string> = {
+  PRIORITY: "My priorities", WORK: "Assessment and review work", OPEN: "Open assessments",
+  MY_ACTIONS: "My assessment actions", SEND_FOR_REVIEW: "Ready to send", CORRECT_DRAFT: "Corrections to make",
 };
 const initialTab = (params: URLSearchParams, canOpen: boolean): AssessmentTab => {
   const tab = params.get("tab");
@@ -163,6 +167,7 @@ export function AssessmentsPage() {
   ];
   if (canOpen) columns.push({ id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-1">{priorityButton(row.original)}{openButton(row.original)}</div> });
   const hasFilters = query.trim() || facility !== "all" || status !== "all";
+  const quickFilter = tab === "assessments" ? quickFilterLabels[status] : undefined;
   const emptyContent = <div className={`table-empty-content${loadState === "ready" && !hasFilters ? " illustrated-empty-state" : ""}`}>{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : tab === "my-work" ? <><AssessmentEmptyIllustration /><strong>Nothing needs your action</strong><span>Drafts, corrections, and assessments ready to send will appear here.</span></> : tab === "completed" ? <><AssessmentEmptyIllustration /><strong>No completed assessments yet</strong><span>Completed assessments will appear here.</span></> : <><AssessmentEmptyIllustration /><strong>No assessments to display</strong><span>Assessments will appear here when available.</span>{canCreate && <RouterButtonLink to="/assessments/new">New assessment</RouterButtonLink>}</>}</div>;
   const assessmentContent = <>
     {priorityError && <p role="alert" className="mb-3 text-sm text-destructive">{priorityError}</p>}
@@ -185,9 +190,10 @@ export function AssessmentsPage() {
     <div className="patient-filter-bar assessment-filter-bar">
       {tab !== "clinical-reviews" ? <>
       <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { const selected = String(key); setFacility(selected); setSearchParams(params => { if (selected === "all") params.delete("facility"); else params.set("facility", selected); return params; }); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
-      <Select key={tab} aria-label={tab === "my-work" ? "Filter my work" : tab === "completed" ? "Filter completed assessments" : "Filter by status"} selectedKey={status} onSelectionChange={(key) => { const selected = String(key); setStatus(selected); setSearchParams(params => { const updated = new URLSearchParams(params); if (selected === "all") updated.delete("status"); else updated.set("status", selected); if (tab !== "assessments") updated.set("tab", tab); return updated; }); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{tab === "my-work" ? <><SelectItem id="all">All my work</SelectItem><SelectItem id="EDIT_DRAFT">My drafts</SelectItem><SelectItem id="CORRECT_DRAFT">Corrections to make</SelectItem><SelectItem id="SEND_FOR_REVIEW">Ready to send</SelectItem></> : tab === "completed" ? <><SelectItem id="all">All completed</SelectItem><SelectItem id="COMPLETED_THIS_MONTH">Completed this month</SelectItem></> : <><SelectItem id="all">All statuses</SelectItem><SelectItem id="PRIORITY">My priorities</SelectItem><SelectItem id="MY_ACTIONS">My assessment actions</SelectItem><SelectItem id="SEND_FOR_REVIEW">Ready to send</SelectItem><SelectItem id="CORRECT_DRAFT">Corrections to make</SelectItem><SelectItem id="WORK">Assessment and review work</SelectItem><SelectItem id="OPEN">Open assessments</SelectItem><SelectItem id="COMPLETED_THIS_MONTH">Completed this month</SelectItem>{Object.entries(assessmentStatusLabels).filter(([id]) => ["DRAFT", "SCORING_PENDING", "SCORING_UNAVAILABLE", "SCORED", "UNDER_REVIEW", "COMPLETED"].includes(id) || records.some(record => record.status === id)).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</>}</SelectContent></Select>
+      <Select key={tab} aria-label={tab === "my-work" ? "Filter my work" : tab === "completed" ? "Filter completed assessments" : "Filter by status"} selectedKey={quickFilter ? "all" : status} onSelectionChange={(key) => { const selected = String(key); setStatus(selected); setSearchParams(params => { const updated = new URLSearchParams(params); if (selected === "all") updated.delete("status"); else updated.set("status", selected); if (tab !== "assessments") updated.set("tab", tab); return updated; }); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{tab === "my-work" ? <><SelectItem id="all">All my work</SelectItem><SelectItem id="EDIT_DRAFT">My drafts</SelectItem><SelectItem id="CORRECT_DRAFT">Corrections to make</SelectItem><SelectItem id="SEND_FOR_REVIEW">Ready to send</SelectItem></> : tab === "completed" ? <><SelectItem id="all">All completed</SelectItem><SelectItem id="COMPLETED_THIS_MONTH">Completed this month</SelectItem></> : <><SelectItem id="all">All statuses</SelectItem>{Object.entries(assessmentStatusLabels).map(([id, label]) => <SelectItem id={id} key={id}>{label}</SelectItem>)}</>}</SelectContent></Select>
       </> : <Select aria-label="Review stage" selectedKey={reviewState} onSelectionChange={key => setReviewState(String(key))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All clinical reviews</SelectItem><SelectItem id="QUEUED">Awaiting reviewer</SelectItem><SelectItem id="mine-active">My reviews in progress</SelectItem><SelectItem id="mine">My work</SelectItem><SelectItem id="IN_REVIEW">In review</SelectItem><SelectItem id="RETURNED">Returned for correction</SelectItem><SelectItem id="AWAITING_RESUBMISSION">Awaiting resubmission</SelectItem><SelectItem id="COMPLETED">Completed</SelectItem></SelectContent></Select>}
     </div>
+    {quickFilter && <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground"><span>Showing {quickFilter.toLowerCase()}</span><Button variant="ghost" size="sm" aria-label={`Clear ${quickFilter} filter`} onPress={() => setSearchParams(params => { const updated = new URLSearchParams(params); updated.delete("status"); return updated; })}><X className="size-4" aria-hidden="true" />Clear</Button></div>}
     <TabsContent id="assessments">{tab === "assessments" && assessmentContent}</TabsContent>
     {canOpen && <TabsContent id="my-work">{tab === "my-work" && assessmentContent}</TabsContent>}
     {canOpen && <TabsContent id="clinical-reviews"><ClinicalReviewQueue key={`${user.organizationId}:${user.membershipId}:${reviewFilter}`} user={user} query={reviewQuery} state={reviewState} canCreate={canCreate} onViewAssessments={() => selectTab("assessments")} /></TabsContent>}

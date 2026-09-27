@@ -50,6 +50,7 @@ test("priority filter and star control reflect a saved change", async () => {
     const table = document.querySelector('[aria-label="Assessments"]');
     expect(table?.textContent).toContain("ASM-000001");
     expect(table?.textContent).not.toContain("ASM-000002");
+    expect(document.querySelector('button[aria-label="Clear My priorities filter"]')).not.toBeNull();
     const remove = document.querySelector<HTMLButtonElement>('button[aria-label="Remove priority from ASM-000001"]')!;
     expect(remove.getAttribute("aria-pressed")).toBe("true");
     await act(async () => { remove.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -75,7 +76,7 @@ test("facility work link applies both facility and work status filters", async (
     expect(table?.textContent).not.toContain("ASM-000005");
     expect(table?.textContent).not.toContain("ASM-000006");
     expect(document.body.textContent).toContain("Page 1 of 1");
-    expect(document.querySelector('[aria-label="Filter by status"]')?.textContent).toContain("Assessment and review work");
+    expect(document.querySelector('button[aria-label="Clear Assessment and review work filter"]')).not.toBeNull();
   });
 });
 
