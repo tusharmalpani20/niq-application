@@ -219,6 +219,12 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   }
   async function continueAfterConsent() {
     if (cameraCheckInFlight.current || !consentReady) return;
+    const missing = missingScanInputs(record);
+    if (missing.length) {
+      setConsentOpen(false);
+      onMissingInputs?.(missing);
+      return;
+    }
     if (cameraCount !== null) { cameraCheckVersion.current++; setConsentOpen(false); void start(); return; }
     cameraCheckInFlight.current = true;
     const version = cameraCheckVersion.current;

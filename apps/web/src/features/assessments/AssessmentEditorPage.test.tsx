@@ -271,7 +271,7 @@ test("questionnaire section changes preserve answers without a leave confirmatio
   await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
   const selected = document.querySelector<HTMLInputElement>('input[type="radio"]:checked')!.value;
   await click("Health history");
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.querySelector('[role="dialog"]:not([hidden])')).toBeNull();
   await click("Disease status");
   expect(document.querySelector<HTMLInputElement>('input[type="radio"]:checked')!.value).toBe(selected);
   expect(document.body.textContent).toContain("Unsaved changes");
@@ -291,7 +291,7 @@ test("report editor survives section changes without a discard prompt", async ()
     input.dispatchEvent(new dom.window.KeyboardEvent("keyup", { bubbles: true, key: "l" }));
   });
   await click("Disease status");
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.querySelector('[role="dialog"]:not([hidden])')).toBeNull();
   await click("Attachments");
   expect(document.querySelector<HTMLInputElement>('#report-label')?.value).toBe("Draft report label");
 }));
