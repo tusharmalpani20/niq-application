@@ -68,7 +68,7 @@ const matchesStatus = (record: AssessmentSummary, status: string, now: Date) => 
   if (status === "COMPLETED_THIS_MONTH") return record.status === "COMPLETED" && record.completedAt !== null && record.completedAt.getFullYear() === now.getFullYear() && record.completedAt.getMonth() === now.getMonth();
   return record.status === status;
 };
-const assessmentListStatus = (record: AssessmentSummary) => record.myAction === "CORRECT_DRAFT" ? "Needs correction" : record.myAction === "SEND_FOR_REVIEW" ? "Ready to send" : assessmentStatusLabels[record.status];
+const assessmentListStatus = (record: AssessmentSummary, tab: AssessmentTab) => tab === "my-work" && record.myAction === "CORRECT_DRAFT" ? "Needs correction" : tab === "my-work" && record.myAction === "SEND_FOR_REVIEW" ? "Ready to send" : assessmentStatusLabels[record.status];
 const assessmentActionLabel = (record: AssessmentSummary) => {
   if (record.myAction === "CORRECT_DRAFT") return "Make corrections";
   if (record.myAction === "SEND_FOR_REVIEW") return "Review & send";
@@ -110,7 +110,7 @@ export function AssessmentsPage() {
   const [reviewQuery, setReviewQuery] = useState("");
   const [facility, setFacility] = useState(() => searchParams.get("facility") ?? "all");
   const [status, setStatus] = useState(() => tabStatus(searchParams, initialTab(searchParams, canOpen)));
-  const reviewFilter = searchParams.get("review") === "QUEUED" ? "QUEUED" : "all";
+  const reviewFilter = ["QUEUED", "IN_REVIEW"].includes(searchParams.get("review") ?? "") ? searchParams.get("review")! : "all";
   const [reviewState, setReviewState] = useState(reviewFilter);
   const [page, setPage] = useState(1);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
@@ -182,7 +182,7 @@ export function AssessmentsPage() {
     { id: "patient", header: "Patient", cell: ({ row }) => <div className="grid gap-1"><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${row.original.patient.reference}`}>{row.original.patient.displayName}</Link><span className="text-xs text-muted-foreground">{row.original.patient.reference}</span></div> },
     { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "—" },
     { id: "created", header: "Started", cell: ({ row }) => <DateDisplay value={row.original.createdAt} /> },
-    { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentListStatus(row.original)} /> },
+    { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentListStatus(row.original, tab)} /> },
   ];
   if (canOpen) columns.push({ id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-2">{priorityButton(row.original)}{openButton(row.original)}{downloadButton(row.original)}</div> });
   const hasFilters = query.trim() || facility !== "all" || status !== "all";
@@ -195,7 +195,7 @@ export function AssessmentsPage() {
         <div className="mobile-card-primary">{canOpen ? <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}<Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${record.patient.reference}`}>{record.patient.displayName}</Link><span>{record.patient.reference}</span></div>
         {canOpen && priorityButton(record)}
       </div>
-      <div className="mobile-card-meta"><StatusBadge status={assessmentListStatus(record)}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></div>
+      <div className="mobile-card-meta"><StatusBadge status={assessmentListStatus(record, tab)}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></div>
       {canOpen && <div className="mobile-card-actions flex flex-wrap justify-end gap-2">{openButton(record)}{downloadButton(record)}</div>}
     </article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}

@@ -127,16 +127,29 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   const changed=await command(admin,id,"REASSIGN_CORRECTION",{assigneeId:colleague.membershipId,reason:"Cover absence"});expect(changed.correctionPerson?.membershipId).toBe(colleague.membershipId);
  });
  test("admin creator sends but cannot score review and support cannot read queue",async()=>{const id=await assessment(admin);await command(admin,id,"SEND");await expect(command(admin,id,"CLAIM")).rejects.toMatchObject({code:"FORBIDDEN"});await expect(reviews.queue(support,org,{page:1,pageSize:25})).rejects.toMatchObject({code:"FORBIDDEN"});expect((await reviews.eligible(admin,org,id)).some(r=>r.membershipId===admin.membershipId)).toBe(false);});
- test("queue includes corrections reopened before and after review handoff",async()=>{
+ test("queue contains only active clinical reviews across correction and completion",async()=>{
   const beforeReview=await assessment();
   await command(creator,beforeReview,"RETURN_TO_DRAFT",{assigneeId:creator.membershipId,reason:"Correct before review"});
   const afterReview=await assessment();
   await command(creator,afterReview,"SEND");
+  expect((await reviews.queue(admin,org,{page:1,pageSize:1000})).items.find(item=>item.assessmentId===afterReview)?.review.state).toBe("QUEUED");
+  await command(nurse,afterReview,"CLAIM");
+  expect((await reviews.queue(admin,org,{page:1,pageSize:1000,state:"IN_REVIEW"})).items.find(item=>item.assessmentId===afterReview)?.review.state).toBe("IN_REVIEW");
   await command(admin,afterReview,"RETURN_TO_DRAFT",{assigneeId:creator.membershipId,reason:"Correct after review"});
-  const queue=await reviews.queue(admin,org,{page:1,pageSize:1000});
-  expect(queue.items.some(item=>item.assessmentId===beforeReview)).toBe(true);
-  expect(queue.items.find(item=>item.assessmentId===beforeReview)?.review.submittedAt).toBeNull();
-  expect(queue.items.some(item=>item.assessmentId===afterReview)).toBe(true);
+  const returned=await reviews.queue(admin,org,{page:1,pageSize:1000});
+  expect(returned.items.some(item=>item.assessmentId===beforeReview)).toBe(false);
+  expect(returned.items.some(item=>item.assessmentId===afterReview)).toBe(false);
+  expect((await app.listAssessments(creator,org)).find(item=>item.id===afterReview)?.myAction).toBe("CORRECT_DRAFT");
+  const [row]=await db.select().from(t.assessments).where(eq(t.assessments.id,afterReview));
+  const submission=createEntityId();
+  await db.insert(t.assessmentSubmissions).values({id:submission,organizationId:org,assessmentId:afterReview,revision:row!.revision,snapshot:row!.workflow!,idempotencyKey:submission,status:"SUCCEEDED",result:workflow.seal({...result,resultReference:"corrected-queue-result"})});
+  await db.update(t.assessments).set({status:"SCORED",currentSubmissionId:submission}).where(eq(t.assessments.id,afterReview));
+  expect((await reviews.queue(admin,org,{page:1,pageSize:1000})).items.some(item=>item.assessmentId===afterReview)).toBe(false);
+  expect((await app.listAssessments(creator,org)).find(item=>item.id===afterReview)?.myAction).toBe("SEND_FOR_REVIEW");
+  await command(creator,afterReview,"RESEND");
+  expect((await reviews.queue(admin,org,{page:1,pageSize:1000})).items.find(item=>item.assessmentId===afterReview)?.review.state).toBe("IN_REVIEW");
+  await command(nurse,afterReview,"COMPLETE",{remark:"Reviewed correction"});
+  expect((await reviews.queue(admin,org,{page:1,pageSize:1000})).items.some(item=>item.assessmentId===afterReview)).toBe(false);
  });
  test("completion versus adjustment serializes to a consistent final result",async()=>{
   const id=await assessment();await command(creator,id,"SEND");await command(nurse,id,"CLAIM");const state=await reviews.read(nurse,org,id);

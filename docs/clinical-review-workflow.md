@@ -36,7 +36,7 @@ Implementation was separately authorized after this plan and audit were complete
 - **Calculated score:** the authoritative result received from NIQ Scoring for one frozen submission.
 - **Score adjustment:** an existing reasoned override of points, associated with a particular calculated result; never a replacement for that result.
 - **Clinical review:** the post-scoring ownership and completion workflow.
-- **Review queue:** clinical reviews waiting to be claimed or already assigned; not all scored assessments automatically appear here.
+- **Review queue:** active clinical reviews waiting to be claimed or already assigned. Returned corrections and completed reviews are outside this queue.
 - **Reviewer:** the sole currently assigned eligible clinical member.
 - **Correction person:** the eligible clinical member responsible for a returned draft and its resubmission.
 - **Correction cycle:** return to draft, edits, rescoring, and explicit resubmission for clinical review.
@@ -199,7 +199,7 @@ Keep reference-to-ID resolution tenant scoped. Send server-derived allowed actio
 ## 10. UI plan
 
 - Add Clinical reviews within Assessments using existing tabs/navigation patterns.
-- Provide waiting, my reviews, and completed views; expose returned correction work to its correction person and admins so it cannot disappear between queues.
+- Show waiting and in-review work in Clinical reviews. Show returned corrections and scored corrections awaiting resubmission in the correction person's My work; show completed assessments in Completed.
 - Show assessment/patient reference, facility, stage, current responsible person and relevant dates. Use pagination and scoped search.
 - Add a review panel to the scored assessment view with only permitted actions.
 - Show current return note/correction responsibility and workflow status. Full answer-history browsing can wait.

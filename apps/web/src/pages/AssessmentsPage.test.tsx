@@ -205,6 +205,24 @@ test("my work separates drafts, corrections, and ready-to-send assessments from 
   });
 });
 
+test("all assessments keeps actual statuses while my work shows the required action", async () => {
+  const items = [
+    { ...records[0]!, myAction: "CORRECT_DRAFT" },
+    { ...records[2]!, myAction: "SEND_FOR_REVIEW" },
+  ];
+  await renderAssessments("/assessments", items, async () => {
+    const all = document.querySelector('[aria-label="Assessments"]');
+    expect(all?.querySelector('[data-status="draft"]')).not.toBeNull();
+    expect(all?.querySelector('[data-status="scored"]')).not.toBeNull();
+    expect(all?.querySelector('[data-status="needs-correction"]')).toBeNull();
+    const myWorkTab = Array.from(document.querySelectorAll<HTMLElement>('[data-slot="tabs-trigger"]')).find(item => item.textContent?.includes("My work"));
+    await act(async () => { myWorkTab?.click(); });
+    const myWork = document.querySelector('[aria-label="Assessments"]');
+    expect(myWork?.querySelector('[data-status="needs-correction"]')).not.toBeNull();
+    expect(myWork?.querySelector('[data-status="ready-to-send"]')).not.toBeNull();
+  });
+});
+
 test("assessment rows offer a status-aware action to open the assessment", async () => {
   await renderAssessments("/assessments", records, () => {
     const table = document.querySelector('[aria-label="Assessments"]');
