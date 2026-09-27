@@ -26,8 +26,13 @@ test("clinical actions follow server permissions and block while another edit is
  const buttons=[...document.querySelectorAll("button")];expect(buttons.some(button=>button.textContent==="Claim review")).toBe(false);
  expect(buttons.find(button=>button.textContent==="Complete review")?.disabled).toBe(true);
 }, {blocked:true}));
-test("review actions are all visible together with plain labels", async()=>harness(async()=>{
-  expect([...document.querySelectorAll("button")].map(button=>button.textContent)).toEqual(["Return for corrections", "Complete review", "Change reviewer", "Unassign myself"]);
+test("review actions are visible in three purpose groups", async()=>harness(async()=>{
+  const labels = ["Reviewer assignment", "Needs corrections", "Finish review"];
+  const expected = [["Change reviewer", "Unassign myself"], ["Return for corrections"], ["Complete review"]];
+  labels.forEach((label, index) => {
+    const group = document.querySelector(`[role="group"][aria-label="${label}"]`);
+    expect([...group!.querySelectorAll("button")].map(button => button.textContent)).toEqual(expected[index]);
+  });
   expect(document.querySelectorAll("details")).toHaveLength(0);
 }));
 test("a scored assessment not yet sent uses the pre-review correction label", async()=>harness(async({click,posts})=>{

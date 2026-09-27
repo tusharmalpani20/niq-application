@@ -16,7 +16,11 @@ const actionIcons: Record<Action, LucideIcon> = {
   SEND: Send, CLAIM: UserRoundCheck, TRANSFER: ArrowRightLeft, RELEASE: UserRoundMinus,
   RETURN_TO_DRAFT: RotateCcw, REASSIGN_CORRECTION: ClipboardPen, RESEND: Send, COMPLETE: CircleCheck,
 };
-const reviewActionOrder: Action[] = ["RETURN_TO_DRAFT", "COMPLETE", "TRANSFER", "RELEASE"];
+const inReviewActionGroups: { label: string; actions: Action[] }[] = [
+  { label: "Reviewer assignment", actions: ["TRANSFER", "RELEASE"] },
+  { label: "Needs corrections", actions: ["RETURN_TO_DRAFT"] },
+  { label: "Finish review", actions: ["COMPLETE"] },
+];
 const automaticCancellationMessage = "The face scan is still open. Automatic cancellation was not confirmed; try again when its status updates.";
 function previouslySent(review: ClinicalReview) {
   return !!review.submittedAt || review.history.some(event => event.action === "SEND" || event.action === "RESEND");
@@ -104,7 +108,18 @@ export function ClinicalReviewPanel({ organizationId, assessmentId, review, atte
           {review.riskClassificationPending && <p className="text-muted-foreground">NIQ must confirm the current reviewed risk before this review can be completed. Check the assessment summary below.</p>}
           {blocked && !!review.allowedActions?.length && <p className="text-muted-foreground">Finish or cancel your current changes before changing the review workflow.</p>}
         </div>
-        {!!review.allowedActions?.length && <div className="flex flex-wrap gap-2">{(review.state === "IN_REVIEW" ? [...review.allowedActions].sort((a, b) => reviewActionOrder.indexOf(a) - reviewActionOrder.indexOf(b)) : review.allowedActions).map(actionButton)}</div>}
+        {!!review.allowedActions?.length && (review.state === "IN_REVIEW"
+          ? <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            {inReviewActionGroups.map(group => {
+              const available = group.actions.filter(next => review.allowedActions.includes(next));
+              if (!available.length) return null;
+              return <div key={group.label} role="group" aria-label={group.label} className="min-w-0 lg:border-l lg:border-border lg:pl-4 lg:first:border-l-0 lg:first:pl-0">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">{group.label}</p>
+                <div className="flex flex-wrap gap-2">{available.map(actionButton)}</div>
+              </div>;
+            })}
+          </div>
+          : <div className="flex flex-wrap gap-2">{review.allowedActions.map(actionButton)}</div>)}
       </div>
       <ReviewHistory history={review.history ?? []} attestations={attestations} />
       {action && <ClinicalReviewCommandDialog key={action} action={action} review={review} organizationId={organizationId} assessmentId={assessmentId} blocked={blocked || loading || !!error || (action === "COMPLETE" && review.riskClassificationPending === true)} onClose={() => setAction(null)} onChanged={onChanged} onRefresh={onRefresh} onBusyChange={onBusyChange} />}
