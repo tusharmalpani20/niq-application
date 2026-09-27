@@ -40,6 +40,7 @@
   --sidebar-border: var(--border);
   --sidebar-ring: var(--primary);
   --primary-soft: color-mix(in srgb, var(--primary) 10%, white);
+  --status-brand-foreground: var(--admin-primary);
   --brand-panel-start: color-mix(in srgb, var(--primary) 76%, var(--foreground));
   --brand-panel-end: color-mix(in srgb, var(--primary) 62%, var(--secondary));
   --ink: #4f5052;
@@ -189,6 +190,7 @@
   --destructive: var(--admin-danger);
   --danger: var(--destructive);
   --radius: var(--admin-radius);
+  --status-brand-foreground: var(--brand-ink, #0b7468);
 }
 
 :root[data-app-area="client"] { --primary-foreground: white; --secondary-foreground: var(--brand-secondary-foreground, white); }

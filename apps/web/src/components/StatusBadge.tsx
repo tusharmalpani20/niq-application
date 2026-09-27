@@ -1,30 +1,20 @@
 import { Badge } from "@/components/ui/badge";
 
-const accents: Record<string, string> = {
-  Draft: "var(--client-muted)",
-  "Needs correction": "var(--danger)",
-  "Ready to send": "var(--primary)",
-  "Ready for scoring": "var(--primary)",
-  "Pending scoring": "var(--primary)",
-  "Scoring unavailable": "var(--danger)",
-  Scored: "var(--review-foreground)",
-  "Under review": "var(--review-foreground)",
-  Completed: "var(--success)",
-  Voided: "var(--client-muted)",
-  "Awaiting reviewer": "var(--client-muted)",
-  "In review": "var(--review-foreground)",
-  "Returned for correction": "var(--danger)",
-  "Reopened for corrections": "var(--review-foreground)",
-  "Awaiting resubmission": "var(--client-muted)",
-  Active: "var(--success)",
-  Deactivated: "var(--destructive)",
+const neutral = { color: "var(--foreground)", backgroundColor: "var(--surface-subtle)", borderColor: "var(--border)", accent: "var(--client-muted)" };
+const brand = { color: "var(--status-brand-foreground)", backgroundColor: "var(--primary-soft)", borderColor: "color-mix(in srgb, var(--primary) 28%, var(--border))", accent: "var(--status-brand-foreground)" };
+const review = { color: "var(--review-foreground)", backgroundColor: "var(--review-background)", borderColor: "color-mix(in srgb, var(--review-foreground) 24%, var(--border))", accent: "var(--review-foreground)" };
+const warning = { color: "var(--warning)", backgroundColor: "var(--warning-soft)", borderColor: "color-mix(in srgb, var(--warning) 24%, var(--border))", accent: "var(--warning)" };
+const danger = { color: "var(--danger)", backgroundColor: "var(--destructive-soft)", borderColor: "color-mix(in srgb, var(--danger) 24%, var(--border))", accent: "var(--danger)" };
+const success = { color: "var(--success)", backgroundColor: "var(--success-soft)", borderColor: "var(--success-border)", accent: "var(--success)" };
+const tones: Record<string, typeof neutral> = {
+  "Ready to send": brand, "Ready for scoring": brand, Scored: brand,
+  "Under review": review, "In review": review, "Reopened for corrections": review,
+  "Awaiting reviewer": warning, "Pending scoring": warning, "Awaiting resubmission": warning,
+  "Needs correction": danger, "Scoring unavailable": danger, "Returned for correction": danger, Deactivated: danger,
+  Completed: success, Active: success,
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  const style = status === "Active"
-    ? { color: "var(--success)", backgroundColor: "var(--success-soft)", borderColor: "var(--success-border)" }
-    : status === "Deactivated"
-      ? { color: "var(--destructive)", backgroundColor: "var(--destructive-soft)", borderColor: "var(--border)" }
-      : { color: "var(--foreground)", backgroundColor: "var(--surface-subtle)", borderColor: "var(--border)" };
-  return <Badge variant="outline" className="status-badge" data-status={status.toLowerCase().replaceAll(" ", "-")} style={style}><span className="status-dot" style={{ backgroundColor: accents[status] ?? "var(--client-muted)" }} />{status}</Badge>;
+  const { accent, ...style } = tones[status] ?? neutral;
+  return <Badge variant="outline" className="status-badge" data-status={status.toLowerCase().replaceAll(" ", "-")} style={style}><span className="status-dot" style={{ backgroundColor: accent }} />{status}</Badge>;
 }
