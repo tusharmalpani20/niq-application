@@ -20,6 +20,8 @@ async function renderAssessments(path: string, items: AssessmentFixture[], verif
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === "PATCH" && String(input).endsWith("/priority")) { priorityWrites.push(JSON.parse(String(init.body)).isPriority); return Response.json({ assessmentId: records[0]?.id, isPriority: priorityWrites.at(-1) }); }
     if (init?.method === "POST" && String(input).endsWith("/clinical-review")) { claimCommands.push(JSON.parse(String(init.body))); return Response.json({}); }
+    const reviewId = String(input).match(/\/assessments\/([^/]+)\/clinical-review$/)?.[1];
+    if (reviewId) return Response.json((reviewItems as Array<{ assessmentId: string; review: unknown }>).find(item => item.assessmentId === reviewId)?.review ?? {});
     if (String(input).includes("/clinical-reviews?")) reviewRequests.push(String(input));
     return Response.json(String(input).includes("/clinical-reviews?") ? { items: reviewItems, total: reviewItems.length || 2, page: 1, pageSize: 10 } : String(input).endsWith("/assessments") ? { items } : { items: [] });
   }) as typeof fetch;
@@ -147,10 +149,11 @@ test("clinical review rows show stage and a compact open action", async () => {
     expect(table?.querySelector('[data-status="awaiting-reviewer"]')?.getAttribute("style")).toContain("var(--surface-subtle)");
     expect(table?.querySelector('[data-status="awaiting-reviewer"] .status-dot')?.getAttribute("style")).toContain("var(--client-muted)");
     expect(document.body.textContent).not.toContain("Page 1 of 1");
-    const open = table?.querySelector('a[aria-label="Open clinical review ASM-000001"]');
+    const open = table?.querySelector('a[aria-label="View review ASM-000001"]');
     expect(open?.getAttribute("href")).toBe("/assessments/ASM-000001");
-    expect(open?.querySelector("svg.lucide-chevron-right")).not.toBeNull();
-    expect(document.querySelector('.mobile-card-list a[aria-label="Open clinical review ASM-000001"]')).not.toBeNull();
+    expect(open?.textContent).toBe("View review");
+    expect(open?.querySelector("svg.lucide-eye")).not.toBeNull();
+    expect(document.querySelector('.mobile-card-list a[aria-label="View review ASM-000001"]')).not.toBeNull();
   }, reviews);
 });
 
@@ -164,6 +167,27 @@ test("eligible clinicians can claim an awaiting review from the queue", async ()
     await act(async () => { claim?.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(commands).toHaveLength(1);
     expect(commands[0]).toMatchObject({ action: "CLAIM", expectedRevision: 3, expectedScoreRevision: 2 });
+  }, reviews, [], commands);
+});
+
+test("all assessments offers Claim only for a claimable clinical review", async () => {
+  const commands: unknown[] = [];
+  const items = [
+    { ...records[0]!, status: "UNDER_REVIEW" },
+    { ...records[1]!, status: "SCORED" },
+  ];
+  const reviews = [{ assessmentId: items[0]!.id, reference: items[0]!.reference, patient, facility: null, review: { state: "QUEUED", revision: 2, scoreRevision: 1, allowedActions: ["CLAIM"] } }];
+  await renderAssessments("/assessments", items, async () => {
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    const table = document.querySelector('[aria-label="Assessments"]');
+    const claim = Array.from(table?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(button => button.textContent === "Claim");
+    expect(claim).toBeDefined();
+    const rows = table?.querySelectorAll("tbody tr");
+    expect(rows?.[0]?.textContent).toContain("Claim");
+    expect(rows?.[1]?.textContent).not.toContain("Claim");
+    await act(async () => { claim?.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({ action: "CLAIM", expectedRevision: 2, expectedScoreRevision: 1 });
   }, reviews, [], commands);
 });
 

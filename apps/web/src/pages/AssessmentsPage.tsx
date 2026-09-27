@@ -2,8 +2,8 @@ import { ClinicalReviewQueue } from "../features/assessments/ClinicalReviewQueue
 import { listClinicalReviews } from "../features/assessments/clinical-review-api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { assessmentStatusSchema, hasPermission } from "@niq/application-contracts";
-import type { AssessmentSummary, AuthenticatedUser, Facility } from "@niq/application-contracts";
-import { useEffect, useMemo, useState } from "react";
+import type { AssessmentSummary, AuthenticatedUser, ClinicalReview, Facility } from "@niq/application-contracts";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { ClipboardCheck, Clock3, Download, Eye, Pencil, Search, Send, Star, TriangleAlert, X } from "lucide-react";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
@@ -16,6 +16,8 @@ import { AssessmentEmptyIllustration } from "../components/AssessmentEmptyIllust
 import { RouterButtonLink } from "../components/RouterButtonLink";
 import { StatusBadge } from "../components/StatusBadge";
 import { listAssessments, listFacilities, setAssessmentPriority } from "../lib/api";
+import { changeClinicalReview, getClinicalReview } from "../features/assessments/clinical-review-api";
+import { AssessmentRequestError } from "../features/assessments/workflow-api";
 import { facilityWorkStatuses, openAssessmentStatuses } from "../lib/assessment-work";
 
 import { Icon } from "../lib/icons";
@@ -116,6 +118,10 @@ export function AssessmentsPage() {
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [priorityBusy, setPriorityBusy] = useState<string | null>(null);
   const [priorityError, setPriorityError] = useState("");
+  const [reviewById, setReviewById] = useState<Record<string, ClinicalReview>>({});
+  const [claiming, setClaiming] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState("");
+  const claimKeys = useRef(new Map<string, string>());
   const togglePriority = async (record: AssessmentSummary) => {
     setPriorityBusy(record.id); setPriorityError("");
     try {
@@ -177,6 +183,37 @@ export function AssessmentsPage() {
   const pageCount = Math.max(1, Math.ceil(filtered.length / assessmentPageSize));
   const currentPage = Math.min(page, pageCount);
   const visible = filtered.slice((currentPage - 1) * assessmentPageSize, currentPage * assessmentPageSize);
+  const visibleReviewIds = canOpen && tab === "assessments" ? visible.filter(record => record.status === "UNDER_REVIEW").map(record => record.id).join(",") : "";
+  useEffect(() => {
+    const controller = new AbortController();
+    setReviewById({});
+    if (visibleReviewIds) {
+      void Promise.all(visibleReviewIds.split(",").map(async id => {
+        try { return [id, await getClinicalReview(user.organizationId, id, controller.signal)] as const; }
+        catch { return null; }
+      })).then(entries => {
+        if (!controller.signal.aborted) setReviewById(Object.fromEntries(entries.filter(entry => entry !== null)));
+      });
+    }
+    return () => controller.abort();
+  }, [user.organizationId, visibleReviewIds, reload]);
+  const claimReview = async (record: AssessmentSummary, review: ClinicalReview) => {
+    setClaiming(record.id); setClaimError("");
+    const key = claimKeys.current.get(record.id) ?? crypto.randomUUID();
+    claimKeys.current.set(record.id, key);
+    try {
+      const updated = await changeClinicalReview(user.organizationId, record.id, { action: "CLAIM", expectedRevision: review.revision, expectedScoreRevision: review.scoreRevision, requestKey: key });
+      claimKeys.current.delete(record.id);
+      setReviewById(previous => ({ ...previous, [record.id]: updated }));
+    } catch (cause) {
+      if (cause instanceof AssessmentRequestError && cause.status === 409) { claimKeys.current.delete(record.id); setReload(value => value + 1); }
+      setClaimError(cause instanceof Error ? cause.message : "Could not claim this review. Please try again.");
+    } finally { setClaiming(null); }
+  };
+  const claimButton = (record: AssessmentSummary) => {
+    const review = reviewById[record.id];
+    return tab === "assessments" && review?.state === "QUEUED" && review.allowedActions.includes("CLAIM") && <Button variant="outline" size="sm" isDisabled={claiming !== null} onPress={() => { void claimReview(record, review); }}>{claiming === record.id ? "Claiming…" : "Claim"}</Button>;
+  };
   const columns: Array<DataTableColumn<AssessmentSummary>> = [
     { id: "reference", header: "Assessment", cell: ({ row }) => canOpen ? <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> : row.original.reference },
     { id: "patient", header: "Patient", cell: ({ row }) => <div className="grid gap-1"><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${row.original.patient.reference}`}>{row.original.patient.displayName}</Link><span className="text-xs text-muted-foreground">{row.original.patient.reference}</span></div> },
@@ -184,19 +221,19 @@ export function AssessmentsPage() {
     { id: "created", header: "Started", cell: ({ row }) => <DateDisplay value={row.original.createdAt} /> },
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentListStatus(row.original, tab)} /> },
   ];
-  if (canOpen) columns.push({ id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-2">{priorityButton(row.original)}{openButton(row.original)}{downloadButton(row.original)}</div> });
+  if (canOpen) columns.push({ id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-2">{priorityButton(row.original)}{claimButton(row.original)}{openButton(row.original)}{downloadButton(row.original)}</div> });
   const hasFilters = query.trim() || facility !== "all" || status !== "all";
   const quickFilter = tab === "assessments" ? quickFilterLabels[status] : undefined;
   const emptyContent = <div className={`table-empty-content${loadState === "ready" && !hasFilters ? " illustrated-empty-state" : ""}`}>{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : tab === "my-work" ? <><AssessmentEmptyIllustration /><strong>Nothing needs your action</strong><span>Drafts, corrections, and assessments ready to send will appear here.</span></> : tab === "completed" ? <><AssessmentEmptyIllustration /><strong>No completed assessments yet</strong><span>Completed assessments will appear here.</span></> : <><AssessmentEmptyIllustration /><strong>No assessments to display</strong><span>Assessments will appear here when available.</span>{canCreate && <RouterButtonLink to="/assessments/new">New assessment</RouterButtonLink>}</>}</div>;
   const assessmentContent = <>
-    {priorityError && <p role="alert" className="mb-3 text-sm text-destructive">{priorityError}</p>}
+    {(priorityError || claimError) && <p role="alert" className="mb-3 text-sm text-destructive">{priorityError || claimError}</p>}
     <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card list-mobile-card" key={record.id}>
       <div className="mobile-card-heading">
         <div className="mobile-card-primary">{canOpen ? <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}<Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${record.patient.reference}`}>{record.patient.displayName}</Link><span>{record.patient.reference}</span></div>
         {canOpen && priorityButton(record)}
       </div>
       <div className="mobile-card-meta"><StatusBadge status={assessmentListStatus(record, tab)}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></div>
-      {canOpen && <div className="mobile-card-actions flex flex-wrap justify-end gap-2">{openButton(record)}{downloadButton(record)}</div>}
+      {canOpen && <div className="mobile-card-actions flex flex-wrap justify-end gap-2">{claimButton(record)}{openButton(record)}{downloadButton(record)}</div>}
     </article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
     {filtered.length > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
   </>;

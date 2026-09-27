@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { AuthenticatedUser, ClinicalReviewQueue as Queue, ClinicalReviewQueueItem } from "@niq/application-contracts";
-import { ChevronRight } from "lucide-react";
+import { Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/DataTable";
 import { ClinicalReviewEmptyIllustration } from "@/components/ClinicalReviewEmptyIllustration";
@@ -13,7 +13,7 @@ import { changeClinicalReview, clinicalReviewLabels, listClinicalReviews } from 
 const reviewStage = (item: ClinicalReviewQueueItem) => item.review.state === "RETURNED" && !item.review.submittedAt ? "Reopened for corrections" : clinicalReviewLabels[item.review.state];
 const reviewOwner = (item: ClinicalReviewQueueItem) => item.review.correctionPerson ? `Corrections: ${item.review.correctionPerson.displayName}` : item.review.assignee ? `Reviewer: ${item.review.assignee.displayName}` : "Awaiting reviewer";
 const reviewDate = (item: ClinicalReviewQueueItem) => item.review.submittedAt ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(item.review.submittedAt)) : "—";
-const openReview = (item: ClinicalReviewQueueItem) => <RouterButtonLink variant="ghost" size="icon" to={`/assessments/${item.reference}`} aria-label={`Open clinical review ${item.reference}`} title="Open clinical review"><ChevronRight className="size-4" aria-hidden="true" /></RouterButtonLink>;
+const openReview = (item: ClinicalReviewQueueItem) => <RouterButtonLink variant="outline" size="sm" className="whitespace-nowrap" to={`/assessments/${item.reference}`} aria-label={`View review ${item.reference}`}><Eye className="size-4" aria-hidden="true" />View review</RouterButtonLink>;
 
 export function ClinicalReviewQueue({ user, query, facilityId, state, canCreate, onViewAssessments }: { user: AuthenticatedUser; query: string; facilityId: string; state: string; canCreate: boolean; onViewAssessments: () => void }) {
   const [data, setData] = useState<Queue | null>(null);
@@ -60,7 +60,7 @@ export function ClinicalReviewQueue({ user, query, facilityId, state, canCreate,
     { id: "stage", header: "Stage", cell: ({ row }) => <StatusBadge status={reviewStage(row.original)} /> },
     { id: "owner", header: "Assigned to", cell: ({ row }) => reviewOwner(row.original) },
     { id: "sent", header: "Sent for review", cell: ({ row }) => reviewDate(row.original) },
-    { id: "actions", header: () => <span className="block text-right">Action</span>, cell: ({ row }) => reviewActions(row.original) },
+    { id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => reviewActions(row.original) },
   ];
   const unfilteredEmpty = !loading && !error && !data?.total && !query.trim() && facilityId === "all" && state === "all";
   const empty = <div className={`table-empty-content${unfilteredEmpty ? " illustrated-empty-state" : ""}`}>{loading ? <p role="status">Loading clinical reviews…</p> : error ? <><p role="alert">{error}</p><Button variant="outline" onPress={() => setRetry(value => value + 1)}>Retry</Button></> : unfilteredEmpty ? <><ClinicalReviewEmptyIllustration /><strong>No clinical reviews yet</strong><span>Reviews will appear after an assessment is sent for review.</span><div className="flex flex-wrap justify-center gap-2">{canCreate && <RouterButtonLink to="/assessments/new">New assessment</RouterButtonLink>}<Button variant="outline" onPress={onViewAssessments}>View assessments</Button></div></> : <p>No clinical reviews match these filters.</p>}</div>;
