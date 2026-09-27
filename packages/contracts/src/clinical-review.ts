@@ -25,5 +25,5 @@ export type ClinicalReview = {
  riskClassificationPending?:boolean;
  allowedActions:ClinicalReviewAction["action"][];canAdjustScores:boolean;canEditDraft:boolean;
 };
-export type ClinicalReviewQueueItem = {assessmentId:string;reference:string;patient:{id:string;reference:string;displayName:string};facility:{id:string;name:string}|null;review:ClinicalReview};
+export type ClinicalReviewQueueItem = {assessmentId:string;reference:string;patient:{id:string;reference:string;displayName:string};facility:{id:string;name:string}|null;isPriority:boolean;review:ClinicalReview};
 export type ClinicalReviewQueue = {items:ClinicalReviewQueueItem[];total:number;page:number;pageSize:number};

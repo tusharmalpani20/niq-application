@@ -170,6 +170,18 @@ test("eligible clinicians can claim an awaiting review from the queue", async ()
   }, reviews, [], commands);
 });
 
+test("clinical review priority star saves and updates the assessment list", async () => {
+  const reviews = [{ assessmentId: records[0]!.id, reference: "ASM-000001", patient, facility: null, isPriority: false, review: { state: "QUEUED", submittedAt: date, assignee: null, correctionPerson: null, allowedActions: [] } }];
+  await renderAssessments("/assessments?tab=clinical-reviews", records, async writes => {
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 200)); });
+    const star = document.querySelector<HTMLButtonElement>('[aria-label="Clinical reviews"] button[aria-label="Mark as priority ASM-000001"]');
+    expect(star?.getAttribute("aria-pressed")).toBe("false");
+    await act(async () => { star?.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(writes).toEqual([true]);
+    expect(document.querySelector('[aria-label="Clinical reviews"] button[aria-label="Remove priority from ASM-000001"]')?.getAttribute("aria-pressed")).toBe("true");
+  }, reviews);
+});
+
 test("all assessments offers Claim only for a claimable clinical review", async () => {
   const commands: unknown[] = [];
   const items = [

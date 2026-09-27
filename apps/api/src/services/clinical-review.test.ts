@@ -234,7 +234,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   expect((await reviews.read(creator,org,id)).state).toBe("NOT_SUBMITTED");expect(await db.select().from(t.assessmentHistory).where(eq(t.assessmentHistory.assessmentId,id))).toHaveLength(0);
  });
  test("history notes are encrypted and queue does not expose notes",async()=>{
-  const queue=await reviews.queue(admin,org,{page:1,pageSize:100});expect(queue.items.length).toBeGreaterThan(0);expect(queue.items.every(i=>!i.review.history.length&&i.review.returnReason===null&&i.review.finalRemark===null)).toBe(true);
+  const queue=await reviews.queue(admin,org,{page:1,pageSize:100});expect(queue.items.length).toBeGreaterThan(0);expect(queue.items.every(i=>typeof i.isPriority==="boolean"&&!i.review.history.length&&i.review.returnReason===null&&i.review.finalRemark===null)).toBe(true);
   const history=await db.select().from(t.assessmentHistory).where(eq(t.assessmentHistory.organizationId,org));expect(history.length).toBeGreaterThan(0);expect(JSON.stringify(history)).not.toContain("Final clinical remark");
   const audits=await db.select().from(t.auditEvents).where(eq(t.auditEvents.organizationId,org));expect(JSON.stringify(audits)).not.toContain("Correct answers");
  });

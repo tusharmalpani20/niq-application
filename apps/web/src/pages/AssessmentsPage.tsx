@@ -252,7 +252,7 @@ export function AssessmentsPage() {
     {quickFilter && <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground"><span>Showing {quickFilter.toLowerCase()}</span><Button variant="ghost" size="sm" aria-label={`Clear ${quickFilter} filter`} onPress={() => setSearchParams(params => { const updated = new URLSearchParams(params); updated.delete("status"); return updated; })}><X className="size-4" aria-hidden="true" />Clear</Button></div>}
     <TabsContent id="assessments">{tab === "assessments" && assessmentContent}</TabsContent>
     {canOpen && <TabsContent id="my-work">{tab === "my-work" && assessmentContent}</TabsContent>}
-    {canOpen && <TabsContent id="clinical-reviews"><ClinicalReviewQueue key={`${user.organizationId}:${user.membershipId}:${reviewFilter}`} user={user} query={reviewQuery} facilityId={facility} state={reviewState} canCreate={canCreate} onViewAssessments={() => selectTab("assessments")} /></TabsContent>}
+    {canOpen && <TabsContent id="clinical-reviews"><ClinicalReviewQueue key={`${user.organizationId}:${user.membershipId}:${reviewFilter}`} user={user} query={reviewQuery} facilityId={facility} state={reviewState} canCreate={canCreate} onPriorityChange={(id, isPriority) => setRecords(items => items.map(item => item.id === id ? { ...item, isPriority } : item))} onViewAssessments={() => selectTab("assessments")} /></TabsContent>}
     <TabsContent id="completed">{tab === "completed" && assessmentContent}</TabsContent></Tabs>
   </>;
 }
