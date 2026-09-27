@@ -209,8 +209,8 @@
   display: flex;
   width: max-content;
   max-width: calc(100vw - 1.5rem);
-  gap: .25rem;
-  padding: .35rem;
+  gap: .125rem;
+  padding: .3rem;
   transform: translateX(-50%);
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -220,12 +220,12 @@
 }
 .workspace-dock-item {
   display: grid;
-  min-width: 5.8rem;
-  min-height: 3.6rem;
+  min-width: 5rem;
+  min-height: 3rem;
   align-content: center;
   justify-items: center;
   gap: .1rem;
-  padding: .35rem .7rem;
+  padding: .25rem .5rem;
   border: 0;
   border-radius: 999px;
   color: var(--muted-foreground);
@@ -249,7 +249,7 @@
   .workspace-account summary { gap: .15rem; padding: .2rem; }
   .workspace-account summary > svg { display: none; }
   .workspace-dock { bottom: calc(.5rem + env(safe-area-inset-bottom)); gap: 0; }
-  .workspace-dock-item { min-width: min(22vw, 5.4rem); min-height: 3.5rem; padding-inline: .2rem; font-size: .64rem; }
+  .workspace-dock-item { min-width: min(22vw, 5rem); min-height: 3rem; padding-inline: .2rem; font-size: .64rem; }
   .client-workspace .content { padding-top: calc(5.5rem + env(safe-area-inset-top)); padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
 }
 .client-workspace .patient-page-title { font-size: clamp(1.65rem, 3vw, 2rem); margin-bottom: 1.75rem; }
