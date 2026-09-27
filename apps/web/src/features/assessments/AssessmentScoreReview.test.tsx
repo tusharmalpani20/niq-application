@@ -50,15 +50,31 @@ test("historical results without saved ranges still show the saved category", as
  expect(document.body.textContent).not.toContain("Risk categories");
 }));
 
-test("score card shows form completion at scoring separately from NIQ points", async()=>harness(async({rerender})=>{
- expect(document.body.textContent).toContain("This score was calculated using assessment answers, with 2 of 2 questions answered (100%).");
+test("score card counts scored answers rather than all form answers", async()=>harness(async({rerender})=>{
+ expect(document.body.textContent).toContain("This score used answers from 1 of 1 scoring questions (100%).");
  const partial = { ...record, manifest: { ...record.manifest, sections: record.manifest.sections.map(section => section.id === "personal_details" ? {
    ...section, fields: [...section.fields, { id: "optional_note", label: "Optional note", kind: "text", owner: "application", required: false, source: "test" }],
  } : section) } } as AssessmentWorkflow;
  await rerender(partial);
- expect(document.body.textContent).toContain("This score was calculated using assessment answers, with 2 of 3 questions answered (66%).");
+ expect(document.body.textContent).toContain("This score used answers from 1 of 1 scoring questions (100%).");
+ expect(document.body.textContent).not.toContain("2 of 3 scoring questions");
  expect(document.querySelector('[data-risk-circle]')?.getAttribute("aria-label")).toBe("8 points, Low");
 }));
+
+test("score card shows the percentage of answered scoring questions", ()=>{
+ const scoringAnswers: AssessmentScoreResult["components"] = [
+  {id:"a",sectionId:"s",label:"Answered",points:8,status:"answered"},
+  {id:"b",sectionId:"s",label:"Unanswered",points:null,status:"unanswered"},
+ ];
+ const document=new JSDOM(renderToStaticMarkup(<AssessmentRiskCircle score={8} classification={result.classification} scoringAnswers={scoringAnswers} />)).window.document;
+ expect(document.body.textContent).toContain("This score used answers from 1 of 2 scoring questions (50%).");
+});
+
+test("scan-only score does not claim questionnaire answers were used", ()=>{
+ const scoringAnswers: AssessmentScoreResult["components"] = [{id:"a",sectionId:"s",label:"Unanswered",points:null,status:"unanswered"}];
+ const document=new JSDOM(renderToStaticMarkup(<AssessmentRiskCircle score={8} classification={result.classification} scoringAnswers={scoringAnswers} />)).window.document;
+ expect(document.body.textContent).toContain("No questionnaire answers contributed to this score (0 of 1; 0%).");
+});
 
 test("summary keeps scored answers readable without score edit controls", async () => harness(async ({ click, posts }) => {
   expect(document.body.textContent).not.toContain("Reviewed score");
