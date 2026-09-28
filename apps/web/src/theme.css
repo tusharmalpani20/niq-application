@@ -57,7 +57,7 @@
   --destructive-soft: color-mix(in srgb, var(--destructive) 8%, var(--surface));
   --border-subtle: color-mix(in srgb, var(--border) 65%, var(--surface));
   --overlay: #182737;
-  --admin-primary: #167565;
+  --admin-primary: #3bb9bd;
   --admin-ink: #1e3047;
   --admin-muted: #64748b;
   --client-muted: #5f6f85;
