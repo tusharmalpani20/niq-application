@@ -14,12 +14,16 @@ export async function loadOverviewSummary(db: Database, config: ApplicationConfi
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400_000);
   const threeDaysAgo = new Date(now.getTime() - 3 * 86400_000);
+  // Raw SQL fragments bypass Drizzle's timestamp column encoder; bind ISO strings instead of Date objects.
+  const nowSql = sql`${now.toISOString()}::timestamptz`;
+  const thirtyDaysAgoSql = sql`${thirtyDaysAgo.toISOString()}::timestamptz`;
+  const threeDaysAgoSql = sql`${threeDaysAgo.toISOString()}::timestamptz`;
   const canReadAssessments = hasPermission(actor.role, "assessments.list");
   const patientScope = and(eq(patients.organizationId, organizationId), eq(patients.isArchived, false), facilityAccessCondition(actor, organizationId, patients.homeFacilityId));
   const assessmentScope = and(eq(assessments.organizationId, organizationId), facilityAccessCondition(actor, organizationId, assessments.facilityId));
   const key = patientDataKey(config.PATIENT_DATA_ENCRYPTION_KEY, config.SESSION_SECRET);
   const displayName = (value: Uint8Array) => (JSON.parse(decryptPatientData(value, key)) as { name: string }).name;
-  const [patientCounts] = await db.select({ total: sql<number>`count(*)::int`, added: sql<number>`count(*) filter (where ${patients.createdAt} between ${thirtyDaysAgo} and ${now})::int` }).from(patients).where(patientScope);
+  const [patientCounts] = await db.select({ total: sql<number>`count(*)::int`, added: sql<number>`count(*) filter (where ${patients.createdAt} between ${thirtyDaysAgoSql} and ${nowSql})::int` }).from(patients).where(patientScope);
 
   let completedCount = 0, completedAdded30Days = 0, scoringIssues = 0;
   let myAssessmentActions = 0, readyToSend = 0, correctionsToMake = 0;
@@ -27,7 +31,7 @@ export async function loadOverviewSummary(db: Database, config: ApplicationConfi
   if (canReadAssessments) {
     const [counts] = await db.select({
       completed: sql<number>`count(*) filter (where ${assessments.status} = 'COMPLETED')::int`,
-      added: sql<number>`count(*) filter (where ${assessments.status} = 'COMPLETED' and ${assessments.completedAt} between ${thirtyDaysAgo} and ${now})::int`,
+      added: sql<number>`count(*) filter (where ${assessments.status} = 'COMPLETED' and ${assessments.completedAt} between ${thirtyDaysAgoSql} and ${nowSql})::int`,
       issues: sql<number>`count(*) filter (where ${assessments.status} = 'SCORING_UNAVAILABLE')::int`,
     }).from(assessments).where(assessmentScope);
     completedCount = counts?.completed ?? 0;
@@ -65,8 +69,8 @@ export async function loadOverviewSummary(db: Database, config: ApplicationConfi
   }
 
   const latest = alias(assessments, "recent_assessment");
-  const activity = canReadAssessments ? sql<Date>`greatest(${patients.createdAt}, coalesce((select max(${latest.createdAt}) from ${latest} where ${latest.organizationId} = ${organizationId} and ${latest.patientId} = ${patients.id} and ${facilityAccessCondition(actor, organizationId, latest.facilityId)}), ${patients.createdAt}))` : sql<Date>`${patients.createdAt}`;
-  const recentScope = and(patientScope, ...(canReadAssessments ? [gte(activity, threeDaysAgo), lte(activity, now)] : []));
+  const activity = canReadAssessments ? sql<Date>`greatest(${patients.createdAt}, coalesce((select max(${latest.createdAt}) from ${assessments} as ${latest} where ${latest.organizationId} = ${organizationId} and ${latest.patientId} = ${patients.id} and ${facilityAccessCondition(actor, organizationId, latest.facilityId)}), ${patients.createdAt}))` : sql<Date>`${patients.createdAt}`;
+  const recentScope = and(patientScope, ...(canReadAssessments ? [gte(activity, threeDaysAgoSql), lte(activity, nowSql)] : []));
   const [recentCount] = await db.select({ total: sql<number>`count(*)::int` }).from(patients).where(recentScope);
   const recentRows = await db.select({ id: patients.id, prefix: patients.referencePrefix, serial: patients.serialNumber, profile: patients.encryptedProfile,
     createdAt: patients.createdAt, facilityId: facilities.id, facilityName: facilities.name })

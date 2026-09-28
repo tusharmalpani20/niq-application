@@ -1056,7 +1056,7 @@ export class PostgresApplicationService implements ApplicationService {
         eq(patients.isArchived, false),
         facilityAccessCondition(actor, organizationId, patients.homeFacilityId),
         facilityAccessCondition(actor, organizationId, assessments.facilityId),
-      )).groupBy(day).orderBy(desc(day));
+      )).groupBy(sql`1`).orderBy(sql`1 desc`);
     return { days: rows.map(row => ({ ...row, actions: row.actions.filter((action): action is typeof actions[number] => actions.includes(action as typeof actions[number])) })) };
   }
   async getOverviewActivityDay(actor: Principal, organizationId: string, from: Date, to: Date, page: number) {
