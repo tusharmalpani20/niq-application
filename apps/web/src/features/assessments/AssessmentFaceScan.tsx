@@ -222,6 +222,11 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     setConsentOpen(false);
     void start();
   }
+  function openConsent() {
+    const missing = missingScanInputs(record);
+    if (missing.length) { onMissingInputs?.(missing); return; }
+    setConsentOpen(true);
+  }
   async function cancel() {
     if (inFlight.current || phase === "uploading") return;
     const id = phase === "idle" ? session?.id : captureId.current ?? session?.id;
@@ -287,7 +292,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
       <div className="space-y-2"><p className="text-sm font-medium">Posture <span aria-hidden="true" className="text-destructive">*</span></p><ChoiceGroup id="face-scan-posture" label="Posture" options={scanPostureOptions} value={selectedPosture} onChange={value => { setPosture(value as ScanPosture); }} required disabled={disabled || session?.state === "REQUESTED" || (startKey.current !== null && !terminal.has(session?.state ?? ""))} iconTiles renderIcon={optionId => optionId === "resting" ? <Armchair className="size-6" strokeWidth={2} /> : <PersonStanding className="size-6" strokeWidth={2} />} /></div>
       {session?.state === "REQUESTED" && <p className="text-sm">This attempt uses {session.context.heightCm} cm and {session.context.weightKg} kg, {scanPostureLabels[session.context.posture].toLowerCase()}. Cancel it to use changed details.</p>}
       <p role="status" className="text-sm text-muted-foreground">{consentApproval?.assessmentId !== record.id ? "Checking patient consent…" : consentReady ? "Patient consent recorded" : "Patient consent needed before capture"}</p>
-      <div className="flex flex-wrap gap-3"><Button className="min-h-11 w-full border border-primary font-semibold shadow-sm disabled:border-primary/50 disabled:bg-background disabled:text-foreground disabled:opacity-100 data-disabled:border-primary/50 data-disabled:bg-background data-disabled:text-foreground data-disabled:opacity-100" isDisabled={disabled || !selectedPosture || stale} onPress={() => { setConsentOpen(true); }}><ScanFace className="size-4" aria-hidden="true"/>{session?.state === "REQUESTED" ? "Resume capture" : session?.state === "FAILED" ? "Try again" : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start face scan"}</Button>{session?.state === "COMPLETED" && <Button variant="outline" onPress={() => { setRescanRequested(false); }}>Keep current results</Button>}{session?.state === "REQUESTED" && <Button variant="outline" isDisabled={disabled} onPress={() => { void cancel(); }}>Cancel attempt</Button>}</div>
+      <div className="flex flex-wrap gap-3"><Button className="min-h-11 w-full border border-primary font-semibold shadow-sm disabled:border-primary/50 disabled:bg-background disabled:text-foreground disabled:opacity-100 data-disabled:border-primary/50 data-disabled:bg-background data-disabled:text-foreground data-disabled:opacity-100" isDisabled={disabled || !selectedPosture || stale} onPress={openConsent}><ScanFace className="size-4" aria-hidden="true"/>{session?.state === "REQUESTED" ? "Resume capture" : session?.state === "FAILED" ? "Try again" : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start face scan"}</Button>{session?.state === "COMPLETED" && <Button variant="outline" onPress={() => { setRescanRequested(false); }}>Keep current results</Button>}{session?.state === "REQUESTED" && <Button variant="outline" isDisabled={disabled} onPress={() => { void cancel(); }}>Cancel attempt</Button>}</div>
       {consentOpen && <Dialog isOpen ariaLabel="Patient consent before face scan" className="facility-dialog face-scan-consent-dialog" onOpenChange={setConsentOpen}>
         <DialogHeader><DialogTitle className="text-lg font-semibold">Before the face scan</DialogTitle></DialogHeader>
         <div className="facility-dialog-fields min-h-0 overflow-y-auto">

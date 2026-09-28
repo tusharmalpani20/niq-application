@@ -88,9 +88,10 @@ test("start opens consent dialog and waits for a separate continue action", asyn
   await click("Continue to face scan");
   expect(starts()).toBe(1);
 }));
-test("missing scan weight directs correction without creating a remote session", async () => harness(async ({ consent, startScan, click, missing, requests, starts }) => {
-  await consent(); await startScan();
+test("missing scan weight directs correction before opening consent or creating a remote session", async () => harness(async ({ consent, click, missing, requests, starts }) => {
+  await consent(); await click("Start face scan");
   expect(missing()).toEqual(["weightKg"]);
+  expect(document.querySelector('section[aria-label="Patient consent"]')).toBeNull();
   expect(requests.some(request => request.body?.requestKey)).toBe(false);
   expect(starts()).toBe(0);
 }, { weight: null }));

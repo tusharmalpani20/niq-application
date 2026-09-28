@@ -187,10 +187,9 @@ test("scan prerequisites open the missing inputs with inline errors and no summa
     document.querySelector<HTMLInputElement>('input[type="radio"][value="resting"]')!.click();
   });
   await click("Start face scan");
-  await click("Send consent request");
-  await click("Continue to face scan");
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
   expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Personal details");
+  expect(document.querySelector('section[aria-label="Patient consent"]')).toBeNull();
   expect(document.getElementById("assessment-field-height_cm-error")?.textContent).toContain("Enter a valid height");
   expect(document.getElementById("assessment-field-current_weight_kg-error")?.textContent).toContain("Enter a valid current weight");
   expect(document.activeElement?.id).toBe("assessment-field-height_cm");
