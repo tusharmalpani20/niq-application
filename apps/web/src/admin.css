@@ -284,6 +284,7 @@
 .client-workspace .patient-search-actions { flex: 1 1 17rem; max-width: 28rem; }
 .client-workspace .patient-filter-bar [data-slot="select-trigger"] { height: 2.5rem; font-size: .875rem; }
 .client-workspace .patient-filter-bar { grid-template-columns: repeat(2, minmax(0, 190px)) minmax(0, 1fr); }
+.client-workspace .assessment-filter-bar { grid-template-columns: repeat(3, minmax(0, 190px)); }
 .client-workspace .patient-sort-control { display: flex; align-items: center; justify-self: end; gap: .6rem; min-width: 0; }
 .client-workspace .patient-sort-control [data-slot="select"] { width: 260px; }
 .client-workspace .patient-sort-label { display: inline-flex; align-items: center; gap: .35rem; flex: none; color: var(--muted-foreground); font-size: .875rem; white-space: nowrap; }
