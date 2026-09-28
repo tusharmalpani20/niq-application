@@ -38,7 +38,7 @@ import { ServiceError } from "./application";
 import { facilityAccessCondition } from "./facility-access";
 import { facilityTrend } from "./facility-performance";
 import { requestScoringOrganizationInfo, ScoringOrganizationInfoRequestError } from "./scoring-organization-info";
-import { countOverviewRisk } from "./overview-risk";
+import { countOverviewRisk, overviewRiskNutritionTargets } from "./overview-risk";
 import type { ClinicalReviewStored } from "./clinical-review-state";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -934,7 +934,7 @@ export class PostgresApplicationService implements ApplicationService {
       facilityName: facilities.name,
       status: assessments.status,
       createdByMembershipId: assessments.createdByMembershipId,
-      clinicalReview: assessments.clinicalReview,
+      clinicalReview: sql<unknown>`case when ${inArray(assessments.status, ["DRAFT", "SCORED"])} then ${assessments.clinicalReview} else null end`,
       createdAt: assessments.createdAt,
       updatedAt: assessments.updatedAt,
       completedAt: assessments.completedAt,
@@ -1003,11 +1003,9 @@ export class PostgresApplicationService implements ApplicationService {
       patientId: assessments.patientId,
       completedAt: assessments.completedAt,
       clinicalReview: assessments.clinicalReview,
-      submissionResult: assessmentSubmissions.result,
-      submissionSnapshot: assessmentSubmissions.snapshot,
+      currentSubmissionId: assessments.currentSubmissionId,
     }).from(assessments)
       .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
-      .leftJoin(assessmentSubmissions, and(eq(assessmentSubmissions.organizationId, assessments.organizationId), eq(assessmentSubmissions.assessmentId, assessments.id), eq(assessmentSubmissions.id, assessments.currentSubmissionId)))
       .where(and(
         eq(assessments.organizationId, organizationId),
         eq(assessments.status, "COMPLETED"),
@@ -1016,11 +1014,35 @@ export class PostgresApplicationService implements ApplicationService {
         facilityAccessCondition(actor, organizationId, assessments.facilityId),
       ));
     const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
-    return countOverviewRisk(rows, value => {
+    const unsealed = new Map<unknown, ReturnType<typeof JSON.parse>>();
+    const unseal = (value: unknown) => {
+      if (unsealed.has(value)) return unsealed.get(value);
       const encrypted = (value as { encrypted?: string })?.encrypted;
       if (!encrypted) throw new ServiceError("CONFLICT", "Assessment review data could not be read.");
-      return JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key));
-    });
+      const parsed = JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key));
+      unsealed.set(value, parsed);
+      return parsed;
+    };
+    const targets = overviewRiskNutritionTargets(rows, unseal);
+    const assessmentIds = new Set(targets.assessmentIds);
+    const submissionIds = rows.flatMap(row => assessmentIds.has(row.id) && row.currentSubmissionId ? [row.currentSubmissionId] : []);
+    const submissions = submissionIds.length ? await this.db.select({
+      id: assessmentSubmissions.id,
+      result: assessmentSubmissions.result,
+      // The snapshot is large and is only used for moderate/high eating barriers.
+      snapshot: targets.snapshotAssessmentIds.length
+        ? sql<unknown>`case when ${inArray(assessmentSubmissions.assessmentId, targets.snapshotAssessmentIds)} then ${assessmentSubmissions.snapshot} else null end`
+        : sql<unknown>`null`,
+    }).from(assessmentSubmissions).where(and(
+      eq(assessmentSubmissions.organizationId, organizationId),
+      inArray(assessmentSubmissions.id, submissionIds),
+    )) : [];
+    const bySubmissionId = new Map(submissions.map(submission => [submission.id, submission]));
+    return countOverviewRisk(rows.map(row => ({
+      ...row,
+      submissionResult: row.currentSubmissionId ? bySubmissionId.get(row.currentSubmissionId)?.result : null,
+      submissionSnapshot: row.currentSubmissionId ? bySubmissionId.get(row.currentSubmissionId)?.snapshot : null,
+    })), unseal);
   }
   async getOverviewActivity(actor: Principal, organizationId: string, from: Date, to: Date) {
     this.ensureOrganizationAccess(actor, organizationId, "assessments.read");

@@ -23,37 +23,52 @@ const eatingBarrierIds = new Set([
   "dietary_symptoms_swallowing_problems", "dietary_symptoms_feel_full_quickly",
 ]);
 
+function latestAssessments(rows: CompletedAssessment[], cutoff?: number): Map<string, CompletedAssessment> {
+  const latest = new Map<string, CompletedAssessment>();
+  for (const row of rows) {
+    if (cutoff !== undefined && (!row.completedAt || row.completedAt.getTime() > cutoff)) continue;
+    const prior = latest.get(row.patientId);
+    if (!prior || (row.completedAt?.getTime() ?? 0) > (prior.completedAt?.getTime() ?? 0)
+      || (row.completedAt?.getTime() ?? 0) === (prior.completedAt?.getTime() ?? 0) && row.id > prior.id) {
+      latest.set(row.patientId, row);
+    }
+  }
+  return latest;
+}
+
+function category(row: CompletedAssessment, unseal: (value: unknown) => StoredData): "low" | "moderate" | "high" | null {
+  if (!row.clinicalReview) return null;
+  const risk = unseal(row.clinicalReview).finalSnapshot?.score?.risk;
+  if (!risk || !["ORIGINAL", "CONFIRMED"].includes(risk.status ?? "") || !risk.classification) return null;
+  const id = risk.classification.id?.toLowerCase();
+  const label = risk.classification.label?.toLowerCase();
+  if (id === "high" || id === "high_risk" || label === "high risk") return "high";
+  if (id === "moderate" || id === "moderate_risk" || label === "moderate risk") return "moderate";
+  if (id === "low" || id === "low_risk" || label === "low risk") return "low";
+  return null;
+}
+
+export function overviewRiskNutritionTargets(rows: CompletedAssessment[], unseal: (value: unknown) => StoredData) {
+  const assessmentIds: string[] = [];
+  const snapshotAssessmentIds: string[] = [];
+  for (const row of latestAssessments(rows).values()) {
+    const riskCategory = category(row, unseal);
+    if (!riskCategory) continue;
+    assessmentIds.push(row.id);
+    if (riskCategory !== "low") snapshotAssessmentIds.push(row.id);
+  }
+  return { assessmentIds, snapshotAssessmentIds };
+}
+
 /** The newest completed assessment decides each patient's current category, even if its category is unavailable. */
 export function countOverviewRisk(
   rows: CompletedAssessment[],
   unseal: (value: unknown) => StoredData,
   now: Date = new Date(),
 ): OverviewRisk {
-  const latest = new Map<string, CompletedAssessment>();
-  const latest30DaysAgo = new Map<string, CompletedAssessment>();
   const cutoff = now.getTime() - 30 * 24 * 60 * 60 * 1000;
-  const recordLatest = (byPatient: Map<string, CompletedAssessment>, row: CompletedAssessment) => {
-    const prior = byPatient.get(row.patientId);
-    if (!prior || (row.completedAt?.getTime() ?? 0) > (prior.completedAt?.getTime() ?? 0)
-      || (row.completedAt?.getTime() ?? 0) === (prior.completedAt?.getTime() ?? 0) && row.id > prior.id) {
-      byPatient.set(row.patientId, row);
-    }
-  };
-  for (const row of rows) {
-    recordLatest(latest, row);
-    if (row.completedAt && row.completedAt.getTime() <= cutoff) recordLatest(latest30DaysAgo, row);
-  }
-  const category = (row: CompletedAssessment): "low" | "moderate" | "high" | null => {
-    if (!row.clinicalReview) return null;
-    const risk = unseal(row.clinicalReview).finalSnapshot?.score?.risk;
-    if (!risk || !["ORIGINAL", "CONFIRMED"].includes(risk.status ?? "") || !risk.classification) return null;
-    const id = risk.classification.id?.toLowerCase();
-    const label = risk.classification.label?.toLowerCase();
-    if (id === "high" || id === "high_risk" || label === "high risk") return "high";
-    if (id === "moderate" || id === "moderate_risk" || label === "moderate risk") return "moderate";
-    if (id === "low" || id === "low_risk" || label === "low risk") return "low";
-    return null;
-  };
+  const latest = latestAssessments(rows);
+  const latest30DaysAgo = latestAssessments(rows, cutoff);
   const categories = { low: 0, moderate: 0, high: 0 };
   const highRiskAssessments: { patientId: string; assessmentId: string }[] = [];
   const protein = { assessed: 0, inadequate: 0 };
@@ -61,7 +76,7 @@ export function countOverviewRisk(
   const barrierCounts = new Map<string, { id: string; label: string; count: number }>();
   let assessedPatients = 0;
   for (const row of latest.values()) {
-    const riskCategory = category(row);
+    const riskCategory = category(row, unseal);
     if (riskCategory === null) continue;
     assessedPatients++;
     categories[riskCategory]++;
@@ -90,7 +105,7 @@ export function countOverviewRisk(
   }
   const categories30DaysAgo = { low: 0, moderate: 0, high: 0 };
   for (const row of latest30DaysAgo.values()) {
-    const riskCategory = category(row);
+    const riskCategory = category(row, unseal);
     if (riskCategory) categories30DaysAgo[riskCategory]++;
   }
   const top = [...barrierCounts.values()].sort((a, b) => b.count - a.count || a.id.localeCompare(b.id))[0] ?? null;

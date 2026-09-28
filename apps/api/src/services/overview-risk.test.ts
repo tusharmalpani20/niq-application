@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { countOverviewRisk } from "./overview-risk";
+import { countOverviewRisk, overviewRiskNutritionTargets } from "./overview-risk";
 
 const row = (id: string, patientId: string, date: string, status: string, classification: { id: string; label: string } | null) => ({
   id, patientId, completedAt: new Date(date), clinicalReview: { finalSnapshot: { score: { risk: { status, classification } } } },
@@ -73,4 +73,34 @@ test("counts protein and reported eating barriers once per patient's latest fina
     protein: { assessed: 3, inadequate: 2 },
     eatingBarrier: { assessed: 2, top: { id: "dietary_symptoms_no_appetite", label: "No appetite", count: 2 } },
   });
+});
+
+test("fetches nutrition only for current classified assessments and snapshots only above low risk", () => {
+  const rows = [
+    row("01", "improved", "2026-09-01", "CONFIRMED", { id: "high", label: "High Risk" }),
+    row("02", "improved", "2026-09-02", "CONFIRMED", { id: "low", label: "Low Risk" }),
+    row("03", "moderate", "2026-09-03", "ORIGINAL", { id: "moderate", label: "Moderate Risk" }),
+    row("04", "high", "2026-09-04", "CONFIRMED", { id: "high_risk", label: "High Risk" }),
+    row("05", "unknown", "2026-09-05", "UNAVAILABLE", null),
+    row("06", "tied", "2026-09-06", "CONFIRMED", { id: "low", label: "Low Risk" }),
+    row("07", "tied", "2026-09-06", "CONFIRMED", { id: "moderate", label: "Moderate Risk" }),
+  ];
+  const targets = overviewRiskNutritionTargets(rows, value => value as any);
+  expect(targets).toEqual({
+    assessmentIds: ["02", "03", "04", "07"],
+    snapshotAssessmentIds: ["03", "04", "07"],
+  });
+  expect(overviewRiskNutritionTargets([row("08", "unknown", "2026-09-07", "UNAVAILABLE", null)], value => value as any))
+    .toEqual({ assessmentIds: [], snapshotAssessmentIds: [] });
+
+  const nutrition = { derived: { proteinAdequacy: "inadequate" as const } };
+  const snapshot = { answers: { dietary_symptoms: ["dietary_symptoms_nausea"] }, manifest: { sections: [{ fields: [{ id: "dietary_symptoms", options: [{ id: "dietary_symptoms_nausea", label: "Nausea" }] }] }] } };
+  const fullRows = rows.map(assessment => ({ ...assessment, submissionResult: nutrition, submissionSnapshot: snapshot }));
+  const hydratedRows = fullRows.map(assessment => ({
+    ...assessment,
+    submissionResult: targets.assessmentIds.includes(assessment.id) ? nutrition : null,
+    submissionSnapshot: targets.snapshotAssessmentIds.includes(assessment.id) ? snapshot : null,
+  }));
+  expect(countOverviewRisk(hydratedRows, value => value as any, new Date("2026-09-30")))
+    .toEqual(countOverviewRisk(fullRows, value => value as any, new Date("2026-09-30")));
 });
