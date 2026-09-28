@@ -13,6 +13,8 @@ import { DietaryStatusIcon } from "./DietaryStatusIcon";
 import { DietarySymptomIcon } from "./DietarySymptomIcon";
 import { formatGenderAnswer } from "./formatGenderAnswer";
 import { assessmentOptionLabel } from "./assessmentOptionLabel";
+import { AssessmentBmiCard } from "./AssessmentBmiCard";
+import { personalDetailIcons } from "./personalDetailIcons";
 
 const diseaseFields = new Set(["stage", "metastasis_site", "relapse_status"]);
 const treatmentFields = new Set(["treatment_status", "palliative_status", "palliative_timing", "cancer_surgical_status", "current_cancer_treatment"]);
@@ -76,16 +78,18 @@ export function AssessmentScoredAnswers({ fields, answers, components, derived, 
   return <div className="@container" data-score-answer-groups>
     {assessmentFieldGroups(fields, answers).map(group => <div key={group[0]!.id} data-score-group={group[0]!.id} className="grid gap-x-6 gap-y-4 border-b border-border py-4 last:border-b-0 @min-[36rem]:grid-cols-2">
       {group.map(field => {
+        if (field.id === "bmi") return <div key={field.id} data-score-field={field.id} className="min-w-0 @min-[36rem]:col-span-2"><AssessmentBmiCard answers={answers} showAnchor={false} /></div>;
         const item = components.find(component => component.id === field.id);
         const reviewed = reviewedItems?.find(row => row.id === field.id);
         const raw = answers[field.id];
         const selected = field.kind === "multi_select" && Array.isArray(raw) ? raw : null;
         const selectedOption = field.kind === "select" && typeof raw === "string" ? raw : null;
         const icon = selectedOption ? answerIcon(field.id, selectedOption) : null;
+        const FieldIcon = personalDetailIcons[field.id];
         const treatmentWithBothFollowUps = field.id === "treatment_status" && group.some(item => item.id === "palliative_status") && group.some(item => item.id === "palliative_timing");
         return <div key={field.id} data-score-field={field.id} className={`min-w-0 ${group.length === 1 || field.kind === "multi_select" || treatmentWithBothFollowUps ? "@min-[36rem]:col-span-2" : ""}`}>
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <p className="text-sm font-medium text-foreground">{field.label}</p>
+            <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">{FieldIcon && <FieldIcon className="size-4 shrink-0 text-primary" aria-hidden="true" />}{field.label}</p>
             {item && <p className="text-xs tabular-nums text-muted-foreground">{revised ? "NIQ " : ""}{points(item.points)}</p>}
           </div>
           {selected ? <div className="mt-2 flex flex-wrap gap-2">{(selected.length ? selected : ["__none__"]).map(optionId => {

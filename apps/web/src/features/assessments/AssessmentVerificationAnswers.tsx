@@ -1,8 +1,11 @@
 import { assessmentFieldError, calculateAssessmentWeightChange, isAssessmentFieldApplicable, type FormAnswers, type FormField } from "@niq/application-contracts";
+import type { LucideIcon } from "lucide-react";
 import { assessmentFieldGroups } from "./AssessmentFields";
 import { assessmentOptionIcon } from "./assessmentOptionIcon";
 import { formatGenderAnswer } from "./formatGenderAnswer";
 import { assessmentOptionLabel } from "./assessmentOptionLabel";
+import { AssessmentBmiCard } from "./AssessmentBmiCard";
+import { personalDetailIcons } from "./personalDetailIcons";
 
 function AnswerValue({ field, answers }: { field: FormField; answers: FormAnswers }) {
   const value = answers[field.id];
@@ -20,9 +23,9 @@ function AnswerValue({ field, answers }: { field: FormField; answers: FormAnswer
   </span>;
 }
 
-function AnswerItem({ field, answers, spanColumns = false }: { field: FormField; answers: FormAnswers; spanColumns?: boolean }) {
+function AnswerItem({ field, answers, spanColumns = false, icon: Icon }: { field: FormField; answers: FormAnswers; spanColumns?: boolean; icon?: LucideIcon }) {
   return <div className={`min-w-0 space-y-1.5 ${spanColumns ? "@min-[28rem]:col-span-2" : ""}`} data-review-answer={field.id}>
-    <dt className="break-words text-sm text-muted-foreground">{field.label}{field.required && " *"}</dt>
+    <dt className="flex min-w-0 items-center gap-2 break-words text-sm text-muted-foreground">{Icon && <Icon className="size-4 shrink-0 text-primary" aria-hidden="true" />}<span>{field.label}{field.required && " *"}</span></dt>
     <dd className="min-w-0 text-sm font-medium text-foreground"><AnswerValue field={field} answers={answers} /></dd>
   </div>;
 }
@@ -72,7 +75,7 @@ export function AssessmentVerificationAnswers({ sectionId, fields, answers }: { 
     const visible = group.filter(field => field.kind !== "calculated");
     if (!visible.length) return null;
     return <dl key={group[0]!.id} data-review-question-group={group[0]!.id} className="grid min-w-0 gap-4 py-4 first:pt-0 last:pb-0 @min-[28rem]:grid-cols-2">
-      {visible.map(field => <AnswerItem key={field.id} field={field} answers={answers} spanColumns={field.kind === "multi_select" || field.id === "treatment_status" || group[0]!.id === "current_cancer_treatment" && field.id === "current_cancer_treatment"} />)}
+      {visible.map(field => <AnswerItem key={field.id} field={field} answers={answers} icon={sectionId === "personal_details" ? personalDetailIcons[field.id] : undefined} spanColumns={field.kind === "multi_select" || field.id === "treatment_status" || group[0]!.id === "current_cancer_treatment" && field.id === "current_cancer_treatment"} />)}
     </dl>;
-  })}</div>;
+  })}{sectionId === "personal_details" && fields.some(field => field.id === "bmi") && <div className="pt-4"><AssessmentBmiCard answers={answers} showAnchor={false} /></div>}</div>;
 }

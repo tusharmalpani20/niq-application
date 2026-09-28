@@ -23,7 +23,8 @@ test("scored answers keep form groups and show selected options as icon chips", 
   expect(tumour?.textContent).toContain("Solid tumour");
   expect(tumour?.textContent).toContain("Haematological");
   expect(document.querySelector('[data-score-field="cancer_type"] [data-cancer-icon="cancer_2"]')).not.toBeNull();
-  expect(document.querySelector('[data-score-field="patient_name"] svg')).toBeNull();
+  expect(document.querySelector('[data-score-field="patient_name"] p svg')).not.toBeNull();
+  expect(document.querySelector('[data-score-field="age"] p svg')).not.toBeNull();
 });
 
 test("scored answer layout retains item scores and calculated values", () => {
@@ -33,10 +34,14 @@ test("scored answer layout retains item scores and calculated values", () => {
     { id: "bmi", label: "BMI", kind: "calculated", owner: "application" },
     { id: "stage", label: "Stage", kind: "select", owner: "scoring", options: [{ id: "stage_metastatic", label: "Metastatic" }] },
   ] as FormField[];
-  const html = renderToStaticMarkup(<AssessmentScoredAnswers fields={fields} answers={{ height_cm: 175, current_weight_kg: 70, stage: "stage_metastatic" }} components={[{ id: "stage", sectionId: "disease", label: "Stage", points: 4, status: "answered" }]} reviewedItems={[{ id: "stage", niqPoints: 4, reviewedPoints: 5, overridden: true }]} revised />);
+  const html = renderToStaticMarkup(<AssessmentScoredAnswers fields={fields} answers={{ age: 45, height_cm: 175, current_weight_kg: 70, stage: "stage_metastatic" }} components={[{ id: "stage", sectionId: "disease", label: "Stage", points: 4, status: "answered" }]} reviewedItems={[{ id: "stage", niqPoints: 4, reviewedPoints: 5, overridden: true }]} revised />);
   const document = new JSDOM(html).window.document;
   expect(document.querySelector('[data-score-group="height_cm"]')?.querySelectorAll("[data-score-field]")).toHaveLength(3);
   expect(document.querySelector('[data-score-field="bmi"]')?.textContent).toContain("22.9");
+  expect(document.querySelector('[data-score-field="bmi"]')?.textContent).toContain("Healthy weight");
+  expect(document.querySelector('[data-score-field="bmi"] svg[viewBox="0 0 240 122"]')).not.toBeNull();
+  expect(document.querySelector('[data-score-field="bmi"] #assessment-field-bmi')).toBeNull();
+  for (const fieldId of ["height_cm", "current_weight_kg", "bmi"]) expect(document.querySelector(`[data-score-field="${fieldId}"] p svg`)).not.toBeNull();
   expect(document.querySelector('[data-score-field="stage"]')?.textContent).toContain("NIQ 4 pts");
   expect(document.querySelector('[data-score-field="stage"]')?.textContent).toContain("Reviewed 5 pts · Adjusted");
   expect(document.querySelector('[data-score-field="stage"] [data-disease-choice-icon="stage_metastatic"]')).not.toBeNull();

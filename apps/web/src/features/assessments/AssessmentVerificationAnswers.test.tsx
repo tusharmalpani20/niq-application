@@ -22,3 +22,17 @@ test("dietary verification does not infer a change without both weights", () => 
   expect(html).toContain("Add both weights to see the change");
   expect(html).not.toContain("kg loss");
 });
+
+test("personal details verification shows the calculated BMI card", () => {
+  const fields = [
+    { id: "height_cm", label: "Height", kind: "number", owner: "application", unit: "cm" },
+    { id: "current_weight_kg", label: "Current weight", kind: "number", owner: "application", unit: "kg" },
+    { id: "bmi", label: "BMI", kind: "calculated", owner: "application" },
+  ] as FormField[];
+  const html = renderToStaticMarkup(<AssessmentVerificationAnswers sectionId="personal_details" fields={fields} answers={{ age: 50, height_cm: 183, current_weight_kg: 70 }} />);
+  expect(html).toContain("Body mass index");
+  expect(html).toContain("20.9");
+  expect(html).toContain("Healthy weight");
+  expect(html).toContain('viewBox="0 0 240 122"');
+  expect(html).not.toContain('id="assessment-field-bmi"');
+});

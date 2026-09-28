@@ -1,4 +1,5 @@
 import { calculateAssessmentBmi, type FormAnswers } from "@niq/application-contracts";
+import { Calculator } from "lucide-react";
 
 const reference = [
   { label: "Underweight", min: 10, max: 18.5, color: "#5799c5", range: "<18.5" },
@@ -25,17 +26,17 @@ function arcPath(start: number, end: number): string {
   return `M ${x1} ${y1} A 89 89 0 0 1 ${x2} ${y2}`;
 }
 
-export function AssessmentBmiCard({ answers }: { answers: FormAnswers }) {
+export function AssessmentBmiCard({ answers, showAnchor = true }: { answers: FormAnswers; showAnchor?: boolean }) {
   const bmi = typeof answers.height_cm === "number" && typeof answers.current_weight_kg === "number"
     ? calculateAssessmentBmi(answers.height_cm, answers.current_weight_kg) : null;
   const adult = typeof answers.age === "number" && answers.age >= 20;
   const category = bmi !== null && adult ? adultBmiCategory(bmi) : null;
   const position = bmi === null ? null : arcPoint(Math.max(10, Math.min(40, bmi)));
 
-  return <section id="assessment-field-bmi" tabIndex={-1} aria-label="Body mass index" className="col-[1/-1] min-w-0 rounded-xl border border-border bg-primary/5 p-4 sm:p-5">
+  return <section id={showAnchor ? "assessment-field-bmi" : undefined} tabIndex={showAnchor ? -1 : undefined} aria-label="Body mass index" className="col-[1/-1] min-w-0 rounded-xl border border-border bg-primary/5 p-4 sm:p-5">
     <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(13rem,16rem)]">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-muted-foreground">Body mass index</p>
+        <p className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><Calculator className="size-4 shrink-0 text-primary" aria-hidden="true" />Body mass index</p>
         <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <strong className="text-4xl font-semibold tracking-tight tabular-nums">{bmi === null ? "—" : bmi.toFixed(1)}</strong>
           {bmi !== null && <span className="text-sm text-muted-foreground">kg/m²</span>}
