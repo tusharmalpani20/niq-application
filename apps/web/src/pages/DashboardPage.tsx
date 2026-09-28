@@ -15,7 +15,7 @@ import { OverviewStatCard } from "./OverviewStatCard";
 import { AssessmentActivityCalendar, RiskOverviewCards } from "./OverviewClinicalCards";
 import { OverviewBottomCards } from "./OverviewBottomCards";
 
-type Overview = { patients: Patient[]; assessments: AssessmentSummary[]; risk: Awaited<ReturnType<typeof getOverviewRisk>> | null; highRiskPatients: number | null; highRiskPatients30DaysAgo: number | null; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
+type Overview = { patients: Patient[]; assessments: AssessmentSummary[]; risk: Awaited<ReturnType<typeof getOverviewRisk>> | null; riskLoaded: boolean; highRiskPatients: number | null; highRiskPatients30DaysAgo: number | null; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
 
 export function greetingForHour(hour: number): "Good morning" | "Good afternoon" | "Good evening" {
   if (hour >= 6 && hour < 12) return "Good morning";
@@ -109,24 +109,31 @@ export function DashboardPage() {
     setData(null); setError(false);
     const org = user.organizationId;
     const reviews = (params: Record<string, string>) => listClinicalReviews(org, new URLSearchParams({ page: "1", pageSize: "3", ...params }));
-    Promise.all([
-      listPatients(org),
-      isAdmin || isClinician ? listAssessments(org) : Promise.resolve([] as AssessmentSummary[]),
-      isAdmin || isClinician ? getOverviewRisk(org).catch(() => null) : Promise.resolve(null),
-      isAdmin ? listOrganizationUsers(org) : Promise.resolve(null),
-      isAdmin ? getOrganization(org) : Promise.resolve(null),
-      isAdmin || isClinician ? reviews({ state: "QUEUED" }).catch(() => null) : Promise.resolve(null),
-      isClinician ? reviews({ state: "IN_REVIEW", mine: "true" }).catch(() => null) : Promise.resolve(null),
-    ]).then(([patients, assessments, overviewRisk, members, organization, queuedReviews, myReviews]) => {
+    let supplemental: Partial<Overview> = {};
+    const update = (patch: Partial<Overview>) => {
+      supplemental = { ...supplemental, ...patch };
+      if (active) setData(current => current ? { ...current, ...patch } : current);
+    };
+    Promise.all([listPatients(org), isAdmin || isClinician ? listAssessments(org) : Promise.resolve([] as AssessmentSummary[])]).then(([patients, assessments]) => {
       if (!active) return;
       setData({
-        patients, assessments, risk: overviewRisk, highRiskPatients: overviewRisk?.highRiskPatients ?? null, highRiskPatients30DaysAgo: overviewRisk?.highRiskPatients30DaysAgo ?? null, queuedReviews, myReviews,
-        seats: members?.filter((item) => item.active).length ?? 0,
-        userLimit: organization?.entitlement?.userLimit ?? null,
-        enabledUsers: members ? members.filter((item) => item.active && item.status === "ACTIVE").length : null,
-        pendingInvitations: organization?.invitations.filter((item) => item.status === "PENDING" && item.expiresAt.getTime() > Date.now()).length ?? 0,
+        patients, assessments, risk: null, riskLoaded: !isAdmin && !isClinician, highRiskPatients: null, highRiskPatients30DaysAgo: null,
+        queuedReviews: null, myReviews: null, seats: 0, userLimit: null, enabledUsers: null, pendingInvitations: 0,
+        ...supplemental,
       });
     }).catch(() => { if (active) setError(true); });
+    if (isAdmin || isClinician) {
+      getOverviewRisk(org).then(risk => update({ risk, riskLoaded: true, highRiskPatients: risk.highRiskPatients, highRiskPatients30DaysAgo: risk.highRiskPatients30DaysAgo }))
+        .catch(() => update({ riskLoaded: true }));
+      reviews({ state: "QUEUED" }).then(queuedReviews => update({ queuedReviews })).catch(() => {});
+    }
+    if (isClinician) reviews({ state: "IN_REVIEW", mine: "true" }).then(myReviews => update({ myReviews })).catch(() => {});
+    if (isAdmin) Promise.all([listOrganizationUsers(org), getOrganization(org)]).then(([members, organization]) => update({
+      seats: members.filter(item => item.active).length,
+      userLimit: organization.entitlement?.userLimit ?? null,
+      enabledUsers: members.filter(item => item.active && item.status === "ACTIVE").length,
+      pendingInvitations: organization.invitations.filter(item => item.status === "PENDING" && item.expiresAt.getTime() > Date.now()).length,
+    })).catch(() => {});
     return () => { active = false; };
   }, [user.organizationId, isAdmin, isClinician, attempt]);
 
@@ -160,7 +167,7 @@ export function DashboardPage() {
       {isAdmin
         ? <div className="mt-7"><QuickActions isAdmin canCreateAssessment={false} queuedReviews={data.queuedReviews} myReviews={null} readyToSend={0} correctionsToMake={0} /></div>
         : <><div className="mt-7 grid items-stretch gap-4 min-[860px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><PriorityAssessments assessments={data.assessments} /><QuickActions isAdmin={false} canCreateAssessment={canCreateAssessment} queuedReviews={data.queuedReviews} myReviews={data.myReviews} readyToSend={readyToSend} correctionsToMake={correctionsToMake} /></div><AssessmentActivityCalendar organizationId={user.organizationId} assessments={data.assessments} /></>}
-      <RiskOverviewCards risk={data.risk} />
+      {data.riskLoaded && <RiskOverviewCards risk={data.risk} />}
     </>}
     {data && isAdmin && <>
       {(data.queuedReviews?.total !== 0 || scoringIssues > 0 || data.pendingInvitations > 0) && <section className="mt-7" aria-label="Organization operations">
@@ -171,10 +178,10 @@ export function DashboardPage() {
             {data.pendingInvitations > 0 && <ActionCard title="Pending invitations" count={data.pendingInvitations} detail="Review invitations and available seats" to="/users" />}
           </div>
       </section>}
-      <UserSeats enabled={data.enabledUsers ?? 0} reserved={data.seats + data.pendingInvitations} pending={data.pendingInvitations} limit={data.userLimit} />
+      {data.enabledUsers !== null && <UserSeats enabled={data.enabledUsers} reserved={data.seats + data.pendingInvitations} pending={data.pendingInvitations} limit={data.userLimit} />}
       <OverviewUsage organizationId={user.organizationId} />
     </>}
-    {data && (isClinician || isAdmin) && <OverviewBottomCards patients={data.patients} assessments={data.assessments} risk={data.risk} />}
+    {data && (isClinician || isAdmin) && data.riskLoaded && <OverviewBottomCards patients={data.patients} assessments={data.assessments} risk={data.risk} />}
     {data && !isAdmin && !isClinician && <section className="mt-7" aria-label="Patient registration"><h2 className="text-lg font-semibold">Patient registration</h2><p className="text-sm text-muted-foreground">Register patients and keep their details current.</p><RecentPatients patients={data.patients} /></section>}
   </>;
 }
