@@ -4,8 +4,7 @@ import { AlertTriangle, Power, PowerOff, Plus, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { DataTableColumn } from "../components/DataTable";
 import { DataTable } from "../components/DataTable";
-import { EmptyState, ErrorState, LoadingState } from "../components/Page";
-import { AdminIllustratedHeader, OrganizationsIllustration } from "../components/PlatformAdminIllustrations";
+import { EmptyState, ErrorState, LoadingState, PageHeader } from "../components/Page";
 import { StatusBadge } from "../components/StatusBadge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -125,7 +124,7 @@ export function AdminOrganizationsPage() {
   const visibleOrganizations = filteredOrganizations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return <>
-    <AdminIllustratedHeader title="Organizations" description="Manage client organizations and their access." illustration={<OrganizationsIllustration />} />
+    <PageHeader title="Organizations" />
     {state === "loading" ? <section className="surface"><LoadingState label="Loading organizations" /></section> : state === "error" ? <ErrorState retry={load} /> : <div className="grid gap-4">
       {statusMessage && <Alert variant="destructive"><AlertDescription>{statusMessage}</AlertDescription></Alert>}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
