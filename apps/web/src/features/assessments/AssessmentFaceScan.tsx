@@ -5,7 +5,7 @@ import { Armchair, History, Info, PersonStanding, ScanFace } from "lucide-react"
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { createCaptureController, type ScanCamera } from "./careplix-capture";
+import { createCaptureController } from "./careplix-capture";
 import { cancelFaceScan, listFaceScans, startFaceScan, uploadFaceScan } from "./face-scan-api";
 import { ChoiceGroup } from "@/components/ui/choice-group";
 import { scanPostureLabels, scanPostureOptions, type ScanPosture } from "./face-scan-posture";
@@ -52,17 +52,11 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const [consentApproval, setConsentApproval] = useState<{ assessmentId: string; approved: boolean } | null>(null);
   const [consentOpen, setConsentOpen] = useState(false);
   const [posture, setPosture] = useState<ScanPosture | "">("");
-  const [camera, setCamera] = useState<ScanCamera>("front");
-  const [cameraCount, setCameraCount] = useState<number | null>(null);
-  const [checkingCameras, setCheckingCameras] = useState(false);
-  const [cameraCheckError, setCameraCheckError] = useState("");
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const controller = useRef(captureFactory());
   const alive = useRef(true);
   const inFlight = useRef(false);
-  const cameraCheckInFlight = useRef(false);
-  const cameraCheckVersion = useRef(0);
   const pendingSignal = useRef<{ sessionId: string; signal: FaceScanSignal } | null>(null);
   const startKey = useRef<string | null>(null);
   const captureId = useRef<string | null>(null);
@@ -180,7 +174,6 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   }
   async function start() {
     if (inFlight.current || blocked || disabled || !data?.enabled || !consentReady || !selectedPosture || record.status !== "DRAFT") return;
-    const captureCamera = camera;
     inFlight.current = true; setPhase("preparing"); setError(""); setProgress(0); setLowPerformance(false);
     statusVersion.current++;
     try {
@@ -207,7 +200,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
         frame: frame => { if (alive.current) { setProgress(frame.progress); setGuidance(frame.message || "Keep your face in view and remain still."); setLowPerformance(frame.isLiteMode || frame.isThrottling); } },
         finish: signal => { void upload(value.id, signal); },
         error: message => { if (alive.current) { setError(message); setPhase("idle"); } },
-      }, captureCamera);
+      });
     } catch (cause) {
       if (alive.current) {
         setError(cause instanceof Error ? cause.message : "Could not prepare the scan."); setPhase("idle");
@@ -218,35 +211,16 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     finally { inFlight.current = false; }
   }
   async function continueAfterConsent() {
-    if (cameraCheckInFlight.current || !consentReady) return;
+    if (!consentReady) return;
     const missing = missingScanInputs(record);
     if (missing.length) {
       setConsentOpen(false);
       onMissingInputs?.(missing);
       return;
     }
-    if (cameraCount !== null) { cameraCheckVersion.current++; setConsentOpen(false); void start(); return; }
-    cameraCheckInFlight.current = true;
-    const version = cameraCheckVersion.current;
-    setCheckingCameras(true); setCameraCheckError("");
-    let stream: MediaStream | null = null;
-    try {
-      if (window.isSecureContext === false || !navigator.mediaDevices?.getUserMedia) throw new Error("Camera access needs HTTPS or localhost.");
-      // Permission reveals non-default cameras. Check only after consent and stop
-      // the preview stream before handing the camera to the CarePlix SDK.
-      stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
-      const devices = await navigator.mediaDevices.enumerateDevices?.();
-      if (!alive.current || version !== cameraCheckVersion.current) return;
-      const count = Math.max(1, devices?.filter(device => device.kind === "videoinput").length ?? 1);
-      setCameraCount(count);
-      if (count === 1) { setCamera("front"); setConsentOpen(false); void start(); }
-    } catch (cause) {
-      if (alive.current && version === cameraCheckVersion.current) setCameraCheckError(cause instanceof Error ? cause.message : "Could not check this device's cameras. Check camera permission and try again.");
-    } finally {
-      stream?.getTracks().forEach(track => track.stop());
-      cameraCheckInFlight.current = false;
-      if (alive.current) setCheckingCameras(false);
-    }
+    // Let the SDK acquire the default camera directly while device selection is disabled.
+    setConsentOpen(false);
+    void start();
   }
   async function cancel() {
     if (inFlight.current || phase === "uploading") return;
@@ -289,7 +263,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {createPortal(<div hidden={phase !== "capturing" && phase !== "preparing"} className="face-scan-capture-overlay" role="dialog" aria-modal="true" aria-label="Face scan camera">
       <div className="face-scan-capture-panel">
         <div className="face-scan-capture-header"><ScanFace className="size-5 shrink-0" aria-hidden="true"/><span>Face scan</span>{phase === "capturing" && <Button variant="outline" className="ml-auto" onPress={() => { void cancel(); }}>Cancel capture</Button>}</div>
-        <div className="face-scan-camera"><video ref={video} autoPlay muted playsInline className="absolute size-px opacity-0" aria-hidden="true"/><canvas ref={canvas} className={`size-full object-contain object-center ${camera === "front" ? "-scale-x-100" : ""}`} aria-label="Camera scan preview"/></div>
+        <div className="face-scan-camera"><video ref={video} autoPlay muted playsInline className="absolute size-px opacity-0" aria-hidden="true"/><canvas ref={canvas} className="size-full -scale-x-100 object-contain object-center" aria-label="Camera scan preview"/></div>
         <div className="face-scan-capture-details">
           {phase === "capturing" ? <><p role="status" aria-live="polite" className="text-center text-base font-medium">{/^\d+% Completed$/i.test(guidance) ? "Hold still and keep your face in view." : guidance}</p><Progress aria-label="Face scan capture progress" value={progress} className="[&_[data-slot=progress-track]]:h-2.5 [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-indicator]]:duration-300"><ProgressLabel>Capturing scan</ProgressLabel><ProgressValue className="font-semibold" /></Progress>{lowPerformance && <p className="text-center text-sm">Device performance is limited. Keep other applications closed during capture.</p>}</> : <p role="status" className="text-center text-base font-medium">Preparing camera…</p>}
         </div>
@@ -311,17 +285,15 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
       <div className="space-y-2"><p className="text-sm font-medium">Posture <span aria-hidden="true" className="text-destructive">*</span></p><ChoiceGroup id="face-scan-posture" label="Posture" options={scanPostureOptions} value={selectedPosture} onChange={value => { setPosture(value as ScanPosture); }} required disabled={disabled || session?.state === "REQUESTED" || (startKey.current !== null && !terminal.has(session?.state ?? ""))} iconTiles renderIcon={optionId => optionId === "resting" ? <Armchair className="size-6" strokeWidth={2} /> : <PersonStanding className="size-6" strokeWidth={2} />} /></div>
       {session?.state === "REQUESTED" && <p className="text-sm">This attempt uses {session.context.heightCm} cm and {session.context.weightKg} kg, {scanPostureLabels[session.context.posture].toLowerCase()}. Cancel it to use changed details.</p>}
       <p role="status" className="text-sm text-muted-foreground">{consentApproval?.assessmentId !== record.id ? "Checking patient consent…" : consentReady ? "Patient consent recorded" : "Patient consent needed before capture"}</p>
-      <div className="flex flex-wrap gap-3"><Button className="min-h-11 w-full border border-primary font-semibold shadow-sm disabled:border-primary/50 disabled:bg-background disabled:text-foreground disabled:opacity-100 data-disabled:border-primary/50 data-disabled:bg-background data-disabled:text-foreground data-disabled:opacity-100" isDisabled={disabled || !selectedPosture || stale} onPress={() => { cameraCheckVersion.current++; setCameraCount(null); setCamera("front"); setCameraCheckError(""); setConsentOpen(true); }}><ScanFace className="size-4" aria-hidden="true"/>{session?.state === "REQUESTED" ? "Resume capture" : session?.state === "FAILED" ? "Try again" : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start face scan"}</Button>{session?.state === "COMPLETED" && <Button variant="outline" onPress={() => { setRescanRequested(false); }}>Keep current results</Button>}{session?.state === "REQUESTED" && <Button variant="outline" isDisabled={disabled} onPress={() => { void cancel(); }}>Cancel attempt</Button>}</div>
-      {consentOpen && <Dialog isOpen ariaLabel="Patient consent before face scan" className="facility-dialog face-scan-consent-dialog" onOpenChange={open => { if (!open) cameraCheckVersion.current++; setConsentOpen(open); }}>
+      <div className="flex flex-wrap gap-3"><Button className="min-h-11 w-full border border-primary font-semibold shadow-sm disabled:border-primary/50 disabled:bg-background disabled:text-foreground disabled:opacity-100 data-disabled:border-primary/50 data-disabled:bg-background data-disabled:text-foreground data-disabled:opacity-100" isDisabled={disabled || !selectedPosture || stale} onPress={() => { setConsentOpen(true); }}><ScanFace className="size-4" aria-hidden="true"/>{session?.state === "REQUESTED" ? "Resume capture" : session?.state === "FAILED" ? "Try again" : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start face scan"}</Button>{session?.state === "COMPLETED" && <Button variant="outline" onPress={() => { setRescanRequested(false); }}>Keep current results</Button>}{session?.state === "REQUESTED" && <Button variant="outline" isDisabled={disabled} onPress={() => { void cancel(); }}>Cancel attempt</Button>}</div>
+      {consentOpen && <Dialog isOpen ariaLabel="Patient consent before face scan" className="facility-dialog face-scan-consent-dialog" onOpenChange={setConsentOpen}>
         <DialogHeader><DialogTitle className="text-lg font-semibold">Before the face scan</DialogTitle></DialogHeader>
         <div className="facility-dialog-fields min-h-0 overflow-y-auto">
           <FaceScanConsent key={record.id} organizationId={organizationId} assessmentId={record.id} revision={record.revision} disabled={disabled} onApprovalChange={handleConsentApproval} embedded/>
-          {cameraCount !== null && cameraCount > 1 && <div className="mt-4 space-y-2"><p className="text-sm font-medium">Choose a camera</p><ChoiceGroup id="face-scan-camera-choice" label="Camera" options={[{ id: "front", label: "Front camera" }, { id: "back", label: "Back camera" }]} value={camera} onChange={value => setCamera(value as ScanCamera)} disabled={disabled || checkingCameras} /></div>}
-          {cameraCheckError && <p role="alert" className="mt-3 text-sm text-destructive">{cameraCheckError}</p>}
         </div>
         <div className="form-footer">
-          <Button variant="outline" className="min-h-10 px-4 font-semibold text-foreground" onPress={() => { cameraCheckVersion.current++; setConsentOpen(false); }}>Cancel</Button>
-          <Button className="min-h-10 px-4 font-semibold disabled:border disabled:border-border disabled:bg-muted disabled:text-foreground disabled:shadow-none disabled:opacity-100 data-disabled:border data-disabled:border-border data-disabled:bg-muted data-disabled:text-foreground data-disabled:shadow-none data-disabled:opacity-100" isDisabled={disabled || !consentReady || !selectedPosture || stale || checkingCameras} onPress={() => { void continueAfterConsent(); }}>{cameraCount !== null && cameraCount > 1 ? "Start face scan" : checkingCameras ? "Checking cameras…" : "Continue to face scan"}</Button>
+          <Button variant="outline" className="min-h-10 px-4 font-semibold text-foreground" onPress={() => { setConsentOpen(false); }}>Cancel</Button>
+          <Button className="min-h-10 px-4 font-semibold disabled:border disabled:border-border disabled:bg-muted disabled:text-foreground disabled:shadow-none disabled:opacity-100 data-disabled:border data-disabled:border-border data-disabled:bg-muted data-disabled:text-foreground data-disabled:shadow-none data-disabled:opacity-100" isDisabled={disabled || !consentReady || !selectedPosture || stale} onPress={() => { void continueAfterConsent(); }}>Continue to face scan</Button>
         </div>
       </Dialog>}
     </div>}
