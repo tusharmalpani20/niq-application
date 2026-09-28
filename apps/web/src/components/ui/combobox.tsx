@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { ComboBox, ComboBoxStateContext, Dialog, Group, ListBox, ListBoxItem, Modal, ModalOverlay, Popover } from "react-aria-components";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ComboBox, ComboBoxStateContext, Dialog, Group, ListBox, ListBoxItem, ListLayout, Modal, ModalOverlay, Popover, Virtualizer } from "react-aria-components";
 import { Check, ChevronsUpDown, Plus, Search, X } from "lucide-react";
 import { Input } from "./input";
 import { Button } from "./button";
@@ -18,7 +18,7 @@ export type SearchComboboxProps = {
   customValue?: string; onCreate?: (text: string) => void; large?: boolean;
   inputValue?: string; onInputValueChange?: (text: string) => void;
   createWhenNoMatches?: boolean; createOptionLabel?: (text: string) => string;
-  renderIcon?: (optionId: string) => ReactNode; primaryHighlight?: boolean;
+  renderIcon?: (optionId: string) => ReactNode; primaryHighlight?: boolean; virtualized?: boolean;
 };
 
 function useMobileChoices() {
@@ -53,21 +53,28 @@ function useVisibleViewport(open: boolean) {
   return viewport;
 }
 
-function MobileChoices({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder, customValue, onCreate, inputValue, onInputValueChange, createWhenNoMatches, createOptionLabel, large, renderIcon, primaryHighlight }: SearchComboboxProps) {
+function MobileChoices({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder, customValue, onCreate, inputValue, onInputValueChange, createWhenNoMatches, createOptionLabel, large, renderIcon, primaryHighlight, virtualized }: SearchComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [scrollTop, setScrollTop] = useState(0);
+  const listRef = useRef<HTMLUListElement>(null);
   const viewport = useVisibleViewport(open);
   const selectedLabel = options.find(option => option.id === value)?.label ?? "";
   const query = search.trim();
   const matches = options.filter(option => matchesComboboxSearch(option.label, query));
   const canCreate = Boolean(onCreate && query && (!createWhenNoMatches || matches.length === 0) && !options.some(option => option.label.toLocaleLowerCase() === query.toLocaleLowerCase()) && query !== customValue);
-  const show = () => { setSearch(inputValue ?? ""); setOpen(true); };
+  const show = () => { setSearch(inputValue ?? ""); setScrollTop(0); setOpen(true); };
   const choose = (id: string) => {
     if (id === "__custom__") onCreate?.(query);
     else onChange(id);
     setOpen(false);
   };
   const visibleHeight = Math.max(1, viewport.height);
+  const windowed = Boolean(virtualized && options.length > 40);
+  const rowHeight = 64;
+  const visibleRows = Math.ceil(Math.max(160, Math.min(visibleHeight * .82 - 150, 500)) / rowHeight) + 6;
+  const start = windowed ? Math.min(Math.max(0, Math.floor(scrollTop / rowHeight) - 3), Math.max(0, matches.length - visibleRows)) : 0;
+  const end = windowed ? Math.min(matches.length, start + visibleRows) : matches.length;
   return <>
     <Button id={id} type="button" variant="outline" isDisabled={disabled} aria-label={label} aria-required={required} aria-invalid={invalid} aria-describedby={describedBy} aria-haspopup="dialog" aria-expanded={open} onPress={show} className={`w-full min-w-0 justify-between gap-2 px-3 text-left font-normal ${large ? "min-h-12 text-base" : "min-h-11 text-sm"} ${invalid ? "border-destructive" : "border-input"} bg-background`}>
       <span className={`min-w-0 truncate ${inputValue || selectedLabel ? "text-foreground" : "text-muted-foreground"}`}>{inputValue || selectedLabel || placeholder}</span>
@@ -83,15 +90,17 @@ function MobileChoices({ id, label, options, value, onChange, disabled, required
           <div className="shrink-0 px-4 py-3">
             <div className="flex min-h-12 items-center gap-2 rounded-lg border border-input bg-background px-3 focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/15">
               <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <Input aria-label={`Search ${label}`} autoComplete="off" placeholder={placeholder} value={search} onChange={event => { setSearch(event.target.value); onInputValueChange?.(event.target.value); }} className="h-11 border-0 px-0 text-base shadow-none focus-visible:border-0 focus-visible:ring-0" />
+              <Input aria-label={`Search ${label}`} autoComplete="off" placeholder={placeholder} value={search} onChange={event => { setSearch(event.target.value); setScrollTop(0); if (listRef.current) listRef.current.scrollTop = 0; onInputValueChange?.(event.target.value); }} className="h-11 border-0 px-0 text-base shadow-none focus-visible:border-0 focus-visible:ring-0" />
             </div>
           </div>
-          <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom))]" aria-label={`${label} choices`}>
-            {matches.map(option => <li key={option.id}><Button type="button" variant="ghost" aria-pressed={option.id === value} onPress={() => choose(option.id)} className={`mb-1 flex min-h-14 h-auto w-full justify-start gap-3 whitespace-normal rounded-xl px-3 py-2 text-left text-base ${primaryHighlight ? "hover:bg-primary/10" : "hover:bg-accent"}`}>
+          <ul ref={listRef} onScroll={windowed ? event => setScrollTop(event.currentTarget.scrollTop) : undefined} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom))]" aria-label={`${label} choices`}>
+            {windowed && start > 0 && <li aria-hidden="true" style={{ height: start * rowHeight }} />}
+            {matches.slice(start, end).map(option => <li key={option.id}><Button type="button" variant="ghost" aria-label={option.label} aria-pressed={option.id === value} onPress={() => choose(option.id)} className={`mb-1 flex w-full justify-start gap-3 whitespace-normal rounded-xl px-3 py-2 text-left text-base ${windowed ? "h-[60px] min-h-[60px]" : "min-h-14 h-auto"} ${primaryHighlight ? "hover:bg-primary/10" : "hover:bg-accent"}`}>
               {renderIcon && <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary" aria-hidden="true">{renderIcon(option.id)}</span>}
-              <span className="min-w-0 flex-1 break-words">{option.label}</span>
+              <span className={`min-w-0 flex-1 break-words ${windowed ? "line-clamp-2" : ""}`}>{option.label}</span>
               {option.id === value && <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />}
             </Button></li>)}
+            {windowed && end < matches.length && <li aria-hidden="true" style={{ height: (matches.length - end) * rowHeight }} />}
             {canCreate && <li><Button type="button" variant="ghost" onPress={() => choose("__custom__")} className="mb-1 flex min-h-14 h-auto w-full justify-start gap-3 whitespace-normal rounded-xl bg-primary/5 px-3 py-2 text-left text-base text-primary"><Plus className="size-5 shrink-0" aria-hidden="true" /><span className="break-words">{createOptionLabel?.(query) ?? `Use “${query}” as Other`}</span></Button></li>}
             {!matches.length && !canCreate && <li className="p-4 text-center text-sm text-muted-foreground">No matching options</li>}
           </ul>
@@ -102,7 +111,7 @@ function MobileChoices({ id, label, options, value, onChange, disabled, required
   </>;
 }
 /** One themed, keyboard-operable search menu; custom values require an explicit Use action. */
-export function SearchCombobox({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder = "Search or select…", customValue, onCreate, inputValue, onInputValueChange, createWhenNoMatches = false, createOptionLabel, large = false, renderIcon, primaryHighlight = false }: SearchComboboxProps) {
+export function SearchCombobox({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder = "Search or select…", customValue, onCreate, inputValue, onInputValueChange, createWhenNoMatches = false, createOptionLabel, large = false, renderIcon, primaryHighlight = false, virtualized = false }: SearchComboboxProps) {
   const mobile = useMobileChoices();
   const selectedLabel = options.find(option => option.id === value)?.label || "";
   const [internalSearch, setInternalSearch] = useState(selectedLabel);
@@ -114,7 +123,13 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
   const canCreate = Boolean(onCreate && query && (!createWhenNoMatches || matches.length === 0) && !options.some(option => option.label.toLocaleLowerCase() === query.toLocaleLowerCase()) && query !== customValue);
   const items = [...(search === selectedLabel ? options : matches), ...(canCreate ? [{ id: "__custom__", label: createOptionLabel?.(query) ?? `Use “${query}” as Other` }] : [])];
   const selectedIcon = renderIcon && value && search === selectedLabel ? renderIcon(value) : null;
-  if (mobile) return <MobileChoices id={id} label={label} options={options} value={value} onChange={onChange} disabled={disabled} required={required} invalid={invalid} describedBy={describedBy} placeholder={placeholder} customValue={customValue} onCreate={onCreate} inputValue={inputValue} onInputValueChange={onInputValueChange} createWhenNoMatches={createWhenNoMatches} createOptionLabel={createOptionLabel} large={large} renderIcon={renderIcon} primaryHighlight={primaryHighlight} />;
+  const renderOption = (option: ComboboxOption) => {
+    const icon = renderIcon?.(option.id);
+    return <ListBoxItem id={option.id} textValue={option.label} className={({ isSelected, isFocused, isHovered }) => `flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2 outline-none data-selected:font-medium ${option.id === "__custom__" && createOptionLabel ? "border-primary/25 bg-primary/5 font-medium text-brand-ink data-focused:bg-primary/10" : primaryHighlight ? isSelected || isFocused || isHovered ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary" : "border-transparent" : "border-transparent data-focused:bg-accent data-focused:text-accent-foreground"} ${large ? "min-h-12 text-base" : "min-h-11 text-sm"}`}>
+      {({ isSelected, isFocused, isHovered }) => <><span className="flex min-w-0 items-center gap-3">{option.id === "__custom__" && createOptionLabel && <Plus className="size-4 shrink-0" aria-hidden="true"/>}{icon && <span className={`flex size-11 shrink-0 items-center justify-center rounded-xl transition-colors ${primaryHighlight ? isSelected || isFocused || isHovered ? "bg-primary text-primary-foreground shadow-sm" : "bg-primary/10 text-primary/70" : "bg-primary/10 text-brand-ink"}`} aria-hidden="true">{icon}</span>}<span className="break-words">{option.label}</span></span>{isSelected && !primaryHighlight && <Check className="size-4 shrink-0" />}</>}
+    </ListBoxItem>;
+  };
+  if (mobile) return <MobileChoices id={id} label={label} options={options} value={value} onChange={onChange} disabled={disabled} required={required} invalid={invalid} describedBy={describedBy} placeholder={placeholder} customValue={customValue} onCreate={onCreate} inputValue={inputValue} onInputValueChange={onInputValueChange} createWhenNoMatches={createWhenNoMatches} createOptionLabel={createOptionLabel} large={large} renderIcon={renderIcon} primaryHighlight={primaryHighlight} virtualized={virtualized} />;
   return <ComboBox data-slot="search-combobox" aria-label={label} isDisabled={disabled} isRequired={required} isInvalid={invalid} allowsCustomValue allowsEmptyCollection menuTrigger="manual"
     selectedKey={value} inputValue={search} onInputChange={setSearch} items={items}
     onSelectionChange={key => { if (key === null) return; if (key === "__custom__") { onCreate?.(query); if (inputValue === undefined) setSearch(selectedLabel); } else { onChange(String(key)); setSearch(options.find(option => option.id === key)?.label || ""); } }}
@@ -135,14 +150,8 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
       <Button variant="ghost" size="icon" className="mr-1 size-10" aria-label={`Show ${label} options`}><ChevronsUpDown className="size-4" /></Button>
     </Group>
     <Popover placement="bottom start" offset={4} className="z-50 flex max-h-[var(--available-height,18rem)] flex-col w-(--trigger-width) max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg">
-      <ListBox<ComboboxOption> className="themed-scrollbar min-h-0 max-h-72 overflow-y-auto overscroll-contain p-1.5 outline-none" renderEmptyState={() => <p className="p-3 text-sm text-muted-foreground">No matching options</p>}>
-        {option => {
-          const icon = renderIcon?.(option.id);
-          return <ListBoxItem id={option.id} textValue={option.label} className={({ isSelected, isFocused, isHovered }) => `flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2 outline-none data-selected:font-medium ${option.id === "__custom__" && createOptionLabel ? "border-primary/25 bg-primary/5 font-medium text-brand-ink data-focused:bg-primary/10" : primaryHighlight ? isSelected || isFocused || isHovered ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary" : "border-transparent" : "border-transparent data-focused:bg-accent data-focused:text-accent-foreground"} ${large ? "min-h-12 text-base" : "min-h-11 text-sm"}`}>
-            {({ isSelected, isFocused, isHovered }) => <><span className="flex min-w-0 items-center gap-3">{option.id === "__custom__" && createOptionLabel && <Plus className="size-4 shrink-0" aria-hidden="true"/>}{icon && <span className={`flex size-11 shrink-0 items-center justify-center rounded-xl transition-colors ${primaryHighlight ? isSelected || isFocused || isHovered ? "bg-primary text-primary-foreground shadow-sm" : "bg-primary/10 text-primary/70" : "bg-primary/10 text-brand-ink"}`} aria-hidden="true">{icon}</span>}<span className="break-words">{option.label}</span></span>{isSelected && !primaryHighlight && <Check className="size-4 shrink-0" />}</>}
-          </ListBoxItem>;
-        }}
-      </ListBox>
+      {virtualized && options.length > 40 ? <Virtualizer layout={ListLayout} layoutOptions={{ estimatedRowSize: 48, padding: 6 }} shouldObserveItemSize><ListBox<ComboboxOption> className="themed-scrollbar min-h-0 overflow-y-auto overscroll-contain outline-none" style={{ display: "block", height: Math.min(288, Math.max(48, items.length * 48 + 12)), padding: 0 }} renderEmptyState={() => <p className="p-3 text-sm text-muted-foreground">No matching options</p>}>{renderOption}</ListBox></Virtualizer>
+        : <ListBox<ComboboxOption> className="themed-scrollbar min-h-0 max-h-72 overflow-y-auto overscroll-contain p-1.5 outline-none" renderEmptyState={() => <p className="p-3 text-sm text-muted-foreground">No matching options</p>}>{renderOption}</ListBox>}
     </Popover>
     </>}</ComboBoxStateContext.Consumer>
   </ComboBox>;
