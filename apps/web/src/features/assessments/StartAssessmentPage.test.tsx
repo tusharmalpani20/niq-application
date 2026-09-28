@@ -65,7 +65,25 @@ test("new assessment opens personal details, with other sections locked and no w
   });
 });
 
-test("existing patient waits for height and weight, then creates and saves one assessment", async () => {
+test("existing patient can continue without measurements and add them later", async () => {
+  const writes: Array<{ url: string; body: any }> = [];
+  await harness(`/assessments/new?patient=${id}`, async (url, init) => {
+    if (url.includes("/patients/")) return Response.json(patient);
+    if (init?.method === "POST") { writes.push({ url, body: JSON.parse(String(init.body)) }); return Response.json({ id, status: "READY", assessmentId: id, assessmentReference: "ASM-000009", failureCode: null }); }
+    if (init?.method === "PATCH") { writes.push({ url, body: JSON.parse(String(init.body)) }); return Response.json({}); }
+    return Response.json({ id, revision: 1, answers: { patient_name: patient.displayName, height_cm: 170 } });
+  }, async router => {
+    expect([...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Continue")?.disabled).toBe(false);
+    expect(document.querySelector("#assessment-field-height_cm")?.getAttribute("aria-required")).toBe("false");
+    expect(document.querySelector("#assessment-field-current_weight_kg")?.getAttribute("aria-required")).toBe("false");
+    await click("Continue");
+    expect(router.state.location.pathname).toBe("/assessments/ASM-000009");
+    expect(writes).toHaveLength(1);
+    expect(writes[0]!.body.patientId).toBe(id);
+  });
+});
+
+test("provided height and weight are saved when creating an assessment", async () => {
   const writes: Array<{ url: string; body: any }> = [];
   await harness(`/assessments/new?patient=${id}`, async (url, init) => {
     if (url.includes("/patients/")) return Response.json(patient);
@@ -74,7 +92,7 @@ test("existing patient waits for height and weight, then creates and saves one a
     return Response.json({ id, revision: 1, answers: { patient_name: patient.displayName } });
   }, async router => {
     expect(writes).toHaveLength(0);
-    expect([...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Continue")?.disabled).toBe(true);
+    expect([...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Continue")?.disabled).toBe(false);
     expect(writes).toHaveLength(0);
     await click("170 cm");
     await click("70 kg");

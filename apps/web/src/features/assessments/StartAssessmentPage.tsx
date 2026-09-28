@@ -100,7 +100,7 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
   const patientReady = creating
     ? registerPatientSchema.safeParse({ ...newPatient, email: newPatient.email.trim() || undefined, homeFacilityId: newPatient.homeFacilityId || undefined }).success
     : !!selected;
-  const ready = patientReady && validMeasurement(measurements.height_cm) && validMeasurement(measurements.current_weight_kg);
+  const ready = patientReady;
   const updateNewPatient = (key: keyof NewPatientDetails, value: string) => {
     setNewPatient(current => ({ ...current, [key]: value }));
     setFieldErrors(current => ({ ...current, [key]: undefined }));
@@ -130,8 +130,8 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
         nextErrors[key] = key === "dateOfBirth" ? "Enter a valid date of birth." : key === "phone" ? "Enter a mobile number using digits only." : `Enter ${key === "medicalRecordNumber" ? "a medical record number" : key === "homeFacilityId" ? "a facility" : key === "gender" ? "a gender" : key === "name" ? "a patient name" : "a valid email address"}.`;
       }
     }
-    if (!validMeasurement(measurements.height_cm)) nextErrors.height_cm = "Enter a valid height.";
-    if (!validMeasurement(measurements.current_weight_kg)) nextErrors.current_weight_kg = "Enter a valid current weight.";
+    if (measurements.height_cm !== null && !validMeasurement(measurements.height_cm)) nextErrors.height_cm = "Enter a valid height.";
+    if (measurements.current_weight_kg !== null && !validMeasurement(measurements.current_weight_kg)) nextErrors.current_weight_kg = "Enter a valid current weight.";
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
 
@@ -160,8 +160,9 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
       if (!result.assessmentId) { setError(preparationMessage(result)); return; }
       const assessment = await getAssessment(user.organizationId, result.assessmentId);
       if (lifecycle.current !== activeLifecycle) return;
-      if (assessment.answers.height_cm !== measurements.height_cm || assessment.answers.current_weight_kg !== measurements.current_weight_kg) {
-        await saveAssessment(user.organizationId, assessment.id, assessment.revision, { ...assessment.answers, ...measurements });
+      const suppliedMeasurements = Object.fromEntries(Object.entries(measurements).filter(([, value]) => value !== null));
+      if (Object.entries(suppliedMeasurements).some(([key, value]) => assessment.answers[key] !== value)) {
+        await saveAssessment(user.organizationId, assessment.id, assessment.revision, { ...assessment.answers, ...suppliedMeasurements });
       }
       if (lifecycle.current !== activeLifecycle) return;
       try { sessionStorage.removeItem(`niq:start-assessment:${request.current.key}`); } catch { /* The assessment is saved already. */ }
@@ -207,7 +208,7 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
             {creating && !activeFacilities.length && <p role="alert" className="text-sm text-destructive">An active facility is required before registering a patient.</p>}
             {patient && <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2"><div><p className="text-sm text-muted-foreground">Age</p><p className="mt-1 font-medium">{age}</p></div><div><p className="text-sm text-muted-foreground">Gender</p><p className="mt-1 font-medium">{patient.gender ?? "Not provided"}</p></div><div><p className="text-sm text-muted-foreground">Contact number</p><p className="mt-1 font-medium">{patient.phone ?? "Not provided"}</p></div><div><p className="text-sm text-muted-foreground">Facility</p><p className="mt-1 font-medium">{patient.homeFacility?.name ?? "No facility"}</p></div></div>}
             <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
-              {([['height_cm', 'Height', 'height'], ['current_weight_kg', 'Current weight', 'weight']] as const).map(([key, label, kind]) => <Field key={key} data-invalid={!!fieldErrors[key] || undefined}><div className="flex min-h-9 flex-wrap items-center justify-between gap-2"><FieldLabel htmlFor={`assessment-field-${key}`} className="required-field-label">{label} <span aria-hidden="true">*</span></FieldLabel><AssessmentMeasurementUnitControl label={label} kind={kind} unit={kind === "height" ? units.height : units.weight} onUnitChange={unit => setUnits(current => ({ ...current, [kind]: unit }))} disabled={busy || !patientReady}/></div><AssessmentMeasurementInput key={`${key}-${kind === "height" ? units.height : units.weight}`} id={`assessment-field-${key}`} label={label} kind={kind} value={measurements[key]} unit={kind === "height" ? units.height : units.weight} onChange={value => updateMeasurement(key, value)} disabled={busy || !patientReady} invalid={!!fieldErrors[key]} required showQuickValues />{fieldErrors[key] && <FieldError>{fieldErrors[key]}</FieldError>}</Field>)}
+              {([['height_cm', 'Height', 'height'], ['current_weight_kg', 'Current weight', 'weight']] as const).map(([key, label, kind]) => <Field key={key} data-invalid={!!fieldErrors[key] || undefined}><div className="flex min-h-9 flex-wrap items-center justify-between gap-2"><FieldLabel htmlFor={`assessment-field-${key}`}>{label} <span className="text-sm font-normal text-muted-foreground">(can be entered later)</span></FieldLabel><AssessmentMeasurementUnitControl label={label} kind={kind} unit={kind === "height" ? units.height : units.weight} onUnitChange={unit => setUnits(current => ({ ...current, [kind]: unit }))} disabled={busy || !patientReady}/></div><AssessmentMeasurementInput key={`${key}-${kind === "height" ? units.height : units.weight}`} id={`assessment-field-${key}`} label={label} kind={kind} value={measurements[key]} unit={kind === "height" ? units.height : units.weight} onChange={value => updateMeasurement(key, value)} disabled={busy || !patientReady} invalid={!!fieldErrors[key]} required={false} showQuickValues />{fieldErrors[key] && <FieldError>{fieldErrors[key]}</FieldError>}</Field>)}
             </div>
             <AssessmentBmiCard answers={bmiAnswers}/>
           </div>
