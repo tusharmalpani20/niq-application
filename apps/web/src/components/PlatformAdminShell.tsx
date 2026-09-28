@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef } from "react";
 import type { AuthenticatedUser } from "@niq/application-contracts";
 import { LogOut } from "lucide-react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -65,7 +65,7 @@ export function PlatformAdminShell({ user }: { user: AuthenticatedUser }) {
         </div>
       </div>
     </header>
-    <main className="content"><Outlet context={{ user }} /></main>
+    <main className="content"><Suspense fallback={<p role="status" className="p-6 text-sm text-muted-foreground">Loading page…</p>}><Outlet context={{ user }} /></Suspense></main>
     <nav className="workspace-dock" aria-label="Administration navigation">
       {navigation.map((item) => <button type="button" key={item.to} className="workspace-dock-item" aria-current={pathname === item.to || pathname.startsWith(`${item.to}/`) ? "page" : undefined} onClick={() => navigate(item.to)}>
         <Icon name={item.icon} size={20} /><span>{item.label}</span>

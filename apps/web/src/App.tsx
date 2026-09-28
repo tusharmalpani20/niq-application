@@ -1,23 +1,27 @@
+import { lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthenticatedShell } from "./components/AuthenticatedShell";
 import { BrandingProvider } from "./lib/branding-context";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
-import { AdminOrganizationsPage } from "./pages/AdminOrganizationsPage";
-import { AdminAdministratorsPage } from "./pages/AdminAdministratorsPage";
-import { AdminCreateOrganizationPage } from "./pages/AdminCreateOrganizationPage";
-import { AdminOrganizationDetailPage } from "./pages/AdminOrganizationDetailPage";
-import { AssessmentsPage } from "./pages/AssessmentsPage";
-import { StartAssessmentPage } from "./features/assessments/StartAssessmentPage";
-import { AssessmentEditorPage } from "./features/assessments/AssessmentEditorPage";
-import { BrandingPage } from "./pages/BrandingPage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { FacilitiesPage } from "./pages/FacilitiesPage";
-import { FacilityDetailPage } from "./pages/FacilityDetailPage";
-import { PatientDetailPage, PatientsPage, RegisterPatientPage } from "./pages/PatientsPage";
 import { SignInPage } from "./pages/SignInPage";
-import { ScoringConnectionPage } from "./pages/ScoringConnectionPage";
-import { UsersPage } from "./pages/UsersPage";
 import { VerifyMfaPage } from "./pages/VerifyMfaPage";
+
+const AdminOrganizationsPage = lazy(() => import("./pages/AdminOrganizationsPage").then(module => ({ default: module.AdminOrganizationsPage })));
+const AdminAdministratorsPage = lazy(() => import("./pages/AdminAdministratorsPage").then(module => ({ default: module.AdminAdministratorsPage })));
+const AdminCreateOrganizationPage = lazy(() => import("./pages/AdminCreateOrganizationPage").then(module => ({ default: module.AdminCreateOrganizationPage })));
+const AdminOrganizationDetailPage = lazy(() => import("./pages/AdminOrganizationDetailPage").then(module => ({ default: module.AdminOrganizationDetailPage })));
+const AssessmentsPage = lazy(() => import("./pages/AssessmentsPage").then(module => ({ default: module.AssessmentsPage })));
+const StartAssessmentPage = lazy(() => import("./features/assessments/StartAssessmentPage").then(module => ({ default: module.StartAssessmentPage })));
+const AssessmentEditorPage = lazy(() => import("./features/assessments/AssessmentEditorPage").then(module => ({ default: module.AssessmentEditorPage })));
+const BrandingPage = lazy(() => import("./pages/BrandingPage").then(module => ({ default: module.BrandingPage })));
+const FacilitiesPage = lazy(() => import("./pages/FacilitiesPage").then(module => ({ default: module.FacilitiesPage })));
+const FacilityDetailPage = lazy(() => import("./pages/FacilityDetailPage").then(module => ({ default: module.FacilityDetailPage })));
+const PatientsPage = lazy(() => import("./pages/PatientsPage").then(module => ({ default: module.PatientsPage })));
+const RegisterPatientPage = lazy(() => import("./pages/PatientsPage").then(module => ({ default: module.RegisterPatientPage })));
+const PatientDetailPage = lazy(() => import("./pages/PatientsPage").then(module => ({ default: module.PatientDetailPage })));
+const ScoringConnectionPage = lazy(() => import("./pages/ScoringConnectionPage").then(module => ({ default: module.ScoringConnectionPage })));
+const UsersPage = lazy(() => import("./pages/UsersPage").then(module => ({ default: module.UsersPage })));
 
 export function App() {
   return (

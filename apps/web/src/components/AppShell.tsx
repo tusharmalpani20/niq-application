@@ -2,7 +2,7 @@ import { canVisitOrganizationRoute } from "../lib/route-permissions";
 import { membershipRoleLabels } from "@niq/application-contracts";
 import type { AuthenticatedUser } from "@niq/application-contracts";
 import { Bell, LogOut } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef } from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -121,7 +121,7 @@ export function AppShell({ user }: { user: AuthenticatedUser }) {
 
   return <div className="client-workspace min-h-svh min-w-0">
     <WorkspaceHeader user={user} onSignOut={handleSignOut} />
-    <main className="content">{!allowed ? <Navigate to="/" replace /> : <Outlet context={user} />}</main>
+    <main className="content">{!allowed ? <Navigate to="/" replace /> : <Suspense fallback={<p role="status" className="p-6 text-sm text-muted-foreground">Loading page…</p>}><Outlet context={user} /></Suspense>}</main>
     <WorkspaceDock user={user} />
   </div>;
 }
