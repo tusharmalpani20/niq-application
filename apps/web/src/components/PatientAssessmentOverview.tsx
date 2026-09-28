@@ -147,16 +147,20 @@ function ScoreTrendPlaceholder({ first, loading }: { first?: ScorePoint; loading
   return <section className="surface flex h-full min-w-0 flex-col overflow-hidden p-5 sm:p-6" aria-label="NIQ score trend">
     <div><h2 className="font-semibold">NIQ score trend</h2><p className="mt-1 text-sm text-muted-foreground">Scores approved for clinical use</p></div>
     <div className="flex flex-1 flex-col items-center justify-center py-6 text-center">
-      <svg className="mb-5 h-36 w-full max-w-72 text-primary" viewBox="0 0 280 140" role="img" aria-label="Illustration of a score trend waiting to be drawn">
-        <rect x="1" y="1" width="278" height="138" rx="18" fill="var(--primary)" fillOpacity=".04" stroke="var(--border)" />
-        <path d="M 30 110 H 252 M 30 72 H 252 M 30 34 H 252" stroke="var(--border)" strokeDasharray="4 6" />
-        <path d="M 44 97 C 92 86 105 93 145 68 S 208 65 237 40" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="5 7" opacity=".55" />
-        <circle cx="44" cy="97" r="6" fill="var(--card)" stroke="currentColor" strokeWidth="2" />
-        <circle cx="145" cy="68" r="6" fill="var(--card)" stroke="currentColor" strokeWidth="2" />
-        <circle cx="237" cy="40" r="7" fill="var(--card)" stroke="currentColor" strokeWidth="2" />
+      <svg className="mb-3 h-56 w-full max-w-lg text-primary" viewBox="0 0 400 220" role="img" aria-label="Illustration of a score trend waiting to be drawn">
+        <defs><linearGradient id="patient-empty-chart" x1="0" x2="1" y1="0" y2="1"><stop stopColor="var(--primary)" stopOpacity=".08" /><stop offset="100%" stopColor="var(--primary)" stopOpacity=".02" /></linearGradient></defs>
+        <rect x="2" y="2" width="396" height="216" rx="26" fill="url(#patient-empty-chart)" stroke="var(--border)" />
+        <rect x="24" y="24" width="352" height="172" rx="18" fill="var(--card)" fillOpacity=".7" />
+        <path d="M 48 158 H 352 M 48 110 H 352 M 48 62 H 352" stroke="var(--border)" strokeDasharray="5 7" />
+        <path d="M 66 153 C 106 144 126 157 166 124 S 225 112 257 91 S 310 104 337 60" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="6 9" opacity=".45" />
+        <circle cx="66" cy="153" r="12" fill="var(--primary)" fillOpacity=".1" /><circle cx="66" cy="153" r="6" fill="var(--card)" stroke="currentColor" strokeWidth="2" />
+        <circle cx="166" cy="124" r="12" fill="var(--primary)" fillOpacity=".1" /><circle cx="166" cy="124" r="6" fill="var(--card)" stroke="currentColor" strokeWidth="2" />
+        <circle cx="257" cy="91" r="12" fill="var(--primary)" fillOpacity=".1" /><circle cx="257" cy="91" r="6" fill="var(--card)" stroke="currentColor" strokeWidth="2" />
+        <circle cx="337" cy="60" r="13" fill="var(--primary)" fillOpacity=".1" /><circle cx="337" cy="60" r="7" fill="var(--card)" stroke="currentColor" strokeWidth="2" />
+        <circle cx="343" cy="178" r="18" fill="var(--card)" stroke="var(--border)" /><path d="M 343 168 V 178 L 350 183" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      <p className="font-semibold">{loading ? "Loading score history…" : "No NIQ scores yet"}</p>
-      <p className="mt-2 max-w-xs text-sm text-muted-foreground">{loading ? "Checking recent assessments." : "Scores appear here after an assessment is scored and available for clinical use. A trend line needs at least two scores."}</p>
+      <p className="text-sm font-medium">{loading ? "Loading score history…" : "No approved scores yet"}</p>
+      <p className="mt-1 max-w-xs text-xs leading-5 text-muted-foreground">{loading ? "Checking recent assessments." : "Clinically reviewed scores appear here after an assessment is completed."}</p>
     </div>
   </section>;
 }
@@ -218,6 +222,7 @@ export function PatientAssessmentOverview({ history, state, organizationId, memb
     } finally { setClaiming(false); }
   }
   const latestScore = details.scores.find(point => point.reference === latest?.reference);
+  const approvedScores = details.scores.filter(point => point.status === "COMPLETED");
   const draft = latest?.status === "DRAFT" || latest?.status === "READY_FOR_SCORING";
   const remaining = details.latest?.progress.required === undefined ? null : Math.max(0, details.latest.progress.required - details.latest.progress.answered);
   const nextStep = latest ? assessmentNextStep(latest, remaining, details.review) : null;
@@ -265,6 +270,6 @@ export function PatientAssessmentOverview({ history, state, organizationId, memb
       {latest && canRead && latestScore && <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t px-5 py-4 sm:px-6"><span className="text-sm text-muted-foreground">NIQ score</span><strong className="text-2xl tabular-nums" style={latestScore.risk ? { color: riskColor(latestScore.color) } : undefined}>{latestScore.score} <span className="text-sm font-normal">points</span></strong>{latestScore.risk && <span data-testid="patient-risk-label" className="rounded-full border px-2.5 py-1 text-sm font-semibold" style={riskBadgeStyle(latestScore.color)}>{latestScore.risk}</span>}</div>}
       {latest && canRead && details.loading && <p className="border-t px-5 py-3 text-sm text-muted-foreground">Loading assessment details…</p>}
     </section>
-    {showTrend && (details.scores.length >= 2 ? <ScoreTrend points={details.scores} /> : <ScoreTrendPlaceholder first={details.scores[0]} loading={state === "loading" || details.loading} />)}
+    {showTrend && (approvedScores.length >= 2 ? <ScoreTrend points={approvedScores} /> : <ScoreTrendPlaceholder first={approvedScores[0]} loading={state === "loading" || details.loading} />)}
   </div>;
 }

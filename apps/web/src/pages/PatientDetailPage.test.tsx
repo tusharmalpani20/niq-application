@@ -60,7 +60,7 @@ test("clinician sees the latest assessment and actions without switching tabs", 
     expect(body.querySelector('[aria-label="Assessment stages"]')?.textContent).toContain("Upcoming");
     expect(body.querySelector('[aria-label="Latest assessment"] a[href="/assessments/ASM-000001"]')?.textContent).toContain("Continue assessment");
     expect(body.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("33");
-    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("No NIQ scores yet");
+    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("No approved scores yet");
     expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("approved for clinical use");
     expect(body.querySelector('[aria-label="NIQ score trend"] svg[role="img"]')).not.toBeNull();
     expect(body.querySelector('button[aria-label="New assessment"] svg')).not.toBeNull();
@@ -89,8 +89,9 @@ test("queued review can be claimed from the patient overview while its NIQ score
     const card = body.querySelector('[aria-label="Latest assessment"]')!;
     expect(card.textContent).toContain("Awaiting reviewer");
     expect(card.textContent).toContain("Not claimed yet");
-    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("Score under clinical review");
-    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("30 points");
+    expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("30 points");
+    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("No approved scores yet");
+    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).not.toContain("30 points");
     const claim = [...card.querySelectorAll("button")].find(button => button.textContent?.includes("Claim review"));
     expect(claim).toBeDefined();
     expect(card.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("View review");
