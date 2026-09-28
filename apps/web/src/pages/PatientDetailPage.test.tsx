@@ -10,7 +10,7 @@ const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patient = { id, organizationId: id, reference: "PAT-2", displayName: "Example Patient", medicalRecordNumber: "MRN-2", homeFacility: { id, name: "Hyderabad" }, dateOfBirth: "1999-03-20", gender: "UNKNOWN", phone: "9014936881", createdAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z" };
 const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: patient.homeFacility, status: "DRAFT", myAction: null, isPriority: false, createdAt: "2026-09-22T00:00:00Z", completedAt: null };
 
-async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) => Promise<void> | void, entry = "/patients/PAT-2", options: { summaries?: unknown[]; details?: Record<string, unknown>; reviews?: Record<string, unknown> } = {}) {
+async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) => Promise<void> | void, entry = "/patients/PAT-2", options: { summaries?: unknown[]; details?: Record<string, unknown>; reviews?: Record<string, unknown>; clinicalReviews?: Record<string, unknown> } = {}) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "HTMLButtonElement", "HTMLInputElement", "HTMLTextAreaElement", "HTMLSelectElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -22,6 +22,8 @@ async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) =>
     if (url.endsWith("/assessments")) return Response.json({ items: options.summaries ?? [assessment] });
     const reviewedId = url.match(/\/assessments\/([^/]+)\/score-reviews$/)?.[1];
     if (reviewedId && options.reviews?.[reviewedId]) return Response.json(options.reviews[reviewedId]);
+    const clinicalId = url.match(/\/assessments\/([^/]+)\/clinical-review$/)?.[1];
+    if (clinicalId && options.clinicalReviews?.[clinicalId]) return Response.json(options.clinicalReviews[clinicalId]);
     const assessmentId = url.split("/assessments/")[1];
     if (assessmentId && options.details?.[assessmentId]) return Response.json(options.details[assessmentId]);
     if (assessmentId === id) return Response.json({ progress: { answered: 2, required: 6, percent: 33 }, result: null });
@@ -45,8 +47,13 @@ test("clinician sees the latest assessment and actions without switching tabs", 
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("Draft");
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("4 required answers remaining");
     expect(body.querySelector('[aria-label="Assessment stages"] [aria-current="step"]')?.textContent).toContain("Draft");
+    expect(body.querySelector('[aria-label="Assessment stages"] time')?.getAttribute("datetime")).toBe(new Date(assessment.createdAt).toISOString());
+    expect(body.querySelector('[aria-label="Assessment stages"]')?.textContent).toContain("Upcoming");
     expect(body.querySelector('[aria-label="Latest assessment"] a[href="/assessments/ASM-000001"]')?.textContent).toContain("Continue assessment");
     expect(body.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("33");
+    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("No NIQ scores yet");
+    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("approved for clinical use");
+    expect(body.querySelector('[aria-label="NIQ score trend"] svg[role="img"]')).not.toBeNull();
     expect(body.querySelector('button[aria-label="New assessment"] svg')).not.toBeNull();
     expect(body.querySelector('button[aria-label="Edit patient"] svg')).not.toBeNull();
     expect(body.textContent).not.toContain("Correct MRN");
@@ -119,14 +126,19 @@ test("completed assessments show the reviewed score and trend", async () => {
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("10 points");
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("Low Risk");
     expect(body.querySelector('[aria-label="Assessment stages"] [aria-current="step"]')?.textContent).toContain("Completed");
+    expect(body.querySelectorAll('[aria-label="Assessment stages"] time')).toHaveLength(4);
+    expect(body.querySelector('[aria-label="Assessment stages"] time[datetime="2026-09-23T02:30:00.000Z"]')).not.toBeNull();
+    expect(body.querySelector('[aria-label="Latest assessment"] [data-testid="patient-risk-label"]')?.getAttribute("style")).toContain("220, 61, 80");
     expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("+5 points");
+    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("Scores approved for clinical use");
   }, "/patients/PAT-2", { summaries: [latest, previous], details: { [id]: detail(5), [latestId]: detail(8) }, reviews: {
     [id]: { overall: { reviewedPoints: 5 }, risk: { status: "ORIGINAL", classification: { label: "Low Risk" } } },
-    [latestId]: { overall: { reviewedPoints: 10 }, risk: { status: "CONFIRMED", classification: { label: "Low Risk" } } },
-  } });
+    [latestId]: { overall: { reviewedPoints: 10 }, risk: { status: "CONFIRMED", classification: { label: "Low Risk", color: "red" } } },
+  }, clinicalReviews: { [latestId]: { submittedAt: "2026-09-23T02:30:00Z" } } });
   await renderDetail("DOCTOR", body => {
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("10 points");
-    expect(body.querySelector('[aria-label="NIQ score trend"]')).toBeNull();
+    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("One NIQ score available");
+    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("10 points");
   }, "/patients/PAT-2", { summaries: [latest], details: { [latestId]: detail(8) }, reviews: {
     [latestId]: { overall: { reviewedPoints: 10 }, risk: { status: "CONFIRMED", classification: { label: "Low Risk" } } },
   } });

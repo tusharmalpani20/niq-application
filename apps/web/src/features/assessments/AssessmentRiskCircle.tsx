@@ -1,15 +1,7 @@
 import type { AssessmentAnswerCoverage, AssessmentScoreResult } from "@niq/application-contracts";
+import { riskColor } from "@/lib/risk-color";
 
 type Classification = AssessmentScoreResult["classification"];
-
-const presetColors: Record<string, string> = {
-  green: "#159f70", amber: "#d97706", red: "#dc3d50",
-  neutral: "#64748b", blue: "#3b82f6", purple: "#8b5cf6",
-};
-
-function categoryColor(color: string | undefined): string {
-  return color?.startsWith("#") ? color : presetColors[color ?? ""] ?? "#64748b";
-}
 
 export function AssessmentRiskCircle({ score, classification, categories, formCoverage }: {
   score: number | null;
@@ -17,7 +9,7 @@ export function AssessmentRiskCircle({ score, classification, categories, formCo
   categories?: AssessmentScoreResult["riskCategories"];
   formCoverage?: Pick<AssessmentAnswerCoverage, "answered" | "total" | "percent">;
 }) {
-  const selectedColor = categoryColor(classification?.color ?? categories?.find(band => band.id === classification?.id)?.color);
+  const selectedColor = riskColor(classification?.color ?? categories?.find(band => band.id === classification?.id)?.color);
   const radius = 64;
   return <div className="grid min-w-0 items-center gap-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-8">
     <div data-risk-circle className="relative mx-auto grid size-40 place-items-center sm:size-44" role="img" aria-label={`${score ?? "No"} points, ${classification?.label ?? "no risk category"}`}>

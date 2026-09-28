@@ -1,16 +1,30 @@
-import type { AssessmentScoreReviews, AssessmentSummary, AssessmentWorkflow } from "@niq/application-contracts";
-import { useEffect, useState } from "react";
+import type { AssessmentScoreReviews, AssessmentSummary, AssessmentWorkflow, ClinicalReview } from "@niq/application-contracts";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Check, ClipboardList } from "lucide-react";
 import { assessmentResultView } from "../features/assessments/AssessmentResult";
 import { assessmentRequest, getAssessment } from "../features/assessments/workflow-api";
 import { assessmentStatusLabels } from "../lib/patient-display";
+import { riskColor } from "../lib/risk-color";
 import { DateDisplay } from "./DateDisplay";
 import { StatusBadge } from "./StatusBadge";
 
-type ScorePoint = { reference: string; date: Date; score: number; risk: string | null };
+type ScorePoint = { reference: string; date: Date; score: number; risk: string | null; color?: string };
 const scoredStatuses = new Set(["SCORED", "COMPLETED"]);
 const assessmentStages = ["Draft", "Scored", "Under review", "Completed"] as const;
+
+function riskBadgeStyle(color: string | undefined): CSSProperties {
+  const selected = riskColor(color);
+  return { color: selected, borderColor: `color-mix(in srgb, ${selected} 35%, transparent)`, backgroundColor: `color-mix(in srgb, ${selected} 10%, transparent)` };
+}
+
+function StageTime({ value, upcoming }: { value: Date | null; upcoming: boolean }) {
+  if (!value || Number.isNaN(value.getTime())) return <span className="text-muted-foreground">{upcoming ? "Upcoming" : "Time unavailable"}</span>;
+  return <time dateTime={value.toISOString()} className="block text-muted-foreground">
+    <span className="block">{value.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+    <span className="block">{value.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" })}</span>
+  </time>;
+}
 
 function primaryStage(status: AssessmentSummary["status"]): number | null {
   switch (status) {
@@ -53,9 +67,9 @@ function scorePoint(summary: AssessmentSummary, record: AssessmentWorkflow, revi
   if (result?.score === null || result?.score === undefined || !result.clinicalUsePermitted) return null;
   if (summary.status === "COMPLETED") {
     if (reviewed?.overall.reviewedPoints === null || reviewed?.overall.reviewedPoints === undefined || !["ORIGINAL", "CONFIRMED"].includes(reviewed.risk?.status ?? "")) return null;
-    return { reference: summary.reference, date: summary.completedAt ?? new Date(result.calculatedAt), score: reviewed.overall.reviewedPoints, risk: reviewed.risk?.classification?.label ?? null };
+    return { reference: summary.reference, date: summary.completedAt ?? new Date(result.calculatedAt), score: reviewed.overall.reviewedPoints, risk: reviewed.risk?.classification?.label ?? null, color: reviewed.risk?.classification?.color };
   }
-  return { reference: summary.reference, date: new Date(result.calculatedAt), score: result.score, risk: result.classification?.label ?? null };
+  return { reference: summary.reference, date: new Date(result.calculatedAt), score: result.score, risk: result.classification?.label ?? null, color: result.classification?.color };
 }
 
 function ScoreTrend({ points }: { points: ScorePoint[] }) {
@@ -76,8 +90,8 @@ function ScoreTrend({ points }: { points: ScorePoint[] }) {
   const area = `M ${left} ${bottom} L ${coordinates.map(point => `${point.x} ${point.y}`).join(" L ")} L ${right} ${bottom} Z`;
   return <section className="surface flex h-full min-w-0 flex-col overflow-hidden p-5 sm:p-6" aria-label="NIQ score trend">
     <div className="flex flex-wrap items-start justify-between gap-2">
-      <div><h2 className="font-semibold">NIQ score trend</h2><p className="mt-1 text-sm text-muted-foreground">Recent scored assessments</p></div>
-      {latest.risk && <span className="rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs font-semibold">{latest.risk}</span>}
+      <div><h2 className="font-semibold">NIQ score trend</h2><p className="mt-1 text-sm text-muted-foreground">Scores approved for clinical use</p></div>
+      {latest.risk && <span className="rounded-full border px-2.5 py-1 text-xs font-semibold" style={riskBadgeStyle(latest.color)}>{latest.risk}</span>}
     </div>
     <div className="mt-5 flex flex-wrap items-end gap-x-3 gap-y-2">
       <strong className="text-4xl leading-none font-semibold tabular-nums">{latest.score}<span className="ml-1 text-base font-normal text-muted-foreground">pts</span></strong>
@@ -105,29 +119,51 @@ function ScoreTrend({ points }: { points: ScorePoint[] }) {
   </section>;
 }
 
+function ScoreTrendPlaceholder({ first, loading }: { first?: ScorePoint; loading: boolean }) {
+  return <section className="surface flex h-full min-w-0 flex-col overflow-hidden p-5 sm:p-6" aria-label="NIQ score trend">
+    <div><h2 className="font-semibold">NIQ score trend</h2><p className="mt-1 text-sm text-muted-foreground">Scores approved for clinical use</p></div>
+    <div className="flex flex-1 flex-col items-center justify-center py-6 text-center">
+      <svg className="mb-5 h-36 w-full max-w-72 text-primary" viewBox="0 0 280 140" role="img" aria-label="Illustration of a score trend waiting to be drawn">
+        <rect x="1" y="1" width="278" height="138" rx="18" fill="var(--primary)" fillOpacity=".04" stroke="var(--border)" />
+        <path d="M 30 110 H 252 M 30 72 H 252 M 30 34 H 252" stroke="var(--border)" strokeDasharray="4 6" />
+        <path d="M 44 97 C 92 86 105 93 145 68 S 208 65 237 40" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="5 7" opacity=".55" />
+        <circle cx="44" cy="97" r="6" fill="var(--card)" stroke="currentColor" strokeWidth="2" />
+        <circle cx="145" cy="68" r="6" fill="var(--card)" stroke="currentColor" strokeWidth="2" />
+        <circle cx="237" cy="40" r="7" fill="var(--card)" stroke="currentColor" strokeWidth="2" />
+      </svg>
+      <p className="font-semibold">{loading ? "Loading score history…" : first ? "One NIQ score available" : "No NIQ scores yet"}</p>
+      {first && !loading && <p className="mt-1 text-2xl font-semibold tabular-nums">{first.score} <span className="text-sm font-normal text-muted-foreground">points</span></p>}
+      <p className="mt-2 max-w-xs text-sm text-muted-foreground">{loading ? "Checking recent assessments." : first ? "Another score approved for clinical use will show how this patient's NIQ score has changed." : "Scores appear here after an assessment is scored and approved for clinical use. A trend line needs at least two scores."}</p>
+    </div>
+  </section>;
+}
+
 export function PatientAssessmentOverview({ history, state, organizationId, canRead, canEdit }: {
   history: AssessmentSummary[]; state: "loading" | "ready" | "error"; organizationId: string; canRead: boolean; canEdit: boolean;
 }) {
   const latest = history[0];
-  const [details, setDetails] = useState<{ latest: AssessmentWorkflow | null; scores: ScorePoint[]; loading: boolean }>({ latest: null, scores: [], loading: false });
+  const [details, setDetails] = useState<{ latest: AssessmentWorkflow | null; review: ClinicalReview | null; scores: ScorePoint[]; loading: boolean }>({ latest: null, review: null, scores: [], loading: false });
   useEffect(() => {
-    if (state !== "ready" || !latest || !canRead) { setDetails({ latest: null, scores: [], loading: false }); return; }
+    if (state !== "ready" || !latest || !canRead) { setDetails({ latest: null, review: null, scores: [], loading: false }); return; }
     let active = true;
-    setDetails({ latest: null, scores: [], loading: true });
+    setDetails({ latest: null, review: null, scores: [], loading: true });
     const scored = history.filter(item => scoredStatuses.has(item.status)).slice(0, 8);
     const candidates = [...new Map([latest, ...scored].map(item => [item.id, item])).values()];
-    Promise.allSettled(candidates.map(async summary => {
+    const reviewRequest = latest.status === "UNDER_REVIEW" || latest.status === "COMPLETED"
+      ? assessmentRequest<ClinicalReview>(organizationId, `/assessments/${latest.id}/clinical-review`).catch(() => null)
+      : Promise.resolve(null);
+    Promise.all([Promise.allSettled(candidates.map(async summary => {
       const record = await getAssessment(organizationId, summary.id);
       const reviewed = summary.status === "COMPLETED" ? await assessmentRequest<AssessmentScoreReviews>(organizationId, `/assessments/${summary.id}/score-reviews`).catch(() => null) : null;
       return { summary, record, reviewed };
-    })).then(results => {
+    })), reviewRequest]).then(([results, review]) => {
       if (!active) return;
       const loaded = results.flatMap(result => result.status === "fulfilled" ? [result.value] : []);
       const scores = loaded.flatMap(({ summary, record, reviewed }) => {
         const point = scoredStatuses.has(summary.status) ? scorePoint(summary, record, reviewed) : null;
         return point ? [point] : [];
       });
-      setDetails({ latest: loaded.find(item => item.summary.id === latest.id)?.record ?? null, scores, loading: false });
+      setDetails({ latest: loaded.find(item => item.summary.id === latest.id)?.record ?? null, review, scores, loading: false });
     });
     return () => { active = false; };
   }, [canRead, history, latest, organizationId, state]);
@@ -136,7 +172,9 @@ export function PatientAssessmentOverview({ history, state, organizationId, canR
   const remaining = details.latest?.progress.required === undefined ? null : Math.max(0, details.latest.progress.required - details.latest.progress.answered);
   const nextStep = latest ? assessmentNextStep(latest, remaining) : null;
   const stage = latest ? primaryStage(latest.status) : null;
-  const showTrend = canRead && details.scores.length >= 2;
+  const scoredAt = details.latest ? assessmentResultView(details.latest)?.result.calculatedAt : null;
+  const stageTimes = latest ? [latest.createdAt, scoredAt ? new Date(scoredAt) : null, details.review?.submittedAt ? new Date(details.review.submittedAt) : null, latest.completedAt] : [];
+  const showTrend = canRead && state !== "error";
   return <div className={`mb-5 grid min-w-0 items-stretch gap-5 ${showTrend ? "lg:grid-cols-2" : ""}`}>
     <section className="surface flex h-full min-w-0 flex-col overflow-hidden" aria-label="Latest assessment">
       <div className="flex flex-wrap items-start justify-between gap-4 bg-primary/5 p-5 sm:p-6">
@@ -155,17 +193,18 @@ export function PatientAssessmentOverview({ history, state, organizationId, canR
           <p className="mt-1 text-sm text-muted-foreground">{nextStep.detail}</p>
           {latest.status === "COMPLETED" && latest.completedAt && <p className="mt-2 text-xs text-muted-foreground">Completed <DateDisplay value={latest.completedAt} /></p>}
         </div>
-        {stage !== null && <ol className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Assessment stages">
-          {assessmentStages.map((label, index) => <li key={label} className={`flex min-w-0 items-center gap-2 text-xs ${index <= stage ? "font-semibold text-foreground" : "text-muted-foreground"}`} aria-current={index === stage ? "step" : undefined}>
-            <span className={`grid size-6 shrink-0 place-items-center rounded-full border ${index < stage ? "border-primary bg-primary text-primary-foreground" : index === stage ? "border-primary bg-primary/10 text-primary" : "border-border bg-muted/40"}`} aria-hidden="true">{index < stage ? <Check className="size-3.5" /> : index + 1}</span>
-            <span className="min-w-0">{label}</span>
+        {stage !== null && <div className="relative"><span className="absolute left-3 right-[12%] top-3 hidden h-px bg-border sm:block" aria-hidden="true" /><ol className="relative grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4" aria-label="Assessment stages">
+          {assessmentStages.map((label, index) => <li key={label} className={`relative min-w-0 text-xs ${index <= stage ? "font-semibold text-foreground" : "text-muted-foreground"}`} aria-current={index === stage ? "step" : undefined}>
+            <span className={`grid size-6 shrink-0 place-items-center rounded-full border ${index < stage ? "border-primary bg-primary text-primary-foreground" : index === stage ? "border-primary bg-primary/10 text-primary" : "border-border bg-card"}`} aria-hidden="true">{index < stage ? <Check className="size-3.5" /> : index + 1}</span>
+            <span className="mt-2 block">{label}</span>
+            <span className="mt-1 block font-normal"><StageTime value={stageTimes[index] ?? null} upcoming={index > stage} /></span>
           </li>)}
-        </ol>}
+        </ol></div>}
       </div>}
       {latest && canRead && details.latest && draft && <div className="border-t px-5 py-4 sm:px-6"><div className="flex items-center justify-between gap-3 text-sm"><span className="font-medium">Questionnaire progress</span><span className="text-muted-foreground">{details.latest.progress.percent === null ? "Unavailable" : `${details.latest.progress.answered}/${details.latest.progress.required} required answers`}</span></div>{details.latest.progress.percent !== null && <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Questionnaire progress" aria-valuenow={details.latest.progress.percent} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-primary" style={{ width: `${details.latest.progress.percent}%` }} /></div>}</div>}
-      {latest && canRead && latestScore && <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t px-5 py-4 sm:px-6"><span className="text-sm text-muted-foreground">NIQ score</span><strong className="text-2xl tabular-nums">{latestScore.score} <span className="text-sm font-normal">points</span></strong>{latestScore.risk && <span className="font-medium">{latestScore.risk}</span>}</div>}
+      {latest && canRead && latestScore && <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t px-5 py-4 sm:px-6"><span className="text-sm text-muted-foreground">NIQ score</span><strong className="text-2xl tabular-nums" style={latestScore.risk ? { color: riskColor(latestScore.color) } : undefined}>{latestScore.score} <span className="text-sm font-normal">points</span></strong>{latestScore.risk && <span data-testid="patient-risk-label" className="rounded-full border px-2.5 py-1 text-sm font-semibold" style={riskBadgeStyle(latestScore.color)}>{latestScore.risk}</span>}</div>}
       {latest && canRead && details.loading && <p className="border-t px-5 py-3 text-sm text-muted-foreground">Loading assessment details…</p>}
     </section>
-    {showTrend && <ScoreTrend points={details.scores} />}
+    {showTrend && (details.scores.length >= 2 ? <ScoreTrend points={details.scores} /> : <ScoreTrendPlaceholder first={details.scores[0]} loading={state === "loading" || details.loading} />)}
   </div>;
 }
