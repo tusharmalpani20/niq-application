@@ -40,9 +40,8 @@ button, input { font: inherit; }
 .brand-marks-auth .brand-marks-partner-logo { width: 8rem; height: 3.2rem; }
 .brand-marks-auth-card { margin-bottom: 1rem; }
 .brand-marks-auth-card .brand-marks-application-logo { width: 4.5rem; height: 2.7rem; }
-.brand-marks-auth-card .brand-marks-partner { flex-direction: column; align-items: flex-start; gap: .1rem; }
 .brand-marks-auth-card .brand-marks-partner-logo { width: 7rem; height: 2.2rem; }
-.brand-marks-auth-card .brand-marks-partner span { font-size: .68rem; }
+.brand-marks-auth-card .brand-marks-partner-caption { font-size: .68rem; }
 .brand-mark {
   display: grid;
   width: 2.5rem;
@@ -72,9 +71,8 @@ form { display: flex; flex-direction: column; }
   .welcome-panel { gap: 1.25rem; padding: 1.25rem; }
   .brand-lockup { padding: .35rem .5rem; }
   .brand-marks-auth .brand-marks-application-logo { width: 4.5rem; height: 2.7rem; }
-  .brand-marks-auth .brand-marks-partner { flex-direction: column; align-items: flex-start; gap: .1rem; }
   .brand-marks-auth .brand-marks-partner-logo { width: 6.7rem; height: 2.1rem; }
-  .brand-marks-auth .brand-marks-partner span { font-size: .65rem; }
+  .brand-marks-auth .brand-marks-partner-caption { font-size: .65rem; }
   .welcome-copy { margin: 0; padding: 0; }
   .welcome-copy .eyebrow { display: none; }
   .welcome-copy h1 { font-size: clamp(1.55rem, 5vw, 2rem); line-height: 1.08; }

@@ -150,15 +150,15 @@
 .workspace-brand-group { display: flex; min-width: 0; flex: 0 1 auto; align-items: center; gap: .9rem; }
 .brand-marks { display: flex; min-width: 0; align-items: center; gap: .9rem; }
 .brand-marks-application-logo { display: block; width: 4.6rem; height: 2.75rem; flex: 0 0 auto; object-fit: contain; }
-.brand-marks-partner { display: flex; min-width: 0; align-items: center; gap: .8rem; padding-left: .9rem; border-left: 1px solid var(--border); }
-.brand-marks-partner-logo { display: block; width: 7.7rem; height: 2.55rem; flex: 0 0 auto; object-fit: contain; }
-.brand-marks-partner span { color: var(--muted-foreground); font-size: .75rem; font-weight: 600; line-height: 1.15; white-space: nowrap; }
+.brand-marks-partner { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: .12rem; padding-left: .9rem; border-left: 1px solid var(--border); }
+.brand-marks-partner-logo { display: block; width: 7.7rem; height: 2.55rem; object-fit: contain; }
+.brand-marks-partner-caption { color: var(--muted-foreground); font-size: .72rem; font-weight: 600; line-height: 1; letter-spacing: .01em; white-space: nowrap; }
 .brand-marks-organization-logo { display: block; max-width: min(13rem, 100%); height: 2.75rem; object-fit: contain; object-position: left center; }
 .brand-marks-sidebar { gap: .35rem; }
 .brand-marks-sidebar .brand-marks-application-logo { width: 2.6rem; height: 2.25rem; }
-.brand-marks-sidebar .brand-marks-partner { flex-direction: column; align-items: flex-start; gap: 0; padding-left: .35rem; }
+.brand-marks-sidebar .brand-marks-partner { gap: 0; padding-left: .35rem; }
 .brand-marks-sidebar .brand-marks-partner-logo { width: 4.8rem; height: 1.55rem; }
-.brand-marks-sidebar .brand-marks-partner span { font-size: .52rem; }
+.brand-marks-sidebar .brand-marks-partner-caption { font-size: .52rem; }
 .workspace-account { position: relative; flex: 0 0 auto; }
 .workspace-account summary {
   display: flex;
@@ -254,7 +254,6 @@
 @media (max-width: 760px) {
   .workspace-header-inner { display: grid; height: auto; grid-template-columns: minmax(0, 1fr) auto auto; gap: .35rem .5rem; }
   .workspace-brand-group { grid-column: 1 / -1; grid-row: 1; }
-  .brand-marks-workspace .brand-marks-partner { flex-direction: column; align-items: flex-start; gap: .1rem; }
   .workspace-header-actions { display: contents; }
   .workspace-search { grid-column: 1; grid-row: 2; width: 100%; max-width: none; }
   .workspace-header-actions > span { grid-column: 2; grid-row: 2; }
@@ -278,7 +277,7 @@
   :is(.admin-workspace, .client-workspace) .content { padding-top: calc(8.5rem + env(safe-area-inset-top)); padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 480px) {
-  .brand-marks-workspace .brand-marks-partner span { font-size: .68rem; }
+  .brand-marks-workspace .brand-marks-partner-caption { font-size: .68rem; }
 }
 .client-workspace .patient-page-title { font-size: clamp(1.65rem, 3vw, 2rem); margin-bottom: 1.75rem; }
 .client-workspace .patient-list-header { flex-wrap: wrap; }

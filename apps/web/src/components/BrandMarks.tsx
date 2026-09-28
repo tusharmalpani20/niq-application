@@ -18,7 +18,7 @@ export function BrandMarks({ className = "", organizationLogoUrl = null, organiz
         <ApplicationLogo className="brand-marks-application-logo" decorative />
         <span className="brand-marks-partner">
           <img src="/eioms-logo.png" alt="" className="brand-marks-partner-logo" />
-          <span>Knowledge Partner</span>
+          <span className="brand-marks-partner-caption">Knowledge Partner</span>
         </span>
       </>}
   </span>;
