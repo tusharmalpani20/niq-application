@@ -38,8 +38,9 @@ import { ServiceError } from "./application";
 import { facilityAccessCondition } from "./facility-access";
 import { facilityTrend } from "./facility-performance";
 import { requestScoringOrganizationInfo, ScoringOrganizationInfoRequestError } from "./scoring-organization-info";
-import { countOverviewRisk, overviewRiskNutritionTargets, riskCategoryFromFinalSnapshot } from "./overview-risk";
+import { countOverviewRisk, overviewRiskNutritionTargets } from "./overview-risk";
 import { loadOverviewSummary } from "./overview-summary";
+import { loadAssessmentRiskCategories } from "./assessment-risk-categories";
 import { myAssessmentAction } from "./my-assessment-action";
 export { myAssessmentAction } from "./my-assessment-action";
 import type { ClinicalReviewStored } from "./clinical-review-state";
@@ -920,6 +921,7 @@ export class PostgresApplicationService implements ApplicationService {
       facilityId: facilities.id,
       facilityName: facilities.name,
       status: assessments.status,
+      currentSubmissionId: assessments.currentSubmissionId,
       createdByMembershipId: assessments.createdByMembershipId,
       clinicalReview: sql<unknown>`case when ${inArray(assessments.status, ["DRAFT", "SCORED", "COMPLETED"])} then ${assessments.clinicalReview} else null end`,
       createdAt: assessments.createdAt,
@@ -933,8 +935,13 @@ export class PostgresApplicationService implements ApplicationService {
       .where(and(eq(assessments.organizationId, organizationId), facilityAccessCondition(actor, organizationId, assessments.facilityId)))
       .orderBy(desc(assessments.createdAt));
     const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
+    const categories = await loadAssessmentRiskCategories(this.db, organizationId, rows, <T>(value: unknown): T => {
+      const encrypted = (value as { encrypted?: string })?.encrypted;
+      if (!encrypted) throw new ServiceError("CONFLICT", "Assessment risk data could not be read.");
+      return JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key)) as T;
+    });
     return rows.map((row) => {
-      const review = row.clinicalReview ? (() => {
+      const review = (row.status === "DRAFT" || row.status === "SCORED") && row.clinicalReview ? (() => {
         const encrypted = (row.clinicalReview as { encrypted?: string }).encrypted;
         if (!encrypted) throw new ServiceError("CONFLICT", "Assessment review data could not be read.");
         return JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key)) as ClinicalReviewStored;
@@ -951,7 +958,7 @@ export class PostgresApplicationService implements ApplicationService {
         },
         facility: row.facilityId && row.facilityName ? { id: row.facilityId, name: row.facilityName } : null,
         status: row.status,
-        riskCategory: row.status === "COMPLETED" ? riskCategoryFromFinalSnapshot(review?.finalSnapshot) : null,
+        riskCategory: categories.get(row.id) ?? null,
         myAction: !row.patientArchived && row.patientAccessible ? myAssessmentAction(actor, row, review?.correctionPerson?.membershipId ?? null) : null,
         isPriority: row.priorityMembershipId !== null,
         createdAt: row.createdAt,

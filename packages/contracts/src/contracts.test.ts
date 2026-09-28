@@ -73,12 +73,14 @@ describe("application contracts", () => {
       patient: { id: patientId, reference: "PAT-1", displayName: "Test Patient" },
       facility: null,
       status: "DRAFT",
+      riskCategory: null,
       myAction: "EDIT_DRAFT",
       isPriority: false,
       createdAt: "2026-09-15T10:00:00.000Z",
       completedAt: null,
     };
     expect(assessmentListResponseSchema.parse({ items: [summary] }).items[0]?.createdAt).toBeInstanceOf(Date);
+    expect(assessmentListResponseSchema.safeParse({ items: [{ ...summary, riskCategory: "high" }] }).success).toBe(true);
     expect(assessmentListResponseSchema.safeParse({ items: [{ ...summary, status: "UNKNOWN" }] }).success).toBe(false);
   });
 

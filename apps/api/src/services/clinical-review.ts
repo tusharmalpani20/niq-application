@@ -9,6 +9,7 @@ import type { AssessmentWorkflowService, WorkflowExecutor, WorkflowRow, StoredWo
 import { facilityAccessCondition } from "./facility-access";
 import { reviewState, canAdjustClinicalScore, appendAssessmentHistory } from "./clinical-review-state";
 import { AssessmentScoreReviewService } from "./assessment-score-reviews";
+import { loadAssessmentRiskCategories, type AssessmentRiskCategory } from "./assessment-risk-categories";
 const clinicalRoles:MembershipRole[]=["DOCTOR","NUTRITIONIST","OTHER_MEDICAL"];
 export class ClinicalReviewService {
  constructor(private service:AssessmentWorkflowService){}
@@ -47,21 +48,26 @@ export class ClinicalReviewService {
   return {riskClassificationPending,assessmentId:row.id,revision:s.revision,scoreRevision:await this.scoreRevision(tx,row),cycle:row.cycle,state:row.status==="COMPLETED"?"COMPLETED":s.correctionPerson?(row.status==="SCORED"?"AWAITING_RESUBMISSION":"RETURNED"):row.status==="UNDER_REVIEW"?(s.assignee?"IN_REVIEW":"QUEUED"):"NOT_SUBMITTED",assignee:s.assignee,correctionPerson:s.correctionPerson,previousReviewer:s.previousReviewer,defaultCorrectionPersonId:eligible.find(r=>r.membershipId===row.createdByMembershipId)?.membershipId??null,returnReason:history?s.returnReason:null,finalRemark:history?s.finalRemark:null,submittedAt:s.submittedAt,completedAt:s.completedAt,history:history?s.history:[],allowedActions:actions,canAdjustScores:canAdjustClinicalScore(this.service,row,actor),canEditDraft:row.status==="DRAFT"&&(!s.correctionPerson||correction)&&hasPermission(actor.role,"assessments.edit")};
  }
  async read(actor:Principal,org:string,id:string){await this.actor(actor,org);return this.projection(actor,await this.service.authorize(actor,org,id));}
- async queue(actor:Principal,org:string,query:{page:number;pageSize:number;search?:string;facilityId?:string;state?:string;mine?:boolean}):Promise<ClinicalReviewQueue>{
+ async queue(actor:Principal,org:string,query:{page:number;pageSize:number;search?:string;facilityId?:string;state?:string;mine?:boolean;risk?:AssessmentRiskCategory}):Promise<ClinicalReviewQueue>{
   await this.actor(actor,org);await this.service.applicationService.getOrganization(actor,org);
   const empty=():ClinicalReviewQueue=>({items:[],total:0,page:query.page,pageSize:query.pageSize});
   if(query.state&&!(["QUEUED","IN_REVIEW"] as string[]).includes(query.state))return empty();
   if(query.mine&&query.state==="QUEUED")return empty();
   const base=and(eq(assessments.organizationId,org),eq(assessments.status,"UNDER_REVIEW"),query.facilityId?eq(assessments.facilityId,query.facilityId):undefined,sql`${assessments.clinicalReview} is not null`,facilityAccessCondition(actor,org,assessments.facilityId),facilityAccessCondition(actor,org,patients.homeFacilityId),query.state==="QUEUED"?sql`${assessments.assignedToMembershipId} is null`:undefined,query.state==="IN_REVIEW"?sql`${assessments.assignedToMembershipId} is not null`:undefined,query.mine?eq(assessments.assignedToMembershipId,actor.membershipId):undefined);
   const search=query.search?.trim().toLowerCase();let matchingIds:string[]|undefined;
-  if(search){
-   // Names are encrypted, so search only lightweight queue candidates before paging.
-   const candidates=await this.service.db.select({id:assessments.id,serialNumber:assessments.serialNumber,patientPrefix:patients.referencePrefix,patientSerial:patients.serialNumber,profile:patients.encryptedProfile,facilityName:facilities.name}).from(assessments).innerJoin(patients,and(eq(patients.id,assessments.patientId),eq(patients.organizationId,org))).leftJoin(facilities,and(eq(facilities.organizationId,org),eq(facilities.id,assessments.facilityId))).where(base);
-   const key=patientDataKey(this.service.config.PATIENT_DATA_ENCRYPTION_KEY,this.service.config.SESSION_SECRET);
-   matchingIds=candidates.filter(row=>{
-    const name=(JSON.parse(decryptPatientData(row.profile,key)) as {name:string}).name;
+  if(search||query.risk){
+   // Search and risk both select candidates before count and pagination.
+   const candidates=await this.service.db.select({id:assessments.id,status:assessments.status,currentSubmissionId:assessments.currentSubmissionId,serialNumber:assessments.serialNumber,patientPrefix:patients.referencePrefix,patientSerial:patients.serialNumber,profile:patients.encryptedProfile,facilityName:facilities.name}).from(assessments).innerJoin(patients,and(eq(patients.id,assessments.patientId),eq(patients.organizationId,org))).leftJoin(facilities,and(eq(facilities.organizationId,org),eq(facilities.id,assessments.facilityId))).where(base);
+   const key=search?patientDataKey(this.service.config.PATIENT_DATA_ENCRYPTION_KEY,this.service.config.SESSION_SECRET):null;
+   let matches=search?candidates.filter(row=>{
+    const name=(JSON.parse(decryptPatientData(row.profile,key!)) as {name:string}).name;
     return `${formatAssessmentReference(row.serialNumber)} ${row.patientPrefix}-${row.patientSerial} ${name} ${row.facilityName??""}`.toLowerCase().includes(search);
-   }).map(row=>row.id);
+   }):candidates;
+   if(query.risk&&matches.length){
+    const categories=await loadAssessmentRiskCategories(this.service.db,org,matches,<T>(value:unknown)=>this.service.unseal<T>(value));
+    matches=matches.filter(row=>categories.get(row.id)===query.risk);
+   }
+   matchingIds=matches.map(row=>row.id);
    if(!matchingIds.length)return empty();
   }
   const where=and(base,matchingIds?inArray(assessments.id,matchingIds):undefined);

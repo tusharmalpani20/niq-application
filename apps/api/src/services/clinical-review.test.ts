@@ -168,6 +168,10 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   expect(matching.items.some(item=>item.assessmentId===second)).toBe(true);
   const byReference=await reviews.queue(admin,org,{page:1,pageSize:10,search:all.items[0]!.reference});
   expect(byReference.items.map(item=>item.assessmentId)).toEqual([all.items[0]!.assessmentId]);
+  const lowRisk=await reviews.queue(admin,org,{page:1,pageSize:1,risk:"low",facilityId:facility});
+  expect(lowRisk.total).toBeGreaterThanOrEqual(2);
+  expect((await app.listAssessments(admin,org)).find(item=>item.id===lowRisk.items[0]?.assessmentId)?.riskCategory).toBe("low");
+  expect((await reviews.queue(admin,org,{page:1,pageSize:1,risk:"high",facilityId:facility})).total).toBe(0);
  });
  test("completion versus adjustment serializes to a consistent final result",async()=>{
   const id=await assessment();await command(creator,id,"SEND");await command(nurse,id,"CLAIM");const state=await reviews.read(nurse,org,id);
