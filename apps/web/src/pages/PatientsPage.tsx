@@ -1,8 +1,9 @@
 import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility, Patient } from "@niq/application-contracts";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { ArrowDownUp, Building2, CalendarDays, ClipboardCheck, Clock3, Download, Eye, HeartHandshake, IdCard, Mail, Pencil, Phone, Search, Send, Star, TriangleAlert, UserRound, UsersRound } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,12 @@ type PatientRow = { id: string; reference: string; displayName: string; age: str
 
 const genderLabel = (gender: Patient["gender"]) => gender[0] + gender.slice(1).toLowerCase();
 const formatPatientDate = (value: string | Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(typeof value === "string" ? `${value}T00:00:00` : value));
+function PatientDetailField({ icon: FieldIcon, label, value, action, wide = false }: { icon: LucideIcon; label: string; value: ReactNode; action?: ReactNode; wide?: boolean }) {
+  return <div className={`flex min-w-0 items-start gap-3 rounded-xl border border-border/80 bg-muted/20 p-3.5 ${wide ? "sm:col-span-2" : ""}`}>
+    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FieldIcon className="size-4" aria-hidden="true" /></span>
+    <div className="min-w-0 flex-1"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 flex min-w-0 items-center gap-1 text-sm font-semibold text-foreground"><span className="min-w-0 break-words">{value}</span>{action}</dd></div>
+  </div>;
+}
 const patientRow = (patient: Patient, dates: Map<string, Date>): PatientRow => ({
   id: patient.id,
   reference: patient.reference,
@@ -263,28 +270,27 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
       </TabsList>
       <TabsContent id="details">
         <PatientAssessmentOverview history={history} state={historyState} organizationId={user.organizationId} membershipId={user.membershipId} canRead={canReadAssessment} canEdit={canEditAssessment} />
-        <Card className="surface gap-0 p-0">
-          <div className="border-b border-border px-5 py-4 sm:px-6"><h2 className="text-lg font-semibold">Patient details</h2></div>
-          <div className="grid min-w-0 md:grid-cols-2">
-            <section className="min-w-0 px-5 py-4 sm:px-6 md:border-r md:border-border" aria-labelledby="patient-identity-heading">
-              <h3 id="patient-identity-heading" className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground"><UserRound className="size-4 shrink-0 text-primary" aria-hidden="true" />Identity</h3>
-              <dl className="patient-definition m-0">
-                <div><dt className="flex min-w-0 items-center gap-2"><IdCard className="size-4 shrink-0 text-primary" aria-hidden="true" />Medical record number</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span className="min-w-0 break-all">{patient.medicalRecordNumber}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct medical record number" onPress={() => setCorrectingMrn(true)}><Pencil className="size-4" /></Button><Tooltip>Correct MRN</Tooltip></TooltipTrigger>}</dd></div>
-                <div><dt className="flex min-w-0 items-center gap-2"><CalendarDays className="size-4 shrink-0 text-primary" aria-hidden="true" />Date of birth</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct date of birth" onPress={() => setCorrectingDob(true)}><Pencil className="size-4" /></Button><Tooltip>Correct DOB</Tooltip></TooltipTrigger>}</dd></div>
-                <div><dt className="flex min-w-0 items-center gap-2"><UsersRound className="size-4 shrink-0 text-primary" aria-hidden="true" />Gender</dt><dd>{genderLabel(patient.gender)}</dd></div>
+        <section aria-labelledby="patient-details-heading">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 px-1"><h2 id="patient-details-heading" className="text-lg font-semibold">Patient details</h2><p className="text-xs text-muted-foreground">Registered <time dateTime={patient.createdAt.toISOString()}>{formatPatientDate(patient.createdAt)}</time></p></div>
+          <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+            <Card className="surface min-w-0 gap-0 overflow-hidden p-0" aria-labelledby="patient-identity-heading">
+              <div className="flex items-center gap-3 border-b border-border bg-primary/5 px-5 py-4"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><UserRound className="size-5" aria-hidden="true" /></span><div><h3 id="patient-identity-heading" className="font-semibold">Identity</h3><p className="text-xs text-muted-foreground">Record and personal information</p></div></div>
+              <dl className="grid min-w-0 gap-3 p-4 sm:grid-cols-2 sm:p-5">
+                <PatientDetailField icon={IdCard} label="Medical record number" value={patient.medicalRecordNumber} wide action={user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct medical record number" onPress={() => setCorrectingMrn(true)}><Pencil className="size-4" /></Button><Tooltip>Correct MRN</Tooltip></TooltipTrigger>} />
+                <PatientDetailField icon={CalendarDays} label="Date of birth" value={patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"} action={user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct date of birth" onPress={() => setCorrectingDob(true)}><Pencil className="size-4" /></Button><Tooltip>Correct DOB</Tooltip></TooltipTrigger>} />
+                <PatientDetailField icon={UsersRound} label="Gender" value={genderLabel(patient.gender)} />
               </dl>
-            </section>
-            <section className="min-w-0 border-t border-border px-5 py-4 sm:px-6 md:border-t-0" aria-labelledby="patient-contact-heading">
-              <h3 id="patient-contact-heading" className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground"><HeartHandshake className="size-4 shrink-0 text-primary" aria-hidden="true" />Care and contact</h3>
-              <dl className="patient-definition m-0">
-                <div><dt className="flex min-w-0 items-center gap-2"><Building2 className="size-4 shrink-0 text-primary" aria-hidden="true" />Home facility</dt><dd>{patient.homeFacility?.name ?? "—"}</dd></div>
-                <div><dt className="flex min-w-0 items-center gap-2"><Phone className="size-4 shrink-0 text-primary" aria-hidden="true" />Mobile number</dt><dd>{patient.phone || "Not provided"}</dd></div>
-                <div><dt className="flex min-w-0 items-center gap-2"><Mail className="size-4 shrink-0 text-primary" aria-hidden="true" />Email address</dt><dd>{patient.email || "Not provided"}</dd></div>
+            </Card>
+            <Card className="surface min-w-0 gap-0 overflow-hidden p-0" aria-labelledby="patient-contact-heading">
+              <div className="flex items-center gap-3 border-b border-border bg-primary/5 px-5 py-4"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><HeartHandshake className="size-5" aria-hidden="true" /></span><div><h3 id="patient-contact-heading" className="font-semibold">Care and contact</h3><p className="text-xs text-muted-foreground">Facility and contact information</p></div></div>
+              <dl className="grid min-w-0 gap-3 p-4 sm:grid-cols-2 sm:p-5">
+                <PatientDetailField icon={Building2} label="Home facility" value={patient.homeFacility?.name ?? "—"} />
+                <PatientDetailField icon={Phone} label="Mobile number" value={patient.phone || "Not provided"} />
+                <PatientDetailField icon={Mail} label="Email address" value={patient.email || "Not provided"} wide />
               </dl>
-            </section>
+            </Card>
           </div>
-          <p className="m-0 border-t border-border bg-muted/20 px-5 py-3 text-xs text-muted-foreground sm:px-6">Registered <time dateTime={patient.createdAt.toISOString()}>{formatPatientDate(patient.createdAt)}</time></p>
-        </Card>
+        </section>
       </TabsContent>
       <TabsContent id="assessments">
         {priorityError && <p role="alert" className="mb-3 text-sm text-destructive">{priorityError}</p>}
