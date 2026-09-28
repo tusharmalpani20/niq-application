@@ -1,16 +1,18 @@
-import type { AssessmentScoreReviews, AssessmentSummary, AssessmentWorkflow, ClinicalReview } from "@niq/application-contracts";
-import { useEffect, useState, type CSSProperties } from "react";
+import { membershipRoleLabels, type AssessmentScoreReviews, type AssessmentSummary, type AssessmentWorkflow, type ClinicalReview } from "@niq/application-contracts";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, ClipboardList } from "lucide-react";
+import { ArrowRight, Check, ClipboardList, UserRoundCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { assessmentResultView } from "../features/assessments/AssessmentResult";
-import { assessmentRequest, getAssessment } from "../features/assessments/workflow-api";
+import { changeClinicalReview, getClinicalReview } from "../features/assessments/clinical-review-api";
+import { AssessmentRequestError, assessmentRequest, getAssessment } from "../features/assessments/workflow-api";
 import { assessmentStatusLabels } from "../lib/patient-display";
 import { riskColor } from "../lib/risk-color";
 import { DateDisplay } from "./DateDisplay";
 import { StatusBadge } from "./StatusBadge";
 
-type ScorePoint = { reference: string; date: Date; score: number; risk: string | null; color?: string };
-const scoredStatuses = new Set(["SCORED", "COMPLETED"]);
+type ScorePoint = { reference: string; date: Date; score: number; risk: string | null; color?: string; status: AssessmentSummary["status"] };
+const scoredStatuses = new Set(["SCORED", "UNDER_REVIEW", "COMPLETED"]);
 const assessmentStages = ["Draft", "Scored", "Under review", "Completed"] as const;
 
 function riskBadgeStyle(color: string | undefined): CSSProperties {
@@ -46,7 +48,7 @@ function assessmentAction(latest: AssessmentSummary, canEdit: boolean): string {
   return "Open assessment";
 }
 
-function assessmentNextStep(latest: AssessmentSummary, remaining: number | null): { title: string; detail: string } {
+function assessmentNextStep(latest: AssessmentSummary, remaining: number | null, review: ClinicalReview | null): { title: string; detail: string } {
   switch (latest.status) {
     case "DRAFT":
       if (latest.myAction === "CORRECT_DRAFT") return { title: "Corrections requested", detail: "Open the draft to review and update the answers." };
@@ -56,7 +58,9 @@ function assessmentNextStep(latest: AssessmentSummary, remaining: number | null)
     case "SCORED": return latest.myAction === "SEND_FOR_REVIEW"
       ? { title: "Ready for clinical review", detail: "Review the score and send the assessment for clinical review." }
       : { title: "Score available", detail: "Open the assessment to view its score and next steps." };
-    case "UNDER_REVIEW": return { title: "Clinical review in progress", detail: "The assessment is with the clinical review team." };
+    case "UNDER_REVIEW": return review?.state === "QUEUED"
+      ? { title: "Awaiting reviewer", detail: "This assessment is ready for an eligible clinician to claim." }
+      : { title: "Clinical review in progress", detail: "The assessment is with the clinical review team." };
     case "COMPLETED": return { title: "Clinical review complete", detail: "The final assessment result is available to view." };
     default: return { title: assessmentStatusLabels[latest.status], detail: "Open the assessment for its current status and next steps." };
   }
@@ -67,9 +71,13 @@ function scorePoint(summary: AssessmentSummary, record: AssessmentWorkflow, revi
   if (result?.score === null || result?.score === undefined || !result.clinicalUsePermitted) return null;
   if (summary.status === "COMPLETED") {
     if (reviewed?.overall.reviewedPoints === null || reviewed?.overall.reviewedPoints === undefined || !["ORIGINAL", "CONFIRMED"].includes(reviewed.risk?.status ?? "")) return null;
-    return { reference: summary.reference, date: summary.completedAt ?? new Date(result.calculatedAt), score: reviewed.overall.reviewedPoints, risk: reviewed.risk?.classification?.label ?? null, color: reviewed.risk?.classification?.color };
+    return { reference: summary.reference, date: summary.completedAt ?? new Date(result.calculatedAt), score: reviewed.overall.reviewedPoints, risk: reviewed.risk?.classification?.label ?? null, color: reviewed.risk?.classification?.color, status: summary.status };
   }
-  return { reference: summary.reference, date: new Date(result.calculatedAt), score: result.score, risk: result.classification?.label ?? null, color: result.classification?.color };
+  return { reference: summary.reference, date: new Date(result.calculatedAt), score: result.score, risk: result.classification?.label ?? null, color: result.classification?.color, status: summary.status };
+}
+
+function scoreReviewLabel(status: ScorePoint["status"]): string {
+  return status === "COMPLETED" ? "Clinically reviewed score" : status === "UNDER_REVIEW" ? "Score under clinical review" : "Score awaiting clinical review";
 }
 
 function ScoreTrend({ points }: { points: ScorePoint[] }) {
@@ -90,7 +98,7 @@ function ScoreTrend({ points }: { points: ScorePoint[] }) {
   const area = `M ${left} ${bottom} L ${coordinates.map(point => `${point.x} ${point.y}`).join(" L ")} L ${right} ${bottom} Z`;
   return <section className="surface flex h-full min-w-0 flex-col overflow-hidden p-5 sm:p-6" aria-label="NIQ score trend">
     <div className="flex flex-wrap items-start justify-between gap-2">
-      <div><h2 className="font-semibold">NIQ score trend</h2><p className="mt-1 text-sm text-muted-foreground">Scores approved for clinical use</p></div>
+      <div><h2 className="font-semibold">NIQ score trend</h2><p className="mt-1 text-sm text-muted-foreground">{scoreReviewLabel(latest.status)}</p></div>
       {latest.risk && <span className="rounded-full border px-2.5 py-1 text-xs font-semibold" style={riskBadgeStyle(latest.color)}>{latest.risk}</span>}
     </div>
     <div className="mt-5 flex flex-wrap items-end gap-x-3 gap-y-2">
@@ -121,7 +129,7 @@ function ScoreTrend({ points }: { points: ScorePoint[] }) {
 
 function ScoreTrendPlaceholder({ first, loading }: { first?: ScorePoint; loading: boolean }) {
   if (first && !loading) return <section className="surface flex h-full min-w-0 flex-col overflow-hidden p-5 sm:p-6" aria-label="NIQ score trend">
-    <div><h2 className="font-semibold">NIQ score trend</h2><p className="mt-1 text-sm text-muted-foreground">One score available for clinical use</p></div>
+    <div><h2 className="font-semibold">NIQ score trend</h2><p className="mt-1 text-sm text-muted-foreground">{scoreReviewLabel(first.status)}</p></div>
     <div className="flex flex-1 flex-col justify-center py-6">
       <div className="rounded-2xl border border-border bg-muted/20 p-5">
         <p className="text-sm font-medium text-muted-foreground">First recorded score</p>
@@ -153,19 +161,23 @@ function ScoreTrendPlaceholder({ first, loading }: { first?: ScorePoint; loading
   </section>;
 }
 
-export function PatientAssessmentOverview({ history, state, organizationId, canRead, canEdit }: {
-  history: AssessmentSummary[]; state: "loading" | "ready" | "error"; organizationId: string; canRead: boolean; canEdit: boolean;
+export function PatientAssessmentOverview({ history, state, organizationId, membershipId, canRead, canEdit }: {
+  history: AssessmentSummary[]; state: "loading" | "ready" | "error"; organizationId: string; membershipId: string; canRead: boolean; canEdit: boolean;
 }) {
   const latest = history[0];
   const [details, setDetails] = useState<{ latest: AssessmentWorkflow | null; review: ClinicalReview | null; scores: ScorePoint[]; loading: boolean }>({ latest: null, review: null, scores: [], loading: false });
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState("");
+  const claimKey = useRef<string | null>(null);
   useEffect(() => {
     if (state !== "ready" || !latest || !canRead) { setDetails({ latest: null, review: null, scores: [], loading: false }); return; }
     let active = true;
+    setClaimError(""); claimKey.current = null;
     setDetails({ latest: null, review: null, scores: [], loading: true });
     const scored = history.filter(item => scoredStatuses.has(item.status)).slice(0, 8);
     const candidates = [...new Map([latest, ...scored].map(item => [item.id, item])).values()];
     const reviewRequest = latest.status === "UNDER_REVIEW" || latest.status === "COMPLETED"
-      ? assessmentRequest<ClinicalReview>(organizationId, `/assessments/${latest.id}/clinical-review`).catch(() => null)
+      ? getClinicalReview(organizationId, latest.id).catch(() => null)
       : Promise.resolve(null);
     Promise.all([Promise.allSettled(candidates.map(async summary => {
       const record = await getAssessment(organizationId, summary.id);
@@ -182,10 +194,33 @@ export function PatientAssessmentOverview({ history, state, organizationId, canR
     });
     return () => { active = false; };
   }, [canRead, history, latest, organizationId, state]);
+  const canClaim = latest?.status === "UNDER_REVIEW" && details.review?.state === "QUEUED" && details.review.allowedActions.includes("CLAIM");
+  const assignedToMe = !!details.review?.assignee && details.review.assignee.membershipId === membershipId;
+  async function claimReview() {
+    if (!latest || !canClaim || !details.review || claiming) return;
+    setClaiming(true); setClaimError("");
+    const requestKey = claimKey.current ?? crypto.randomUUID();
+    claimKey.current = requestKey;
+    try {
+      const review = await changeClinicalReview(organizationId, latest.id, {
+        action: "CLAIM", expectedRevision: details.review.revision, expectedScoreRevision: details.review.scoreRevision, requestKey,
+      });
+      claimKey.current = null;
+      setDetails(current => ({ ...current, review }));
+    } catch (cause) {
+      if (cause instanceof AssessmentRequestError && cause.status === 409) claimKey.current = null;
+      try {
+        const review = await getClinicalReview(organizationId, latest.id);
+        setDetails(current => ({ ...current, review }));
+        if (review.assignee?.membershipId === membershipId) { claimKey.current = null; return; }
+      } catch { /* Keep the last known review so the action can be retried. */ }
+      setClaimError(cause instanceof Error ? cause.message : "Could not claim this review. Please try again.");
+    } finally { setClaiming(false); }
+  }
   const latestScore = details.scores.find(point => point.reference === latest?.reference);
   const draft = latest?.status === "DRAFT" || latest?.status === "READY_FOR_SCORING";
   const remaining = details.latest?.progress.required === undefined ? null : Math.max(0, details.latest.progress.required - details.latest.progress.answered);
-  const nextStep = latest ? assessmentNextStep(latest, remaining) : null;
+  const nextStep = latest ? assessmentNextStep(latest, remaining, details.review) : null;
   const stage = latest ? primaryStage(latest.status) : null;
   const scoredAt = details.latest ? assessmentResultView(details.latest)?.result.calculatedAt : null;
   const stageTimes = latest ? [latest.createdAt, scoredAt ? new Date(scoredAt) : null, details.review?.submittedAt ? new Date(details.review.submittedAt) : null, latest.completedAt] : [];
@@ -200,12 +235,18 @@ export function PatientAssessmentOverview({ history, state, organizationId, canR
             : !latest ? <p className="mt-2 text-sm text-muted-foreground">No assessments yet.</p>
             : <><div className="mt-2 flex flex-wrap items-center gap-2"><span className="font-medium">{latest.reference}</span><StatusBadge status={assessmentStatusLabels[latest.status]} /></div><p className="mt-2 text-sm text-muted-foreground">{latest.facility?.name ?? "No facility"} · Started <DateDisplay value={latest.createdAt} /></p></>}
         </div></div>
-        {latest && canRead && <Link className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" to={`/assessments/${latest.reference}`}>{assessmentAction(latest, canEdit)}<ArrowRight className="size-4" /></Link>}
+        {latest && canRead && <div className="flex flex-wrap items-center gap-2">
+          {canClaim && <Button className="min-h-10" isDisabled={claiming} onPress={() => { void claimReview(); }}><UserRoundCheck className="size-4" aria-hidden="true" />{claiming ? "Claiming…" : "Claim review"}</Button>}
+          <Link className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${canClaim ? "border border-border bg-card text-foreground hover:bg-muted" : "bg-primary text-primary-foreground hover:bg-primary/90"}`} to={`/assessments/${latest.reference}`}>{assignedToMe && latest.status === "UNDER_REVIEW" ? "Continue review" : assessmentAction(latest, canEdit)}<ArrowRight className="size-4" /></Link>
+        </div>}
       </div>
       {latest && nextStep && <div className="flex flex-1 flex-col justify-center gap-5 px-5 py-5 sm:px-6">
         <div className="rounded-xl border border-primary/15 bg-card/80 p-4">
           <p className="font-semibold text-foreground">{nextStep.title}</p>
           <p className="mt-1 text-sm text-muted-foreground">{nextStep.detail}</p>
+          {details.review && (latest.status === "UNDER_REVIEW" || latest.status === "COMPLETED") && <p className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3 text-sm"><UserRoundCheck className="size-4 text-primary" aria-hidden="true" /><span className="text-muted-foreground">{latest.status === "COMPLETED" ? "Reviewed by" : "Assigned reviewer"}</span><span className="font-medium">{details.review.assignee ? `${details.review.assignee.displayName} · ${membershipRoleLabels[details.review.assignee.role]}` : "Not claimed yet"}</span></p>}
+          {!details.loading && !details.review && latest.status === "UNDER_REVIEW" && <p className="mt-3 text-sm text-muted-foreground">Reviewer details are unavailable.</p>}
+          {claimError && <p role="alert" className="mt-2 text-sm text-destructive">{claimError}</p>}
           {latest.status === "COMPLETED" && latest.completedAt && <p className="mt-2 text-xs text-muted-foreground">Completed <DateDisplay value={latest.completedAt} /></p>}
         </div>
         {stage !== null && <ol className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-4" aria-label="Assessment stages">

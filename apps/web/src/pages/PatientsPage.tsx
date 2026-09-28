@@ -262,7 +262,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
         <TabsTrigger id="assessments" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Assessments {historyState === "ready" && <span className="ml-2 text-xs">{history.length}</span>}</TabsTrigger>
       </TabsList>
       <TabsContent id="details">
-        <PatientAssessmentOverview history={history} state={historyState} organizationId={user.organizationId} canRead={canReadAssessment} canEdit={canEditAssessment} />
+        <PatientAssessmentOverview history={history} state={historyState} organizationId={user.organizationId} membershipId={user.membershipId} canRead={canReadAssessment} canEdit={canEditAssessment} />
         <Card className="surface gap-0 p-0">
           <div className="border-b border-border px-5 py-4 sm:px-6"><h2 className="text-lg font-semibold">Patient details</h2></div>
           <div className="grid min-w-0 md:grid-cols-2">

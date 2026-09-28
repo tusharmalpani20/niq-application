@@ -9,20 +9,29 @@ import { PatientDetailPage } from "./PatientsPage";
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patient = { id, organizationId: id, reference: "PAT-2", displayName: "Example Patient", medicalRecordNumber: "MRN-2", homeFacility: { id, name: "Hyderabad" }, dateOfBirth: "1999-03-20", gender: "UNKNOWN", phone: "9014936881", createdAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z" };
 const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: patient.homeFacility, status: "DRAFT", myAction: null, isPriority: false, createdAt: "2026-09-22T00:00:00Z", completedAt: null };
+const scoredDetail = (score: number) => ({
+  reference: "ASM-000001", binding: { version: "V1", checksum: "a".repeat(64) },
+  manifest: { sections: [{ id: "diet", fields: [{ id: "a", owner: "scoring" }] }] },
+  progress: { answered: 6, required: 6, percent: 100, sections: [] }, reports: [],
+  result: { formatVersion: 2, profile: "NIQ_FINAL_ASSESSMENT", complete: true, score,
+    classification: { id: "high", label: "High Risk", color: "red", interpretation: "" }, components: [{ id: "a", sectionId: "diet", label: "A", points: score, status: "answered" }],
+    version: "V1", checksum: "a".repeat(64), resultReference: `result-${score}`, calculatedAt: "2026-09-23T00:00:00Z", clinicalUsePermitted: true },
+});
 
-async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) => Promise<void> | void, entry = "/patients/PAT-2", options: { summaries?: unknown[]; details?: Record<string, unknown>; reviews?: Record<string, unknown>; clinicalReviews?: Record<string, unknown> } = {}) {
+async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) => Promise<void> | void, entry = "/patients/PAT-2", options: { summaries?: unknown[]; details?: Record<string, unknown>; reviews?: Record<string, unknown>; clinicalReviews?: Record<string, unknown>; onClaim?: (command: any) => unknown } = {}) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "HTMLButtonElement", "HTMLInputElement", "HTMLTextAreaElement", "HTMLSelectElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, HTMLTextAreaElement: dom.window.HTMLTextAreaElement, HTMLSelectElement: dom.window.HTMLSelectElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, NodeFilter: dom.window.NodeFilter, DocumentFragment: dom.window.DocumentFragment, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { value, configurable: true });
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {} });
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith("/patients/PAT-2")) return Response.json(patient);
     if (url.endsWith("/assessments")) return Response.json({ items: options.summaries ?? [assessment] });
     const reviewedId = url.match(/\/assessments\/([^/]+)\/score-reviews$/)?.[1];
     if (reviewedId && options.reviews?.[reviewedId]) return Response.json(options.reviews[reviewedId]);
     const clinicalId = url.match(/\/assessments\/([^/]+)\/clinical-review$/)?.[1];
+    if (clinicalId && init?.method === "POST" && options.onClaim) return Response.json(options.onClaim(JSON.parse(String(init.body))));
     if (clinicalId && options.clinicalReviews?.[clinicalId]) return Response.json(options.clinicalReviews[clinicalId]);
     const assessmentId = url.split("/assessments/")[1];
     if (assessmentId && options.details?.[assessmentId]) return Response.json(options.details[assessmentId]);
@@ -71,6 +80,39 @@ test("latest assessment follows the scored and clinical review stages", async ()
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("Clinical review in progress");
     expect(body.querySelector('[aria-label="Assessment stages"] [aria-current="step"]')?.textContent).toContain("Under review");
   }, "/patients/PAT-2", { summaries: [{ ...assessment, status: "UNDER_REVIEW" }] });
+});
+
+test("queued review can be claimed from the patient overview while its NIQ score remains visible", async () => {
+  const queued = { state: "QUEUED", assignee: null, allowedActions: ["CLAIM"], revision: 3, scoreRevision: 2, submittedAt: "2026-09-23T01:00:00Z" };
+  const reviewer = { membershipId: id, displayName: "Example User", role: "DOCTOR" };
+  await renderDetail("DOCTOR", async body => {
+    const card = body.querySelector('[aria-label="Latest assessment"]')!;
+    expect(card.textContent).toContain("Awaiting reviewer");
+    expect(card.textContent).toContain("Not claimed yet");
+    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("Score under clinical review");
+    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("30 points");
+    const claim = [...card.querySelectorAll("button")].find(button => button.textContent?.includes("Claim review"));
+    expect(claim).toBeDefined();
+    expect(card.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("View review");
+    await act(async () => { claim!.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(card.textContent).toContain("Example User · Doctor");
+    expect(card.textContent).toContain("Clinical review in progress");
+    expect(card.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("Continue review");
+    expect([...card.querySelectorAll("button")].some(button => button.textContent?.includes("Claim review"))).toBe(false);
+  }, "/patients/PAT-2", { summaries: [{ ...assessment, status: "UNDER_REVIEW" }], details: { [id]: scoredDetail(30) }, clinicalReviews: { [id]: queued }, onClaim: command => {
+    expect(command).toMatchObject({ action: "CLAIM", expectedRevision: 3, expectedScoreRevision: 2 });
+    return { ...queued, state: "IN_REVIEW", assignee: reviewer, allowedActions: ["COMPLETE"], revision: 4 };
+  } });
+});
+
+test("an assigned review names its reviewer and cannot be claimed by another user", async () => {
+  const review = { state: "IN_REVIEW", assignee: { membershipId: "another-member", displayName: "Dr Meera", role: "DOCTOR" }, allowedActions: [], revision: 4, scoreRevision: 2, submittedAt: "2026-09-23T01:00:00Z" };
+  await renderDetail("DOCTOR", body => {
+    const card = body.querySelector('[aria-label="Latest assessment"]')!;
+    expect(card.textContent).toContain("Dr Meera · Doctor");
+    expect([...card.querySelectorAll("button")].some(button => button.textContent?.includes("Claim review"))).toBe(false);
+    expect(card.querySelector('a[href="/assessments/ASM-000001"]')?.textContent).toContain("View review");
+  }, "/patients/PAT-2", { summaries: [{ ...assessment, status: "UNDER_REVIEW" }], clinicalReviews: { [id]: review } });
 });
 
 test("organization admin can open the MRN correction action", async () => {
@@ -130,7 +172,7 @@ test("completed assessments show the reviewed score and trend", async () => {
     expect(body.querySelector('[aria-label="Assessment stages"] time[datetime="2026-09-23T02:30:00.000Z"]')).not.toBeNull();
     expect(body.querySelector('[aria-label="Latest assessment"] [data-testid="patient-risk-label"]')?.getAttribute("style")).toContain("220, 61, 80");
     expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("+5 points");
-    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("Scores approved for clinical use");
+    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("Clinically reviewed score");
   }, "/patients/PAT-2", { summaries: [latest, previous], details: { [id]: detail(5), [latestId]: detail(8) }, reviews: {
     [id]: { overall: { reviewedPoints: 5 }, risk: { status: "ORIGINAL", classification: { label: "Low Risk" } } },
     [latestId]: { overall: { reviewedPoints: 10 }, risk: { status: "CONFIRMED", classification: { label: "Low Risk", color: "red" } } },
