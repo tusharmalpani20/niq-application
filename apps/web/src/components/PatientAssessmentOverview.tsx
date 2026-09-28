@@ -208,13 +208,17 @@ export function PatientAssessmentOverview({ history, state, organizationId, canR
           <p className="mt-1 text-sm text-muted-foreground">{nextStep.detail}</p>
           {latest.status === "COMPLETED" && latest.completedAt && <p className="mt-2 text-xs text-muted-foreground">Completed <DateDisplay value={latest.completedAt} /></p>}
         </div>
-        {stage !== null && <div className="relative"><span className="absolute left-3 right-[12%] top-3 hidden h-px bg-border sm:block" aria-hidden="true" /><ol className="relative grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4" aria-label="Assessment stages">
-          {assessmentStages.map((label, index) => <li key={label} className={`relative min-w-0 text-xs ${index <= stage ? "font-semibold text-foreground" : "text-muted-foreground"}`} aria-current={index === stage ? "step" : undefined}>
-            <span className={`grid size-6 shrink-0 place-items-center rounded-full border ${index < stage ? "border-primary bg-primary text-primary-foreground" : index === stage ? "border-primary bg-primary/10 text-primary" : "border-border bg-card"}`} aria-hidden="true">{index < stage ? <Check className="size-3.5" /> : index + 1}</span>
-            <span className="mt-2 block">{label}</span>
+        {stage !== null && <ol className="grid grid-cols-1 gap-x-3 gap-y-4 sm:grid-cols-4" aria-label="Assessment stages">
+          {assessmentStages.map((label, index) => <li key={label} className={`relative grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)] gap-x-2 text-xs sm:block ${index <= stage ? "font-semibold text-foreground" : "text-muted-foreground"}`} aria-current={index === stage ? "step" : undefined}>
+            {index < assessmentStages.length - 1 && <>
+              <span className={`absolute left-3 top-3 h-[calc(100%+1rem)] w-px sm:hidden ${index < stage ? "bg-primary" : "bg-border"}`} aria-hidden="true" />
+              <span className={`absolute left-3 top-3 hidden h-px w-[calc(100%+0.75rem)] sm:block ${index < stage ? "bg-primary" : "bg-border"}`} aria-hidden="true" />
+            </>}
+            <span className={`relative row-span-2 grid size-6 shrink-0 place-items-center rounded-full border sm:row-auto ${index < stage ? "border-primary bg-primary text-primary-foreground" : index === stage ? "border-primary bg-card text-primary" : "border-border bg-card"}`} aria-hidden="true">{index < stage ? <Check className="size-3.5" /> : index + 1}</span>
+            <span className="block sm:mt-2">{label}</span>
             <span className="mt-1 block font-normal"><StageTime value={stageTimes[index] ?? null} upcoming={index > stage} /></span>
           </li>)}
-        </ol></div>}
+        </ol>}
       </div>}
       {latest && canRead && details.latest && draft && <div className="border-t px-5 py-4 sm:px-6"><div className="flex items-center justify-between gap-3 text-sm"><span className="font-medium">Questionnaire progress</span><span className="text-muted-foreground">{details.latest.progress.percent === null ? "Unavailable" : `${details.latest.progress.answered}/${details.latest.progress.required} required answers`}</span></div>{details.latest.progress.percent !== null && <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Questionnaire progress" aria-valuenow={details.latest.progress.percent} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-primary" style={{ width: `${details.latest.progress.percent}%` }} /></div>}</div>}
       {latest && canRead && latestScore && <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t px-5 py-4 sm:px-6"><span className="text-sm text-muted-foreground">NIQ score</span><strong className="text-2xl tabular-nums" style={latestScore.risk ? { color: riskColor(latestScore.color) } : undefined}>{latestScore.score} <span className="text-sm font-normal">points</span></strong>{latestScore.risk && <span data-testid="patient-risk-label" className="rounded-full border px-2.5 py-1 text-sm font-semibold" style={riskBadgeStyle(latestScore.color)}>{latestScore.risk}</span>}</div>}
