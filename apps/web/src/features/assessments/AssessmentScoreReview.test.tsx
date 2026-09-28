@@ -68,6 +68,9 @@ test("summary keeps scored answers readable without score edit controls", async 
   expect(document.querySelector('[aria-label^="Adjust "]')).toBeNull();
   await click("Disease status");
   expect(document.body.textContent).toContain("Metastatic");
+  const openSection = document.getElementById("score-section-disease")?.parentElement;
+  expect(openSection?.className).toContain("border-primary/30");
+  expect(openSection?.querySelector('button[aria-expanded="true"]')?.className).toContain("aria-expanded:bg-primary/10");
   expect(document.querySelector("form")).toBeNull();
   await click("Face scan");
   expect(document.getElementById("score-section-face_scan")?.hidden).toBe(false);

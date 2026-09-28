@@ -57,7 +57,7 @@ function riskCardAppearance(classification: AssessmentScoreResult["classificatio
   return { className: `${base} ${riskCardClasses[presetRiskColor(selected) ? selected : "neutral"]}` };
 }
 const summaryRowClass = "flex items-center gap-2 px-2 py-1 sm:px-3";
-const summaryToggleClass = "min-h-11 min-w-0 flex-1 justify-start gap-2 whitespace-normal text-left";
+const summaryToggleClass = "min-h-11 min-w-0 flex-1 justify-start gap-2 whitespace-normal text-left hover:bg-primary/5 hover:text-primary aria-expanded:bg-primary/10 aria-expanded:text-primary aria-expanded:hover:bg-primary/15";
 
 export function AssessmentScoreReview({ record, organizationId, renderScan, reportsContent, onSaved, canReview = true, scanStatus = "Face scan unavailable" }: {
   onSaved?: () => Promise<unknown>; canReview?: boolean; scanStatus?: string; record: AssessmentWorkflow; organizationId: string; renderScan: (active: boolean) => ReactNode; reportsContent: ReactNode;
@@ -109,8 +109,8 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   const scan = data?.scan;
   const scanSummaryStatus = scanStatus === "Face scan ready" ? "Not done" : scanStatus;
   const scoreCard = riskCardAppearance(revised ? null : result.classification);
-  const scanSection = <div className="overflow-hidden rounded-xl border border-border">
-    <div className={`${summaryRowClass} ${expanded === "face_scan" ? "bg-muted/40" : ""}`}>
+  const scanSection = <div className={`overflow-hidden rounded-xl border ${expanded === "face_scan" ? "border-primary/30" : "border-border"}`}>
+    <div className={`${summaryRowClass} ${expanded === "face_scan" ? "bg-primary/5" : ""}`}>
       <Button variant="ghost" className={summaryToggleClass} aria-expanded={expanded === "face_scan"} aria-controls="score-section-face_scan" onPress={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>{expanded === "face_scan" ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}<assessmentSectionIcons.face_scan className="size-4 shrink-0" aria-hidden="true" />Face scan</Button>
       <div className="w-28 shrink-0 text-right text-sm tabular-nums sm:w-36"><p className="text-xs text-muted-foreground">{scanSummaryStatus}</p><p>Vital IQ {scan?.niqPoints ?? "—"}</p>{scan?.overridden && <p className="text-brand-ink">Reviewed Vital IQ {scan.reviewedPoints ?? "—"}</p>}</div>
     </div>
@@ -142,8 +142,8 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
       const open = expanded === section.id;
       const completion = coverage.sections.find(item => item.id === section.id);
       const Icon = assessmentSectionIcons[section.id as keyof typeof assessmentSectionIcons] ?? ClipboardList;
-      return <Fragment key={section.id}><div className="overflow-hidden rounded-xl border border-border">
-        <div className={`${summaryRowClass} ${open ? "bg-muted/40" : ""}`}>
+      return <Fragment key={section.id}><div className={`overflow-hidden rounded-xl border ${open ? "border-primary/30" : "border-border"}`}>
+        <div className={`${summaryRowClass} ${open ? "bg-primary/5" : ""}`}>
           <Button variant="ghost" className={summaryToggleClass} aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}<Icon className="size-4 shrink-0" aria-hidden="true" />{section.title}</Button>
           <div className="w-28 shrink-0 text-right text-sm tabular-nums sm:w-36"><p className="text-xs text-muted-foreground">{completion?.answered ?? 0}/{completion?.total ?? 0} questions answered</p><p className="font-medium">{revised ? "NIQ " : ""}{points(section.points)}</p>{revised && effective?.reviewedPoints !== null && effective?.reviewedPoints !== undefined && <p className="text-brand-ink">Reviewed {points(effective.reviewedPoints)}{effective.overridden ? " · Override" : ""}</p>}</div>
         </div>
@@ -154,8 +154,8 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
     })}{!sections.some(section => section.id === "personal_details") && scanSection}</div>
     {[{id: "reports", title: "Attachments", status: `${record.reports.length} reports`}].map(section => {
       const open = expanded === section.id;
-      return <div key={section.id} className="mt-2 overflow-hidden rounded-xl border border-border">
-        <div className={`${summaryRowClass} ${open ? "bg-muted/40" : ""}`}>
+      return <div key={section.id} className={`mt-2 overflow-hidden rounded-xl border ${open ? "border-primary/30" : "border-border"}`}>
+        <div className={`${summaryRowClass} ${open ? "bg-primary/5" : ""}`}>
           <Button variant="ghost" className={summaryToggleClass} aria-expanded={open} aria-controls={`score-section-${section.id}`} onPress={() => setExpanded(open ? null : section.id)}>{open ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}<assessmentSectionIcons.reports className="size-4 shrink-0" aria-hidden="true" />{section.title}</Button>
           <span className="w-28 shrink-0 text-right text-sm text-muted-foreground tabular-nums sm:w-36">{section.status}</span>
         </div>
