@@ -39,13 +39,16 @@ async function withBrandingPage(verify: (body: HTMLElement, requests: Array<Reco
   }
 }
 
-test("removing an organization logo stages the Nutra-IQ fallback and saves a null logo key", async () => {
+test("removing an organization logo restores both default marks and saves a null logo key", async () => {
   await withBrandingPage(async (body, requests) => {
+    expect(body.querySelector('[aria-label="Brand preview"] [aria-label="Example Health Network logo"]')).not.toBeNull();
+    expect(body.querySelector('[aria-label="Brand preview"] img[src="/eioms-logo.png"]')).toBeNull();
     const remove = body.querySelector<HTMLButtonElement>('button[aria-label="Remove organization logo"]');
     expect(remove).toBeDefined();
     await act(async () => remove!.click());
     expect(body.querySelector('img[alt="Nutra-IQ"]')).not.toBeNull();
-    expect(body.textContent).toContain("Nutra-IQ logo will appear after saving.");
+    expect(body.textContent).toContain("NIQ and EIOMS logos will appear after saving.");
+    expect(body.querySelector('[aria-label="Brand preview"] img[src="/eioms-logo.png"]')).not.toBeNull();
     const undo = Array.from(body.querySelectorAll("button")).find(button => button.textContent === "Undo");
     await act(async () => undo!.click());
     expect(body.querySelector('img[alt="Organization logo"]')).not.toBeNull();

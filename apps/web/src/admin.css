@@ -147,7 +147,18 @@
   text-align: left;
   cursor: pointer;
 }
-.workspace-brand-logo { width: 4.6rem; height: 2.75rem; flex: 0 0 auto; object-fit: contain; }
+.workspace-brand-group { display: flex; min-width: 0; flex: 0 1 auto; align-items: center; gap: .9rem; }
+.brand-marks { display: flex; min-width: 0; align-items: center; gap: .9rem; }
+.brand-marks-application-logo { display: block; width: 4.6rem; height: 2.75rem; flex: 0 0 auto; object-fit: contain; }
+.brand-marks-partner { display: flex; min-width: 0; align-items: center; gap: .8rem; padding-left: .9rem; border-left: 1px solid var(--border); }
+.brand-marks-partner-logo { display: block; width: 7.7rem; height: 2.55rem; flex: 0 0 auto; object-fit: contain; }
+.brand-marks-partner span { color: var(--muted-foreground); font-size: .75rem; font-weight: 600; line-height: 1.15; white-space: nowrap; }
+.brand-marks-organization-logo { display: block; max-width: min(13rem, 100%); height: 2.75rem; object-fit: contain; object-position: left center; }
+.brand-marks-sidebar { gap: .35rem; }
+.brand-marks-sidebar .brand-marks-application-logo { width: 2.6rem; height: 2.25rem; }
+.brand-marks-sidebar .brand-marks-partner { flex-direction: column; align-items: flex-start; gap: 0; padding-left: .35rem; }
+.brand-marks-sidebar .brand-marks-partner-logo { width: 4.8rem; height: 1.55rem; }
+.brand-marks-sidebar .brand-marks-partner span { font-size: .52rem; }
 .workspace-account { position: relative; flex: 0 0 auto; }
 .workspace-account summary {
   display: flex;
@@ -240,17 +251,34 @@
 .workspace-account summary:focus-visible,
 .workspace-account-menu button:focus-visible,
 .workspace-dock-item:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (max-width: 760px) {
+  .workspace-header-inner { display: grid; height: auto; grid-template-columns: minmax(0, 1fr) auto auto; gap: .35rem .5rem; }
+  .workspace-brand-group { grid-column: 1 / -1; grid-row: 1; }
+  .brand-marks-workspace .brand-marks-partner { flex-direction: column; align-items: flex-start; gap: .1rem; }
+  .workspace-header-actions { display: contents; }
+  .workspace-search { grid-column: 1; grid-row: 2; width: 100%; max-width: none; }
+  .workspace-header-actions > span { grid-column: 2; grid-row: 2; }
+  .workspace-account { grid-column: 3; grid-row: 2; }
+  .client-workspace .content { padding-top: calc(8.5rem + env(safe-area-inset-top)); }
+}
 @media (max-width: 640px) {
   .workspace-header { left: .65rem; right: .65rem; top: calc(.5rem + env(safe-area-inset-top)); }
-  .workspace-header-inner { height: 4rem; padding: .4rem .5rem .4rem .65rem; border-radius: 1.25rem; }
+  .workspace-header-inner { padding: .4rem .5rem .4rem .65rem; border-radius: 1.25rem; }
   .workspace-brand { gap: .45rem; }
-  .workspace-brand-logo { width: 3.8rem; height: 2.5rem; }
+  .brand-marks-workspace .brand-marks-application-logo { width: 3.8rem; height: 2.5rem; }
+  .workspace-brand-group { gap: .5rem; }
+  .brand-marks-workspace { gap: .5rem; }
+  .brand-marks-workspace .brand-marks-partner { padding-left: .5rem; }
+  .brand-marks-workspace .brand-marks-partner-logo { width: 6.8rem; height: 2.2rem; }
   .workspace-account-name { display: none; }
   .workspace-account summary { gap: .15rem; padding: .2rem; }
   .workspace-account summary > svg { display: none; }
   .workspace-dock { bottom: calc(.5rem + env(safe-area-inset-bottom)); gap: 0; }
   .workspace-dock-item { min-width: min(22vw, 5rem); min-height: 3rem; padding-inline: .2rem; font-size: .64rem; }
-  .client-workspace .content { padding-top: calc(5.5rem + env(safe-area-inset-top)); padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
+  .client-workspace .content { padding-top: calc(8.5rem + env(safe-area-inset-top)); padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 480px) {
+  .brand-marks-workspace .brand-marks-partner span { font-size: .68rem; }
 }
 .client-workspace .patient-page-title { font-size: clamp(1.65rem, 3vw, 2rem); margin-bottom: 1.75rem; }
 .client-workspace .patient-list-header { flex-wrap: wrap; }

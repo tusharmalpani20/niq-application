@@ -2,11 +2,11 @@ import { canVisitOrganizationRoute } from "../lib/route-permissions";
 import { membershipRoleLabels } from "@niq/application-contracts";
 import type { AuthenticatedUser } from "@niq/application-contracts";
 import { Bell, LogOut } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { ApplicationLogo } from "./ApplicationLogo";
+import { BrandMarks } from "./BrandMarks";
 import { WorkspaceSearch } from "./WorkspaceSearch";
 import { signOut } from "../lib/api";
 import { useBranding } from "../lib/branding-context";
@@ -26,13 +26,6 @@ const managementNavigation = [
   { to: "/settings/branding", label: "Branding", icon: "palette" },
   { to: "/settings/scoring", label: "Scoring connection", icon: "link" },
 ];
-
-function OrganizationMark({ url }: { url: string | null }) {
-  const [failed, setFailed] = useState(false);
-  return url && !failed
-    ? <img src={url} alt="" className="workspace-brand-logo" onError={() => setFailed(true)} />
-    : <ApplicationLogo className="workspace-brand-logo" decorative />;
-}
 
 function navigateWithGuard(to: string, navigate: ReturnType<typeof useNavigate>) {
   const proceed = () => navigate(to);
@@ -70,10 +63,10 @@ function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignO
 
   return <header className="workspace-header" aria-label="Workspace header">
     <div className="workspace-header-inner">
-      <button type="button" className="workspace-brand" aria-label={`${branding.displayName} home`} onClick={() => go("/")}>
-        <OrganizationMark key={branding.logoUrl} url={branding.logoUrl} />
+      <button type="button" className="workspace-brand-group workspace-brand" aria-label="Go to overview" onClick={() => go("/")}>
+        <BrandMarks key={branding.logoUrl} className="brand-marks-workspace" organizationLogoUrl={branding.logoUrl} organizationName={branding.displayName} />
       </button>
-      <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
+      <div className="workspace-header-actions ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
         <WorkspaceSearch key={`${user.organizationId}:${user.role}`} user={user} onNavigate={go} />
         <span role="img" aria-label="Notifications" className="grid size-9 shrink-0 place-items-center text-foreground">
           <Bell className="size-[18px]" aria-hidden="true" />

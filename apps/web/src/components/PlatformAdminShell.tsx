@@ -12,6 +12,7 @@ import {
 import { signOut } from "../lib/api";
 import { Icon } from "../lib/icons";
 import { ApplicationLogo } from "./ApplicationLogo";
+import { BrandMarks } from "./BrandMarks";
 
 const navigation = [
   { to: "/admin/organizations", label: "Organizations", icon: "building" },
@@ -35,7 +36,7 @@ function AdminSidebar({ user, onSignOut }: { user: AuthenticatedUser; onSignOut:
       <div className="flex h-11 items-center gap-2 group-data-[collapsible=icon]:justify-center">
         {collapsed
           ? <Button variant="ghost" size="icon" className="size-10" aria-label="Expand navigation" onPress={() => setOpen(true)}><ApplicationLogo className="h-8 w-10 object-contain" decorative /></Button>
-          : <><Link className="grid size-12 shrink-0 place-items-center" to="/admin/organizations" aria-label="NIQ home"><ApplicationLogo className="size-full object-contain" decorative /></Link><strong className="min-w-0 flex-1 truncate text-sm">NIQ</strong><SidebarTrigger aria-label="Collapse navigation" /></>}
+          : <><Link className="flex min-w-0 flex-1 items-center" to="/admin/organizations" aria-label="NIQ home"><BrandMarks className="brand-marks-sidebar" /></Link><SidebarTrigger aria-label="Collapse navigation" /></>}
       </div>
     </SidebarHeader>
     <SidebarContent><SidebarGroup><SidebarGroupContent><SidebarMenu className="gap-1">

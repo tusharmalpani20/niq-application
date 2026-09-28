@@ -13,6 +13,7 @@ import { brandingFromOrganization } from "../lib/branding";
 import { useBranding } from "../lib/branding-context";
 import { ORGANIZATION_LOGO_ACCEPT, organizationLogoError, organizationLogoPayload } from "../lib/organization-onboarding";
 import { ApplicationLogo } from "../components/ApplicationLogo";
+import { BrandMarks } from "../components/BrandMarks";
 
 const hex = /^#[0-9a-fA-F]{6}$/;
 function settingsFrom(org: Organization) {
@@ -159,7 +160,7 @@ export function BrandingPage() {
                   }}><X aria-hidden="true" /></Button>}
                 </div>
                 <span className="text-xs text-muted-foreground">PNG, JPEG or WebP · Up to 2 MB</span>
-                {removeLogo && <div className="flex flex-wrap items-center gap-2"><span className="text-xs text-muted-foreground">Nutra-IQ logo will appear after saving.</span><Button type="button" variant="link" size="sm" isDisabled={disabled} onPress={() => setRemoveLogo(false)}>Undo</Button></div>}
+                {removeLogo && <div className="flex flex-wrap items-center gap-2"><span className="text-xs text-muted-foreground">NIQ and EIOMS logos will appear after saving.</span><Button type="button" variant="link" size="sm" isDisabled={disabled} onPress={() => setRemoveLogo(false)}>Undo</Button></div>}
                 {logo && <><span className="truncate text-xs text-muted-foreground">{logo.name} · Unsaved</span><Button type="button" variant="ghost" size="sm" isDisabled={disabled} onPress={() => { setLogo(null); if (fileInput.current) fileInput.current.value = ""; }}>Undo logo change</Button></>}
               </div>
             </div>
@@ -171,6 +172,8 @@ export function BrandingPage() {
           </div>
           <section className="grid gap-3 rounded-xl border p-4" aria-label="Brand preview">
             <h2 className="m-0 text-sm font-semibold">Preview</h2>
+            <div className="w-fit max-w-full rounded-xl border bg-card px-3 py-2"><BrandMarks key={logoUrl} organizationLogoUrl={logoUrl} organizationName={draft.displayName} /></div>
+            <p className="text-sm text-muted-foreground">An uploaded organization logo replaces both default marks in the workspace header.</p>
             <p className="text-sm text-muted-foreground">Primary is used for buttons and navigation. Secondary is used for accents.</p>
             <div className="flex flex-wrap items-center gap-3">
               <span className="rounded-lg px-4 py-2 font-medium" style={{ backgroundColor: draft.primaryColor, color: "#ffffff" }}>Primary button</span>
