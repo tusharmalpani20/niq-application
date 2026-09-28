@@ -5,6 +5,7 @@ export * from "./assessment-form";
 export * from "./assessment-form-validation";
 export * from "./assessment-answer-coverage";
 export * from "./assessment-workflow";
+export * from "./overview-summary";
 
 export const DEFAULT_ORGANIZATION_BRANDING = {
   primaryColor: "#3BB9BD",
@@ -57,11 +58,26 @@ export const overviewRiskSchema = z.object({
 export type OverviewRisk = z.infer<typeof overviewRiskSchema>;
 
 export const overviewActivitySchema = z.object({
-  items: z.array(z.object({
-    id: idSchema,
+  days: z.array(z.object({
+    day: z.iso.date(),
+    assessmentCount: z.number().int().nonnegative(),
+    milestoneCount: z.number().int().nonnegative(),
+    actions: z.array(z.enum(["ASSESSMENT_CREATED", "ASSESSMENT_SUBMITTED", "CLINICAL_REVIEW_COMPLETE"])),
+  })),
+});
+
+export const overviewActivityDaySchema = z.object({
+  assessmentCount: z.number().int().nonnegative(),
+  milestoneCount: z.number().int().nonnegative(),
+  pageCount: z.number().int().nonnegative(),
+  assessments: z.array(z.object({
     assessmentId: idSchema,
-    action: z.enum(["ASSESSMENT_CREATED", "ASSESSMENT_SUBMITTED", "CLINICAL_REVIEW_COMPLETE"]),
-    occurredAt: z.coerce.date(),
+    reference: z.string(),
+    patientDisplayName: z.string(),
+    milestones: z.array(z.object({
+      action: z.enum(["ASSESSMENT_CREATED", "ASSESSMENT_SUBMITTED", "CLINICAL_REVIEW_COMPLETE"]),
+      occurredAt: z.coerce.date(),
+    })),
   })),
 });
 

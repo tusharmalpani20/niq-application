@@ -1,6 +1,6 @@
 import { correctPatientDob as correctDob, correctPatientMrn as correctMrn, editPatient, editOrganizationUser } from "./profile-edits";
 import { faceScanSessionSchema } from "../../../../packages/contracts/src/face-scan";
-import { formatAssessmentReference, hasPermission, type AssessmentSummary, type Permission } from "@niq/application-contracts";
+import { formatAssessmentReference, hasPermission, type Permission } from "@niq/application-contracts";
 import type { ApplicationConfig } from "@niq/application-config";
 import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CorrectPatientDob, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
@@ -39,6 +39,9 @@ import { facilityAccessCondition } from "./facility-access";
 import { facilityTrend } from "./facility-performance";
 import { requestScoringOrganizationInfo, ScoringOrganizationInfoRequestError } from "./scoring-organization-info";
 import { countOverviewRisk, overviewRiskNutritionTargets } from "./overview-risk";
+import { loadOverviewSummary } from "./overview-summary";
+import { myAssessmentAction } from "./my-assessment-action";
+export { myAssessmentAction } from "./my-assessment-action";
 import type { ClinicalReviewStored } from "./clinical-review-state";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -53,22 +56,6 @@ const patientProfileSchema = z.object({
   phone: z.string().optional(),
   email: z.string().optional(),
 });
-export function myAssessmentAction(
-  actor: Principal,
-  row: Pick<typeof assessments.$inferSelect, "status" | "createdByMembershipId">,
-  correctionPersonId: string | null,
-): AssessmentSummary["myAction"] {
-  if (actor.platformRole !== "USER") return null;
-  const ownerId = correctionPersonId ?? row.createdByMembershipId;
-  if (ownerId !== actor.membershipId) return null;
-  if (row.status === "DRAFT" && hasPermission(actor.role, "assessments.edit")) {
-    return correctionPersonId ? "CORRECT_DRAFT" : "EDIT_DRAFT";
-  }
-  if (row.status === "SCORED" && hasPermission(actor.role, "assessments.submit")) {
-    return "SEND_FOR_REVIEW";
-  }
-  return null;
-}
 type PatientRecord = {
   id: string;
   organizationId: string;
@@ -996,6 +983,10 @@ export class PostgresApplicationService implements ApplicationService {
     }
     return { assessmentId, isPriority };
   }
+  async getOverviewSummary(actor: Principal, organizationId: string, priorityPage: number, recentPage: number) {
+    this.ensureOrganizationAccess(actor, organizationId, "patients.read");
+    return loadOverviewSummary(this.db, this.config, actor, organizationId, priorityPage, recentPage);
+  }
   async getOverviewRisk(actor: Principal, organizationId: string) {
     this.ensureOrganizationAccess(actor, organizationId, "assessments.read");
     const rows = await this.db.select({
@@ -1044,15 +1035,16 @@ export class PostgresApplicationService implements ApplicationService {
       submissionSnapshot: row.currentSubmissionId ? bySubmissionId.get(row.currentSubmissionId)?.snapshot : null,
     })), unseal);
   }
-  async getOverviewActivity(actor: Principal, organizationId: string, from: Date, to: Date) {
+  async getOverviewActivity(actor: Principal, organizationId: string, from: Date, to: Date, timeZone: string) {
     this.ensureOrganizationAccess(actor, organizationId, "assessments.read");
     if (actor.platformRole !== "USER") throw new ServiceError("FORBIDDEN", "Personal activity requires a signed-in organization member.");
     const actions = ["ASSESSMENT_CREATED", "ASSESSMENT_SUBMITTED", "CLINICAL_REVIEW_COMPLETE"] as const;
+    const day = sql<string>`to_char(${auditEvents.occurredAt} at time zone ${timeZone}, 'YYYY-MM-DD')`;
     const rows = await this.db.select({
-      id: auditEvents.id,
-      assessmentId: auditEvents.assessmentId,
-      action: auditEvents.action,
-      occurredAt: auditEvents.occurredAt,
+      day,
+      assessmentCount: sql<number>`count(distinct ${auditEvents.assessmentId})::int`,
+      milestoneCount: sql<number>`count(distinct (${auditEvents.assessmentId}, ${auditEvents.action}))::int`,
+      actions: sql<string[]>`array_agg(distinct ${auditEvents.action})`,
     }).from(auditEvents)
       .innerJoin(assessments, and(eq(assessments.organizationId, auditEvents.organizationId), eq(assessments.id, auditEvents.assessmentId)))
       .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
@@ -1064,8 +1056,76 @@ export class PostgresApplicationService implements ApplicationService {
         eq(patients.isArchived, false),
         facilityAccessCondition(actor, organizationId, patients.homeFacilityId),
         facilityAccessCondition(actor, organizationId, assessments.facilityId),
-      )).orderBy(desc(auditEvents.occurredAt));
-    return { items: rows.filter((row): row is typeof row & { assessmentId: string; action: typeof actions[number] } => !!row.assessmentId && actions.includes(row.action as typeof actions[number])) };
+      )).groupBy(day).orderBy(desc(day));
+    return { days: rows.map(row => ({ ...row, actions: row.actions.filter((action): action is typeof actions[number] => actions.includes(action as typeof actions[number])) })) };
+  }
+  async getOverviewActivityDay(actor: Principal, organizationId: string, from: Date, to: Date, page: number) {
+    this.ensureOrganizationAccess(actor, organizationId, "assessments.read");
+    if (actor.platformRole !== "USER") throw new ServiceError("FORBIDDEN", "Personal activity requires a signed-in organization member.");
+    const actions = ["ASSESSMENT_CREATED", "ASSESSMENT_SUBMITTED", "CLINICAL_REVIEW_COMPLETE"] as const;
+    const condition = and(
+      eq(auditEvents.organizationId, organizationId),
+      eq(auditEvents.actorMembershipId, actor.membershipId),
+      inArray(auditEvents.action, [...actions]),
+      gte(auditEvents.occurredAt, from), lt(auditEvents.occurredAt, to),
+      eq(patients.isArchived, false),
+      facilityAccessCondition(actor, organizationId, patients.homeFacilityId),
+      facilityAccessCondition(actor, organizationId, assessments.facilityId),
+    );
+    const source = () => this.db.select({
+      assessmentId: auditEvents.assessmentId,
+      firstAction: sql<number>`min(case ${auditEvents.action} when 'ASSESSMENT_CREATED' then 0 when 'ASSESSMENT_SUBMITTED' then 1 else 2 end)`,
+      latestAt: sql<Date>`max(${auditEvents.occurredAt})`,
+    }).from(auditEvents)
+      .innerJoin(assessments, and(eq(assessments.organizationId, auditEvents.organizationId), eq(assessments.id, auditEvents.assessmentId)))
+      .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
+      .where(condition);
+    const [count] = await this.db.select({
+      assessmentCount: sql<number>`count(distinct ${auditEvents.assessmentId})::int`,
+      milestoneCount: sql<number>`count(distinct (${auditEvents.assessmentId}, ${auditEvents.action}))::int`,
+    }).from(auditEvents)
+      .innerJoin(assessments, and(eq(assessments.organizationId, auditEvents.organizationId), eq(assessments.id, auditEvents.assessmentId)))
+      .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
+      .where(condition);
+    const assessmentCount = count?.assessmentCount ?? 0;
+    const milestoneCount = count?.milestoneCount ?? 0;
+    const pageCount = Math.ceil(assessmentCount / 4);
+    if (page > pageCount) return { assessmentCount, milestoneCount, pageCount, assessments: [] };
+    const rows = await source().groupBy(auditEvents.assessmentId)
+      .orderBy(sql`min(case ${auditEvents.action} when 'ASSESSMENT_CREATED' then 0 when 'ASSESSMENT_SUBMITTED' then 1 else 2 end)`, desc(sql`max(${auditEvents.occurredAt})`), auditEvents.assessmentId)
+      .limit(4).offset((page - 1) * 4);
+    const ids = rows.flatMap(row => row.assessmentId ? [row.assessmentId] : []);
+    const details = ids.length ? await this.db.select({
+      assessmentId: assessments.id,
+      serialNumber: assessments.serialNumber,
+      patientEncryptedProfile: patients.encryptedProfile,
+    }).from(assessments)
+      .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
+      .where(and(eq(assessments.organizationId, organizationId), inArray(assessments.id, ids), eq(patients.isArchived, false),
+        facilityAccessCondition(actor, organizationId, patients.homeFacilityId), facilityAccessCondition(actor, organizationId, assessments.facilityId))) : [];
+    const detailById = new Map(details.map(detail => [detail.assessmentId, detail]));
+    const milestones = ids.length ? await this.db.select({
+      assessmentId: auditEvents.assessmentId,
+      action: auditEvents.action,
+      occurredAt: sql<Date>`max(${auditEvents.occurredAt})`,
+    }).from(auditEvents)
+      .innerJoin(assessments, and(eq(assessments.organizationId, auditEvents.organizationId), eq(assessments.id, auditEvents.assessmentId)))
+      .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
+      .where(and(condition, inArray(auditEvents.assessmentId, ids)))
+      .groupBy(auditEvents.assessmentId, auditEvents.action) : [];
+    const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
+    return { assessmentCount, milestoneCount, pageCount, assessments: rows.flatMap(row => {
+      if (!row.assessmentId) return [];
+      const detail = detailById.get(row.assessmentId);
+      return detail ? [{
+      assessmentId: row.assessmentId,
+      reference: formatAssessmentReference(detail.serialNumber),
+      patientDisplayName: patientProfileSchema.parse(JSON.parse(decryptPatientData(detail.patientEncryptedProfile, key))).name,
+      milestones: milestones.filter(item => item.assessmentId === row.assessmentId && actions.includes(item.action as typeof actions[number]))
+        .map(item => ({ action: item.action as typeof actions[number], occurredAt: item.occurredAt }))
+        .sort((a, b) => actions.indexOf(a.action) - actions.indexOf(b.action)),
+    }] : [];
+    }) };
   }
   async invitationAccess(actor: Principal, organizationId: string) {
     this.ensureOrganizationAccess(actor, organizationId, "users.manage");

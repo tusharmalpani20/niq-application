@@ -198,12 +198,25 @@ export function createApp(dependencies: AppDependencies) {
     context.header("Cache-Control", "private, no-store");
     return context.json(await dependencies.service!.getOverviewRisk(context.get("principal"), context.req.valid("param").organizationId));
   });
-  app.get("/v1/organizations/:organizationId/overview-activity", zValidator("param", idParamsSchema, validationFailure), zValidator("query", z.object({ from: z.iso.datetime({ offset: true }), to: z.iso.datetime({ offset: true }) }), validationFailure), async (context) => {
-    const { from, to } = context.req.valid("query");
+  app.get("/v1/organizations/:organizationId/overview-summary", zValidator("param", idParamsSchema, validationFailure), zValidator("query", z.object({ priorityPage: z.coerce.number().int().min(1).max(100000).default(1), recentPage: z.coerce.number().int().min(1).max(100000).default(1) }), validationFailure), async (context) => {
+    context.header("Cache-Control", "private, no-store");
+    const { priorityPage, recentPage } = context.req.valid("query");
+    return context.json(jsonValue(await dependencies.service!.getOverviewSummary(context.get("principal"), context.req.valid("param").organizationId, priorityPage, recentPage)));
+  });
+  app.get("/v1/organizations/:organizationId/overview-activity", zValidator("param", idParamsSchema, validationFailure), zValidator("query", z.object({ from: z.iso.datetime({ offset: true }), to: z.iso.datetime({ offset: true }), timeZone: z.string().min(1).max(64) }), validationFailure), async (context) => {
+    const { from, to, timeZone } = context.req.valid("query");
     const start = new Date(from), end = new Date(to);
     if (end <= start || end.getTime() - start.getTime() > 32 * 24 * 60 * 60 * 1000) throw new ServiceError("VALIDATION_ERROR", "Choose a calendar month to view.");
+    try { new Intl.DateTimeFormat("en-US", { timeZone }); } catch { throw new ServiceError("VALIDATION_ERROR", "Choose a valid time zone."); }
     context.header("Cache-Control", "private, no-store");
-    return context.json(await dependencies.service!.getOverviewActivity(context.get("principal"), context.req.valid("param").organizationId, start, end));
+    return context.json(await dependencies.service!.getOverviewActivity(context.get("principal"), context.req.valid("param").organizationId, start, end, timeZone));
+  });
+  app.get("/v1/organizations/:organizationId/overview-activity/day", zValidator("param", idParamsSchema, validationFailure), zValidator("query", z.object({ from: z.iso.datetime({ offset: true }), to: z.iso.datetime({ offset: true }), page: z.coerce.number().int().min(1).max(100000) }), validationFailure), async (context) => {
+    const { from, to, page } = context.req.valid("query");
+    const start = new Date(from), end = new Date(to);
+    if (end <= start || end.getTime() - start.getTime() > 25 * 60 * 60 * 1000) throw new ServiceError("VALIDATION_ERROR", "Choose a calendar day to view.");
+    context.header("Cache-Control", "private, no-store");
+    return context.json(await dependencies.service!.getOverviewActivityDay(context.get("principal"), context.req.valid("param").organizationId, start, end, page));
   });
   app.get("/v1/organizations/:organizationId/users", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json({ items: await dependencies.service!.listUsers(context.get("principal"), context.req.valid("param").organizationId) }));
   app.get("/v1/organizations/:organizationId/invitation-access", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json(await dependencies.service!.invitationAccess(context.get("principal"), context.req.valid("param").organizationId)));

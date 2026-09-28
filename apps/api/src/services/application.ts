@@ -1,6 +1,7 @@
 import type {
   MembershipRole,
   OverviewRisk,
+  OverviewSummary,
   AcceptInvitation,
   ActivateScoring,
   BootstrapAdmin,
@@ -97,7 +98,9 @@ export interface ApplicationService {
   setAssessmentPriority(actor: Principal, organizationId: string, assessmentId: string, isPriority: boolean): Promise<{ assessmentId: string; isPriority: boolean }>;
   getAssessmentPriority(actor: Principal, organizationId: string, assessmentId: string): Promise<boolean>;
   getOverviewRisk(actor: Principal, organizationId: string): Promise<OverviewRisk>;
-  getOverviewActivity(actor: Principal, organizationId: string, from: Date, to: Date): Promise<{ items: { id: string; assessmentId: string; action: "ASSESSMENT_CREATED" | "ASSESSMENT_SUBMITTED" | "CLINICAL_REVIEW_COMPLETE"; occurredAt: Date }[] }>;
+  getOverviewSummary(actor: Principal, organizationId: string, priorityPage: number, recentPage: number): Promise<OverviewSummary>;
+  getOverviewActivity(actor: Principal, organizationId: string, from: Date, to: Date, timeZone: string): Promise<{ days: { day: string; assessmentCount: number; milestoneCount: number; actions: ("ASSESSMENT_CREATED" | "ASSESSMENT_SUBMITTED" | "CLINICAL_REVIEW_COMPLETE")[] }[] }>;
+  getOverviewActivityDay(actor: Principal, organizationId: string, from: Date, to: Date, page: number): Promise<{ assessmentCount: number; milestoneCount: number; pageCount: number; assessments: { assessmentId: string; reference: string; patientDisplayName: string; milestones: { action: "ASSESSMENT_CREATED" | "ASSESSMENT_SUBMITTED" | "CLINICAL_REVIEW_COMPLETE"; occurredAt: Date }[] }[] }>;
   invitationAccess(actor: Principal, organizationId: string): Promise<{ allFacilities: boolean }>;
   manageUserInvitation(actor: Principal, organizationId: string, invitationId: string, action: "revoke" | "regenerate", context: RequestContext): Promise<{ invitation: unknown; token?: string }>;
   inviteUser(actor: Principal, organizationId: string, input: CreateInvitation, context: RequestContext): Promise<{ invitation: unknown; token: string }>;

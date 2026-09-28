@@ -1,5 +1,5 @@
 import { hasPermission } from "@niq/application-contracts";
-import type { AssessmentSummary, AuthenticatedUser, ClinicalReviewQueue, Patient } from "@niq/application-contracts";
+import type { AuthenticatedUser, ClinicalReviewQueue, OverviewSummary } from "@niq/application-contracts";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { ArrowRight, Building2, ClipboardCheck, ClipboardList, ClipboardPenLine, Link2, Plus, Send, Sparkles, Star, Stethoscope, TriangleAlert, UsersRound } from "lucide-react";
@@ -9,13 +9,12 @@ import { OverviewUsage } from "../components/OverviewUsage";
 import { GreetingIllustration } from "../components/GreetingIllustration";
 import { PriorityEmptyIllustration, RecentPatientsEmptyIllustration } from "../components/DashboardEmptyIllustrations";
 import { listClinicalReviews } from "../features/assessments/clinical-review-api";
-import { getOrganization, getOverviewRisk, listAssessments, listOrganizationUsers, listPatients } from "../lib/api";
-import { overviewGrowth } from "./overview-growth";
+import { getOrganization, getOverviewRisk, getOverviewSummary, listOrganizationUsers } from "../lib/api";
 import { OverviewStatCard } from "./OverviewStatCard";
 import { AssessmentActivityCalendar, RiskOverviewCards } from "./OverviewClinicalCards";
 import { OverviewBottomCards } from "./OverviewBottomCards";
 
-type Overview = { patients: Patient[]; assessments: AssessmentSummary[]; risk: Awaited<ReturnType<typeof getOverviewRisk>> | null; riskLoaded: boolean; highRiskPatients: number | null; highRiskPatients30DaysAgo: number | null; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
+type Overview = { summary: OverviewSummary; risk: Awaited<ReturnType<typeof getOverviewRisk>> | null; riskLoaded: boolean; highRiskPatients: number | null; highRiskPatients30DaysAgo: number | null; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
 
 export function greetingForHour(hour: number): "Good morning" | "Good afternoon" | "Good evening" {
   if (hour >= 6 && hour < 12) return "Good morning";
@@ -65,24 +64,25 @@ function QuickActions({ isAdmin, canCreateAssessment, queuedReviews, myReviews, 
   </section>;
 }
 
-function PriorityAssessments({ assessments }: { assessments: AssessmentSummary[] }) {
-  const [page, setPage] = useState(1);
-  const priority = assessments.filter(item => item.isPriority);
-  const pageSize = 3;
-  const pageCount = Math.max(1, Math.ceil(priority.length / pageSize));
-  const currentPage = Math.min(page, pageCount);
-  const pageItems = priority.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+function PriorityAssessments({ organizationId, initial }: { organizationId: string; initial: OverviewSummary["priority"] }) {
+  const [priority, setPriority] = useState(initial);
+  const [loading, setLoading] = useState(false);
+  const [pageError, setPageError] = useState(false);
+  const pageCount = Math.max(1, Math.ceil(priority.total / priority.pageSize));
+  const changePage = (page: number) => {
+    setLoading(true); setPageError(false);
+    getOverviewSummary(organizationId, page, 1).then(result => setPriority(result.priority)).catch(() => setPageError(true)).finally(() => setLoading(false));
+  };
   return <section className="surface flex min-w-0 flex-col p-5" aria-label="Priority assessments">
-    <div className="flex items-start justify-between gap-3"><div><h2 className="flex items-center gap-2 font-semibold"><Star className="size-5 fill-amber-400 text-amber-500" aria-hidden="true" />Priority assessments</h2><p className="mt-1 text-xs text-muted-foreground">Assessments you marked for follow-up</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">{priority.length}</span></div>
-    {priority.length ? <><ul className="mt-4 divide-y divide-border">{pageItems.map(item => <li key={item.id}><Link className="flex items-center justify-between gap-3 py-3 text-sm text-foreground hover:text-primary" to={`/assessments/${item.reference}`}><span className="min-w-0"><strong className="block truncate font-medium">{item.patient.displayName}</strong><span className="text-xs text-muted-foreground">{item.reference} · {item.status.replaceAll("_", " ").toLowerCase()}</span></span><ArrowRight className="size-4 shrink-0" aria-hidden="true" /></Link></li>)}</ul>{pageCount > 1 && <nav aria-label="Priority assessment pages" className="mt-3 flex justify-center border-t pt-3 text-sm"><div className="flex items-center gap-2"><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button><span>Page {currentPage} of {pageCount}</span><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>Next</button></div></nav>}</> : <div className="mt-4 flex flex-1 flex-col items-center justify-center rounded-xl border border-primary/10 bg-primary/[.025] px-5 py-5 text-center"><PriorityEmptyIllustration /><p className="mt-1 text-sm font-medium">Nothing marked yet</p><p className="mt-1 text-xs text-muted-foreground">Mark an assessment as priority to keep it here.</p><Link className="mt-3 inline-block text-sm text-primary hover:underline" to="/assessments">Browse assessments</Link></div>}
+    <div className="flex items-start justify-between gap-3"><div><h2 className="flex items-center gap-2 font-semibold"><Star className="size-5 fill-amber-400 text-amber-500" aria-hidden="true" />Priority assessments</h2><p className="mt-1 text-xs text-muted-foreground">Assessments you marked for follow-up</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">{priority.total}</span></div>
+    {priority.total ? <><ul className="mt-4 divide-y divide-border">{priority.items.map(item => <li key={item.id}><Link className="flex items-center justify-between gap-3 py-3 text-sm text-foreground hover:text-primary" to={`/assessments/${item.reference}`}><span className="min-w-0"><strong className="block truncate font-medium">{item.patient.displayName}</strong><span className="text-xs text-muted-foreground">{item.reference} · {item.status.replaceAll("_", " ").toLowerCase()}</span></span><ArrowRight className="size-4 shrink-0" aria-hidden="true" /></Link></li>)}</ul>{pageError && <p role="alert" className="mt-2 text-xs text-destructive">That page could not be loaded. Please try again.</p>}{pageCount > 1 && <nav aria-label="Priority assessment pages" className="mt-3 flex justify-center border-t pt-3 text-sm"><div className="flex items-center gap-2"><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={priority.page === 1 || loading} onClick={() => changePage(priority.page - 1)}>Previous</button><span>Page {priority.page} of {pageCount}</span><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={priority.page === pageCount || loading} onClick={() => changePage(priority.page + 1)}>Next</button></div></nav>}</> : <div className="mt-4 flex flex-1 flex-col items-center justify-center rounded-xl border border-primary/10 bg-primary/[.025] px-5 py-5 text-center"><PriorityEmptyIllustration /><p className="mt-1 text-sm font-medium">Nothing marked yet</p><p className="mt-1 text-xs text-muted-foreground">Mark an assessment as priority to keep it here.</p><Link className="mt-3 inline-block text-sm text-primary hover:underline" to="/assessments">Browse assessments</Link></div>}
   </section>;
 }
 
-function RecentPatients({ patients }: { patients: Patient[] }) {
-  const recent = [...patients].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 4);
+function RecentPatients({ recent }: { recent: OverviewSummary["recent"]["items"] }) {
   return <section className="surface mt-7 p-5" aria-label="Recently registered patients">
     <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Recently registered patients</h2><Link className="text-sm text-primary hover:underline" to="/patients">Register or find a patient</Link></div>
-    {recent.length ? <ul className="divide-y">{recent.map(patient => <li key={patient.id} className="flex items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0"><Link className="font-medium text-foreground hover:underline" to={`/patients/${patient.reference}`}>{patient.displayName}</Link><p className="text-xs text-muted-foreground">{patient.reference} · {patient.homeFacility?.name ?? "No home facility"}</p></div><span className="shrink-0 text-xs text-muted-foreground">{patient.createdAt.toLocaleDateString("en-GB")}</span></li>)}</ul> : <div className="flex min-h-40 flex-col items-center justify-center text-center"><RecentPatientsEmptyIllustration /><p className="mt-1 text-sm text-muted-foreground">No patients have been registered yet.</p></div>}
+    {recent.length ? <ul className="divide-y">{recent.map(({ patient }) => <li key={patient.id} className="flex items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0"><Link className="font-medium text-foreground hover:underline" to={`/patients/${patient.reference}`}>{patient.displayName}</Link><p className="text-xs text-muted-foreground">{patient.reference} · {patient.homeFacility?.name ?? "No home facility"}</p></div><span className="shrink-0 text-xs text-muted-foreground">{patient.createdAt.toLocaleDateString("en-GB")}</span></li>)}</ul> : <div className="flex min-h-40 flex-col items-center justify-center text-center"><RecentPatientsEmptyIllustration /><p className="mt-1 text-sm text-muted-foreground">No patients have been registered yet.</p></div>}
   </section>;
 }
 
@@ -114,10 +114,10 @@ export function DashboardPage() {
       supplemental = { ...supplemental, ...patch };
       if (active) setData(current => current ? { ...current, ...patch } : current);
     };
-    Promise.all([listPatients(org), isAdmin || isClinician ? listAssessments(org) : Promise.resolve([] as AssessmentSummary[])]).then(([patients, assessments]) => {
+    getOverviewSummary(org).then(summary => {
       if (!active) return;
       setData({
-        patients, assessments, risk: null, riskLoaded: !isAdmin && !isClinician, highRiskPatients: null, highRiskPatients30DaysAgo: null,
+        summary, risk: null, riskLoaded: !isAdmin && !isClinician, highRiskPatients: null, highRiskPatients30DaysAgo: null,
         queuedReviews: null, myReviews: null, seats: 0, userLimit: null, enabledUsers: null, pendingInvitations: 0,
         ...supplemental,
       });
@@ -137,16 +137,16 @@ export function DashboardPage() {
     return () => { active = false; };
   }, [user.organizationId, isAdmin, isClinician, attempt]);
 
-  const now = new Date();
-  const patientGrowth = data ? overviewGrowth(data.patients.map(item => item.createdAt), now) : null;
-  const completedGrowth = data ? overviewGrowth(data.assessments.flatMap(item => item.status === "COMPLETED" && item.completedAt ? [item.completedAt] : []), now) : null;
+  const growth = (total: number, added: number) => ({ total, added, percent: total > added ? Math.round(added / (total - added) * 100) : null });
+  const patientGrowth = data ? growth(data.summary.patientCount, data.summary.patientsAdded30Days) : null;
+  const completedGrowth = data ? growth(data.summary.completedCount, data.summary.completedAdded30Days) : null;
   const highRiskTrend = data?.highRiskPatients != null && data.highRiskPatients30DaysAgo != null && data.highRiskPatients !== data.highRiskPatients30DaysAgo
     ? { change: data.highRiskPatients - data.highRiskPatients30DaysAgo, percent: null, increaseIsGood: false }
     : undefined;
-  const myAssessmentActions = data?.assessments.filter(item => !!item.myAction) ?? [];
-  const readyToSend = myAssessmentActions.filter(item => item.myAction === "SEND_FOR_REVIEW").length;
-  const correctionsToMake = myAssessmentActions.filter(item => item.myAction === "CORRECT_DRAFT").length;
-  const scoringIssues = data?.assessments.filter(item => item.status === "SCORING_UNAVAILABLE").length ?? 0;
+  const myAssessmentActions = data?.summary.myAssessmentActions ?? 0;
+  const readyToSend = data?.summary.readyToSend ?? 0;
+  const correctionsToMake = data?.summary.correctionsToMake ?? 0;
+  const scoringIssues = data?.summary.scoringIssues ?? 0;
   return <>
     <header className="mb-7 flex flex-wrap items-center justify-between gap-4" aria-label="Overview greeting">
       <GreetingBanner hour={localTime.getHours()} displayName={user.displayName} />
@@ -159,14 +159,14 @@ export function DashboardPage() {
           <OverviewStatCard label="High risk patients" value={data?.highRiskPatients ?? null} icon={TriangleAlert} tone="alert" trend={highRiskTrend} detail="vs 30 days ago" />
           {isAdmin
             ? <OverviewStatCard label="Reviews awaiting assignment" value={data?.queuedReviews?.total ?? null} icon={ClipboardList} detail="Unclaimed clinical reviews" to="/assessments?tab=clinical-reviews&review=QUEUED" />
-            : <OverviewStatCard label="My assessment actions" value={data ? myAssessmentActions.length : null} icon={ClipboardList} detail="Drafts, corrections, ready to send" to="/assessments?status=MY_ACTIONS" />}
+            : <OverviewStatCard label="My assessment actions" value={data ? myAssessmentActions : null} icon={ClipboardList} detail="Drafts, corrections, ready to send" to="/assessments?status=MY_ACTIONS" />}
         </>}
       </section>
     </>}
     {data && (isClinician || isAdmin) && <>
       {isAdmin
         ? <div className="mt-7"><QuickActions isAdmin canCreateAssessment={false} queuedReviews={data.queuedReviews} myReviews={null} readyToSend={0} correctionsToMake={0} /></div>
-        : <><div className="mt-7 grid items-stretch gap-4 min-[860px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><PriorityAssessments assessments={data.assessments} /><QuickActions isAdmin={false} canCreateAssessment={canCreateAssessment} queuedReviews={data.queuedReviews} myReviews={data.myReviews} readyToSend={readyToSend} correctionsToMake={correctionsToMake} /></div><AssessmentActivityCalendar organizationId={user.organizationId} assessments={data.assessments} /></>}
+        : <><div className="mt-7 grid items-stretch gap-4 min-[860px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><PriorityAssessments organizationId={user.organizationId} initial={data.summary.priority} /><QuickActions isAdmin={false} canCreateAssessment={canCreateAssessment} queuedReviews={data.queuedReviews} myReviews={data.myReviews} readyToSend={readyToSend} correctionsToMake={correctionsToMake} /></div><AssessmentActivityCalendar organizationId={user.organizationId} /></>}
       {data.riskLoaded && <RiskOverviewCards risk={data.risk} />}
     </>}
     {data && isAdmin && <>
@@ -181,7 +181,7 @@ export function DashboardPage() {
       {data.enabledUsers !== null && <UserSeats enabled={data.enabledUsers} reserved={data.seats + data.pendingInvitations} pending={data.pendingInvitations} limit={data.userLimit} />}
       <OverviewUsage organizationId={user.organizationId} />
     </>}
-    {data && (isClinician || isAdmin) && data.riskLoaded && <OverviewBottomCards patients={data.patients} assessments={data.assessments} risk={data.risk} />}
-    {data && !isAdmin && !isClinician && <section className="mt-7" aria-label="Patient registration"><h2 className="text-lg font-semibold">Patient registration</h2><p className="text-sm text-muted-foreground">Register patients and keep their details current.</p><RecentPatients patients={data.patients} /></section>}
+    {data && (isClinician || isAdmin) && data.riskLoaded && <OverviewBottomCards organizationId={user.organizationId} initial={data.summary.recent} risk={data.risk} />}
+    {data && !isAdmin && !isClinician && <section className="mt-7" aria-label="Patient registration"><h2 className="text-lg font-semibold">Patient registration</h2><p className="text-sm text-muted-foreground">Register patients and keep their details current.</p><RecentPatients recent={data.summary.recent.items} /></section>}
   </>;
 }

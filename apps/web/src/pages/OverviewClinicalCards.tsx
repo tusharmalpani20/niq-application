@@ -1,76 +1,53 @@
-import type { AssessmentSummary } from "@niq/application-contracts";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, CalendarDays, ShieldCheck } from "lucide-react";
-import { getOverviewActivity, getOverviewRisk } from "../lib/api";
+import { getOverviewActivity, getOverviewActivityDay, getOverviewRisk } from "../lib/api";
 import { ActivityEmptyIllustration } from "../components/DashboardEmptyIllustrations";
 
 type Risk = Awaited<ReturnType<typeof getOverviewRisk>>;
-type Activity = Awaited<ReturnType<typeof getOverviewActivity>>["items"][number];
-const activityPageSize = 4;
-const actionSequence: Activity["action"][] = ["ASSESSMENT_CREATED", "ASSESSMENT_SUBMITTED", "CLINICAL_REVIEW_COMPLETE"];
-const actions: Record<Activity["action"], { label: string; color: string }> = {
+type ActivityDay = Awaited<ReturnType<typeof getOverviewActivity>>["days"][number];
+type DayDetail = Awaited<ReturnType<typeof getOverviewActivityDay>>;
+type ActivityAction = ActivityDay["actions"][number];
+const actionSequence: ActivityAction[] = ["ASSESSMENT_CREATED", "ASSESSMENT_SUBMITTED", "CLINICAL_REVIEW_COMPLETE"];
+const actions: Record<ActivityAction, { label: string; color: string }> = {
   ASSESSMENT_CREATED: { label: "Assessment created", color: "bg-slate-400" },
   ASSESSMENT_SUBMITTED: { label: "Submitted for scoring", color: "bg-primary" },
   CLINICAL_REVIEW_COMPLETE: { label: "Clinical review completed", color: "bg-amber-500" },
 };
-function dayKey(date: Date) { return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`; }
+function dayKey(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
 
-/** Keep the most recent occurrence of an action per assessment and local day for the overview. */
-export function summarizeAssessmentActivity(items: Activity[]): Activity[] {
-  const latest = new Map<string, Activity>();
-  for (const item of items) {
-    const key = `${dayKey(item.occurredAt)}:${item.assessmentId}:${item.action}`;
-    const prior = latest.get(key);
-    if (!prior || item.occurredAt > prior.occurredAt) latest.set(key, item);
-  }
-  return [...latest.values()].sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
-}
-
-type AssessmentDayActivity = { assessmentId: string; latestAt: Date; milestones: Activity[] };
-function groupAssessmentActivity(items: Activity[]): AssessmentDayActivity[] {
-  const groups = new Map<string, AssessmentDayActivity>();
-  for (const item of items) {
-    const group = groups.get(item.assessmentId);
-    if (group) {
-      group.milestones.push(item);
-      if (item.occurredAt > group.latestAt) group.latestAt = item.occurredAt;
-    } else {
-      groups.set(item.assessmentId, { assessmentId: item.assessmentId, latestAt: item.occurredAt, milestones: [item] });
-    }
-  }
-  return [...groups.values()].map(group => ({ ...group, milestones: group.milestones.sort((a, b) => actionSequence.indexOf(a.action) - actionSequence.indexOf(b.action)) }))
-    .sort((a, b) => actionSequence.indexOf(a.milestones[0]!.action) - actionSequence.indexOf(b.milestones[0]!.action)
-      || b.latestAt.getTime() - a.latestAt.getTime()
-      || a.assessmentId.localeCompare(b.assessmentId));
-}
-
-export function AssessmentActivityCalendar({ organizationId, assessments }: { organizationId: string; assessments: AssessmentSummary[] }) {
+export function AssessmentActivityCalendar({ organizationId }: { organizationId: string }) {
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selected, setSelected] = useState<Date | null>(() => new Date());
-  const [items, setItems] = useState<Activity[]>([]);
+  const [days, setDays] = useState<ActivityDay[]>([]);
+  const [detail, setDetail] = useState<DayDetail | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   useEffect(() => {
     let active = true;
-    setItems([]); setLoading(true); setError(false);
+    setDays([]); setLoading(true); setError(false);
     const from = new Date(month.getFullYear(), month.getMonth(), 1);
     const to = new Date(month.getFullYear(), month.getMonth() + 1, 1);
     getOverviewActivity(organizationId, from, to).then(result => {
       if (!active) return;
-      setItems(result.items);
+      setDays(result.days);
       // Month navigation leaves no day selected until data loads; then show its most recent active day.
-      setSelected(current => current ?? result.items.find(item => assessments.some(assessment => assessment.id === item.assessmentId))?.occurredAt ?? null);
-    }).catch(() => { if (active) { setItems([]); setError(true); } }).finally(() => { if (active) setLoading(false); });
+      setSelected(current => current ?? (result.days[0] ? new Date(`${result.days[0].day}T12:00:00`) : null));
+    }).catch(() => { if (active) { setDays([]); setError(true); setLoading(false); } }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [organizationId, month, assessments]);
-  const byAssessment = useMemo(() => new Map(assessments.map(item => [item.id, item])), [assessments]);
-  const visibleItems = summarizeAssessmentActivity(items.filter(item => byAssessment.has(item.assessmentId)));
-  const selectedItems = selected ? visibleItems.filter(item => dayKey(item.occurredAt) === dayKey(selected)) : [];
-  const selectedAssessments = groupAssessmentActivity(selectedItems);
-  const pageCount = Math.max(1, Math.ceil(selectedAssessments.length / activityPageSize));
-  const pageAssessments = selectedAssessments.slice((page - 1) * activityPageSize, page * activityPageSize);
+  }, [organizationId, month]);
+  const selectedDay = selected ? days.find(item => item.day === dayKey(selected)) : undefined;
+  useEffect(() => {
+    let active = true;
+    setDetail(null);
+    if (!selected || !selectedDay || loading || error) return () => { active = false; };
+    const from = new Date(selected.getFullYear(), selected.getMonth(), selected.getDate());
+    const to = new Date(selected.getFullYear(), selected.getMonth(), selected.getDate() + 1);
+    getOverviewActivityDay(organizationId, from, to, page).then(result => { if (active) setDetail(result); })
+      .catch(() => { if (active) setError(true); });
+    return () => { active = false; };
+  }, [organizationId, selected, selectedDay?.day, page, loading, error]);
   const selectDate = (date: Date) => { setSelected(date); setPage(1); };
   const firstWeekday = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
   const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
@@ -89,19 +66,19 @@ export function AssessmentActivityCalendar({ organizationId, assessments }: { or
         <div className="grid grid-cols-7 text-center text-xs text-muted-foreground">{["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(day => <span key={day}>{day}</span>)}</div>
         <div className="mt-2 grid grid-cols-7 gap-1">{Array.from({ length: firstWeekday }, (_, index) => <span key={`pad-${index}`} />)}{Array.from({ length: daysInMonth }, (_, index) => {
           const date = new Date(month.getFullYear(), month.getMonth(), index + 1);
-          const events = visibleItems.filter(item => dayKey(item.occurredAt) === dayKey(date));
-          const eventActions = new Set(events.map(event => event.action));
+          const activity = days.find(item => item.day === dayKey(date));
+          const eventActions = new Set(activity?.actions ?? []);
           const active = selected !== null && dayKey(date) === dayKey(selected);
-          const assessmentCount = new Set(events.map(event => event.assessmentId)).size;
+          const assessmentCount = activity?.assessmentCount ?? 0;
           const dateLabel = date.toLocaleDateString(undefined, { dateStyle: "full" });
-          return <button key={index} type="button" aria-label={assessmentCount ? `${dateLabel}, ${assessmentCount} ${assessmentCount === 1 ? "assessment" : "assessments"}, ${events.length} ${events.length === 1 ? "milestone" : "milestones"}` : dateLabel} aria-pressed={active} className={`flex aspect-square flex-col items-center justify-center rounded-lg text-sm hover:bg-primary/10 ${active ? "bg-primary text-primary-foreground hover:bg-primary" : ""}`} onClick={() => selectDate(date)}><span>{index + 1}</span><span className="mt-0.5 flex min-h-2 gap-0.5">{actionSequence.filter(action => eventActions.has(action)).map(action => <span key={action} className={`size-2 rounded-full ${actions[action].color} ${active ? "ring-1 ring-white" : ""}`} />)}</span></button>;
+          return <button key={index} type="button" aria-label={assessmentCount ? `${dateLabel}, ${assessmentCount} ${assessmentCount === 1 ? "assessment" : "assessments"}, ${activity!.milestoneCount} ${activity!.milestoneCount === 1 ? "milestone" : "milestones"}` : dateLabel} aria-pressed={active} className={`flex aspect-square flex-col items-center justify-center rounded-lg text-sm hover:bg-primary/10 ${active ? "bg-primary text-primary-foreground hover:bg-primary" : ""}`} onClick={() => selectDate(date)}><span>{index + 1}</span><span className="mt-0.5 flex min-h-2 gap-0.5">{actionSequence.filter(action => eventActions.has(action)).map(action => <span key={action} className={`size-2 rounded-full ${actions[action].color} ${active ? "ring-1 ring-white" : ""}`} />)}</span></button>;
         })}</div>
         <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">{actionSequence.map(action => <span key={action} className="flex items-center gap-1"><i aria-hidden="true" className={`size-2 rounded-full ${actions[action].color}`} />{actions[action].label}</span>)}</div>
       </div>
-      <div className="flex min-w-0 flex-col"><div className="mb-3"><h3 className="font-semibold">{selected ? selected.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h3><p className="text-sm text-muted-foreground">{loading ? "Loading activity…" : `${selectedAssessments.length} ${selectedAssessments.length === 1 ? "assessment" : "assessments"}${selectedItems.length ? ` · ${selectedItems.length} ${selectedItems.length === 1 ? "milestone" : "milestones"}` : ""}`}</p></div>
-        {loading ? <p className="text-sm text-muted-foreground">Loading activity…</p> : error ? <p role="alert" className="text-sm text-muted-foreground">Activity could not be loaded for this month.</p> : selectedAssessments.length ? <>
-          <ul className="divide-y">{pageAssessments.map(group => { const assessment = byAssessment.get(group.assessmentId)!; return <li key={group.assessmentId}><Link to={`/assessments/${assessment.reference}`} className="block rounded-lg px-2 py-3 text-sm hover:bg-muted/50"><span className="flex flex-wrap items-baseline gap-x-2"><strong className="text-foreground">{assessment.patient.displayName}</strong><span className="text-xs text-muted-foreground">{assessment.reference}</span></span><span className="mt-1.5 flex flex-wrap gap-2">{group.milestones.map(item => <span key={item.action} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/30 px-2.5 py-1 text-xs text-foreground"><i aria-hidden="true" className={`size-2 shrink-0 rounded-full ${actions[item.action].color}`} />{actions[item.action].label}<time className="ml-1 text-muted-foreground">{item.occurredAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</time></span>)}</span></Link></li>; })}</ul>
-          {pageCount > 1 && <nav aria-label="Activity pages" className="mt-4 flex justify-center border-t pt-4 text-sm"><div className="flex items-center gap-2"><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={page === 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page} of {pageCount}</span><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={page === pageCount} onClick={() => setPage(value => value + 1)}>Next</button></div></nav>}
+      <div className="flex min-w-0 flex-col"><div className="mb-3"><h3 className="font-semibold">{selected ? selected.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h3><p className="text-sm text-muted-foreground">{loading ? "Loading activity…" : `${selectedDay?.assessmentCount ?? 0} ${(selectedDay?.assessmentCount ?? 0) === 1 ? "assessment" : "assessments"}${selectedDay?.milestoneCount ? ` · ${selectedDay.milestoneCount} ${selectedDay.milestoneCount === 1 ? "milestone" : "milestones"}` : ""}`}</p></div>
+        {loading || (selectedDay && !detail && !error) ? <p className="text-sm text-muted-foreground">Loading activity…</p> : error ? <p role="alert" className="text-sm text-muted-foreground">Activity could not be loaded for this month.</p> : detail?.assessments.length ? <>
+          <ul className="divide-y">{detail.assessments.map(group => <li key={group.assessmentId}><Link to={`/assessments/${group.reference}`} className="block rounded-lg px-2 py-3 text-sm hover:bg-muted/50"><span className="flex flex-wrap items-baseline gap-x-2"><strong className="text-foreground">{group.patientDisplayName}</strong><span className="text-xs text-muted-foreground">{group.reference}</span></span><span className="mt-1.5 flex flex-wrap gap-2">{group.milestones.map(item => <span key={item.action} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/30 px-2.5 py-1 text-xs text-foreground"><i aria-hidden="true" className={`size-2 shrink-0 rounded-full ${actions[item.action].color}`} />{actions[item.action].label}<time className="ml-1 text-muted-foreground">{item.occurredAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</time></span>)}</span></Link></li>)}</ul>
+          {detail.pageCount > 1 && <nav aria-label="Activity pages" className="mt-4 flex justify-center border-t pt-4 text-sm"><div className="flex items-center gap-2"><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={page === 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page} of {detail.pageCount}</span><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={page === detail.pageCount} onClick={() => setPage(value => value + 1)}>Next</button></div></nav>}
         </> : <div className="flex min-h-60 flex-1 flex-col items-center justify-center rounded-xl border border-primary/10 bg-primary/[.025] p-5 text-center"><ActivityEmptyIllustration /><p className="mt-2 text-sm text-muted-foreground">{selected ? "No assessment milestones on this day." : "No assessment milestones in this month."}</p></div>}
       </div>
     </div>

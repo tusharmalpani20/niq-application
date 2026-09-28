@@ -28,7 +28,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     getScoringOrganizationInfo: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], getFacilityPerformance: async () => ({}), updateFacility: async () => ({}),
     updatePatient: async () => ({}), correctPatientMrn: async () => ({}), correctPatientDob: async () => ({}), updateOrganizationUser: async () => ({}),
-    createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [], getAssessmentPriority: async () => false, setAssessmentPriority: async (_actor, _organizationId, assessmentId, isPriority) => ({ assessmentId, isPriority }), getOverviewRisk: async () => ({ highRiskPatients: 0, highRiskPatients30DaysAgo: 0, assessedPatients: 0, categories: { low: 0, moderate: 0, high: 0 }, categories30DaysAgo: { low: 0, moderate: 0, high: 0 }, highRiskAssessments: [], nutrition: { protein: { assessed: 0, inadequate: 0 }, eatingBarrier: { assessed: 0, top: null } } }), getOverviewActivity: async () => ({ items: [] }),
+    createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [], getAssessmentPriority: async () => false, setAssessmentPriority: async (_actor, _organizationId, assessmentId, isPriority) => ({ assessmentId, isPriority }), getOverviewRisk: async () => ({ highRiskPatients: 0, highRiskPatients30DaysAgo: 0, assessedPatients: 0, categories: { low: 0, moderate: 0, high: 0 }, categories30DaysAgo: { low: 0, moderate: 0, high: 0 }, highRiskAssessments: [], nutrition: { protein: { assessed: 0, inadequate: 0 }, eatingBarrier: { assessed: 0, top: null } } }), getOverviewSummary: async (_actor, _org, priorityPage, recentPage) => ({ patientCount: 0, patientsAdded30Days: 0, completedCount: 0, completedAdded30Days: 0, myAssessmentActions: 0, readyToSend: 0, correctionsToMake: 0, scoringIssues: 0, priority: { total: 0, page: priorityPage, pageSize: 3, items: [] }, recent: { total: 0, page: recentPage, pageSize: 4, items: [] } }), getOverviewActivity: async () => ({ days: [] }), getOverviewActivityDay: async () => ({ assessmentCount: 0, milestoneCount: 0, pageCount: 0, assessments: [] }),
     invitationAccess: async () => ({ allFacilities: true }), manageUserInvitation: async () => ({ invitation: {}, token: "replacement-token" }),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
     ...overrides,
@@ -365,23 +365,65 @@ describe("local authentication routes", () => {
     expect(await response.json()).toEqual({ highRiskPatients: 2, highRiskPatients30DaysAgo: 3, assessedPatients: 5, categories: { low: 2, moderate: 1, high: 2 }, categories30DaysAgo: { low: 1, moderate: 1, high: 3 }, highRiskAssessments: [], nutrition: { protein: { assessed: 4, inadequate: 2 }, eatingBarrier: { assessed: 3, top: { id: "dietary_symptoms_nausea", label: "Nausea", count: 2 } } } });
   });
 
-  test("returns only requested personal assessment activity through the tenant boundary", async () => {
-    const event = { id: principal.membershipId, assessmentId: principal.membershipId, action: "ASSESSMENT_CREATED" as const, occurredAt: new Date("2026-09-24T08:30:00.000Z") };
+  test("returns paged overview data through the authenticated tenant boundary", async () => {
     const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
-      service: fakeService({ getOverviewActivity: async (actor, organizationId, from, to) => {
+      service: fakeService({ getOverviewSummary: async (actor, organizationId, priorityPage, recentPage) => {
+        expect(actor).toEqual(principal);
+        expect(organizationId).toBe(principal.organizationId);
+        expect([priorityPage, recentPage]).toEqual([2, 3]);
+        return { patientCount: 9, patientsAdded30Days: 2, completedCount: 4, completedAdded30Days: 1, myAssessmentActions: 0, readyToSend: 0, correctionsToMake: 0, scoringIssues: 0,
+          priority: { total: 5, page: priorityPage, pageSize: 3, items: [] }, recent: { total: 10, page: recentPage, pageSize: 4, items: [] } };
+      } }),
+    });
+    const url = `/v1/organizations/${principal.organizationId}/overview-summary?priorityPage=2&recentPage=3`;
+    expect((await app.request(url)).status).toBe(401);
+    const invalid = await app.request(`${url}&priorityPage=0`, { headers: { cookie: "niq_session=valid-session" } });
+    expect(invalid.status).toBe(400);
+    const response = await app.request(url, { headers: { cookie: "niq_session=valid-session" } });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect((await response.json()).patientCount).toBe(9);
+  });
+
+  test("returns only requested personal assessment activity through the tenant boundary", async () => {
+    const day = { day: "2026-09-24", assessmentCount: 1, milestoneCount: 1, actions: ["ASSESSMENT_CREATED" as const] };
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({ getOverviewActivity: async (actor, organizationId, from, to, timeZone) => {
         expect(actor).toEqual(principal);
         expect(organizationId).toBe(principal.organizationId);
         expect(from.toISOString()).toBe("2026-08-31T18:30:00.000Z");
         expect(to.toISOString()).toBe("2026-09-30T18:30:00.000Z");
-        return { items: [event] };
+        expect(timeZone).toBe("Asia/Kolkata");
+        return { days: [day] };
       } }),
     });
-    const url = `/v1/organizations/${principal.organizationId}/overview-activity?from=2026-08-31T18%3A30%3A00.000Z&to=2026-09-30T18%3A30%3A00.000Z`;
+    const url = `/v1/organizations/${principal.organizationId}/overview-activity?from=2026-08-31T18%3A30%3A00.000Z&to=2026-09-30T18%3A30%3A00.000Z&timeZone=Asia%2FKolkata`;
     expect((await app.request(url)).status).toBe(401);
     const response = await app.request(url, { headers: { cookie: "niq_session=valid-session" } });
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(await response.json()).toEqual({ items: [{ ...event, occurredAt: event.occurredAt.toISOString() }] });
+    expect(await response.json()).toEqual({ days: [day] });
+    expect((await app.request(url.replace("Asia%2FKolkata", "Invalid%2FZone"), { headers: { cookie: "niq_session=valid-session" } })).status).toBe(400);
+  });
+
+  test("returns a bounded page of personal activity with assessment labels", async () => {
+    const detail = { assessmentCount: 5, milestoneCount: 6, pageCount: 2, assessments: [{ assessmentId: principal.membershipId, reference: "NIQ-A-1", patientDisplayName: "A Person", milestones: [{ action: "ASSESSMENT_CREATED" as const, occurredAt: new Date("2026-09-24T08:30:00.000Z") }] }] };
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({ getOverviewActivityDay: async (actor, organizationId, from, to, page) => {
+        expect(actor).toEqual(principal);
+        expect(organizationId).toBe(principal.organizationId);
+        expect(from.toISOString()).toBe("2026-09-23T18:30:00.000Z");
+        expect(to.toISOString()).toBe("2026-09-24T18:30:00.000Z");
+        expect(page).toBe(2);
+        return detail;
+      } }),
+    });
+    const url = `/v1/organizations/${principal.organizationId}/overview-activity/day?from=2026-09-23T18%3A30%3A00.000Z&to=2026-09-24T18%3A30%3A00.000Z&page=2`;
+    expect((await app.request(url)).status).toBe(401);
+    const response = await app.request(url, { headers: { cookie: "niq_session=valid-session" } });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(await response.json()).toEqual({ ...detail, assessments: [{ ...detail.assessments[0], milestones: [{ ...detail.assessments[0]!.milestones[0], occurredAt: "2026-09-24T08:30:00.000Z" }] }] });
   });
 
   test("resolves an organization detail by its URL name", async () => {

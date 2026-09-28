@@ -34,11 +34,66 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
     if (url.endsWith("/patients")) return Response.json({ items: scenario.patients ?? [patient] });
     if (url.endsWith("/facilities")) return Response.json({ items: [] });
     if (url.endsWith("/assessments")) return Response.json({ items: scenario.assessments ?? [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status, myAction: scenario.assessmentStatus === "DRAFT" ? "EDIT_DRAFT" : null, createdAt: scenario.assessmentCreatedAt ?? date, completedAt: scenario.completedAt ?? null }] });
+    if (url.includes("/overview-summary?")) {
+      const query = new URL(url, "http://localhost").searchParams;
+      const patients = scenario.patients ?? [patient];
+      const assessments = scenario.assessments ?? [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status, myAction: scenario.assessmentStatus === "DRAFT" ? "EDIT_DRAFT" : null, createdAt: scenario.assessmentCreatedAt ?? date, completedAt: scenario.completedAt ?? null }];
+      const now = Date.now();
+      const recent = patients.map(person => ({ patient: person, assessment: assessments.filter(item => item.patient.id === person.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null }))
+        .filter(item => role === "SUPPORT" || Math.max(new Date(item.patient.createdAt).getTime(), new Date(item.assessment?.createdAt ?? 0).getTime()) >= now - 3 * 86400_000)
+        .sort((a, b) => Math.max(new Date(b.patient.createdAt).getTime(), new Date(b.assessment?.createdAt ?? 0).getTime()) - Math.max(new Date(a.patient.createdAt).getTime(), new Date(a.assessment?.createdAt ?? 0).getTime()));
+      const priority = assessments.filter(item => item.isPriority);
+      const priorityPage = Number(query.get("priorityPage") ?? 1);
+      const recentPage = Number(query.get("recentPage") ?? 1);
+      const added = (value: string) => new Date(value).getTime() >= now - 30 * 86400_000 && new Date(value).getTime() <= now;
+      return Response.json({ patientCount: patients.length, patientsAdded30Days: patients.filter(item => added(item.createdAt)).length,
+        completedCount: assessments.filter(item => item.status === "COMPLETED").length,
+        completedAdded30Days: assessments.filter(item => item.status === "COMPLETED" && item.completedAt && added(item.completedAt)).length,
+        myAssessmentActions: assessments.filter(item => item.myAction).length,
+        readyToSend: assessments.filter(item => item.myAction === "SEND_FOR_REVIEW").length,
+        correctionsToMake: assessments.filter(item => item.myAction === "CORRECT_DRAFT").length,
+        scoringIssues: assessments.filter(item => item.status === "SCORING_UNAVAILABLE").length,
+        priority: { total: priority.length, page: priorityPage, pageSize: 3, items: priority.slice((priorityPage - 1) * 3, priorityPage * 3) },
+        recent: { total: recent.length, page: recentPage, pageSize: 4, items: recent.slice((recentPage - 1) * 4, recentPage * 4) },
+      });
+    }
     if (url.endsWith("/overview-risk")) {
       if (scenario.riskDelayMs) await new Promise(resolve => setTimeout(resolve, scenario.riskDelayMs));
       return Response.json({ highRiskPatients: scenario.highRiskPatients ?? 1, highRiskPatients30DaysAgo: scenario.highRiskPatients30DaysAgo ?? 0, assessedPatients: 1, categories: { low: 0, moderate: 0, high: 1 }, categories30DaysAgo: { low: 0, moderate: 0, high: scenario.highRiskPatients30DaysAgo ?? 0 }, highRiskAssessments: scenario.highRiskAssessments ?? [], nutrition: scenario.nutrition ?? { protein: { assessed: 0, inadequate: 0 }, eatingBarrier: { assessed: 0, top: null } }, ...scenario.risk });
     }
-    if (url.includes("/overview-activity?")) return Response.json({ items: scenario.activity ?? [] });
+    if (url.includes("/overview-activity")) {
+      const request = new URL(url, "http://localhost");
+      const from = new Date(request.searchParams.get("from")!);
+      const to = new Date(request.searchParams.get("to")!);
+      const key = (value: string) => {
+        const at = new Date(value);
+        return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}`;
+      };
+      const latest = new Map<string, NonNullable<Scenario["activity"]>[number]>();
+      for (const event of scenario.activity ?? []) {
+        const at = new Date(event.occurredAt);
+        if (at < from || at >= to) continue;
+        const eventKey = `${key(event.occurredAt)}:${event.assessmentId}:${event.action}`;
+        if (!latest.has(eventKey) || latest.get(eventKey)!.occurredAt < event.occurredAt) latest.set(eventKey, event);
+      }
+      const events = [...latest.values()];
+      if (!request.pathname.endsWith("/day")) {
+        const days = [...new Set(events.map(event => key(event.occurredAt)))].sort().reverse().map(day => {
+          const daily = events.filter(event => key(event.occurredAt) === day);
+          return { day, assessmentCount: new Set(daily.map(event => event.assessmentId)).size, milestoneCount: daily.length, actions: [...new Set(daily.map(event => event.action))] };
+        });
+        return Response.json({ days });
+      }
+      const records = scenario.assessments ?? [assessment];
+      const actionOrder = ["ASSESSMENT_CREATED", "ASSESSMENT_SUBMITTED", "CLINICAL_REVIEW_COMPLETE"];
+      const grouped = [...new Set(events.map(event => event.assessmentId))].map(assessmentId => ({
+        assessmentId,
+        record: records.find(record => record.id === assessmentId),
+        milestones: events.filter(event => event.assessmentId === assessmentId).sort((a, b) => actionOrder.indexOf(a.action) - actionOrder.indexOf(b.action)),
+      })).sort((a, b) => actionOrder.indexOf(a.milestones[0]!.action) - actionOrder.indexOf(b.milestones[0]!.action));
+      const page = Number(request.searchParams.get("page") ?? 1);
+      return Response.json({ assessmentCount: grouped.length, milestoneCount: events.length, pageCount: Math.ceil(grouped.length / 4), assessments: grouped.slice((page - 1) * 4, page * 4).map(group => ({ assessmentId: group.assessmentId, reference: group.record!.reference, patientDisplayName: group.record!.patient.displayName, milestones: group.milestones.map(event => ({ action: event.action, occurredAt: event.occurredAt })) })) });
+    }
     if (url.endsWith("/users")) return Response.json({ items: [{ membershipId: id, userId: id, email: "admin@example.test", displayName: "Admin", status: "ACTIVE", role, active: true, createdAt: date }] });
     if (url.includes("/clinical-reviews?")) return Response.json({ items: [], total: scenario.reviewTotal ?? 2, page: 1, pageSize: 3 });
     if (url.endsWith(`/organizations/${id}`)) return Response.json({ organization: { id, legalName: "Example Health", displayName: "Example Health", slug: "example-health", logoObjectKey: null, primaryColor: "#006B5F", secondaryColor: "#FFFFFF", patientReferencePrefix: "PAT", status: "ACTIVE", createdAt: date, updatedAt: date }, entitlement: { userLimit: scenario.userLimit === undefined ? 5 : scenario.userLimit, effectiveFrom: date }, invitations: [], scoringConnection: null });
@@ -57,8 +112,10 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
 }
 
 test("overview statistics load while risk calculation is still running", async () => {
-  await renderOverview("DOCTOR", async body => {
+  await renderOverview("DOCTOR", async (body, requests) => {
     expect(body.querySelector('a[href="/patients"] strong')?.textContent).toBe("1");
+    expect(requests.some(url => url.endsWith("/patients") || url.endsWith("/assessments"))).toBe(false);
+    expect(requests.some(url => url.includes("/overview-summary?"))).toBe(true);
     expect(body.querySelector('[aria-label="Assessment risk overview"]')).toBeNull();
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 80)); });
     expect(body.querySelector('[aria-label="Assessment risk overview"]')).not.toBeNull();

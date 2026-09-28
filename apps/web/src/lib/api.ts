@@ -15,7 +15,9 @@ import {
   organizationDetailsResponseSchema,
   organizationSchema,
   overviewRiskSchema,
+  overviewSummarySchema,
   overviewActivitySchema,
+  overviewActivityDaySchema,
   scoringOrganizationInfoSchema,
   organizationUsersResponseSchema,
   updateOrganizationSchema,
@@ -280,10 +282,22 @@ export async function getOverviewRisk(organizationId: string) {
   return overviewRiskSchema.parse(await responseBody(response));
 }
 
+export async function getOverviewSummary(organizationId: string, priorityPage = 1, recentPage = 1) {
+  const query = new URLSearchParams({ priorityPage: String(priorityPage), recentPage: String(recentPage) });
+  const response = await fetch(`/api/v1/organizations/${organizationId}/overview-summary?${query}`, { credentials: "include" });
+  return overviewSummarySchema.parse(await responseBody(response));
+}
+
 export async function getOverviewActivity(organizationId: string, from: Date, to: Date) {
-  const query = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+  const query = new URLSearchParams({ from: from.toISOString(), to: to.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
   const response = await fetch(`/api/v1/organizations/${organizationId}/overview-activity?${query}`, { credentials: "include" });
   return overviewActivitySchema.parse(await responseBody(response));
+}
+
+export async function getOverviewActivityDay(organizationId: string, from: Date, to: Date, page: number) {
+  const query = new URLSearchParams({ from: from.toISOString(), to: to.toISOString(), page: String(page) });
+  const response = await fetch(`/api/v1/organizations/${organizationId}/overview-activity/day?${query}`, { credentials: "include" });
+  return overviewActivityDaySchema.parse(await responseBody(response));
 }
 
 export async function getFacilityPerformance(organizationId: string, facilityId: string): Promise<FacilityPerformance> {
