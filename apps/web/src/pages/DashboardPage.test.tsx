@@ -461,6 +461,7 @@ test("high-risk card shows a single zero when the comparison is unchanged", asyn
     expect(card?.querySelector("strong")?.textContent).toBe("0");
     expect(card?.querySelector('[aria-label="No change 0"]')).toBeNull();
     expect(card?.textContent).toContain("vs 30 days ago");
+    expect(card?.getAttribute("href")).toBe("/assessments?tab=completed&risk=high");
   }, { highRiskPatients: 0, highRiskPatients30DaysAgo: 0 });
 });
 

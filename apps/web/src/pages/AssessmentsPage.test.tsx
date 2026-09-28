@@ -135,6 +135,48 @@ test("risk category filter uses completed assessments' reviewed categories", asy
   });
 });
 
+test("risk category filters My work and remains available on every tab", async () => {
+  const items = [
+    { ...records[0]!, myAction: "EDIT_DRAFT", riskCategory: "high" as const },
+    { ...records[1]!, myAction: "CORRECT_DRAFT", riskCategory: "low" as const },
+  ];
+  await renderAssessments("/assessments?tab=my-work&risk=high", items, () => {
+    const table = document.querySelector('[aria-label="Assessments"]');
+    expect(table?.textContent).toContain("ASM-000001");
+    expect(table?.textContent).not.toContain("ASM-000002");
+    expect(document.querySelector('[aria-label="Filter by risk category"]')).not.toBeNull();
+  });
+  await renderAssessments("/assessments?tab=clinical-reviews&risk=high", items, () => {
+    expect(document.querySelector('[aria-label="Filter by risk category"]')).not.toBeNull();
+  });
+});
+
+test("switching tabs retains the selected risk category", async () => {
+  const items = [
+    { ...records[0]!, myAction: "EDIT_DRAFT", riskCategory: "high" as const },
+    { ...records[1]!, myAction: "EDIT_DRAFT", riskCategory: "low" as const },
+  ];
+  await renderAssessments("/assessments?risk=high", items, async () => {
+    const myWork = Array.from(document.querySelectorAll<HTMLElement>('[data-slot="tabs-trigger"]')).find(tab => tab.textContent?.includes("My work"));
+    await act(async () => { myWork?.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(document.querySelector('[data-slot="tabs-trigger"][data-selected]')?.textContent).toContain("My work");
+    expect(document.querySelector('[aria-label="Assessments"]')?.textContent).toContain("ASM-000001");
+    expect(document.querySelector('[aria-label="Assessments"]')?.textContent).not.toContain("ASM-000002");
+    expect(document.querySelector('[aria-label="Filter by risk category"]')?.textContent).toContain("High risk");
+  });
+});
+
+test("clinical review risk filter is sent with other queue filters", async () => {
+  const requests: string[] = [];
+  await renderAssessments(`/assessments?tab=clinical-reviews&facility=${id}&review=QUEUED&risk=high`, records, async () => {
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 200)); });
+    expect(requests.some(url => {
+      const params = new URL(url, "http://localhost").searchParams;
+      return params.get("risk") === "high" && params.get("facilityId") === id && params.get("state") === "QUEUED" && params.get("page") === "1";
+    })).toBe(true);
+  }, [], requests);
+});
+
 test("a scoring issue remains visible when opened from an older status link", async () => {
   const items = [{ ...records[0], status: "SCORING_UNAVAILABLE" }, records[1]!];
   await renderAssessments("/assessments?status=SCORING_UNAVAILABLE", items, () => {

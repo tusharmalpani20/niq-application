@@ -156,7 +156,7 @@ export function DashboardPage() {
         <OverviewStatCard label="Total patients" value={patientGrowth?.total ?? null} icon={UsersRound} trend={patientGrowth ? { change: patientGrowth.added, percent: patientGrowth.percent, increaseIsGood: true } : undefined} detail="vs 30 days ago" to="/patients" />
         {(isClinician || isAdmin) && <>
           <OverviewStatCard label="Assessments completed" value={completedGrowth?.total ?? null} icon={ClipboardCheck} trend={completedGrowth ? { change: completedGrowth.added, percent: completedGrowth.percent, increaseIsGood: true } : undefined} detail="vs 30 days ago" to="/assessments?status=COMPLETED" />
-          <OverviewStatCard label="High risk patients" value={data?.highRiskPatients ?? null} icon={TriangleAlert} tone="alert" trend={highRiskTrend} detail="vs 30 days ago" />
+          <OverviewStatCard label="High risk patients" value={data?.highRiskPatients ?? null} icon={TriangleAlert} tone="alert" trend={highRiskTrend} detail="vs 30 days ago" to="/assessments?tab=completed&risk=high" />
           {isAdmin
             ? <OverviewStatCard label="Reviews awaiting assignment" value={data?.queuedReviews?.total ?? null} icon={ClipboardList} detail="Unclaimed clinical reviews" to="/assessments?tab=clinical-reviews&review=QUEUED" />
             : <OverviewStatCard label="My assessment actions" value={data ? myAssessmentActions : null} icon={ClipboardList} detail="Drafts, corrections, ready to send" to="/assessments?status=MY_ACTIONS" />}

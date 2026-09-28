@@ -16,7 +16,7 @@ const reviewOwner = (item: ClinicalReviewQueueItem) => item.review.correctionPer
 const reviewDate = (item: ClinicalReviewQueueItem) => item.review.submittedAt ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(item.review.submittedAt)) : "—";
 const openReview = (item: ClinicalReviewQueueItem) => <RouterButtonLink variant="outline" size="sm" className="whitespace-nowrap" to={`/assessments/${item.reference}`} aria-label={`View review ${item.reference}`}><Eye className="size-4" aria-hidden="true" />View review</RouterButtonLink>;
 
-export function ClinicalReviewQueue({ user, query, facilityId, state, canCreate, onPriorityChange, onViewAssessments }: { user: AuthenticatedUser; query: string; facilityId: string; state: string; canCreate: boolean; onPriorityChange: (assessmentId: string, isPriority: boolean) => void; onViewAssessments: () => void }) {
+export function ClinicalReviewQueue({ user, query, facilityId, state, risk, canCreate, onPriorityChange, onViewAssessments }: { user: AuthenticatedUser; query: string; facilityId: string; state: string; risk: string; canCreate: boolean; onPriorityChange: (assessmentId: string, isPriority: boolean) => void; onViewAssessments: () => void }) {
   const [data, setData] = useState<Queue | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -57,7 +57,7 @@ export function ClinicalReviewQueue({ user, query, facilityId, state, canCreate,
   const canClaim = (item: ClinicalReviewQueueItem) => item.review.state === "QUEUED" && item.review.allowedActions?.includes("CLAIM");
   const claimButton = (item: ClinicalReviewQueueItem) => canClaim(item) && <Button variant="outline" size="sm" isDisabled={claiming !== null} onPress={() => { void claim(item); }}><UserRoundCheck className="size-4" aria-hidden="true" />{claiming === item.assessmentId ? "Claiming…" : "Claim"}</Button>;
   const reviewActions = (item: ClinicalReviewQueueItem) => <div className="flex items-center justify-end gap-2">{claimButton(item)}{openReview(item)}{priorityButton(item)}</div>;
-  useEffect(() => { setPage(1); }, [query, facilityId, state]);
+  useEffect(() => { setPage(1); }, [query, facilityId, state, risk]);
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setData(null);
     const timer = setTimeout(() => {
@@ -65,10 +65,11 @@ export function ClinicalReviewQueue({ user, query, facilityId, state, canCreate,
       if (query.trim()) params.set("search", query.trim());
       if (facilityId !== "all") params.set("facilityId", facilityId);
       if (state !== "all") params.set("state", state);
+      if (risk !== "all") params.set("risk", risk);
       listClinicalReviews(user.organizationId, params, controller.signal).then(next => { if (!controller.signal.aborted) { setData(next); setError(""); } }).catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Clinical reviews could not be loaded."); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     }, 150);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [user.organizationId, query, facilityId, state, page, retry]);
+  }, [user.organizationId, query, facilityId, state, risk, page, retry]);
   const columns: DataTableColumn<ClinicalReviewQueueItem>[] = [
     { id: "reference", header: "Assessment", cell: ({ row }) => <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> },
     { id: "patient", header: "Patient", cell: ({ row }) => <div className="grid gap-1"><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${row.original.patient.reference}`}>{row.original.patient.displayName}</Link><span className="text-xs text-muted-foreground">{row.original.patient.reference}</span></div> },
@@ -78,7 +79,7 @@ export function ClinicalReviewQueue({ user, query, facilityId, state, canCreate,
     { id: "sent", header: "Sent for review", cell: ({ row }) => reviewDate(row.original) },
     { id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => reviewActions(row.original) },
   ];
-  const unfilteredEmpty = !loading && !error && !data?.total && !query.trim() && facilityId === "all" && state === "all";
+  const unfilteredEmpty = !loading && !error && !data?.total && !query.trim() && facilityId === "all" && state === "all" && risk === "all";
   const empty = <div className={`table-empty-content${unfilteredEmpty ? " illustrated-empty-state" : ""}`}>{loading ? <p role="status">Loading clinical reviews…</p> : error ? <><p role="alert">{error}</p><Button variant="outline" onPress={() => setRetry(value => value + 1)}>Retry</Button></> : unfilteredEmpty ? <><ClinicalReviewEmptyIllustration /><strong>No clinical reviews yet</strong><span>Reviews will appear after an assessment is sent for review.</span><div className="flex flex-wrap justify-center gap-2">{canCreate && <RouterButtonLink to="/assessments/new">New assessment</RouterButtonLink>}<Button variant="outline" onPress={onViewAssessments}>View assessments</Button></div></> : <p>No clinical reviews match these filters.</p>}</div>;
   return <div className="space-y-4">
     {(claimError || priorityError) && <p role="alert" className="text-sm text-destructive">{claimError || priorityError}</p>}
