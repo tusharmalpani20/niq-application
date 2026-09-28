@@ -43,6 +43,8 @@ async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) =>
 test("clinician sees the latest assessment and actions without switching tabs", async () => {
   await renderDetail("DOCTOR", body => {
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("Draft");
+    expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("4 required answers remaining");
+    expect(body.querySelector('[aria-label="Assessment stages"] [aria-current="step"]')?.textContent).toContain("Draft");
     expect(body.querySelector('[aria-label="Latest assessment"] a[href="/assessments/ASM-000001"]')?.textContent).toContain("Continue assessment");
     expect(body.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("33");
     expect(body.querySelector('button[aria-label="New assessment"] svg')).not.toBeNull();
@@ -50,6 +52,18 @@ test("clinician sees the latest assessment and actions without switching tabs", 
     expect(body.textContent).not.toContain("Correct MRN");
     expect(body.textContent).not.toContain("Patient reference");
   });
+});
+
+test("latest assessment follows the scored and clinical review stages", async () => {
+  await renderDetail("DOCTOR", body => {
+    expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("Ready for clinical review");
+    expect(body.querySelector('[aria-label="Latest assessment"] a[href="/assessments/ASM-000001"]')?.textContent).toContain("Review & send");
+    expect(body.querySelector('[aria-label="Assessment stages"] [aria-current="step"]')?.textContent).toContain("Scored");
+  }, "/patients/PAT-2", { summaries: [{ ...assessment, status: "SCORED", myAction: "SEND_FOR_REVIEW" }] });
+  await renderDetail("DOCTOR", body => {
+    expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("Clinical review in progress");
+    expect(body.querySelector('[aria-label="Assessment stages"] [aria-current="step"]')?.textContent).toContain("Under review");
+  }, "/patients/PAT-2", { summaries: [{ ...assessment, status: "UNDER_REVIEW" }] });
 });
 
 test("organization admin can open the MRN correction action", async () => {
@@ -74,6 +88,21 @@ test("support can edit patient details but cannot open a clinical assessment", a
   });
 });
 
+test("patient assessment history uses contextual actions without a patient column", async () => {
+  const scored = { ...assessment, id: "01ARZ3NDEKTSV4RRFFQ69G5FAW", reference: "ASM-000002", serialNumber: 2, status: "SCORED", isPriority: true };
+  const completed = { ...assessment, id: "01ARZ3NDEKTSV4RRFFQ69G5FAX", reference: "ASM-000003", serialNumber: 3, status: "COMPLETED" };
+  await renderDetail("DOCTOR", async body => {
+    const assessmentsTab = [...body.querySelectorAll<HTMLElement>('[role="tab"]')].find(tab => tab.textContent?.includes("Assessments"));
+    await act(async () => { assessmentsTab!.click(); });
+    const table = body.querySelector('table[aria-label="Patient assessments"]')!;
+    expect([...table.querySelectorAll("th")].map(cell => cell.textContent?.trim())).toEqual(["Assessment", "Facility", "Started", "Status", "Actions"]);
+    expect(body.querySelector('a[aria-label="Continue draft ASM-000001"]')).not.toBeNull();
+    expect(body.querySelector('a[aria-label="View score ASM-000002"]')).not.toBeNull();
+    expect(body.querySelector('a[aria-label="View result ASM-000003"]')).not.toBeNull();
+    expect(body.querySelector('button[aria-label="Remove priority from ASM-000002"]')).not.toBeNull();
+  }, "/patients/PAT-2", { summaries: [assessment, scored, completed] });
+});
+
 test("completed assessments show the reviewed score and trend", async () => {
   const previous = { ...assessment, status: "COMPLETED", completedAt: "2026-09-22T00:00:00Z" };
   const latestId = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
@@ -89,6 +118,7 @@ test("completed assessments show the reviewed score and trend", async () => {
   await renderDetail("DOCTOR", body => {
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("10 points");
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("Low Risk");
+    expect(body.querySelector('[aria-label="Assessment stages"] [aria-current="step"]')?.textContent).toContain("Completed");
     expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("+5 points");
   }, "/patients/PAT-2", { summaries: [latest, previous], details: { [id]: detail(5), [latestId]: detail(8) }, reviews: {
     [id]: { overall: { reviewedPoints: 5 }, risk: { status: "ORIGINAL", classification: { label: "Low Risk" } } },

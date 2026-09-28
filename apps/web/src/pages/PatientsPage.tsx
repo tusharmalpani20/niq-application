@@ -2,7 +2,7 @@ import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility, Patient } from "@niq/application-contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
-import { ArrowDownUp, Pencil, Search } from "lucide-react";
+import { ArrowDownUp, Building2, CalendarDays, ClipboardCheck, Clock3, Download, Eye, HeartHandshake, IdCard, Mail, Pencil, Phone, Search, Send, Star, TriangleAlert, UserRound, UsersRound } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import { PatientAssessmentOverview } from "../components/PatientAssessmentOvervi
 import { PatientEmptyIllustration } from "../components/PatientEmptyIllustration";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
-import { getPatient, listAssessments, listFacilities, listPatients } from "../lib/api";
+import { getPatient, listAssessments, listFacilities, listPatients, setAssessmentPriority } from "../lib/api";
 import { Icon } from "../lib/icons";
 
 import { DateDisplay } from "../components/DateDisplay";
@@ -43,6 +43,21 @@ const patientRow = (patient: Patient, dates: Map<string, Date>): PatientRow => (
   facilityId: patient.homeFacility?.id ?? null,
   lastAssessment: dates.get(patient.id) ?? null,
 });
+
+const assessmentAction = (record: AssessmentSummary) => {
+  if (record.myAction === "CORRECT_DRAFT") return { label: "Make corrections", icon: Pencil };
+  if (record.myAction === "SEND_FOR_REVIEW") return { label: "Review & send", icon: Send };
+  switch (record.status) {
+    case "DRAFT": return { label: "Continue draft", icon: Pencil };
+    case "READY_FOR_SCORING": return { label: "Review answers", icon: ClipboardCheck };
+    case "SCORING_PENDING": return { label: "View progress", icon: Clock3 };
+    case "SCORING_UNAVAILABLE": return { label: "Review issue", icon: TriangleAlert };
+    case "SCORED": return { label: "View score", icon: Eye };
+    case "UNDER_REVIEW": return { label: "View review", icon: Eye };
+    case "COMPLETED": return { label: "View result", icon: Eye };
+    default: return { label: "View assessment", icon: Eye };
+  }
+};
 
 export function PatientsPage() {
   const user = useOutletContext<AuthenticatedUser>();
@@ -160,6 +175,8 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
   const [history, setHistory] = useState<AssessmentSummary[]>([]);
   const [patientTab, setPatientTab] = useState("details");
   const [historyState, setHistoryState] = useState<"loading" | "ready" | "error">("loading");
+  const [priorityBusy, setPriorityBusy] = useState<string | null>(null);
+  const [priorityError, setPriorityError] = useState("");
   const [editing, setEditing] = useState(false);
   const [correctingMrn, setCorrectingMrn] = useState(false);
   const [correctingDob, setCorrectingDob] = useState(false);
@@ -209,6 +226,33 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
     catch { setEditError(true); }
     finally { setEditLoading(false); }
   };
+  const togglePriority = async (record: AssessmentSummary) => {
+    setPriorityBusy(record.id);
+    setPriorityError("");
+    try {
+      await setAssessmentPriority(user.organizationId, record.id, !record.isPriority);
+      setHistory(items => items.map(item => item.id === record.id ? { ...item, isPriority: !record.isPriority } : item));
+    } catch (cause) {
+      setPriorityError(cause instanceof Error ? cause.message : "Could not update priority. Please try again.");
+    } finally {
+      setPriorityBusy(null);
+    }
+  };
+  const priorityButton = (record: AssessmentSummary) => <Button variant="ghost" size="icon" className={record.isPriority ? "text-amber-600" : "text-muted-foreground"} aria-label={`${record.isPriority ? "Remove priority from" : "Mark as priority"} ${record.reference}`} aria-pressed={record.isPriority} isDisabled={priorityBusy !== null} onPress={() => { void togglePriority(record); }}><Star className={`size-4 ${record.isPriority ? "fill-current" : ""}`} aria-hidden="true" /></Button>;
+  const openAssessmentButton = (record: AssessmentSummary) => {
+    const { label, icon: ActionIcon } = assessmentAction(record);
+    return <RouterButtonLink variant="outline" size="sm" className="whitespace-nowrap" to={`/assessments/${record.reference}`} aria-label={`${label} ${record.reference}`}><ActionIcon className="size-4" aria-hidden="true" />{label}</RouterButtonLink>;
+  };
+  // Reports are not generated yet, so this mirrors the disabled affordance in the main list.
+  const downloadButton = (record: AssessmentSummary) => record.status === "COMPLETED" && <span title="PDF reports are not available yet"><Button variant="outline" size="sm" isDisabled aria-label={`Download PDF for ${record.reference} (not yet available)`}><Download className="size-4" aria-hidden="true" />Download PDF</Button></span>;
+  const historyColumns: Array<DataTableColumn<AssessmentSummary>> = [
+    { id: "reference", header: "Assessment", cell: ({ row }) => canReadAssessment ? <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> : row.original.reference },
+    { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "—" },
+    { id: "created", header: "Started", cell: ({ row }) => <DateDisplay value={row.original.createdAt} /> },
+    { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
+  ];
+  if (canReadAssessment) historyColumns.push({ id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-2">{openAssessmentButton(row.original)}{downloadButton(row.original)}{priorityButton(row.original)}</div> });
+  const historyEmptyContent = <div className="table-empty-content illustrated-empty-state"><strong>{canCreateAssessment ? "Start this patient’s first assessment" : "No assessments yet"}</strong>{canCreateAssessment && <RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18} />New assessment</RouterButtonLink>}</div>;
   return <>
     <PatientHeader patient={patient} action={<div className="flex flex-wrap gap-2">{canEditPatient && <TooltipTrigger><Button variant="outline" size="icon-lg" className="size-10 shrink-0" aria-label="Edit patient" onPress={openEditor} isDisabled={editLoading}><Pencil className="size-4" /></Button><Tooltip>Edit patient</Tooltip></TooltipTrigger>}{canCreateAssessment && <TooltipTrigger><Button size="icon-lg" className="size-10 shrink-0" aria-label="New assessment" onPress={() => navigate(`/assessments/new?patient=${patient.id}`)}><Icon name="plus" size={20} /></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>} />
     {editError && <Alert variant="destructive"><AlertDescription>Facilities could not be loaded for editing. <Button variant="link" onPress={openEditor}>Retry</Button></AlertDescription></Alert>}
@@ -223,26 +267,37 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
           <div className="border-b border-border px-5 py-4 sm:px-6"><h2 className="text-lg font-semibold">Patient details</h2></div>
           <div className="grid min-w-0 md:grid-cols-2">
             <section className="min-w-0 px-5 py-4 sm:px-6 md:border-r md:border-border" aria-labelledby="patient-identity-heading">
-              <h3 id="patient-identity-heading" className="mb-2 text-sm font-semibold text-foreground">Identity</h3>
-              <dl className="patient-definition m-0"><div><dt>Medical record number</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span className="min-w-0 break-all">{patient.medicalRecordNumber}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct medical record number" onPress={() => setCorrectingMrn(true)}><Pencil className="size-4" /></Button><Tooltip>Correct MRN</Tooltip></TooltipTrigger>}</dd></div><div><dt>Date of birth</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct date of birth" onPress={() => setCorrectingDob(true)}><Pencil className="size-4" /></Button><Tooltip>Correct DOB</Tooltip></TooltipTrigger>}</dd></div><div><dt>Gender</dt><dd>{genderLabel(patient.gender)}</dd></div></dl>
+              <h3 id="patient-identity-heading" className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground"><UserRound className="size-4 shrink-0 text-primary" aria-hidden="true" />Identity</h3>
+              <dl className="patient-definition m-0">
+                <div><dt className="flex min-w-0 items-center gap-2"><IdCard className="size-4 shrink-0 text-primary" aria-hidden="true" />Medical record number</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span className="min-w-0 break-all">{patient.medicalRecordNumber}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct medical record number" onPress={() => setCorrectingMrn(true)}><Pencil className="size-4" /></Button><Tooltip>Correct MRN</Tooltip></TooltipTrigger>}</dd></div>
+                <div><dt className="flex min-w-0 items-center gap-2"><CalendarDays className="size-4 shrink-0 text-primary" aria-hidden="true" />Date of birth</dt><dd className="flex min-w-0 items-center justify-end gap-1"><span>{patient.dateOfBirth ? formatPatientDate(patient.dateOfBirth) : "—"}</span>{user.role === "ORGANIZATION_ADMIN" && <TooltipTrigger><Button variant="ghost" size="icon-sm" className="shrink-0 text-primary" aria-label="Correct date of birth" onPress={() => setCorrectingDob(true)}><Pencil className="size-4" /></Button><Tooltip>Correct DOB</Tooltip></TooltipTrigger>}</dd></div>
+                <div><dt className="flex min-w-0 items-center gap-2"><UsersRound className="size-4 shrink-0 text-primary" aria-hidden="true" />Gender</dt><dd>{genderLabel(patient.gender)}</dd></div>
+              </dl>
             </section>
             <section className="min-w-0 border-t border-border px-5 py-4 sm:px-6 md:border-t-0" aria-labelledby="patient-contact-heading">
-              <h3 id="patient-contact-heading" className="mb-2 text-sm font-semibold text-foreground">Care and contact</h3>
-              <dl className="patient-definition m-0"><div><dt>Home facility</dt><dd>{patient.homeFacility?.name ?? "—"}</dd></div><div><dt>Mobile number</dt><dd>{patient.phone || "Not provided"}</dd></div><div><dt>Email address</dt><dd>{patient.email || "Not provided"}</dd></div></dl>
+              <h3 id="patient-contact-heading" className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground"><HeartHandshake className="size-4 shrink-0 text-primary" aria-hidden="true" />Care and contact</h3>
+              <dl className="patient-definition m-0">
+                <div><dt className="flex min-w-0 items-center gap-2"><Building2 className="size-4 shrink-0 text-primary" aria-hidden="true" />Home facility</dt><dd>{patient.homeFacility?.name ?? "—"}</dd></div>
+                <div><dt className="flex min-w-0 items-center gap-2"><Phone className="size-4 shrink-0 text-primary" aria-hidden="true" />Mobile number</dt><dd>{patient.phone || "Not provided"}</dd></div>
+                <div><dt className="flex min-w-0 items-center gap-2"><Mail className="size-4 shrink-0 text-primary" aria-hidden="true" />Email address</dt><dd>{patient.email || "Not provided"}</dd></div>
+              </dl>
             </section>
           </div>
           <p className="m-0 border-t border-border bg-muted/20 px-5 py-3 text-xs text-muted-foreground sm:px-6">Registered <time dateTime={patient.createdAt.toISOString()}>{formatPatientDate(patient.createdAt)}</time></p>
         </Card>
       </TabsContent>
       <TabsContent id="assessments">
-        <Card className="surface p-5">
-          {historyState === "loading" ? <p>Loading assessments…</p> : historyState === "error" ? <div className="grid gap-3"><p>Assessment history could not be loaded.</p><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></div> : history.length ? <DataTable label="Patient assessments" data={history} columns={[
-            { id: "reference", header: "Assessment", cell: ({ row }) => hasPermission(user.role, "assessments.read") ? <Link className="text-foreground hover:underline font-normal" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> : row.original.reference },
-            { id: "date", header: "Started", cell: ({ row }) => hasPermission(user.role, "assessments.read") ? <Link className="text-foreground underline" to={`/assessments/${row.original.reference}`}><DateDisplay value={row.original.createdAt} /></Link> : <DateDisplay value={row.original.createdAt} /> },
-            { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "No facility" },
-            { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentStatusLabels[row.original.status]} /> },
-          ]} /> : <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center"><h2 className="font-semibold">{canCreateAssessment ? "Start this patient’s first assessment" : "No assessments yet"}</h2>{canCreateAssessment && <RouterButtonLink to={`/assessments/new?patient=${patient.id}`}><Icon name="plus" size={18} />New assessment</RouterButtonLink>}</div>}
-        </Card>
+        {priorityError && <p role="alert" className="mb-3 text-sm text-destructive">{priorityError}</p>}
+        <section className="surface table-surface" aria-label="Patient assessments">
+          {historyState === "loading" ? <p className="p-5">Loading assessments…</p> : historyState === "error" ? <div className="grid gap-3 p-5"><p>Assessment history could not be loaded.</p><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></div> : <>
+            <div className="mobile-card-list">{history.length ? history.map(record => <article className="mobile-data-card list-mobile-card assessment-mobile-card" key={record.id}>
+              <div className="mobile-card-heading"><div className="mobile-card-primary">{canReadAssessment ? <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}</div>{canReadAssessment && <div className="mobile-card-actions">{priorityButton(record)}</div>}</div>
+              <div className="mobile-card-meta"><StatusBadge status={assessmentStatusLabels[record.status]} /><span>{record.facility?.name ?? "No facility"} · {formatPatientDate(record.createdAt)}</span></div>
+              {canReadAssessment && <div className="assessment-card-footer">{openAssessmentButton(record)}<div className="assessment-card-secondary">{downloadButton(record)}</div></div>}
+            </article>) : historyEmptyContent}</div>
+            <div className="desktop-table p-5"><DataTable label="Patient assessments" data={history} columns={historyColumns} emptyContent={historyEmptyContent} /></div>
+          </>}
+        </section>
       </TabsContent>
     </Tabs>
     {editing && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={patient} canCorrectIdentity={user.role === "ORGANIZATION_ADMIN"} focusField={focusEditField} onClose={() => setEditing(false)} onSaved={updated => { setPatient(updated); setEditing(false); }} />}
