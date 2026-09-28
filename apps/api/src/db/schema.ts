@@ -368,6 +368,7 @@ export const patients = pgTable(
     uniqueIndex("patients_org_serial_uidx").on(table.organizationId, table.serialNumber),
     uniqueIndex("patients_org_external_reference_hash_uidx").on(table.organizationId, table.externalReferenceLookupHash),
     index("patients_org_facility_idx").on(table.organizationId, table.homeFacilityId),
+    index("patients_overview_recent_idx").on(table.organizationId, table.createdAt).where(sql`${table.isArchived} = false`),
     foreignKey({
       name: "patients_org_home_facility_fk",
       columns: [table.organizationId, table.homeFacilityId],
@@ -433,6 +434,8 @@ export const assessments = pgTable(
     check("assessments_serial_number_ck", sql`${table.serialNumber} > 0`),
     index("assessments_org_status_idx").on(table.organizationId, table.status),
     index("assessments_org_patient_idx").on(table.organizationId, table.patientId),
+    index("assessments_overview_patient_recent_idx").on(table.organizationId, table.patientId, table.createdAt),
+    index("assessments_overview_completed_idx").on(table.organizationId, table.completedAt).where(sql`${table.status} = 'COMPLETED'`),
     foreignKey({
       name: "assessments_org_patient_fk",
       columns: [table.organizationId, table.patientId],

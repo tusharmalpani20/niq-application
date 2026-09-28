@@ -232,6 +232,13 @@
       "when": 1790582400000,
       "tag": "0032_audit_activity_actor_index",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790668800000,
+      "tag": "0033_overview_summary_indexes",
+      "breakpoints": true
     }
   ]
 }
