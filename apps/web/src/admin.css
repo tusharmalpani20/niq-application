@@ -107,8 +107,8 @@
 }
 
 /* Client lists share the same rhythm while their primary colour stays tenant-owned. */
-.client-workspace { min-height: 100svh; }
-.client-workspace .content {
+:is(.admin-workspace, .client-workspace) { min-height: 100svh; }
+:is(.admin-workspace, .client-workspace) .content {
   padding-top: calc(6.75rem + env(safe-area-inset-top));
   padding-bottom: calc(7rem + env(safe-area-inset-bottom));
 }
@@ -259,7 +259,7 @@
   .workspace-search { grid-column: 1; grid-row: 2; width: 100%; max-width: none; }
   .workspace-header-actions > span { grid-column: 2; grid-row: 2; }
   .workspace-account { grid-column: 3; grid-row: 2; }
-  .client-workspace .content { padding-top: calc(8.5rem + env(safe-area-inset-top)); }
+  :is(.admin-workspace, .client-workspace) .content { padding-top: calc(8.5rem + env(safe-area-inset-top)); }
 }
 @media (max-width: 640px) {
   .workspace-header { left: .65rem; right: .65rem; top: calc(.5rem + env(safe-area-inset-top)); }
@@ -275,7 +275,7 @@
   .workspace-account summary > svg { display: none; }
   .workspace-dock { bottom: calc(.5rem + env(safe-area-inset-bottom)); gap: 0; }
   .workspace-dock-item { min-width: min(22vw, 5rem); min-height: 3rem; padding-inline: .2rem; font-size: .64rem; }
-  .client-workspace .content { padding-top: calc(8.5rem + env(safe-area-inset-top)); padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
+  :is(.admin-workspace, .client-workspace) .content { padding-top: calc(8.5rem + env(safe-area-inset-top)); padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 480px) {
   .brand-marks-workspace .brand-marks-partner span { font-size: .68rem; }
