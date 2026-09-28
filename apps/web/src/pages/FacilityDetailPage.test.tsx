@@ -11,7 +11,7 @@ const otherId = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
 const recently = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
 const facility = { id: facilityId, organizationId: facilityId, name: "Hyderabad", code: "HYD", timezone: "Asia/Kolkata", status: "ACTIVE", createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-01T00:00:00Z" };
 const patient = { id: facilityId, organizationId: facilityId, reference: "PAT-2", displayName: "Example Patient", homeFacility: { id: facilityId, name: "Hyderabad" }, dateOfBirth: null, gender: "UNKNOWN", createdAt: recently, updatedAt: recently };
-const assessment = { id: facilityId, reference: "ASM-000001", serialNumber: 1, organizationId: facilityId, patient: { id: facilityId, reference: "PAT-2", displayName: "Example Patient" }, facility: { id: facilityId, name: "Hyderabad" }, status: "DRAFT", myAction: null, isPriority: false, createdAt: recently, completedAt: null };
+const assessment = { id: facilityId, reference: "ASM-000001", serialNumber: 1, organizationId: facilityId, patient: { id: facilityId, reference: "PAT-2", displayName: "Example Patient" }, facility: { id: facilityId, name: "Hyderabad" }, status: "DRAFT", myAction: null, isPriority: false, createdAt: recently, completedAt: null, riskCategory: null };
 const team = [
   { membershipId: facilityId, userId: facilityId, email: "doctor@example.test", displayName: "Example Doctor", status: "ACTIVE", role: "DOCTOR", active: true, facilities: [{ id: facilityId, name: "Hyderabad" }], createdAt: facility.createdAt },
   { membershipId: otherId, userId: otherId, email: "other@example.test", displayName: "Other Doctor", status: "ACTIVE", role: "DOCTOR", active: true, facilities: [{ id: otherId, name: "Elsewhere" }], createdAt: facility.createdAt },

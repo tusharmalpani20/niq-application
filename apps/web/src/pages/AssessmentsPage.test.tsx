@@ -8,7 +8,7 @@ import { AssessmentsPage } from "./AssessmentsPage";
 const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const date = "2026-09-20T00:00:00Z";
 const patient = { id, reference: "PAT-1", displayName: "Example Patient" };
-const records = ["DRAFT", "READY_FOR_SCORING", "SCORED"].map((status, index) => ({ id: `${id.slice(0, -1)}${index + 1}`, reference: `ASM-00000${index + 1}`, serialNumber: index + 1, organizationId: id, patient, facility: null, status, myAction: null as string | null, isPriority: false, createdAt: date, completedAt: null }));
+const records = ["DRAFT", "READY_FOR_SCORING", "SCORED"].map((status, index) => ({ id: `${id.slice(0, -1)}${index + 1}`, reference: `ASM-00000${index + 1}`, serialNumber: index + 1, organizationId: id, patient, facility: null, status, myAction: null as string | null, isPriority: false, createdAt: date, completedAt: null, riskCategory: null as "low" | "moderate" | "high" | null }));
 type AssessmentFixture = Omit<(typeof records)[number], "facility" | "completedAt"> & { facility: { id: string; name: string } | null; completedAt: string | null };
 
 async function renderAssessments(path: string, items: AssessmentFixture[], verify: (priorityWrites: boolean[]) => void | Promise<void>, reviewItems: unknown[] = [], reviewRequests: string[] = [], claimCommands: unknown[] = []) {
@@ -110,6 +110,28 @@ test("completed overview card opens all completed assessments", async () => {
     const table = document.querySelector('[aria-label="Assessments"]');
     expect(table?.textContent).toContain("ASM-000001");
     expect(table?.textContent).not.toContain("ASM-000002");
+  });
+});
+
+test("risk category filter uses completed assessments' reviewed categories", async () => {
+  const items = [
+    { ...records[0]!, status: "COMPLETED", completedAt: date, riskCategory: "high" as const },
+    { ...records[1]!, status: "COMPLETED", completedAt: date, riskCategory: "moderate" as const },
+    { ...records[2]!, status: "COMPLETED", completedAt: date, riskCategory: null },
+    { ...records[2]!, id: `${id.slice(0, -1)}4`, reference: "ASM-000004", status: "SCORED", riskCategory: null },
+  ];
+  await renderAssessments("/assessments?risk=high", items, () => {
+    const table = document.querySelector('[aria-label="Assessments"]');
+    expect(table?.textContent).toContain("ASM-000001");
+    expect(table?.textContent).not.toContain("ASM-000002");
+    expect(table?.textContent).not.toContain("ASM-000003");
+    expect(table?.textContent).not.toContain("ASM-000004");
+    expect(document.querySelector('[aria-label="Filter by risk category"]')).not.toBeNull();
+  });
+  await renderAssessments("/assessments?tab=completed&risk=moderate", items, () => {
+    const table = document.querySelector('[aria-label="Assessments"]');
+    expect(table?.textContent).toContain("ASM-000002");
+    expect(table?.textContent).not.toContain("ASM-000001");
   });
 });
 

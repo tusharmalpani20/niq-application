@@ -28,6 +28,12 @@ import { assessmentStatusLabels } from "../lib/patient-display";
 const assessmentPageSize = 10;
 type AssessmentTab = "assessments" | "my-work" | "clinical-reviews" | "completed";
 const statusFilterIds = ["DRAFT", "SCORED", "UNDER_REVIEW", "COMPLETED"] as const;
+const riskCategoryIds = ["low", "moderate", "high"] as const;
+type RiskCategory = (typeof riskCategoryIds)[number];
+const initialRisk = (params: URLSearchParams): RiskCategory | "all" => {
+  const value = params.get("risk");
+  return riskCategoryIds.find(category => category === value) ?? "all";
+};
 const assessmentDate = (date: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
 const initialStatus = (params: URLSearchParams) => {
   const value = params.get("status");
@@ -112,6 +118,7 @@ export function AssessmentsPage() {
   const [reviewQuery, setReviewQuery] = useState("");
   const [facility, setFacility] = useState(() => searchParams.get("facility") ?? "all");
   const [status, setStatus] = useState(() => tabStatus(searchParams, initialTab(searchParams, canOpen)));
+  const [risk, setRisk] = useState(() => initialRisk(searchParams));
   const reviewFilter = ["QUEUED", "IN_REVIEW"].includes(searchParams.get("review") ?? "") ? searchParams.get("review")! : "all";
   const [reviewState, setReviewState] = useState(reviewFilter);
   const [page, setPage] = useState(1);
@@ -145,6 +152,7 @@ export function AssessmentsPage() {
       if (next === "assessments") updated.delete("tab"); else updated.set("tab", next);
       updated.delete("status");
       updated.delete("review");
+      if (next === "my-work" || next === "clinical-reviews") updated.delete("risk");
       return updated;
     });
   };
@@ -152,6 +160,7 @@ export function AssessmentsPage() {
     setTab(initialTab(searchParams, canOpen));
     setStatus(tabStatus(searchParams, initialTab(searchParams, canOpen)));
     setFacility(searchParams.get("facility") ?? "all");
+    setRisk(initialRisk(searchParams));
     setReviewState(reviewFilter);
     setPage(1);
   }, [canOpen, reviewFilter, searchParams]);
@@ -175,9 +184,9 @@ export function AssessmentsPage() {
     const now = new Date();
     return records.filter((record) => {
       const matchesQuery = !normalizedQuery || `${record.reference} ${record.patient.reference} ${record.patient.displayName} ${record.facility?.name ?? ""}`.toLowerCase().includes(normalizedQuery);
-      return matchesQuery && (facility === "all" || record.facility?.id === facility) && matchesTab(record, tab) && matchesStatus(record, status, now);
+      return matchesQuery && (facility === "all" || record.facility?.id === facility) && matchesTab(record, tab) && matchesStatus(record, status, now) && (risk === "all" || tab === "my-work" || record.riskCategory === risk);
     });
-  }, [facility, query, records, status, tab]);
+  }, [facility, query, records, risk, status, tab]);
   const myWorkCount = records.filter(record => !!record.myAction).length;
   const completedCount = records.filter(record => record.status === "COMPLETED").length;
   const pageCount = Math.max(1, Math.ceil(filtered.length / assessmentPageSize));
@@ -222,7 +231,7 @@ export function AssessmentsPage() {
     { id: "status", header: "Status", cell: ({ row }) => <StatusBadge status={assessmentListStatus(row.original, tab)} /> },
   ];
   if (canOpen) columns.push({ id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-2">{claimButton(row.original)}{openButton(row.original)}{downloadButton(row.original)}{priorityButton(row.original)}</div> });
-  const hasFilters = query.trim() || facility !== "all" || status !== "all";
+  const hasFilters = query.trim() || facility !== "all" || status !== "all" || (tab !== "my-work" && risk !== "all");
   const quickFilter = tab === "assessments" ? quickFilterLabels[status] : undefined;
   const emptyContent = <div className={`table-empty-content${loadState === "ready" && !hasFilters ? " illustrated-empty-state" : ""}`}>{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : tab === "my-work" ? <><AssessmentEmptyIllustration /><strong>Nothing needs your action</strong><span>Drafts, corrections, and assessments ready to send will appear here.</span></> : tab === "completed" ? <><AssessmentEmptyIllustration /><strong>No completed assessments yet</strong><span>Completed assessments will appear here.</span></> : <><AssessmentEmptyIllustration /><strong>No assessments to display</strong><span>Assessments will appear here when available.</span>{canCreate && <RouterButtonLink to="/assessments/new">New assessment</RouterButtonLink>}</>}</div>;
   const assessmentContent = <>
@@ -249,6 +258,7 @@ export function AssessmentsPage() {
       {tab !== "clinical-reviews" ?
       <Select key={tab} aria-label={tab === "my-work" ? "Filter my work" : tab === "completed" ? "Filter completed assessments" : "Filter by status"} selectedKey={quickFilter ? "all" : status} onSelectionChange={(key) => { const selected = String(key); setStatus(selected); setSearchParams(params => { const updated = new URLSearchParams(params); if (selected === "all") updated.delete("status"); else updated.set("status", selected); if (tab !== "assessments") updated.set("tab", tab); return updated; }); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{tab === "my-work" ? <><SelectItem id="all">All my work</SelectItem><SelectItem id="EDIT_DRAFT">My drafts</SelectItem><SelectItem id="CORRECT_DRAFT">Corrections to make</SelectItem><SelectItem id="SEND_FOR_REVIEW">Ready to send</SelectItem></> : tab === "completed" ? <><SelectItem id="all">All completed</SelectItem><SelectItem id="COMPLETED_THIS_MONTH">Completed this month</SelectItem></> : <><SelectItem id="all">All statuses</SelectItem>{statusFilterIds.map(id => <SelectItem id={id} key={id}>{assessmentStatusLabels[id]}</SelectItem>)}</>}</SelectContent></Select>
       : <Select aria-label="Review stage" selectedKey={reviewState} onSelectionChange={key => setReviewState(String(key))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All clinical reviews</SelectItem><SelectItem id="QUEUED">Awaiting reviewer</SelectItem><SelectItem id="IN_REVIEW">In review</SelectItem></SelectContent></Select>}
+      {(tab === "assessments" || tab === "completed") && <Select aria-label="Filter by risk category" selectedKey={risk} onSelectionChange={key => { const selected = String(key) as RiskCategory | "all"; setRisk(selected); setSearchParams(params => { const updated = new URLSearchParams(params); if (selected === "all") updated.delete("risk"); else updated.set("risk", selected); return updated; }); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All risk categories</SelectItem><SelectItem id="low">Low risk</SelectItem><SelectItem id="moderate">Moderate risk</SelectItem><SelectItem id="high">High risk</SelectItem></SelectContent></Select>}
     </div>
     {quickFilter && <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground"><span>Showing {quickFilter.toLowerCase()}</span><Button variant="ghost" size="sm" aria-label={`Clear ${quickFilter} filter`} onPress={() => setSearchParams(params => { const updated = new URLSearchParams(params); updated.delete("status"); return updated; })}><X className="size-4" aria-hidden="true" />Clear</Button></div>}
     <TabsContent id="assessments">{tab === "assessments" && assessmentContent}</TabsContent>
