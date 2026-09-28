@@ -98,7 +98,10 @@ test("saves draft before capture and unlocks navigation only after upload accept
   await consent(); await startScan();
   expect(saved()).toBe(1); expect(starts()).toBe(1); expect(busy()).toBe(true);
   const start = requests.find(r => r.body?.requestKey); expect(start?.body.revision).toBe(4); expect(start?.body.requestKey.length).toBeGreaterThan(16);
-  await finish(); expect(busy()).toBe(false); expect(document.body.textContent).toContain("Your capture is saved");
+  await finish(); expect(busy()).toBe(false);
+  expect(document.querySelector('[aria-label="Scan analysis status"]')?.textContent).toContain("Scan queued for analysis");
+  expect(document.querySelector('[aria-label="Scan analysis status"] svg.animate-spin')).not.toBeNull();
+  expect(document.body.textContent).not.toContain("waiting to be sent");
 }));
 test("shows position and stillness guidance below the camera image", async () => harness(async ({ consent, startScan, click, frame }) => {
   await consent(); await startScan();
@@ -142,10 +145,13 @@ test("multiple cameras still use the SDK's default camera", async () => harness(
 test("lost upload response reconciles accepted scan without another capture", async () => harness(async ({ consent, startScan, click, finish, starts, requests }) => {
   await consent(); await startScan(); await finish();
   expect(starts()).toBe(1); expect(requests.filter(r => r.path.endsWith("/signal")).length).toBe(1);
-  expect(document.body.textContent).toContain("Your capture is saved");
+  expect(document.body.textContent).toContain("Your scan is saved and waiting for analysis to begin");
 }, { lostUpload: true }));
 test("reopens processing session without requesting camera", async () => harness(async ({ starts }) => {
-  expect(document.body.textContent).toContain("Getting scan results"); expect(starts()).toBe(0);
+  expect(document.querySelector('[aria-label="Scan analysis status"]')?.textContent).toContain("Processing scan");
+  expect(document.querySelector('[aria-label="Scan analysis status"]')?.textContent).toContain("Results will appear here when ready");
+  expect(document.querySelector('[aria-label="Scan analysis status"] svg.animate-spin')).not.toBeNull();
+  expect(starts()).toBe(0);
 }, { existing: { ...session, state: "PROCESSING" } }));
 test("a scored assessment does not ask clinicians to cancel an unfinished scan", async () => harness(async ({ requests }) => {
  expect(document.body.textContent).toContain("Scan not completed");
@@ -173,7 +179,7 @@ test("explains an expired attempt and retains earlier attempts in scan history",
 
 test("late pre-upload status cannot overwrite accepted upload", async () => harness(async ({ consent, startScan, click, finish, releaseStatus }) => {
   await consent(); await startScan(); await finish(); await releaseStatus();
-  expect(document.body.textContent).toContain("Your capture is saved");
+  expect(document.body.textContent).toContain("Your scan is saved and waiting for analysis to begin");
   expect(document.body.textContent).not.toContain("Resume capture");
 }, { delayedStatus: true }));
 test("queued cancellation targets the current attempt after a previous capture", async () => harness(async ({ consent, startScan, click, finish, setCurrent, requests }) => {

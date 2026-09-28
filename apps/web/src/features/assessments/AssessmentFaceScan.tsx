@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { faceScanContextSchema, hasUsableFaceScan, type AssessmentWorkflow, type FaceScanList, type FaceScanSession, type FaceScanSignal } from "@niq/application-contracts";
-import { Armchair, History, Info, PersonStanding, ScanFace } from "lucide-react";
+import { Armchair, History, Info, LoaderCircle, PersonStanding, ScanFace } from "lucide-react";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,7 +15,7 @@ import { getFaceScanConsent } from "./face-scan-consent-api";
 
 type Phase = "idle" | "preparing" | "capturing" | "uploading" | "upload_failed";
 const labels: Record<FaceScanSession["state"], string> = {
-  REQUESTED: "Ready to capture", UPLOAD_ACCEPTED: "Scan captured", PROCESSING: "Getting scan results",
+  REQUESTED: "Ready to capture", UPLOAD_ACCEPTED: "Scan queued for analysis", PROCESSING: "Processing scan",
   COMPLETED: "Scan complete", RECONCILIATION_REQUIRED: "Scan result unavailable", FAILED: "Scan failed",
   EXPIRED: "No scan result", CANCELLED: "Scan cancelled", PAUSED: "Scan paused",
 };
@@ -241,11 +241,13 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {data && !data.enabled && !noRecordedScan && <div className="py-6 text-center"><ScanFace className="mx-auto mb-3 size-8 text-brand-ink" aria-hidden="true"/><h3 className="font-semibold">Face scan is not available yet</h3><p className="mt-2 text-sm text-muted-foreground">You can continue with the questionnaire. Face scanning does not affect its completion.</p></div>}
     {noRecordedScan && <p className="py-4 text-sm text-muted-foreground">No face scan was done for this assessment.</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    {session && !(session.state === "COMPLETED" && session.result) && <p role="status" className="font-medium">{statusLabel}{stale ? " · Last known status" : ""}</p>}
+    {session && (session.state === "UPLOAD_ACCEPTED" || session.state === "PROCESSING") && <div role="status" aria-label="Scan analysis status" className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+      <LoaderCircle className="mt-0.5 size-5 shrink-0 animate-spin text-primary motion-reduce:animate-none" aria-hidden="true" />
+      <div><p className="font-semibold">{statusLabel}{stale ? " · Last known status" : ""}</p><p className="mt-1 text-sm text-muted-foreground">{session.state === "UPLOAD_ACCEPTED" ? "Your scan is saved and waiting for analysis to begin." : "Your scan is being analysed. Results will appear here when ready."} You can continue the questionnaire.</p></div>
+    </div>}
+    {session && session.state !== "UPLOAD_ACCEPTED" && session.state !== "PROCESSING" && !(session.state === "COMPLETED" && session.result) && <p role="status" className="font-medium">{statusLabel}{stale ? " · Last known status" : ""}</p>}
     {session?.state === "RECONCILIATION_REQUIRED" && <p className="text-sm text-muted-foreground">{rejected ? "The scan could not be processed. Please contact support before trying again. You can continue filling in the form." : "Your scan result is not available. You can continue filling in the form. Please contact support before trying another scan."}</p>}
     {session?.state === "PAUSED" && <p className="text-sm text-muted-foreground">The service has paused this scan. Its saved status will update when processing can continue.</p>}
-    {session?.state === "UPLOAD_ACCEPTED" && <p className="text-sm text-muted-foreground">Your capture is saved and waiting to be sent for analysis. You can continue the questionnaire. Results will appear here when available.</p>}
-    {session?.state === "PROCESSING" && <p className="text-sm text-muted-foreground">Your scan is being processed. You can continue filling in the form and return here for the result.</p>}
     {session?.state === "FAILED" && <p className="text-sm text-muted-foreground">The scan didn’t finish. Please try again.</p>}
     {session?.state === "EXPIRED" && <p className="text-sm text-muted-foreground">The attempt started on {new Date(session.createdAt).toLocaleString()} ended before analysis, so there is no measurement from that attempt. This record remains in the scan history. A new scan would measure the patient at a new time.</p>}
     {session?.state === "COMPLETED" && record.status === "DRAFT" && <p className="text-sm text-muted-foreground">{hasUsableFaceScan(session) ? "The saved face scan is retained. Scan again only if a new measurement is needed." : "This scan did not produce a usable result. Scan again before submitting the assessment."}</p>}
