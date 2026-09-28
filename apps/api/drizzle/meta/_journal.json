@@ -225,6 +225,13 @@
       "when": 1790496001000,
       "tag": "0031_face_scan_consent_binding",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790582400000,
+      "tag": "0032_audit_activity_actor_index",
+      "breakpoints": true
     }
   ]
 }

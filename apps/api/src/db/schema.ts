@@ -648,6 +648,7 @@ export const auditEvents = pgTable(
   },
   (table) => [
     index("audit_events_org_occurred_idx").on(table.organizationId, table.occurredAt),
+    index("audit_events_org_actor_occurred_idx").on(table.organizationId, table.actorMembershipId, table.occurredAt),
     index("audit_events_resource_idx").on(table.resourceType, table.resourceId),
     foreignKey({
       name: "audit_events_org_actor_fk",
