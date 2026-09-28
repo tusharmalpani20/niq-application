@@ -227,11 +227,12 @@ test("failed pre-submission attempt offers explicit retry without automatic capt
   expect(requests.filter(r => r.body?.requestKey).length).toBe(1);
 }, {existing: {...session, state:"FAILED", failureCode:"SCAN_NOT_SUBMITTED"}}));
 
-test("explicit service rejection shows failed status without permitting another submission", async () => harness(async ({starts}) => {
-  expect(document.body.textContent).toContain("Scan failed");
-  expect(document.body.textContent).toContain("The scan could not be processed");
-  expect(document.body.textContent).not.toContain("Scan result unavailable");
-  expect([...document.querySelectorAll("button")].some(b => /Try again|Start another scan/.test(b.textContent ?? ""))).toBe(false);
+test("explicit service rejection previews scan setup without permitting another submission", async () => harness(async ({starts,requests}) => {
+  expect(document.body.textContent).toContain("Before you start");
+  expect(document.body.textContent).toContain("Scan setup preview");
+  expect(document.body.textContent).not.toContain("The scan could not be processed");
+  expect([...document.querySelectorAll("button")].find(b => b.textContent?.trim() === "Start face scan")?.disabled).toBe(true);
+  expect(requests.every(r => r.body === null)).toBe(true);
   expect(starts()).toBe(0);
 }, {existing: {...session,state:"RECONCILIATION_REQUIRED",failureCode:"PROVIDER_REJECTED"}}));
 
