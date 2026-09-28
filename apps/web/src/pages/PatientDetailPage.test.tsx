@@ -137,10 +137,12 @@ test("completed assessments show the reviewed score and trend", async () => {
   }, clinicalReviews: { [latestId]: { submittedAt: "2026-09-23T02:30:00Z" } } });
   await renderDetail("DOCTOR", body => {
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("10 points");
-    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("One NIQ score available");
+    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("First recorded score");
     expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("10 points");
+    expect(body.querySelector('[aria-label="NIQ score trend"]')?.textContent).toContain("Low Risk");
+    expect(body.querySelector('[aria-label="NIQ score trend"] svg')).toBeNull();
   }, "/patients/PAT-2", { summaries: [latest], details: { [latestId]: detail(8) }, reviews: {
-    [latestId]: { overall: { reviewedPoints: 10 }, risk: { status: "CONFIRMED", classification: { label: "Low Risk" } } },
+    [latestId]: { overall: { reviewedPoints: 10 }, risk: { status: "CONFIRMED", classification: { label: "Low Risk", color: "green" } } },
   } });
 });
 test("DOB correction link opens the admin correction dialog", async () => {

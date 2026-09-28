@@ -120,6 +120,22 @@ function ScoreTrend({ points }: { points: ScorePoint[] }) {
 }
 
 function ScoreTrendPlaceholder({ first, loading }: { first?: ScorePoint; loading: boolean }) {
+  if (first && !loading) return <section className="surface flex h-full min-w-0 flex-col overflow-hidden p-5 sm:p-6" aria-label="NIQ score trend">
+    <div><h2 className="font-semibold">NIQ score trend</h2><p className="mt-1 text-sm text-muted-foreground">One score available for clinical use</p></div>
+    <div className="flex flex-1 flex-col justify-center py-6">
+      <div className="rounded-2xl border border-border bg-muted/20 p-5">
+        <p className="text-sm font-medium text-muted-foreground">First recorded score</p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <strong className="text-4xl font-semibold tabular-nums" style={first.risk ? { color: riskColor(first.color) } : undefined}>{first.score}{" "}<span className="text-base font-normal text-muted-foreground">points</span></strong>
+          {first.risk && <span className="rounded-full border px-3 py-1 text-sm font-semibold" style={riskBadgeStyle(first.color)}>{first.risk}</span>}
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">Recorded <DateDisplay value={first.date} /></p>
+      </div>
+      <div className="mt-5 flex items-center gap-2" aria-hidden="true"><span className="size-3 shrink-0 rounded-full bg-primary" /><span className="h-0 flex-1 border-t border-dashed border-border" /><span className="size-3 shrink-0 rounded-full border-2 border-border bg-card" /></div>
+      <div className="mt-2 flex justify-between gap-3 text-xs"><span className="font-medium">First score</span><span className="text-muted-foreground">Next score</span></div>
+      <p className="mt-5 text-sm text-muted-foreground">A trend will appear after another assessment is scored and available for clinical use.</p>
+    </div>
+  </section>;
   return <section className="surface flex h-full min-w-0 flex-col overflow-hidden p-5 sm:p-6" aria-label="NIQ score trend">
     <div><h2 className="font-semibold">NIQ score trend</h2><p className="mt-1 text-sm text-muted-foreground">Scores approved for clinical use</p></div>
     <div className="flex flex-1 flex-col items-center justify-center py-6 text-center">
@@ -131,9 +147,8 @@ function ScoreTrendPlaceholder({ first, loading }: { first?: ScorePoint; loading
         <circle cx="145" cy="68" r="6" fill="var(--card)" stroke="currentColor" strokeWidth="2" />
         <circle cx="237" cy="40" r="7" fill="var(--card)" stroke="currentColor" strokeWidth="2" />
       </svg>
-      <p className="font-semibold">{loading ? "Loading score history…" : first ? "One NIQ score available" : "No NIQ scores yet"}</p>
-      {first && !loading && <p className="mt-1 text-2xl font-semibold tabular-nums">{first.score} <span className="text-sm font-normal text-muted-foreground">points</span></p>}
-      <p className="mt-2 max-w-xs text-sm text-muted-foreground">{loading ? "Checking recent assessments." : first ? "Another score approved for clinical use will show how this patient's NIQ score has changed." : "Scores appear here after an assessment is scored and approved for clinical use. A trend line needs at least two scores."}</p>
+      <p className="font-semibold">{loading ? "Loading score history…" : "No NIQ scores yet"}</p>
+      <p className="mt-2 max-w-xs text-sm text-muted-foreground">{loading ? "Checking recent assessments." : "Scores appear here after an assessment is scored and available for clinical use. A trend line needs at least two scores."}</p>
     </div>
   </section>;
 }
