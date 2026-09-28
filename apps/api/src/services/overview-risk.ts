@@ -36,9 +36,8 @@ function latestAssessments(rows: CompletedAssessment[], cutoff?: number): Map<st
   return latest;
 }
 
-function category(row: CompletedAssessment, unseal: (value: unknown) => StoredData): "low" | "moderate" | "high" | null {
-  if (!row.clinicalReview) return null;
-  const risk = unseal(row.clinicalReview).finalSnapshot?.score?.risk;
+export function riskCategoryFromFinalSnapshot(snapshot: unknown): "low" | "moderate" | "high" | null {
+  const risk = (snapshot as StoredData["finalSnapshot"] | null | undefined)?.score?.risk;
   if (!risk || !["ORIGINAL", "CONFIRMED"].includes(risk.status ?? "") || !risk.classification) return null;
   const id = risk.classification.id?.toLowerCase();
   const label = risk.classification.label?.toLowerCase();
@@ -46,6 +45,10 @@ function category(row: CompletedAssessment, unseal: (value: unknown) => StoredDa
   if (id === "moderate" || id === "moderate_risk" || label === "moderate risk") return "moderate";
   if (id === "low" || id === "low_risk" || label === "low risk") return "low";
   return null;
+}
+
+function category(row: CompletedAssessment, unseal: (value: unknown) => StoredData): "low" | "moderate" | "high" | null {
+  return row.clinicalReview ? riskCategoryFromFinalSnapshot(unseal(row.clinicalReview).finalSnapshot) : null;
 }
 
 export function overviewRiskNutritionTargets(rows: CompletedAssessment[], unseal: (value: unknown) => StoredData) {

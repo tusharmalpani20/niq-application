@@ -1,8 +1,14 @@
 import { expect, test } from "bun:test";
-import { countOverviewRisk, overviewRiskNutritionTargets } from "./overview-risk";
+import { countOverviewRisk, overviewRiskNutritionTargets, riskCategoryFromFinalSnapshot } from "./overview-risk";
 
 const row = (id: string, patientId: string, date: string, status: string, classification: { id: string; label: string } | null) => ({
   id, patientId, completedAt: new Date(date), clinicalReview: { finalSnapshot: { score: { risk: { status, classification } } } },
+});
+
+test("list filtering uses the reviewed category and ignores unavailable classifications", () => {
+  expect(riskCategoryFromFinalSnapshot(row("1", "one", "2026-09-01", "CONFIRMED", { id: "high_risk", label: "High Risk" }).clinicalReview.finalSnapshot)).toBe("high");
+  expect(riskCategoryFromFinalSnapshot(row("2", "two", "2026-09-01", "PENDING", { id: "high", label: "High Risk" }).clinicalReview.finalSnapshot)).toBeNull();
+  expect(riskCategoryFromFinalSnapshot(null)).toBeNull();
 });
 
 test("counts one confirmed high risk category per patient from the latest completed assessment", () => {

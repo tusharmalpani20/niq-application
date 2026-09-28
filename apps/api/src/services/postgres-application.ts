@@ -38,7 +38,7 @@ import { ServiceError } from "./application";
 import { facilityAccessCondition } from "./facility-access";
 import { facilityTrend } from "./facility-performance";
 import { requestScoringOrganizationInfo, ScoringOrganizationInfoRequestError } from "./scoring-organization-info";
-import { countOverviewRisk, overviewRiskNutritionTargets } from "./overview-risk";
+import { countOverviewRisk, overviewRiskNutritionTargets, riskCategoryFromFinalSnapshot } from "./overview-risk";
 import { loadOverviewSummary } from "./overview-summary";
 import { myAssessmentAction } from "./my-assessment-action";
 export { myAssessmentAction } from "./my-assessment-action";
@@ -921,7 +921,7 @@ export class PostgresApplicationService implements ApplicationService {
       facilityName: facilities.name,
       status: assessments.status,
       createdByMembershipId: assessments.createdByMembershipId,
-      clinicalReview: sql<unknown>`case when ${inArray(assessments.status, ["DRAFT", "SCORED"])} then ${assessments.clinicalReview} else null end`,
+      clinicalReview: sql<unknown>`case when ${inArray(assessments.status, ["DRAFT", "SCORED", "COMPLETED"])} then ${assessments.clinicalReview} else null end`,
       createdAt: assessments.createdAt,
       updatedAt: assessments.updatedAt,
       completedAt: assessments.completedAt,
@@ -934,7 +934,7 @@ export class PostgresApplicationService implements ApplicationService {
       .orderBy(desc(assessments.createdAt));
     const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
     return rows.map((row) => {
-      const review = (row.status === "DRAFT" || row.status === "SCORED") && row.clinicalReview ? (() => {
+      const review = row.clinicalReview ? (() => {
         const encrypted = (row.clinicalReview as { encrypted?: string }).encrypted;
         if (!encrypted) throw new ServiceError("CONFLICT", "Assessment review data could not be read.");
         return JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key)) as ClinicalReviewStored;
@@ -951,6 +951,7 @@ export class PostgresApplicationService implements ApplicationService {
         },
         facility: row.facilityId && row.facilityName ? { id: row.facilityId, name: row.facilityName } : null,
         status: row.status,
+        riskCategory: row.status === "COMPLETED" ? riskCategoryFromFinalSnapshot(review?.finalSnapshot) : null,
         myAction: !row.patientArchived && row.patientAccessible ? myAssessmentAction(actor, row, review?.correctionPerson?.membershipId ?? null) : null,
         isPriority: row.priorityMembershipId !== null,
         createdAt: row.createdAt,

@@ -439,6 +439,7 @@ export const assessmentSummarySchema = z.object({
   patient: patientSchema.pick({ id: true, reference: true, displayName: true }),
   facility: facilitySchema.pick({ id: true, name: true }).nullable(),
   status: assessmentStatusSchema,
+  riskCategory: z.enum(["low", "moderate", "high"]).nullable(),
   myAction: z.enum(["EDIT_DRAFT", "CORRECT_DRAFT", "SEND_FOR_REVIEW"]).nullable(),
   isPriority: z.boolean(),
   createdAt: z.coerce.date(),
