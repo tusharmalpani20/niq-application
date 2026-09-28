@@ -312,6 +312,19 @@ test("activity calendar shows the signed-in clinician's actions and the risk ove
   });
 });
 
+test("risk overview reveals category counts when a legend item is selected", async () => {
+  await renderOverview("DOCTOR", async body => {
+    const overview = body.querySelector('[aria-label="Assessment risk overview"]')!;
+    const chart = overview.querySelector('[role="img"]')!;
+    expect(chart.textContent).toContain("6scored patients");
+    const moderate = [...overview.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent?.includes("Moderate Risk"))!;
+    expect(moderate.textContent).toContain("2");
+    await act(async () => moderate.click());
+    expect(chart.textContent).toContain("2Moderate Risk");
+    expect(moderate.getAttribute("aria-pressed")).toBe("true");
+  }, { risk: { assessedPatients: 6, categories: { low: 1, moderate: 2, high: 3 }, categories30DaysAgo: { low: 0, moderate: 0, high: 0 } } });
+});
+
 test("priority assessments appear beside quick actions", async () => {
   await renderOverview("DOCTOR", body => {
     const actions = body.querySelector('[aria-label="Quick actions"]');

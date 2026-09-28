@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type PointerEvent } from "react";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, CalendarDays, ShieldCheck } from "lucide-react";
 import { getOverviewActivity, getOverviewActivityDay, getOverviewRisk } from "../lib/api";
@@ -86,14 +86,28 @@ export function AssessmentActivityCalendar({ organizationId }: { organizationId:
 }
 
 export function RiskOverviewCards({ risk }: { risk: Risk | null }) {
+  const [hoveredCategory, setHoveredCategory] = useState<"low" | "moderate" | "high" | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<"low" | "moderate" | "high" | null>(null);
   const counts = risk?.categories;
   const total = risk?.assessedPatients ?? 0;
   const low = total ? (counts?.low ?? 0) / total * 100 : 0;
   const moderate = total ? (counts?.moderate ?? 0) / total * 100 : 0;
-  const categories = [{ label: "Low Risk", count: counts?.low ?? 0, color: "bg-primary" }, { label: "Moderate Risk", count: counts?.moderate ?? 0, color: "bg-amber-400" }, { label: "High Risk", count: counts?.high ?? 0, color: "bg-rose-500" }];
+  const categories = [{ id: "low" as const, label: "Low Risk", count: counts?.low ?? 0, color: "bg-primary" }, { id: "moderate" as const, label: "Moderate Risk", count: counts?.moderate ?? 0, color: "bg-amber-400" }, { id: "high" as const, label: "High Risk", count: counts?.high ?? 0, color: "bg-rose-500" }];
+  const activeCategory = categories.find(item => item.id === (hoveredCategory ?? selectedCategory));
+  function hoverRing(event: PointerEvent<HTMLDivElement>) {
+    if (!total) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - bounds.left - bounds.width / 2;
+    const y = event.clientY - bounds.top - bounds.height / 2;
+    const radius = Math.hypot(x, y);
+    // The center is a hole; angles start at 12 o'clock and proceed clockwise like conic-gradient.
+    if (radius < bounds.width * 0.34 || radius > bounds.width / 2) { setHoveredCategory(null); return; }
+    const percent = ((Math.atan2(x, -y) + 2 * Math.PI) % (2 * Math.PI)) / (2 * Math.PI) * 100;
+    setHoveredCategory(percent < low ? "low" : percent < low + moderate ? "moderate" : "high");
+  }
   return <section className="mt-4" aria-label="Assessment risk overview">
     <div className="surface p-5"><h2 className="flex items-center gap-2 font-semibold"><ShieldCheck className="size-5 text-primary" aria-hidden="true" />NIQ risk overview</h2><p className="mt-1 text-xs text-muted-foreground">Each patient’s latest completed assessment</p>
-      {risk ? <div className="mt-5"><div role="img" aria-label={`${total} scored patients; ${categories.map(item => `${item.label}: ${item.count}`).join(", ")}`} className="mx-auto grid size-48 place-items-center rounded-full lg:size-56" style={{ background: total ? `conic-gradient(var(--primary) 0 ${low}%, #fbbf24 ${low}% ${low + moderate}%, #f43f5e ${low + moderate}% 100%)` : "var(--muted)" }}><div className="grid size-32 place-content-center rounded-full bg-background text-center lg:size-40"><strong className="text-4xl">{total}</strong><span className="text-xs text-muted-foreground">scored patients</span></div></div><ul className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">{categories.map(item => <li key={item.label} className="flex items-center gap-2 text-sm"><i className={`size-2.5 rounded-full ${item.color}`} /><span>{item.label}</span></li>)}</ul></div> : <p className="mt-5 text-sm text-muted-foreground">Risk categories are unavailable.</p>}
+      {risk ? <div className="mt-5"><div role="img" aria-label={`${total} scored patients; ${categories.map(item => `${item.label}: ${item.count}`).join(", ")}`} className={`mx-auto grid size-48 place-items-center rounded-full lg:size-56 ${total ? "cursor-pointer" : ""}`} style={{ background: total ? `conic-gradient(var(--primary) 0 ${low}%, #fbbf24 ${low}% ${low + moderate}%, #f43f5e ${low + moderate}% 100%)` : "var(--muted)" }} onPointerMove={hoverRing} onPointerLeave={() => setHoveredCategory(null)} onClick={() => { if (hoveredCategory) setSelectedCategory(current => current === hoveredCategory ? null : hoveredCategory); }}><div className="grid size-32 place-content-center rounded-full bg-background text-center lg:size-40"><strong className="text-4xl">{activeCategory ? activeCategory.count : total}</strong><span className="text-xs text-muted-foreground">{activeCategory ? activeCategory.label : "scored patients"}</span></div></div><ul className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">{categories.map(item => <li key={item.id}><button type="button" aria-pressed={selectedCategory === item.id} onPointerEnter={() => setHoveredCategory(item.id)} onPointerLeave={() => setHoveredCategory(null)} onFocus={() => setHoveredCategory(item.id)} onBlur={() => setHoveredCategory(null)} onClick={() => setSelectedCategory(current => current === item.id ? null : item.id)} className="flex items-center gap-2 rounded-md px-1 py-0.5 text-sm hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"><i aria-hidden="true" className={`size-2.5 rounded-full ${item.color}`} /><span>{item.label}</span><span className="tabular-nums text-muted-foreground">{item.count}</span></button></li>)}</ul></div> : <p className="mt-5 text-sm text-muted-foreground">Risk categories are unavailable.</p>}
     </div>
   </section>;
 }
