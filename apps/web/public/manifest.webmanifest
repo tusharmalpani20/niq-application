@@ -1,0 +1,11 @@
+{
+  "id": "/",
+  "name": "NIQ Clinical Workspace",
+  "short_name": "NIQ",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7fbfd",
+  "theme_color": "#3bb9bd",
+  "icons": [{ "src": "/niq-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
