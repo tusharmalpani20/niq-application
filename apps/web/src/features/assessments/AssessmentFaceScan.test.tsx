@@ -8,14 +8,14 @@ import { createCaptureController, type CaptureSDK } from "./careplix-capture";
 
 const session: FaceScanSession = { id: "session", state: "REQUESTED", context: { dob: "1990-01-01", gender: "female", heightCm: 170, weightKg: 70, posture: "resting", employeeId: "employee" }, createdAt: "2026-09-20T12:00:00.000Z", updatedAt: "2026-09-20T12:00:00.000Z", completedAt: null, failureCode: null, result: null, score: null };
 const usableSession: FaceScanSession = { ...session, state: "COMPLETED", completedAt: "2026-09-20T12:01:00.000Z", result: { schemaVersion: 1, providerScanId: "scan", wellnessScore: 70, healthRiskScore: null, vitals: { heartRate: 70, oxygenSaturation: null, respiratoryRate: null, systolic: null, diastolic: null }, physiologicalScore: null, mentalWellbeingScore: null }, score: { status: "SCORED", points: 1 } };
-async function harness(run: (ctx: { click: (text: string) => Promise<void>; startScan: (label?: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; cameraChecks: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null; status?: AssessmentWorkflow["status"]; cameras?: number } = {}) {
+async function harness(run: (ctx: { click: (text: string) => Promise<void>; startScan: (label?: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; cameraChecks: () => number; cameraStops: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null; status?: AssessmentWorkflow["status"]; cameras?: number } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "https://niq.test", pretendToBeVisual: true });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   const values: Record<string, unknown> = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, NodeFilter: dom.window.NodeFilter, DocumentFragment: dom.window.DocumentFragment, HTMLButtonElement: dom.window.HTMLButtonElement, HTMLInputElement: dom.window.HTMLInputElement, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0), cancelAnimationFrame: clearTimeout, IS_REACT_ACT_ENVIRONMENT: true };
-  let cameraChecks = 0;
+  let cameraChecks = 0, cameraStops = 0;
   Object.defineProperty(dom.window.navigator, "mediaDevices", { value: {
-    getUserMedia: async () => { cameraChecks++; return { getTracks: () => [{ stop: () => {} }] }; },
+    getUserMedia: async () => { cameraChecks++; return { getTracks: () => [{ stop: () => { cameraStops++; } }] }; },
     enumerateDevices: async () => Array.from({ length: options.cameras ?? 1 }, (_, index) => ({ kind: "videoinput", deviceId: `camera-${index}` })),
   } });
   const requests: Array<{ path: string; body: any }> = [];
@@ -59,7 +59,7 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; star
     await act(async () => { root.render(<AssessmentFaceScan organizationId="org" record={record} active disabled={false} beforeStart={async () => { saves++; if (options.hiddenDuringSave) Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true }); return { ...record, revision: 4 }; }} onMissingInputs={fields => { missing = fields; }} onBusyChange={value => { busy = value; }} onStatusChange={() => {}} captureFactory={() => createCaptureController(async () => sdk)}/>); await flush(); });
     await run({ releaseStatus: async () => { await act(async () => { releaseStatus(); await flush(); }); },
       setCurrent: async value => { current = value; await act(async () => { document.dispatchEvent(new dom.window.Event("visibilitychange")); await flush(); }); },
-      requests, starts: () => starts, cameraChecks: () => cameraChecks, saved: () => saves, busy: () => busy, missing: () => missing,
+      requests, starts: () => starts, cameraChecks: () => cameraChecks, cameraStops: () => cameraStops, saved: () => saves, busy: () => busy, missing: () => missing,
       click, startScan,
       consent: async () => { await act(async () => { document.querySelector<HTMLInputElement>('input[type="radio"][value="standing"]:not(:disabled)')?.click(); }); },
       finish: async () => { await act(async () => { finish({ raw_intensity: [{ r: 1, g: 2, b: 3 }, { r: 2, g: 3, b: 4 }], ppg_time: [0, 33], average_fps: 30 }); await flush(); }); },
@@ -129,19 +129,25 @@ test("capture uses an uncropped full-screen camera view with a visible cancel co
   expect(overlay?.hidden).toBe(true);
   expect(document.body.style.overflow).toBe("");
 }));
-test("consent starts the SDK without a separate camera probe or selection", async () => harness(async ({ consent, startScan, cameraChecks, starts }) => {
+test("a single camera starts automatically without offering an unavailable back camera", async () => harness(async ({ consent, startScan, cameraChecks, cameraStops, starts }) => {
   await consent(); await startScan();
-  expect(cameraChecks()).toBe(0);
+  expect(cameraChecks()).toBe(1);
+  expect(cameraStops()).toBe(1);
   expect(starts()).toBe(1);
   expect(document.querySelector('input[type="radio"][value="back"]')).toBeNull();
 }));
-test("multiple cameras still use the SDK's default camera", async () => harness(async ({ consent, startScan, starts, cameraChecks }) => {
-  await consent(); await startScan();
-  expect(cameraChecks()).toBe(0);
+test("multiple cameras offer a back camera choice and use an unmirrored preview", async () => harness(async ({ consent, click, starts, cameraChecks, cameraStops }) => {
+  await consent(); await click("Start face scan");
+  await click("Send consent request"); await click("Continue to face scan");
+  expect(cameraChecks()).toBe(1);
+  expect(cameraStops()).toBe(1);
+  expect(starts()).toBe(0);
+  await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"][value="back"]')!.click());
+  const startButton = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Start face scan" && button.closest('[role="dialog"]'))!;
+  await act(async () => { startButton.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
   expect(starts()).toBe(1);
-  expect(document.querySelector('input[type="radio"][value="back"]')).toBeNull();
   const canvas = document.querySelector<HTMLCanvasElement>('canvas[aria-label="Camera scan preview"]');
-  expect(canvas?.classList.contains("-scale-x-100")).toBe(true);
+  expect(canvas?.classList.contains("-scale-x-100")).toBe(false);
 }, { cameras: 2 }));
 test("lost upload response reconciles accepted scan without another capture", async () => harness(async ({ consent, startScan, click, finish, starts, requests }) => {
   await consent(); await startScan(); await finish();
