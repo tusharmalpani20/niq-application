@@ -256,8 +256,9 @@
   .workspace-brand-group { grid-column: 1 / -1; grid-row: 1; }
   .workspace-header-actions { display: contents; }
   .workspace-search { grid-column: 1; grid-row: 2; width: 100%; max-width: none; }
-  .workspace-header-actions > span { grid-column: 2; grid-row: 2; }
+  .workspace-header-actions > .notification-bell { grid-column: 2; grid-row: 2; }
   .workspace-account { grid-column: 3; grid-row: 2; }
+  #notification-inbox { position: fixed; top: 5.75rem; right: .75rem; }
   :is(.admin-workspace, .client-workspace) .content { padding-top: calc(8.5rem + env(safe-area-inset-top)); }
 }
 @media (max-width: 640px) {

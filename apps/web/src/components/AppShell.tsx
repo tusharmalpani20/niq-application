@@ -1,7 +1,7 @@
 import { canVisitOrganizationRoute } from "../lib/route-permissions";
 import { membershipRoleLabels } from "@niq/application-contracts";
 import type { AuthenticatedUser } from "@niq/application-contracts";
-import { Bell, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { Suspense, useEffect, useLayoutEffect, useRef } from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -11,6 +11,7 @@ import { WorkspaceSearch } from "./WorkspaceSearch";
 import { signOut } from "../lib/api";
 import { useBranding } from "../lib/branding-context";
 import { Icon } from "../lib/icons";
+import { NotificationBell } from "../features/notifications/NotificationBell";
 
 const canVisit = (user: AuthenticatedUser, path: string) => canVisitOrganizationRoute(user.role, path);
 
@@ -68,9 +69,7 @@ function WorkspaceHeader({ user, onSignOut }: { user: AuthenticatedUser; onSignO
       </button>
       <div className="workspace-header-actions ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
         <WorkspaceSearch key={`${user.organizationId}:${user.role}`} user={user} onNavigate={go} />
-        <span role="img" aria-label="Notifications" className="grid size-9 shrink-0 place-items-center text-foreground">
-          <Bell className="size-[18px]" aria-hidden="true" />
-        </span>
+        <NotificationBell key={user.organizationId} organizationId={user.organizationId} onNavigate={go} />
         <details className="workspace-account" ref={menuRef}>
           <summary aria-label={`Account menu for ${user.displayName}`}>
             <Avatar className="size-9 shrink-0"><AvatarFallback className="text-xs">{initials}</AvatarFallback></Avatar>
