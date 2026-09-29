@@ -21,6 +21,7 @@ import { useDraftNavigationGuard } from "./useDraftNavigationGuard";
 import { assessmentRequest, AssessmentRequestError, getAssessment, reconcileAssessmentScoring, retryAssessmentScoring, saveAssessment, submitAssessment } from "./workflow-api";
 import { metricUnits, readMeasurementUnits, rememberMeasurementUnits, type MeasurementUnits } from "./measurement-units";
 import { setAssessmentPriority } from "../../lib/api";
+import type { WorkspaceChange } from "../notifications/useWorkspaceEvents";
 
 export function AssessmentEditorPage() {
   const user = useOutletContext<AuthenticatedUser>();
@@ -75,6 +76,31 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     setError(cause instanceof Error ? cause.message : "Could not save assessment. Your changes are still on this page.");
   }, []);
   const reload = useCallback(async () => { const value = await getAssessment(organizationId, assessmentId); accept(value); }, [organizationId, assessmentId, accept]);
+  const liveState = useRef({ dirty, reportDirty, reportBusy, scanBusy, reviewBusy, busy, contactOpen, record });
+  liveState.current = { dirty, reportDirty, reportBusy, scanBusy, reviewBusy, busy, contactOpen, record };
+  useEffect(() => {
+    let active = true;
+    const onChange = (event: Event) => {
+      const change = (event as CustomEvent<WorkspaceChange>).detail;
+      if (change?.scope !== "organization" && (change?.scope !== "assessment" || change.assessmentId !== (liveState.current.record?.id ?? assessmentId))) return;
+      const current = liveState.current;
+      if (current.dirty || current.reportDirty || current.reportBusy || current.scanBusy || current.reviewBusy || current.busy || current.contactOpen) {
+        setNotice("New saved changes may be available. Finish your work before reloading.");
+        return;
+      }
+      void getAssessment(organizationId, assessmentId).then(value => {
+        if (!active) return;
+        const latest = liveState.current;
+        if (latest.dirty || latest.reportDirty || latest.reportBusy || latest.scanBusy || latest.reviewBusy || latest.busy || latest.contactOpen) return;
+        if (latest.record && value.revision === latest.record.revision && value.status === latest.record.status) return;
+        setRecord(value);
+        setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers);
+        setNotice("Assessment updated");
+      }).catch(() => { if (active) setNotice("A change is available. Reload when ready."); });
+    };
+    window.addEventListener("niq:workspace-change", onChange);
+    return () => { active = false; window.removeEventListener("niq:workspace-change", onChange); };
+  }, [organizationId, assessmentId]);
   useEffect(() => {
     let active = true;
     getAssessment(organizationId, assessmentId).then(value => { if (active) accept(value); }).catch(cause => { if (active) handleError(cause); }).finally(() => { if (active) setLoading(false); });
