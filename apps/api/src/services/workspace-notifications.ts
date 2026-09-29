@@ -1,7 +1,8 @@
-import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
 import type { Database } from "../db/client";
 import { userNotifications, workspaceEventCursors, workspaceEvents } from "../db/notification-schema";
+import { notificationDeliveries, pushSubscriptions, workspacePresence } from "../db/push-schema";
 import type { WorkflowExecutor, AssessmentWorkflowService } from "./assessment-workflow";
 import type { Principal } from "./application";
 import { ServiceError } from "./application";
@@ -22,10 +23,18 @@ export async function publishWorkspaceChange(executor: WorkflowExecutor, input: 
     .returning({ sequence: workspaceEventCursors.sequence });
   const sequence = cursor!.sequence;
   await executor.insert(workspaceEvents).values({ organizationId: input.organizationId, sequence, scope: input.scope, assessmentId: input.assessmentId ?? null });
-  if (recipients.length) await executor.insert(userNotifications).values(recipients.map(item => ({
+  const notificationRows = recipients.map(item => ({
     id: createEntityId(), organizationId: input.organizationId, recipientMembershipId: item.membershipId,
     eventSequence: sequence, kind: item.kind, assessmentId: input.assessmentId!, reference: item.reference,
-  })));
+  }));
+  if (notificationRows.length) {
+    await executor.insert(userNotifications).values(notificationRows);
+    const subscriptions = await executor.select({ id: pushSubscriptions.id, membershipId: pushSubscriptions.membershipId })
+      .from(pushSubscriptions).where(and(eq(pushSubscriptions.organizationId, input.organizationId), inArray(pushSubscriptions.membershipId, recipients.map(item => item.membershipId)), isNull(pushSubscriptions.revokedAt)));
+    const deliveries = notificationRows.flatMap(notification => subscriptions.filter(subscription => subscription.membershipId === notification.recipientMembershipId)
+      .map(subscription => ({ id: createEntityId(), notificationId: notification.id, channel: "PUSH", destinationKey: subscription.id, subscriptionId: subscription.id, nextAttemptAt: new Date(Date.now() + 30_000) })));
+    if (deliveries.length) await executor.insert(notificationDeliveries).values(deliveries);
+  }
   // PostgreSQL delivers NOTIFY only after the transaction commits. The durable row is the source of truth.
   await executor.execute(sql`select pg_notify('niq_workspace_events', ${input.organizationId})`);
   return sequence;
@@ -90,6 +99,12 @@ export class WorkspaceNotificationService {
   async latestSequence(organizationId: string): Promise<number> {
     const [row] = await this.db.select({ sequence: workspaceEventCursors.sequence }).from(workspaceEventCursors).where(eq(workspaceEventCursors.organizationId, organizationId));
     return row?.sequence ?? 0;
+  }
+
+  async markPresent(actor: Principal, organizationId: string) {
+    this.actor(actor, organizationId);
+    await this.db.insert(workspacePresence).values({ organizationId, membershipId: actor.membershipId, lastSeenAt: new Date() })
+      .onConflictDoUpdate({ target: [workspacePresence.organizationId, workspacePresence.membershipId], set: { lastSeenAt: new Date() } });
   }
 
   async changes(actor: Principal, organizationId: string, after: number, limit = 100) {
