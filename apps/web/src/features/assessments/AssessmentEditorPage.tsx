@@ -78,11 +78,13 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   const reload = useCallback(async () => { const value = await getAssessment(organizationId, assessmentId); accept(value); }, [organizationId, assessmentId, accept]);
   const liveState = useRef({ dirty, reportDirty, reportBusy, scanBusy, reviewBusy, busy, contactOpen, record });
   liveState.current = { dirty, reportDirty, reportBusy, scanBusy, reviewBusy, busy, contactOpen, record };
+  const liveRequestSequence = useRef(0);
   useEffect(() => {
     let active = true;
     const onChange = (event: Event) => {
       const change = (event as CustomEvent<WorkspaceChange>).detail;
       if (change?.scope !== "organization" && change?.scope !== "patient" && (change?.scope !== "assessment" || change.assessmentId !== (liveState.current.record?.id ?? assessmentId))) return;
+      const requestSequence = ++liveRequestSequence.current;
       const current = liveState.current;
       if (current.dirty || current.reportDirty || current.reportBusy || current.scanBusy || current.reviewBusy || current.busy || current.contactOpen) {
         setNotice("New saved changes may be available. Finish your work before reloading.");
@@ -95,26 +97,27 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
         return;
       }
       void getAssessment(organizationId, assessmentId).then(value => {
-        if (!active) return;
+        if (!active || requestSequence !== liveRequestSequence.current) return;
         const latest = liveState.current;
         if (latest.dirty || latest.reportDirty || latest.reportBusy || latest.scanBusy || latest.reviewBusy || latest.busy || latest.contactOpen) return;
-        if (latest.record && value.revision === latest.record.revision && value.status === latest.record.status) return;
+        if (latest.record && value.revision < latest.record.revision) return;
+        if (latest.record && value.revision === latest.record.revision && value.status === latest.record.status && value.updatedAt === latest.record.updatedAt && value.isPriority === latest.record.isPriority && JSON.stringify(value.patient) === JSON.stringify(latest.record.patient)) return;
         setRecord(value);
         setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers);
         setNotice("Assessment updated");
       }).catch(cause => {
-        if (!active) return;
+        if (!active || requestSequence !== liveRequestSequence.current) return;
         if (cause instanceof AssessmentRequestError && [403, 404].includes(cause.status)) {
           setRecord(null); setAnswers({}); setError("This assessment is no longer available to you.");
         } else setNotice("A change is available. Reload when ready.");
       });
     };
     window.addEventListener("niq:workspace-change", onChange);
-    return () => { active = false; window.removeEventListener("niq:workspace-change", onChange); };
+    return () => { active = false; liveRequestSequence.current++; window.removeEventListener("niq:workspace-change", onChange); };
   }, [organizationId, assessmentId]);
   useEffect(() => {
     let active = true;
-    getAssessment(organizationId, assessmentId).then(value => { if (active) accept(value); }).catch(cause => { if (active) handleError(cause); }).finally(() => { if (active) setLoading(false); });
+    getAssessment(organizationId, assessmentId).then(value => { if (active && (!liveState.current.record || value.revision >= liveState.current.record.revision)) accept(value); }).catch(cause => { if (active) handleError(cause); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [organizationId, assessmentId, accept, handleError]);
   const internalId = record?.id ?? assessmentId;
