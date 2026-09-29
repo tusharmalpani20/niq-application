@@ -14,7 +14,7 @@ describe("organisation roles", () => {
   });
   test("admin has management permissions without clinical review and support retains only registration and list access", () => {
     for (const permission of permissions) {
-      expect(hasPermission("ORGANIZATION_ADMIN", permission)).toBe(!["assessments.create", "scores.review", "reviews.claim", "reviews.complete"].includes(permission));
+      expect(hasPermission("ORGANIZATION_ADMIN", permission)).toBe(!["assessments.create", "assessments.edit", "assessments.submit", "scans.perform", "reports.manage", "scores.review", "reviews.claim", "reviews.complete"].includes(permission));
       expect(hasPermission("SUPPORT", permission)).toBe(["patients.read", "patients.create", "patients.edit", "assessments.list", "facilities.read"].includes(permission));
       expect(hasPermission("MEDICAL", permission)).toBe(false);
       expect(hasPermission("toString", permission)).toBe(false);

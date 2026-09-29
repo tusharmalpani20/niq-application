@@ -30,6 +30,12 @@ describe("personal assessment action", () => {
     expect(myAssessmentAction(colleague, row, null)).toBeNull();
   });
 
+  test("a transferred scored assessment follows its current owner", () => {
+    const row = { status: "SCORED" as const, createdByMembershipId: "creator", currentOwnerMembershipId: "colleague" };
+    expect(myAssessmentAction(creator, row, null)).toBeNull();
+    expect(myAssessmentAction(colleague, row, null)).toBe("SEND_FOR_REVIEW");
+  });
+
   test("other states and roles have no personal action", () => {
     for (const status of ["READY_FOR_SCORING", "SCORING_PENDING", "SCORING_UNAVAILABLE", "UNDER_REVIEW", "COMPLETED", "VOIDED"] as const) {
       expect(myAssessmentAction(creator, { status, createdByMembershipId: "creator" }, null)).toBeNull();

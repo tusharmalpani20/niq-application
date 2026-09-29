@@ -90,7 +90,7 @@ test("clinical gate rejects support, cross-tenant and platform actors for every 
   for (const permission of ["assessments.read", "assessments.create", "assessments.edit", "assessments.submit", "scans.perform", "reports.manage", "scores.review"] as const) {
     for (const role of ["DOCTOR", "NUTRITIONIST", "OTHER_MEDICAL"] as const) expect(() => check({ ...actor, role }, "org", permission)).not.toThrow();
     const adminCheck = () => check({ ...actor, role: "ORGANIZATION_ADMIN" }, "org", permission);
-    if (permission === "assessments.create" || permission === "scores.review") expect(adminCheck).toThrow();
+    if (["assessments.create", "assessments.edit", "assessments.submit", "scans.perform", "reports.manage", "scores.review"].includes(permission)) expect(adminCheck).toThrow();
     else expect(adminCheck).not.toThrow();
     expect(() => check({ ...actor, role: "SUPPORT" }, "org", permission)).toThrow();
     expect(() => check(actor, "other-org", permission)).toThrow();

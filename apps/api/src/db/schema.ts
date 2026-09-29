@@ -418,6 +418,7 @@ export const assessments = pgTable(
     status: assessmentStatus("status").notNull().default("DRAFT"),
     assignedToMembershipId: entityId("assigned_to_membership_id"),
     createdByMembershipId: entityId("created_by_membership_id").notNull(),
+    currentOwnerMembershipId: entityId("current_owner_membership_id"),
     revision: integer("revision").notNull().default(0),
     workflow: jsonb("workflow"),
     clinicalReview: jsonb("clinical_review"),
@@ -434,6 +435,7 @@ export const assessments = pgTable(
     check("assessments_serial_number_ck", sql`${table.serialNumber} > 0`),
     index("assessments_org_status_idx").on(table.organizationId, table.status),
     index("assessments_org_patient_idx").on(table.organizationId, table.patientId),
+    index("assessments_org_current_owner_idx").on(table.organizationId, table.currentOwnerMembershipId),
     index("assessments_overview_patient_recent_idx").on(table.organizationId, table.patientId, table.createdAt),
     index("assessments_overview_completed_idx").on(table.organizationId, table.completedAt).where(sql`${table.status} = 'COMPLETED'`),
     foreignKey({
@@ -449,6 +451,11 @@ export const assessments = pgTable(
     foreignKey({
       name: "assessments_org_creator_fk",
       columns: [table.organizationId, table.createdByMembershipId],
+      foreignColumns: [organizationMemberships.organizationId, organizationMemberships.id],
+    }),
+    foreignKey({
+      name: "assessments_org_current_owner_fk",
+      columns: [table.organizationId, table.currentOwnerMembershipId],
       foreignColumns: [organizationMemberships.organizationId, organizationMemberships.id],
     }),
     foreignKey({

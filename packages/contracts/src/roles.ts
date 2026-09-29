@@ -30,7 +30,7 @@ const clinicalPermissions: readonly Permission[] = [
  * Organisation, active membership and facility checks must still run on the server.
  */
 export const rolePermissions: Readonly<Record<MembershipRole, readonly Permission[]>> = {
-  ORGANIZATION_ADMIN: permissions.filter(permission => !["assessments.create", "scores.review", "reviews.claim", "reviews.complete"].includes(permission)),
+  ORGANIZATION_ADMIN: permissions.filter(permission => !["assessments.create", "assessments.edit", "assessments.submit", "scans.perform", "reports.manage", "scores.review", "reviews.claim", "reviews.complete"].includes(permission)),
   DOCTOR: [...clinicalPermissions],
   NUTRITIONIST: [...clinicalPermissions],
   OTHER_MEDICAL: [...clinicalPermissions],
