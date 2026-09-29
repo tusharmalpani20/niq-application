@@ -17,6 +17,7 @@ import { PatientForm, PatientFormDialog } from "../components/PatientForm";
 import { CorrectPatientMrnDialog } from "../components/CorrectPatientMrnDialog";
 import { CorrectPatientDobDialog } from "../components/CorrectPatientDobDialog";
 import { PatientHeader } from "../components/PatientHeader";
+import { useWorkspaceRevision } from "../features/notifications/useWorkspaceRevision";
 import { PatientAssessmentOverview } from "../components/PatientAssessmentOverview";
 import { PatientEmptyIllustration } from "../components/PatientEmptyIllustration";
 import { PageHeader } from "../components/Page";
@@ -67,6 +68,7 @@ const assessmentAction = (record: AssessmentSummary) => {
 };
 
 export function PatientsPage() {
+  const workspaceRevision = useWorkspaceRevision(["assessment", "patient", "facility"]);
   const user = useOutletContext<AuthenticatedUser>();
   const [searchParams, setSearchParams] = useSearchParams();
   const registeredThisMonth = searchParams.get("registered") === "this-month";
@@ -100,7 +102,7 @@ export function PatientsPage() {
     setAssessmentState("loading");
     listAssessments(user.organizationId).then(items => { if (active) { setAssessments(items); setAssessmentState("ready"); } }).catch(() => { if (active) setAssessmentState("error"); });
     return () => { active = false; };
-  }, [user.organizationId, reload]);
+  }, [user.organizationId, reload, workspaceRevision]);
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return sortPatientRows(patientRecords.filter((patient) => {
@@ -171,6 +173,7 @@ export function PatientDetailPage() {
 }
 
 function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; patientLocator: string }) {
+  const workspaceRevision = useWorkspaceRevision(["assessment", "patient", "facility"]);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedEdit = searchParams.get("edit");
@@ -219,7 +222,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
       if (patientLocator !== value.reference) navigate(`/patients/${value.reference}${requestedEdit ? `?edit=${requestedEdit}` : ""}`, { replace: true });
     }).catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
-  }, [navigate, patientLocator, user.organizationId, reload, requestedEdit]);
+  }, [navigate, patientLocator, user.organizationId, reload, requestedEdit, workspaceRevision]);
   if (failed) return <Alert variant="destructive"><AlertDescription>This patient could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button> <Link to="/patients">Back to patients</Link></AlertDescription></Alert>;
   if (!patient) return <p className="muted">Loading patient…</p>;
   const canEditPatient = hasPermission(user.role, "patients.edit");

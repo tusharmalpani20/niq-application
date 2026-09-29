@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { AssessmentRequestError } from "./workflow-api";
 import { changeClinicalReview, clinicalReviewLabels, listClinicalReviews } from "./clinical-review-api";
 import { setAssessmentPriority } from "@/lib/api";
+import { useWorkspaceRevision } from "../notifications/useWorkspaceRevision";
 
 const reviewStage = (item: ClinicalReviewQueueItem) => item.review.state === "RETURNED" && !item.review.submittedAt ? "Reopened for corrections" : clinicalReviewLabels[item.review.state];
 const reviewOwner = (item: ClinicalReviewQueueItem) => item.review.correctionPerson ? `Corrections: ${item.review.correctionPerson.displayName}` : item.review.assignee ? `Reviewer: ${item.review.assignee.displayName}` : "Awaiting reviewer";
@@ -17,6 +18,7 @@ const reviewDate = (item: ClinicalReviewQueueItem) => item.review.submittedAt ? 
 const openReview = (item: ClinicalReviewQueueItem) => <RouterButtonLink variant="outline" size="sm" className="whitespace-nowrap" to={`/assessments/${item.reference}`} aria-label={`View review ${item.reference}`}><Eye className="size-4" aria-hidden="true" />View review</RouterButtonLink>;
 
 export function ClinicalReviewQueue({ user, query, facilityId, state, risk, canCreate, onPriorityChange, onViewAssessments }: { user: AuthenticatedUser; query: string; facilityId: string; state: string; risk: string; canCreate: boolean; onPriorityChange: (assessmentId: string, isPriority: boolean) => void; onViewAssessments: () => void }) {
+  const workspaceRevision = useWorkspaceRevision(["assessment", "patient", "facility"]);
   const [data, setData] = useState<Queue | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -59,7 +61,7 @@ export function ClinicalReviewQueue({ user, query, facilityId, state, risk, canC
   const reviewActions = (item: ClinicalReviewQueueItem) => <div className="flex items-center justify-end gap-2">{claimButton(item)}{openReview(item)}{priorityButton(item)}</div>;
   useEffect(() => { setPage(1); }, [query, facilityId, state, risk]);
   useEffect(() => {
-    const controller = new AbortController(); setLoading(true); setData(null);
+    const controller = new AbortController(); setLoading(true);
     const timer = setTimeout(() => {
       const params = new URLSearchParams({ page: String(page), pageSize: "10" });
       if (query.trim()) params.set("search", query.trim());
@@ -69,7 +71,7 @@ export function ClinicalReviewQueue({ user, query, facilityId, state, risk, canC
       listClinicalReviews(user.organizationId, params, controller.signal).then(next => { if (!controller.signal.aborted) { setData(next); setError(""); } }).catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Clinical reviews could not be loaded."); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     }, 150);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [user.organizationId, query, facilityId, state, risk, page, retry]);
+  }, [user.organizationId, query, facilityId, state, risk, page, retry, workspaceRevision]);
   const columns: DataTableColumn<ClinicalReviewQueueItem>[] = [
     { id: "reference", header: "Assessment", cell: ({ row }) => <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> },
     { id: "patient", header: "Patient", cell: ({ row }) => <div className="grid gap-1"><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${row.original.patient.reference}`}>{row.original.patient.displayName}</Link><span className="text-xs text-muted-foreground">{row.original.patient.reference}</span></div> },

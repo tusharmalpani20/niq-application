@@ -9,6 +9,7 @@ import { OverviewUsage } from "../components/OverviewUsage";
 import { GreetingIllustration } from "../components/GreetingIllustration";
 import { PriorityEmptyIllustration, RecentPatientsEmptyIllustration } from "../components/DashboardEmptyIllustrations";
 import { listClinicalReviews } from "../features/assessments/clinical-review-api";
+import { useWorkspaceRevision } from "../features/notifications/useWorkspaceRevision";
 import { getOrganization, getOverviewRisk, getOverviewSummary, listOrganizationUsers } from "../lib/api";
 import { OverviewStatCard } from "./OverviewStatCard";
 import { AssessmentActivityCalendar, RiskOverviewCards } from "./OverviewClinicalCards";
@@ -92,6 +93,7 @@ function UserSeats({ enabled, reserved, pending, limit }: { enabled: number; res
 }
 
 export function DashboardPage() {
+  const workspaceRevision = useWorkspaceRevision(["assessment", "patient", "facility", "users"]);
   const user = useOutletContext<AuthenticatedUser>();
   const isAdmin = hasPermission(user.role, "users.manage");
   const isClinician = hasPermission(user.role, "reviews.claim");
@@ -106,7 +108,7 @@ export function DashboardPage() {
   }, []);
   useEffect(() => {
     let active = true;
-    setData(null); setError(false);
+    setError(false);
     const org = user.organizationId;
     const reviews = (params: Record<string, string>) => listClinicalReviews(org, new URLSearchParams({ page: "1", pageSize: "3", ...params }));
     let supplemental: Partial<Overview> = {};
@@ -135,7 +137,7 @@ export function DashboardPage() {
       pendingInvitations: organization.invitations.filter(item => item.status === "PENDING" && item.expiresAt.getTime() > Date.now()).length,
     })).catch(() => {});
     return () => { active = false; };
-  }, [user.organizationId, isAdmin, isClinician, attempt]);
+  }, [user.organizationId, isAdmin, isClinician, attempt, workspaceRevision]);
 
   const growth = (total: number, added: number) => ({ total, added, percent: total > added ? Math.round(added / (total - added) * 100) : null });
   const patientGrowth = data ? growth(data.summary.patientCount, data.summary.patientsAdded30Days) : null;

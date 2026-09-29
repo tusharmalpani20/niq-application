@@ -1,4 +1,5 @@
 import { ClinicalReviewQueue } from "../features/assessments/ClinicalReviewQueue";
+import { useWorkspaceRevision } from "../features/notifications/useWorkspaceRevision";
 import { listClinicalReviews } from "../features/assessments/clinical-review-api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { assessmentStatusSchema, hasPermission } from "@niq/application-contracts";
@@ -104,6 +105,7 @@ const assessmentActionIcon = (record: AssessmentSummary) => {
 };
 
 export function AssessmentsPage() {
+  const workspaceRevision = useWorkspaceRevision(["assessment", "patient", "facility"]);
   const user = useOutletContext<AuthenticatedUser>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -168,7 +170,7 @@ export function AssessmentsPage() {
     setLoadState("loading");
     Promise.all([listAssessments(user.organizationId), listFacilities(user.organizationId)]).then(([items, facilities]) => { if (active) { setRecords(items); setFacilities(facilities); setLoadState("ready"); } }).catch(() => { if (active) setLoadState("error"); });
     return () => { active = false; };
-  }, [user.organizationId, reload]);
+  }, [user.organizationId, reload, workspaceRevision]);
   useEffect(() => {
     if (!canOpen) return;
     const controller = new AbortController();
@@ -177,7 +179,7 @@ export function AssessmentsPage() {
       .then(result => { if (!controller.signal.aborted) setReviewCount(result.total); })
       .catch(() => { if (!controller.signal.aborted) setReviewCount(null); });
     return () => controller.abort();
-  }, [canOpen, user.organizationId, reload]);
+  }, [canOpen, user.organizationId, reload, workspaceRevision]);
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     const now = new Date();
@@ -204,7 +206,7 @@ export function AssessmentsPage() {
       });
     }
     return () => controller.abort();
-  }, [user.organizationId, visibleReviewIds, reload]);
+  }, [user.organizationId, visibleReviewIds, reload, workspaceRevision]);
   const claimReview = async (record: AssessmentSummary, review: ClinicalReview) => {
     setClaiming(record.id); setClaimError("");
     const key = claimKeys.current.get(record.id) ?? crypto.randomUUID();

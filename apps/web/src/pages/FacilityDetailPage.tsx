@@ -15,6 +15,7 @@ import { openAssessmentStatuses } from "../lib/assessment-work";
 import { assessmentStatusLabels } from "../lib/patient-display";
 import { FacilityDialog } from "./FacilitiesPage";
 import { FacilityPerformance } from "./FacilityPerformance";
+import { useWorkspaceRevision } from "../features/notifications/useWorkspaceRevision";
 import { OverviewStatCard } from "./OverviewStatCard";
 import { periodGrowth } from "./overview-growth";
 import { facilityUrl } from "../lib/facility-url";
@@ -23,6 +24,7 @@ type FacilityOverview = { facility: Facility; patients: Patient[]; assessments: 
 const dateLabel = (date: Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
 
 export function FacilityDetailPage() {
+  const workspaceRevision = useWorkspaceRevision(["assessment", "patient", "facility", "users"]);
   const user = useOutletContext<AuthenticatedUser>();
   const navigate = useNavigate();
   const { facilityId: facilityLocator } = useParams();
@@ -39,8 +41,7 @@ export function FacilityDetailPage() {
 
   useEffect(() => {
     let active = true;
-    setState("loading");
-    setOverview(null);
+    setState(current => current === "ready" ? current : "loading");
     void Promise.all([
       listFacilities(user.organizationId), listPatients(user.organizationId), listAssessments(user.organizationId),
       canManageUsers ? listOrganizationUsers(user.organizationId).catch(() => null) : Promise.resolve(null),
@@ -61,7 +62,7 @@ export function FacilityDetailPage() {
       if (`/facilities/${encodeURIComponent(facilityLocator ?? "")}` !== facilityUrl(facility)) navigate(facilityUrl(facility), { replace: true });
     }).catch(() => { if (active) setState("error"); });
     return () => { active = false; };
-  }, [user.organizationId, canManageUsers, canOpenAssessment, facilityLocator, navigate, reload]);
+  }, [user.organizationId, canManageUsers, canOpenAssessment, facilityLocator, navigate, reload, workspaceRevision]);
 
   if (state === "loading") return <p role="status">Loading facility…</p>;
   if (state === "missing") return <Alert><AlertDescription>Facility not found or you do not have access. <Link to="/facilities">Back to facilities</Link></AlertDescription></Alert>;
