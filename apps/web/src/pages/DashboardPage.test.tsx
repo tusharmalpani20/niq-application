@@ -11,7 +11,7 @@ const date = "2026-09-20T00:00:00Z";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Example Patient", homeFacility: null, dateOfBirth: null, gender: "UNKNOWN", createdAt: date, updatedAt: date };
 const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: null, status: "SCORING_UNAVAILABLE", isPriority: false, createdAt: date, completedAt: null };
 
-type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; patients?: typeof patient[]; assessments?: Array<typeof assessment & { myAction?: string | null; updatedAt?: string }>; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number; riskDelayMs?: number; risk?: { assessedPatients: number; categories: { low: number; moderate: number; high: number }; categories30DaysAgo: { low: number; moderate: number; high: number } }; nutrition?: { protein: { assessed: number; inadequate: number }; eatingBarrier: { assessed: number; top: { id: string; label: string; count: number } | null } }; activity?: { id: string; assessmentId: string; action: string; occurredAt: string }[]; highRiskAssessments?: { patientId: string; assessmentId: string }[] };
+type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; patients?: typeof patient[]; assessments?: Array<typeof assessment & { myAction?: string | null; updatedAt?: string }>; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number; riskDelayMs?: number; riskGate?: Promise<void>; risk?: { assessedPatients: number; categories: { low: number; moderate: number; high: number }; categories30DaysAgo: { low: number; moderate: number; high: number } }; nutrition?: { protein: { assessed: number; inadequate: number }; eatingBarrier: { assessed: number; top: { id: string; label: string; count: number } | null } }; activity?: { id: string; assessmentId: string; action: string; occurredAt: string }[]; highRiskAssessments?: { patientId: string; assessmentId: string }[] };
 
 test("overview greeting follows the local hour", () => {
   expect(greetingForHour(0)).toBe("Good evening");
@@ -58,6 +58,7 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
       });
     }
     if (url.endsWith("/overview-risk")) {
+      if (scenario.riskGate) await scenario.riskGate;
       if (scenario.riskDelayMs) await new Promise(resolve => setTimeout(resolve, scenario.riskDelayMs));
       return Response.json({ highRiskPatients: scenario.highRiskPatients ?? 1, highRiskPatients30DaysAgo: scenario.highRiskPatients30DaysAgo ?? 0, assessedPatients: 1, categories: { low: 0, moderate: 0, high: 1 }, categories30DaysAgo: { low: 0, moderate: 0, high: scenario.highRiskPatients30DaysAgo ?? 0 }, highRiskAssessments: scenario.highRiskAssessments ?? [], nutrition: scenario.nutrition ?? { protein: { assessed: 0, inadequate: 0 }, eatingBarrier: { assessed: 0, top: null } }, ...scenario.risk });
     }
@@ -112,14 +113,16 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
 }
 
 test("overview statistics load while risk calculation is still running", async () => {
+  let finishRisk!: () => void;
+  const riskGate = new Promise<void>(resolve => { finishRisk = resolve; });
   await renderOverview("DOCTOR", async (body, requests) => {
     expect(body.querySelector('a[href="/patients"] strong')?.textContent).toBe("1");
     expect(requests.some(url => url.endsWith("/patients") || url.endsWith("/assessments"))).toBe(false);
     expect(requests.some(url => url.includes("/overview-summary?"))).toBe(true);
     expect(body.querySelector('[aria-label="Assessment risk overview"]')).toBeNull();
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 80)); });
+    await act(async () => { finishRisk(); await riskGate; });
     expect(body.querySelector('[aria-label="Assessment risk overview"]')).not.toBeNull();
-  }, { riskDelayMs: 60 });
+  }, { riskGate });
 });
 
 test("clinician overview shows review work without administrator operations", async () => {
