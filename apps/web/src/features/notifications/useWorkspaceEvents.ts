@@ -10,7 +10,7 @@ const scopes = new Set<WorkspaceChange["scope"]>(["assessment", "patient", "faci
 export function useWorkspaceEvents(organizationId: string) {
   useEffect(() => {
     if (typeof EventSource === "undefined") return;
-    const source = new EventSource(`/api/v1/organizations/${encodeURIComponent(organizationId)}/live`, { withCredentials: true });
+    let source: EventSource | null = null;
     const onChange = (event: MessageEvent) => {
       try {
         const detail: unknown = JSON.parse(event.data);
@@ -23,16 +23,24 @@ export function useWorkspaceEvents(organizationId: string) {
     };
     let connected = false;
     const onOpen = () => { if (connected) catchUp(); connected = true; };
-    source.addEventListener("change", onChange);
-    source.addEventListener("open", onOpen);
+    const connect = () => {
+      if (source || document.visibilityState !== "visible") return;
+      source = new EventSource(`/api/v1/organizations/${encodeURIComponent(organizationId)}/live`, { withCredentials: true });
+      source.addEventListener("change", onChange);
+      source.addEventListener("open", onOpen);
+      catchUp();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") connect();
+      else { source?.close(); source = null; }
+    };
+    connect();
     window.addEventListener("focus", catchUp);
-    document.addEventListener("visibilitychange", catchUp);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      source.removeEventListener("change", onChange);
-      source.removeEventListener("open", onOpen);
       window.removeEventListener("focus", catchUp);
-      document.removeEventListener("visibilitychange", catchUp);
-      source.close();
+      document.removeEventListener("visibilitychange", onVisibility);
+      source?.close();
     };
   }, [organizationId]);
 }

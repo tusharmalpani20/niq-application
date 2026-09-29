@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Inbox } from "./notification-api";
 import { dismissAllNotifications, dismissNotification, getInbox, markAllNotificationsRead, markNotificationRead, safeNotificationHref } from "./notification-api";
 import { useWorkspaceEvents } from "./useWorkspaceEvents";
+import { disablePush, enablePush, getPushState } from "./push-api";
 
 export function NotificationBell({ organizationId, onNavigate }: { organizationId: string; onNavigate: (to: string) => void }) {
   useWorkspaceEvents(organizationId);
@@ -11,6 +12,8 @@ export function NotificationBell({ organizationId, onNavigate }: { organizationI
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pushState, setPushState] = useState<"unavailable" | "unsupported" | "enabled" | "disabled">("unavailable");
+  const [pushBusy, setPushBusy] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const requestSequence = useRef(0);
@@ -37,6 +40,7 @@ export function NotificationBell({ organizationId, onNavigate }: { organizationI
 
   useEffect(() => {
     if (!open) return;
+    void getPushState(organizationId).then(setPushState).catch(() => setPushState("unavailable"));
     const onOutside = (event: PointerEvent) => { if (root.current && !root.current.contains(event.target as Node)) setOpen(false); };
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") { setOpen(false); button.current?.focus(); }
@@ -44,7 +48,17 @@ export function NotificationBell({ organizationId, onNavigate }: { organizationI
     document.addEventListener("pointerdown", onOutside);
     document.addEventListener("keydown", onEscape);
     return () => { document.removeEventListener("pointerdown", onOutside); document.removeEventListener("keydown", onEscape); };
-  }, [open]);
+  }, [open, organizationId]);
+
+  async function togglePush() {
+    if (pushBusy) return;
+    setPushBusy(true); setError(null);
+    try {
+      if (pushState === "enabled") { await disablePush(organizationId); setPushState("disabled"); }
+      else { await enablePush(organizationId); setPushState("enabled"); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Push notifications could not be changed."); }
+    finally { setPushBusy(false); }
+  }
 
   async function mutate(action: () => Promise<unknown>) {
     if (busy) return;
@@ -71,6 +85,10 @@ export function NotificationBell({ organizationId, onNavigate }: { organizationI
           {inbox.items.length > 0 && <button type="button" disabled={busy} className="text-muted-foreground hover:underline disabled:opacity-50" onClick={() => void mutate(() => dismissAllNotifications(organizationId))}>Clear all</button>}
         </div>
       </div>
+      {pushState !== "unavailable" && <div className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
+        {pushState === "unsupported" ? "Push alerts need a secure connection. On iPhone, add NIQ to your Home Screen and open it there." :
+          <button type="button" disabled={pushBusy} className="text-primary hover:underline disabled:opacity-50" onClick={() => void togglePush()}>{pushBusy ? "Updating push alerts…" : pushState === "enabled" ? "Turn off push alerts on this device" : "Turn on push alerts on this device"}</button>}
+      </div>}
       {error && <div role="alert" className="border-b border-border px-4 py-2 text-sm text-destructive">{error} <button type="button" className="underline" onClick={() => void reload()}>Retry</button></div>}
       <div className="min-h-0 overflow-y-auto">
         {inbox.items.length === 0 && !error && <p className="px-4 py-8 text-center text-sm text-muted-foreground">{loading ? "Loading notifications…" : "No notifications yet."}</p>}
