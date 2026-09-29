@@ -5,6 +5,7 @@ import { createDatabase, isDatabaseSchemaReady } from "./db/client";
 import { DevelopmentOtpDelivery, UnconfiguredOtpDelivery } from "./services/dev-otp";
 import { PostgresApplicationService } from "./services/postgres-application";
 import { AssessmentWorkflowService } from "./services/assessment-workflow";
+import { WebPushService } from "./services/web-push";
 
 const config = loadApplicationConfig(process.env);
 const { db, sql } = createDatabase(config);
@@ -12,6 +13,15 @@ const otpDelivery = (config.DEV_OTP_DELIVERY || config.DEV_FIXED_OTP) ? new Deve
 const service = new PostgresApplicationService(db, config, otpDelivery);
 
 const workflow = new AssessmentWorkflowService({ db, applicationService: service, config });
+const webPush = new WebPushService(db, workflow, config);
+let deliveringPush = false;
+const pushWorker = setInterval(async () => {
+  if (deliveringPush) return;
+  deliveringPush = true;
+  try { await webPush.deliverDue(); } catch { console.warn("Push delivery temporarily unavailable"); }
+  finally { deliveringPush = false; }
+}, 10_000);
+pushWorker.unref();
 const faceScans = new AssessmentFaceScanService(workflow);
 let reconciling = false;
 const recovery = setInterval(async () => {
@@ -28,6 +38,7 @@ const app = createApp({
   checkDatabase: () => isDatabaseSchemaReady(sql),
   service,
   assessmentWorkflow: workflow,
+  webPush,
   sessionCookieName: config.SESSION_COOKIE_NAME,
   secureCookies: config.NODE_ENV === "production",
   bootstrapToken: config.BOOTSTRAP_TOKEN,

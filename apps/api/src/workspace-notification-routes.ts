@@ -60,6 +60,7 @@ export function mountWorkspaceNotificationRoutes(
             if (!current || current.membershipId !== actor.membershipId || current.organizationId !== organizationId) {
               stopped = true; controller.close(); return;
             }
+            await notifications.markPresent(current, organizationId);
             // A durable cursor catches missed notifications and events from other API processes.
             for (let batch = 0; batch < 5; batch += 1) {
               const result = await notifications.changes(current, organizationId, cursor);
