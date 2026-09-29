@@ -19,7 +19,7 @@ import { mountAssessmentRoutes } from "./assessment-routes";
 import { mountWorkspaceNotificationRoutes } from "./workspace-notification-routes";
 import { publishWorkspaceChange, type WorkspaceScope } from "./services/workspace-notifications";
 import { mountWebPushRoutes } from "./web-push-routes";
-import { WebPushService } from "./services/web-push";
+import type { WebPushService } from "./services/web-push";
 import type { AssessmentWorkflowService } from "./services/assessment-workflow";
 
 export type AppDependencies = {
@@ -257,7 +257,7 @@ export function createApp(dependencies: AppDependencies) {
   });
   app.patch("/v1/organizations/:organizationId/users/:membershipId", zValidator("param", idParamsSchema, validationFailure), zValidator("json", updateUserStatusSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.setUserActive(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").membershipId!, context.req.valid("json").active, requestContext(context)))));
   if (dependencies.assessmentWorkflow) {
-    mountWebPushRoutes(app, dependencies.webPush ?? new WebPushService(dependencies.assessmentWorkflow.db, dependencies.assessmentWorkflow, dependencies.assessmentWorkflow.config));
+    if (dependencies.webPush) mountWebPushRoutes(app, dependencies.webPush);
     mountWorkspaceNotificationRoutes(app, dependencies.assessmentWorkflow, dependencies.service!, cookieName);
     mountAssessmentRoutes(app, dependencies.assessmentWorkflow);
     mountFaceScanRoutes(app, new AssessmentFaceScanService(dependencies.assessmentWorkflow));
