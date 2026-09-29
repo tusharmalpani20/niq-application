@@ -15,7 +15,7 @@ function recordFixture(): AssessmentWorkflow {
     patient: { id: "patient-a", reference: "PAT-1", displayName: "Test patient", dateOfBirth: "2006-01-01", gender: "FEMALE", phone: "1234567890", homeFacility: { id: "facility-a", name: "Chennai" } },
     createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 }
-async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{url: string; method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}, locator = "assessment-a", submittedResult?: AssessmentScoreResult, role: MembershipRole = "OTHER_MEDICAL", scanEnabled = false, startAtFaceScan = false, scanSession: FaceScanSession | null = null) {
+async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof createMemoryRouter>; requests: Array<{url: string; method: string; body: any}>; click: (label: string) => Promise<void>; conflict: () => void; remoteAnswers: (answers: AssessmentWorkflow["answers"]) => void; remotePatient: (name: string) => void; deferReads: () => { resolve: (index: number) => void; count: () => number } }) => Promise<void>, overrides: Partial<AssessmentWorkflow> = {}, locator = "assessment-a", submittedResult?: AssessmentScoreResult, role: MembershipRole = "OTHER_MEDICAL", scanEnabled = false, startAtFaceScan = false, scanSession: FaceScanSession | null = null) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["FocusEvent", "window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -29,6 +29,7 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {} });
   dom.window.confirm = () => false;
   let record = { ...recordFixture(), ...overrides }; let rejectSave = false;
+  let heldReads: Array<() => void> | null = null;
   let consentCurrent: unknown = null;
   const requests: Array<{ url: string; method: string; body: any }> = [];
   globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
@@ -40,6 +41,10 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
     }
     if (String(_url).endsWith("/face-scans")) return Response.json({ enabled: scanEnabled, currentSessionId: scanSession?.id ?? null, sessions: scanSession ? [scanSession] : [] });
     if (String(_url).endsWith("/clinical-review")) return Response.json({ assessmentId:record.id, revision:0, scoreRevision:0, cycle:0, state:"NOT_SUBMITTED", allowedActions:[], history:[], canAdjustScores:role !== "ORGANIZATION_ADMIN", canEditDraft:record.canEditDraft ?? true });
+    if (method === "GET" && String(_url).endsWith(`/assessments/${locator}`) && heldReads) {
+      const snapshot = structuredClone(record);
+      return new Promise<Response>(resolve => { heldReads!.push(() => resolve(Response.json(snapshot))); });
+    }
     if (String(_url).endsWith("/score-reviews") && record.result) return Response.json(projectScoreReviews(record.result, []));
     if (method === "POST" && String(_url).endsWith("/submit") && submittedResult) record = { ...record, status: "SCORED", result: submittedResult };
     if (method === "PATCH" && String(_url).endsWith("/contact")) {
@@ -63,7 +68,7 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
   }
   try {
     await act(async () => { root.render(<RouterProvider router={router} />); await new Promise(resolve => setTimeout(resolve, 0)); });
-    await callback({ dom, router, requests, click, conflict: () => { rejectSave = true; }, remoteAnswers: answers => { record = { ...record, answers, revision: record.revision + 1 }; } });
+    await callback({ dom, router, requests, click, conflict: () => { rejectSave = true; }, remoteAnswers: answers => { record = { ...record, answers, revision: record.revision + 1 }; }, remotePatient: name => { record = { ...record, patient: { ...record.patient, displayName: name } }; }, deferReads: () => { heldReads = []; return { resolve: index => heldReads?.[index]?.(), count: () => heldReads?.length ?? 0 }; } });
   } finally {
     await act(async () => root.unmount()); router.dispose(); dom.window.close();
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key]; }
@@ -73,6 +78,24 @@ test("new assessment opens directly on face scan after personal details", async 
   expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Face scan");
   expect(document.querySelector('nav[aria-label="Assessment sections"] button[aria-current="step"]')?.textContent).toContain("Face scan");
 }, {}, "assessment-a", undefined, "OTHER_MEDICAL", false, true));
+
+test("live refresh keeps the newest assessment when requests finish out of order", async () => harness(async ({ deferReads, remoteAnswers }) => {
+  const pending = deferReads();
+  await act(async () => { window.dispatchEvent(new window.CustomEvent("niq:workspace-change", { detail: { scope: "assessment", assessmentId: "assessment-a" } })); await new Promise(resolve => setTimeout(resolve, 0)); });
+  remoteAnswers({ ...recordFixture().answers, current_weight_kg: 71 });
+  await act(async () => { window.dispatchEvent(new window.CustomEvent("niq:workspace-change", { detail: { scope: "assessment", assessmentId: "assessment-a" } })); await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(pending.count()).toBe(2);
+  await act(async () => { pending.resolve(1); await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(document.querySelector<HTMLInputElement>("#assessment-field-current_weight_kg")?.value).toBe("71");
+  await act(async () => { pending.resolve(0); await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(document.querySelector<HTMLInputElement>("#assessment-field-current_weight_kg")?.value).toBe("71");
+}));
+
+test("a patient profile change refreshes even when assessment revision is unchanged", async () => harness(async ({ remotePatient }) => {
+  remotePatient("Updated patient");
+  await act(async () => { window.dispatchEvent(new window.CustomEvent("niq:workspace-change", { detail: { scope: "patient" } })); await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(document.body.textContent).toContain("Updated patient");
+}));
 
 test("resumed real draft shows profile context read-only and saves dirty choices with revision", async () => harness(async ({ requests, click }) => {
   expect(document.body.textContent).toContain("Test patient");

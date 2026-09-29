@@ -76,8 +76,9 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     setError(cause instanceof Error ? cause.message : "Could not save assessment. Your changes are still on this page.");
   }, []);
   const reload = useCallback(async () => { const value = await getAssessment(organizationId, assessmentId); accept(value); }, [organizationId, assessmentId, accept]);
-  const liveState = useRef({ dirty, reportDirty, reportBusy, scanBusy, reviewBusy, busy, contactOpen, record });
-  liveState.current = { dirty, reportDirty, reportBusy, scanBusy, reviewBusy, busy, contactOpen, record };
+  const liveState = useRef({ dirty, reportDirty, reportBusy, scanBusy, reviewBusy, busy, priorityBusy, contactOpen, verificationRecord, record });
+  liveState.current = { dirty, reportDirty, reportBusy, scanBusy, reviewBusy, busy, priorityBusy, contactOpen, verificationRecord, record };
+  const inProgress = (state: typeof liveState.current) => state.dirty || state.reportDirty || state.reportBusy || state.scanBusy || state.reviewBusy || state.busy || state.priorityBusy || state.contactOpen || !!state.verificationRecord;
   const liveRequestSequence = useRef(0);
   useEffect(() => {
     let active = true;
@@ -86,10 +87,10 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
       if (change?.scope !== "organization" && change?.scope !== "patient" && (change?.scope !== "assessment" || change.assessmentId !== (liveState.current.record?.id ?? assessmentId))) return;
       const requestSequence = ++liveRequestSequence.current;
       const current = liveState.current;
-      if (current.dirty || current.reportDirty || current.reportBusy || current.scanBusy || current.reviewBusy || current.busy || current.contactOpen) {
+      if (inProgress(current)) {
         setNotice("New saved changes may be available. Finish your work before reloading.");
         void getAssessment(organizationId, assessmentId).catch(cause => {
-          if (active && cause instanceof AssessmentRequestError && [403, 404].includes(cause.status)) {
+          if (active && requestSequence === liveRequestSequence.current && cause instanceof AssessmentRequestError && [403, 404].includes(cause.status)) {
             setConflict(true);
             setError("This assessment was reassigned or your access changed. Your local entries remain on this page, but they cannot be saved.");
           }
@@ -99,7 +100,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
       void getAssessment(organizationId, assessmentId).then(value => {
         if (!active || requestSequence !== liveRequestSequence.current) return;
         const latest = liveState.current;
-        if (latest.dirty || latest.reportDirty || latest.reportBusy || latest.scanBusy || latest.reviewBusy || latest.busy || latest.contactOpen) return;
+        if (inProgress(latest)) return;
         if (latest.record && value.revision < latest.record.revision) return;
         if (latest.record && value.revision === latest.record.revision && value.status === latest.record.status && value.updatedAt === latest.record.updatedAt && value.isPriority === latest.record.isPriority && JSON.stringify(value.patient) === JSON.stringify(latest.record.patient)) return;
         setRecord(value);
@@ -117,7 +118,11 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   }, [organizationId, assessmentId]);
   useEffect(() => {
     let active = true;
-    getAssessment(organizationId, assessmentId).then(value => { if (active && (!liveState.current.record || value.revision >= liveState.current.record.revision)) accept(value); }).catch(cause => { if (active) handleError(cause); }).finally(() => { if (active) setLoading(false); });
+    getAssessment(organizationId, assessmentId).then(value => {
+      if (!active) return;
+      const latest = liveState.current;
+      if (!inProgress(latest) && (!latest.record || value.revision >= latest.record.revision)) accept(value);
+    }).catch(cause => { if (active) handleError(cause); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [organizationId, assessmentId, accept, handleError]);
   const internalId = record?.id ?? assessmentId;
