@@ -10,6 +10,7 @@ import type { AssessmentWorkflowService } from "./assessment-workflow";
 import type { Principal } from "./application";
 import { ServiceError } from "./application";
 import { notificationKinds, notificationMessage, type NotificationKind } from "./notification-messages";
+import { notificationStillRelevant } from "./workspace-notifications";
 
 export type BrowserPushSubscription = { endpoint: string; keys: { p256dh: string; auth: string } };
 
@@ -91,7 +92,10 @@ export class WebPushService {
       subscription.revokedAt || subscription.membershipId !== notification.recipientMembershipId || notification.readAt || notification.dismissedAt) { await skip(); return; }
     const actor: Principal = { userId: membership.userId, organizationId: notification.organizationId, membershipId: notification.recipientMembershipId,
       email: membership.email, displayName: membership.displayName, role: membership.role, platformRole: "USER" };
-    try { await this.workflow.authorize(actor, notification.organizationId, notification.assessmentId); }
+    try {
+      const assessment = await this.workflow.authorize(actor, notification.organizationId, notification.assessmentId);
+      if (!notificationStillRelevant(this.workflow, assessment, actor, notification.kind as NotificationKind)) { await skip(); return; }
+    }
     catch (cause) { if (cause instanceof ServiceError && ["FORBIDDEN", "NOT_FOUND"].includes(cause.code)) { await skip(); return; } throw cause; }
     const [presence] = await this.db.select({ lastSeenAt: workspacePresence.lastSeenAt }).from(workspacePresence).where(and(
       eq(workspacePresence.organizationId, notification.organizationId), eq(workspacePresence.membershipId, notification.recipientMembershipId),
@@ -104,7 +108,7 @@ export class WebPushService {
     const message = notificationMessage(notification.kind as NotificationKind, "push", notification.reference);
     try {
       await webPush.sendNotification({ endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
-        JSON.stringify({ ...message, href: `/assessments/${notification.reference}` }), { TTL: 3600, urgency: "normal" });
+        JSON.stringify({ ...message, href: `/assessments/${notification.reference}` }), { TTL: 3600, urgency: "normal", timeout: 10_000 });
       await this.db.update(notificationDeliveries).set({ status: "SENT", sentAt: new Date(), leaseUntil: null, lastError: null }).where(eq(notificationDeliveries.id, id));
     } catch (cause) {
       const status = typeof cause === "object" && cause !== null && "statusCode" in cause ? Number(cause.statusCode) : 0;
