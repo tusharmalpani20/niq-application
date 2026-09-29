@@ -65,3 +65,10 @@ test("fixed OTP defaults off and is rejected outside development", () => {
   for (const NODE_ENV of ["production", "test"])
     expect(() => loadApplicationConfig({ ...base, NODE_ENV, DEV_FIXED_OTP: "true" })).toThrow("Fixed OTP is allowed only in development");
 });
+
+test("browser push keys must be configured together", () => {
+  const base = { DATABASE_URL: "postgres://localhost/niq", SESSION_SECRET: "a-development-secret-with-32-chars" };
+  expect(loadApplicationConfig(base).VAPID_PUBLIC_KEY).toBeUndefined();
+  expect(() => loadApplicationConfig({ ...base, VAPID_PUBLIC_KEY: "A".repeat(87) })).toThrow("Configure all VAPID values together");
+  expect(loadApplicationConfig({ ...base, VAPID_PUBLIC_KEY: "A".repeat(87), VAPID_PRIVATE_KEY: "B".repeat(43), VAPID_SUBJECT: "mailto:ops@example.com" }).VAPID_SUBJECT).toBe("mailto:ops@example.com");
+});

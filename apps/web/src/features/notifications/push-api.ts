@@ -27,9 +27,11 @@ function keyBytes(key: string): Uint8Array<ArrayBuffer> {
 }
 
 export async function enablePush(organizationId: string): Promise<void> {
-  const config = await request<PushConfig>(`${base(organizationId)}/config`);
-  if (!config.enabled || !config.publicKey || !pushSupported()) throw new Error("Push notifications are unavailable on this device.");
+  if (!pushSupported()) throw new Error("Push notifications are unavailable on this device.");
+  // Keep the permission request in the direct button gesture, before any network await.
   if (Notification.permission !== "granted" && await Notification.requestPermission() !== "granted") throw new Error("Allow notifications in your browser settings to turn on push alerts.");
+  const config = await request<PushConfig>(`${base(organizationId)}/config`);
+  if (!config.enabled || !config.publicKey) throw new Error("Push notifications are unavailable on this device.");
   const registration = await navigator.serviceWorker.register("/niq-push-sw.js", { scope: "/" });
   const subscription = await registration.pushManager.getSubscription() ?? await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(config.publicKey) });
   await request(`${base(organizationId)}/subscriptions`, "POST", subscription.toJSON());
