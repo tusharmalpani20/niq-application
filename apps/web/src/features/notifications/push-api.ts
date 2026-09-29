@@ -18,7 +18,9 @@ export async function getPushState(organizationId: string): Promise<"unavailable
   if (!pushSupported()) return "unsupported";
   const registration = await navigator.serviceWorker.getRegistration("/");
   const subscription = await registration?.pushManager.getSubscription();
-  return subscription ? "enabled" : "disabled";
+  if (!subscription) return "disabled";
+  const status = await request<{ enabled: boolean }>(`${base(organizationId)}/subscriptions/status`, "POST", { endpoint: subscription.endpoint });
+  return status.enabled ? "enabled" : "disabled";
 }
 
 function keyBytes(key: string): Uint8Array<ArrayBuffer> {

@@ -1,7 +1,7 @@
 import { Bell, Check, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Inbox } from "./notification-api";
-import { dismissAllNotifications, dismissNotification, getInbox, markAllNotificationsRead, markNotificationRead, safeNotificationHref } from "./notification-api";
+import { dismissAllNotifications, dismissNotification, getInbox, markAllNotificationsRead, markNotificationRead, NotificationRequestError, safeNotificationHref } from "./notification-api";
 import { useWorkspaceEvents } from "./useWorkspaceEvents";
 import { disablePush, enablePush, getPushState } from "./push-api";
 
@@ -25,7 +25,10 @@ export function NotificationBell({ organizationId, onNavigate }: { organizationI
       const next = await getInbox(organizationId);
       if (sequence === requestSequence.current) { setInbox(next); setError(null); setLoading(false); }
     } catch (cause) {
-      if (sequence === requestSequence.current) { setError(cause instanceof Error ? cause.message : "Notifications could not be loaded."); setLoading(false); }
+      if (sequence === requestSequence.current) {
+        if (cause instanceof NotificationRequestError && [401, 403].includes(cause.status)) setInbox({ items: [], unreadCount: 0 });
+        setError(cause instanceof Error ? cause.message : "Notifications could not be loaded."); setLoading(false);
+      }
     }
   }, [organizationId]);
 
@@ -68,7 +71,10 @@ export function NotificationBell({ organizationId, onNavigate }: { organizationI
   async function mutate(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
-    try { await action(); await reload(); channel.current?.postMessage({ organizationId }); } catch (cause) { setError(cause instanceof Error ? cause.message : "The notification could not be updated."); }
+    try { await action(); await reload(); channel.current?.postMessage({ organizationId }); } catch (cause) {
+      if (cause instanceof NotificationRequestError && [401, 403].includes(cause.status)) setInbox({ items: [], unreadCount: 0 });
+      setError(cause instanceof Error ? cause.message : "The notification could not be updated.");
+    }
     finally { setBusy(false); }
   }
 

@@ -12,10 +12,14 @@ export type Inbox = { items: InboxItem[]; unreadCount: number };
 
 const base = (organizationId: string) => `/api/v1/organizations/${encodeURIComponent(organizationId)}/notifications`;
 
+export class NotificationRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
 async function request<T>(url: string, method = "GET", signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, { method, credentials: "include", signal });
   const data = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(data?.error?.message ?? "Notifications could not be loaded. Please try again.");
+  if (!response.ok) throw new NotificationRequestError(data?.error?.message ?? "Notifications could not be loaded. Please try again.", response.status);
   return data as T;
 }
 

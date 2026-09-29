@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { dismissAllNotifications, dismissNotification, getInbox, markAllNotificationsRead, markNotificationRead, safeNotificationHref } from "./notification-api";
+import { dismissAllNotifications, dismissNotification, getInbox, markAllNotificationsRead, markNotificationRead, NotificationRequestError, safeNotificationHref } from "./notification-api";
 
 test("notification destinations stay within the app", () => {
   expect(safeNotificationHref("/assessments/ASM-1")).toBe("/assessments/ASM-1");
@@ -7,6 +7,13 @@ test("notification destinations stay within the app", () => {
   expect(safeNotificationHref("//example.com")).toBeNull();
   expect(safeNotificationHref("/\\example.com")).toBeNull();
   expect(safeNotificationHref("/assessments/\nexample.com")).toBeNull();
+});
+
+test("an inbox authorization failure retains its status for cache clearing", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => Response.json({ error: { message: "Sign in is required." } }, { status: 401 })) as typeof fetch;
+  try { await expect(getInbox("org")).rejects.toMatchObject({ status: 401, message: "Sign in is required." } satisfies Partial<NotificationRequestError>); }
+  finally { globalThis.fetch = originalFetch; }
 });
 
 test("inbox actions use authenticated organization-scoped endpoints", async () => {
