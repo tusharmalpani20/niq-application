@@ -17,6 +17,7 @@ import { AssessmentFaceScanService } from "./services/assessment-face-scan";
 import { BoundedBodyError } from "./http/bounded-json";
 import { mountAssessmentRoutes } from "./assessment-routes";
 import { mountWorkspaceNotificationRoutes } from "./workspace-notification-routes";
+import { publishWorkspaceChange, type WorkspaceScope } from "./services/workspace-notifications";
 import type { AssessmentWorkflowService } from "./services/assessment-workflow";
 
 export type AppDependencies = {
@@ -139,6 +140,25 @@ export function createApp(dependencies: AppDependencies) {
     if (/\/face-scan-consent\/upload$/.test(path) && context.req.method === "POST") return next();
     if (/\/face-scans(?:\/|$)/.test(path)) return next(); // Routes count actual bytes and enforce an upload deadline.
     return bodyLimit({ maxSize: 256 * 1024, onError: c => c.json(errorBody("VALIDATION_ERROR", "The request is too large.", c.get("requestId")), 413) })(context, next);
+  });
+  app.use("/v1/organizations/*", async (context, next) => {
+    await next();
+    if (!dependencies.assessmentWorkflow || ["GET", "HEAD", "OPTIONS"].includes(context.req.method) || context.res.status >= 400) return;
+    const match = context.req.path.match(/^\/v1\/organizations\/([0-9A-HJKMNP-TV-Z]{26})(?:\/(.*))?$/);
+    if (!match) return;
+    const tail = match[2] ?? "";
+    let scope: WorkspaceScope | null = null;
+    if (/^patients(?:\/|$)/.test(tail)) scope = "patient";
+    else if (/^facilities(?:\/|$)/.test(tail)) scope = "facility";
+    else if (/^(users|invitations)(?:\/|$)/.test(tail)) scope = "users";
+    else if (/^(scoring|branding)(?:\/|$)/.test(tail)) scope = "organization";
+    else if (/^assessments\//.test(tail) && /\/(priority|score-reviews|reports|face-scans)(?:\/|$)/.test(tail)) scope = "assessment";
+    if (!scope) return;
+    // These secondary mutations commit in their own services. A failed invalidation must not
+    // turn a successful patient or facility edit into a misleading retryable error.
+    try {
+      await dependencies.assessmentWorkflow.db.transaction(tx => publishWorkspaceChange(tx, { organizationId: match[1]!, scope }));
+    } catch (cause) { console.error("Workspace refresh event unavailable", cause); }
   });
   app.get("/v1/auth/me", (context) => context.json({ user: context.get("principal") }));
   app.post("/v1/auth/sign-out", async (context) => {
