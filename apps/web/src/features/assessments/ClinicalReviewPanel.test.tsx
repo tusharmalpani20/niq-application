@@ -37,7 +37,7 @@ test("review actions are visible in three purpose groups", async()=>harness(asyn
 }));
 test("a scored assessment not yet sent uses the pre-review correction label", async()=>harness(async({click,posts})=>{
  expect(document.body.textContent).not.toContain("Not sent for clinical review");
- expect(document.body.textContent).toContain("Ask the person who created this assessment to open it and select Send for clinical review.");
+ expect(document.body.textContent).toContain("The current owner can finish this assessment and send it for clinical review.");
  expect(document.body.textContent).toContain("Reopen for corrections");
  expect(document.body.textContent).not.toContain("Return to draft");
  await click("Reopen for corrections");
@@ -48,6 +48,10 @@ test("the original creator sees how to send a scored assessment", async()=>harne
  expect(document.body.textContent).toContain("Ready for review. Send this assessment to the clinical review queue.");
  expect([...document.querySelectorAll("button")].some(button=>button.textContent==="Send for clinical review")).toBe(true);
 },{review:{...review,state:"NOT_SUBMITTED",allowedActions:["SEND"]}}));
+test("an administrator sees the current draft owner and can transfer ownership", async()=>harness(async()=>{
+ expect(document.body.textContent).toContain("Current owner: Example clinician");
+ expect([...document.querySelectorAll("button")].some(button=>button.textContent==="Transfer assessment owner")).toBe(true);
+},{review:{...review,state:"NOT_SUBMITTED",currentOwnerMembershipId:"owner",currentOwner:{membershipId:"owner",displayName:"Example clinician",role:"DOCTOR"},allowedActions:["TRANSFER_OWNER"]}}));
 test("completed review has no mutation actions and displays final remark",async()=>harness(async()=>{
  expect(document.body.textContent).toContain("Final clinical remark");expect(document.body.textContent).toContain("cannot be reopened");expect(document.querySelectorAll("button").length).toBe(0);
 },{review:{...review,state:"COMPLETED",allowedActions:[],finalRemark:"Final clinical remark"}}));

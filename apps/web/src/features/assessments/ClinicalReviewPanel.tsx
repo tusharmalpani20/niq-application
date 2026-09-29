@@ -96,12 +96,13 @@ export function ClinicalReviewPanel({ organizationId, assessmentId, review, atte
     {review && <>
       <div className="mt-4 space-y-4">
         <div className="space-y-2 text-sm">
+          {review.currentOwnerMembershipId && <p>Current owner: {review.currentOwner?.displayName ?? "Unavailable"}</p>}
           {review.assignee && <p>Reviewer: {review.assignee.displayName}</p>}
           {review.correctionPerson && review.state !== "AWAITING_RESUBMISSION" && <p>Corrections assigned to: {review.correctionPerson.displayName}</p>}
           {review.returnReason && review.state === "RETURNED" && <div className="rounded-lg bg-muted p-3"><p>{previouslySent(review) ? "Return reason" : "Correction reason"}</p><p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{review.returnReason}</p></div>}
           {review.state === "NOT_SUBMITTED" && <p className="text-muted-foreground">{review.allowedActions.includes("SEND")
             ? "Ready for review. Send this assessment to the clinical review queue."
-            : "Ask the person who created this assessment to open it and select Send for clinical review."}</p>}
+            : "The current owner can finish this assessment and send it for clinical review."}</p>}
           {review.state === "QUEUED" && <p className="text-muted-foreground">An eligible clinician can claim this review.</p>}
           {review.state === "RETURNED" && <p className="text-muted-foreground">The clinician assigned to corrections updates the questionnaire, requests a new score, then {previouslySent(review) ? "resends" : "sends"} it for clinical review.</p>}
           {review.state === "AWAITING_RESUBMISSION" && <p className="text-muted-foreground">Scoring is complete. {review.correctionPerson?.displayName ?? "The clinician assigned to corrections"} can {previouslySent(review) ? "resend" : "send"} this assessment for clinical review.</p>}

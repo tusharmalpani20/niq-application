@@ -20,6 +20,7 @@ export type ClinicalReviewEvent = {id:string;action:ClinicalReviewAction["action
 export type ClinicalReview = {
  assessmentId:string;revision:number;scoreRevision:number;cycle:number;
  currentOwnerMembershipId?:string|null;
+ currentOwner?:ClinicalReviewer|null;
  state:"NOT_SUBMITTED"|"QUEUED"|"IN_REVIEW"|"RETURNED"|"AWAITING_RESUBMISSION"|"COMPLETED";
  assignee:ClinicalReviewer|null;correctionPerson:ClinicalReviewer|null;previousReviewer:ClinicalReviewer|null;
  defaultCorrectionPersonId:string|null;returnReason:string|null;finalRemark:string|null;
