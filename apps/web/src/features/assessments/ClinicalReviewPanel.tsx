@@ -10,10 +10,10 @@ import { AssessmentRequestError } from "./workflow-api";
 import { ArrowRightLeft, CircleCheck, ClipboardPen, RotateCcw, Send, UserRoundCheck, UserRoundMinus, type LucideIcon } from "lucide-react";
 
 type Action = ClinicalReviewAction["action"];
-export const recipientActions: Action[] = ["TRANSFER", "RETURN_TO_DRAFT", "REASSIGN_CORRECTION"];
+export const recipientActions: Action[] = ["TRANSFER", "TRANSFER_OWNER", "RETURN_TO_DRAFT", "REASSIGN_CORRECTION"];
 const noteActions: Action[] = [...recipientActions, "RELEASE", "COMPLETE"];
 const actionIcons: Record<Action, LucideIcon> = {
-  SEND: Send, CLAIM: UserRoundCheck, TRANSFER: ArrowRightLeft, RELEASE: UserRoundMinus,
+  SEND: Send, CLAIM: UserRoundCheck, TRANSFER: ArrowRightLeft, TRANSFER_OWNER: ArrowRightLeft, RELEASE: UserRoundMinus,
   RETURN_TO_DRAFT: RotateCcw, REASSIGN_CORRECTION: ClipboardPen, RESEND: Send, COMPLETE: CircleCheck,
 };
 const inReviewActionGroups: { label: string; actions: Action[] }[] = [
@@ -32,6 +32,7 @@ function actionLabel(action: Action, review: ClinicalReview) {
   if (action === "RESEND" && !previouslySent(review)) return clinicalActionLabels.SEND;
   if (action === "RETURN_TO_DRAFT" && reopeningBeforeReview(review)) return "Reopen for corrections";
   if (action === "TRANSFER") return review.assignee ? "Change reviewer" : "Assign reviewer";
+  if (action === "TRANSFER_OWNER") return "Transfer assessment owner";
   if (action === "RELEASE") return "Unassign myself";
   return clinicalActionLabels[action];
 }
@@ -44,14 +45,14 @@ function historyLabel(event: ClinicalReviewEvent, history: ClinicalReviewEvent[]
   if (event.action === "RESEND" && !history.some(prior => prior.revision < event.revision && (prior.action === "SEND" || prior.action === "RESEND"))) return "Sent for clinical review";
   if (event.action === "RETURN_TO_DRAFT" && !history.some(prior => prior.revision < event.revision && (prior.action === "SEND" || prior.action === "RESEND"))) return "Reopened for corrections";
   const labels: Record<Action, string> = {
-    SEND: "Sent for clinical review", CLAIM: "Claimed review", TRANSFER: "Transferred review",
+    SEND: "Sent for clinical review", CLAIM: "Claimed review", TRANSFER: "Transferred review", TRANSFER_OWNER: "Transferred assessment owner",
     RELEASE: "Released to queue", RETURN_TO_DRAFT: "Returned for correction",
     REASSIGN_CORRECTION: "Reassigned corrections", RESEND: "Resent for clinical review", COMPLETE: "Completed review",
   };
   return labels[event.action];
 }
 function ReviewHistoryEvent({ event, history }: { event: ClinicalReviewEvent; history: ClinicalReviewEvent[] }) {
-  const assignmentLabel = event.action === "RETURN_TO_DRAFT" || event.action === "REASSIGN_CORRECTION" ? "Corrections assigned to" : event.action === "TRANSFER" ? "Reviewer assigned" : null;
+  const assignmentLabel = event.action === "RETURN_TO_DRAFT" || event.action === "REASSIGN_CORRECTION" ? "Corrections assigned to" : event.action === "TRANSFER" ? "Reviewer assigned" : event.action === "TRANSFER_OWNER" ? "Assessment owner" : null;
   return <li className="relative border-l-2 border-border py-3 pl-5 text-sm first:pt-1 last:pb-1">
     <span aria-hidden className="absolute -left-[5px] top-4 size-2 rounded-full bg-primary" />
     <p className="font-medium">{historyLabel(event, history)}</p>
@@ -119,7 +120,7 @@ export function ClinicalReviewPanel({ organizationId, assessmentId, review, atte
               </div>;
             })}
           </div>
-          : <div className="flex flex-wrap gap-2">{review.allowedActions.map(actionButton)}</div>)}
+          : <div className="flex flex-wrap gap-2">{review.allowedActions.filter(next => next !== "REASSIGN_CORRECTION" || !review.allowedActions.includes("TRANSFER_OWNER")).map(actionButton)}</div>)}
       </div>
       <ReviewHistory history={review.history ?? []} attestations={attestations} />
       {action && <ClinicalReviewCommandDialog key={action} action={action} review={review} organizationId={organizationId} assessmentId={assessmentId} blocked={blocked || loading || !!error || (action === "COMPLETE" && review.riskClassificationPending === true)} onClose={() => setAction(null)} onChanged={onChanged} onRefresh={onRefresh} onBusyChange={onBusyChange} />}
@@ -149,7 +150,7 @@ export function ClinicalReviewCommandDialog({ action, review, organizationId, as
     const controller = new AbortController(); setLoading(true);
     getClinicalReviewers(organizationId, assessmentId, controller.signal).then(items => {
       if (controller.signal.aborted) return;
-      const current = action === "REASSIGN_CORRECTION" ? review.correctionPerson?.membershipId : action === "TRANSFER" ? review.assignee?.membershipId : undefined;
+      const current = action === "REASSIGN_CORRECTION" ? review.correctionPerson?.membershipId : action === "TRANSFER" ? review.assignee?.membershipId : action === "TRANSFER_OWNER" ? review.currentOwnerMembershipId : undefined;
       const eligible = items.filter(item => item.membershipId !== current);
       setRecipients(eligible); setError("");
       const defaultRecipient = action === "RETURN_TO_DRAFT" && eligible.some(item => item.membershipId === review.defaultCorrectionPersonId) ? review.defaultCorrectionPersonId : null;
@@ -183,7 +184,7 @@ export function ClinicalReviewCommandDialog({ action, review, organizationId, as
     <form className="clinical-form" onSubmit={event => { event.preventDefault(); void submit(); }}>
       <div className="form-fields facility-dialog-fields min-h-0 overflow-y-auto">
         <p className="text-sm text-muted-foreground">{action === "COMPLETE" ? "Complete this clinical review with a final remark. Completion is permanent; the assessment cannot be reopened or edited." : action === "RETURN_TO_DRAFT" ? reopeningBeforeReview(review) ? "Reopen this scored assessment for corrections and a new score. Existing submitted answers, results and adjustments stay in history." : "Return this assessment for corrections and a new score. Existing submitted answers, results and adjustments stay in history." : action === "RELEASE" ? "Release ownership so another eligible clinician can claim the review. Saved work stays in history." : action === "RESEND" ? (previouslySent(review) ? "Resend this scored assessment for clinical review." : "Send this scored assessment for clinical review.") : action === "SEND" ? "Send this scored assessment for clinical review." : action === "CLAIM" ? "You will become responsible for this clinical review." : "The selected person will become responsible immediately. This change is recorded in review history."}</p>
-        {needsRecipient && <div className="grid gap-2"><label htmlFor="clinical-review-recipient">{action === "TRANSFER" ? "Reviewer" : "Assign corrections to"} *</label><SearchCombobox id="clinical-review-recipient" label={action === "TRANSFER" ? "Reviewer" : "Assign corrections to"} value={recipient} onChange={setRecipient} options={recipients.map(item => ({ id: item.membershipId, label: `${item.displayName} · ${membershipRoleLabels[item.role]}` }))} required disabled={busy || loading || conflict} placeholder="Search or select a person…" />{loading ? <p role="status" className="text-sm">Loading eligible people…</p> : !recipients.length && <p className="text-sm">No eligible people are available. An administrator needs to check clinical roles and facility access.</p>}</div>}
+        {needsRecipient && <div className="grid gap-2"><label htmlFor="clinical-review-recipient">{action === "TRANSFER" ? "Reviewer" : action === "TRANSFER_OWNER" ? "New owner" : "Assign corrections to"} *</label><SearchCombobox id="clinical-review-recipient" label={action === "TRANSFER" ? "Reviewer" : action === "TRANSFER_OWNER" ? "New owner" : "Assign corrections to"} value={recipient} onChange={setRecipient} options={recipients.map(item => ({ id: item.membershipId, label: `${item.displayName} · ${membershipRoleLabels[item.role]}` }))} required disabled={busy || loading || conflict} placeholder="Search or select a person…" />{loading ? <p role="status" className="text-sm">Loading eligible people…</p> : !recipients.length && <p className="text-sm">No eligible people are available. An administrator needs to check clinical roles and facility access.</p>}</div>}
         {needsNote && <label className="grid gap-2">{action === "COMPLETE" ? "Final remark" : "Reason"} *<Textarea className="font-normal" value={note} onChange={event => setNote(event.target.value)} required maxLength={4000} disabled={busy || conflict} /></label>}
         {error && <div role="alert" className="text-sm text-destructive">{error}{conflict ? <Button variant="link" isDisabled={busy} onPress={async () => { const fresh = await onRefresh(); if (fresh) { setConflict(false); setError(""); setRetry(value => value + 1); } }}>Reload review</Button> : needsRecipient && !recipients.length && <Button variant="link" onPress={() => setRetry(value => value + 1)}>Retry loading people</Button>}</div>}
       </div>
