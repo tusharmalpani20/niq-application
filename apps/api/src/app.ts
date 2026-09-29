@@ -159,8 +159,9 @@ export function createApp(dependencies: AppDependencies) {
     if (!scope) return;
     // These secondary mutations commit in their own services. A failed invalidation must not
     // turn a successful patient or facility edit into a misleading retryable error.
+    const assessmentId = scope === "assessment" ? tail.match(/^assessments\/([0-9A-HJKMNP-TV-Z]{26})(?:\/|$)/)?.[1] : undefined;
     try {
-      await dependencies.assessmentWorkflow.db.transaction(tx => publishWorkspaceChange(tx, { organizationId: match[1]!, scope }));
+      await dependencies.assessmentWorkflow.db.transaction(tx => publishWorkspaceChange(tx, { organizationId: match[1]!, scope: scope === "assessment" && !assessmentId ? "organization" : scope, assessmentId }));
     } catch (cause) { console.error("Workspace refresh event unavailable", cause); }
   });
   app.get("/v1/auth/me", (context) => context.json({ user: context.get("principal") }));

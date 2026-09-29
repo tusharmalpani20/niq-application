@@ -82,10 +82,16 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     let active = true;
     const onChange = (event: Event) => {
       const change = (event as CustomEvent<WorkspaceChange>).detail;
-      if (change?.scope !== "organization" && (change?.scope !== "assessment" || change.assessmentId !== (liveState.current.record?.id ?? assessmentId))) return;
+      if (change?.scope !== "organization" && change?.scope !== "patient" && (change?.scope !== "assessment" || change.assessmentId !== (liveState.current.record?.id ?? assessmentId))) return;
       const current = liveState.current;
       if (current.dirty || current.reportDirty || current.reportBusy || current.scanBusy || current.reviewBusy || current.busy || current.contactOpen) {
         setNotice("New saved changes may be available. Finish your work before reloading.");
+        void getAssessment(organizationId, assessmentId).catch(cause => {
+          if (active && cause instanceof AssessmentRequestError && [403, 404].includes(cause.status)) {
+            setConflict(true);
+            setError("This assessment was reassigned or your access changed. Your local entries remain on this page, but they cannot be saved.");
+          }
+        });
         return;
       }
       void getAssessment(organizationId, assessmentId).then(value => {
@@ -96,7 +102,12 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
         setRecord(value);
         setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers);
         setNotice("Assessment updated");
-      }).catch(() => { if (active) setNotice("A change is available. Reload when ready."); });
+      }).catch(cause => {
+        if (!active) return;
+        if (cause instanceof AssessmentRequestError && [403, 404].includes(cause.status)) {
+          setRecord(null); setAnswers({}); setError("This assessment is no longer available to you.");
+        } else setNotice("A change is available. Reload when ready.");
+      });
     };
     window.addEventListener("niq:workspace-change", onChange);
     return () => { active = false; window.removeEventListener("niq:workspace-change", onChange); };

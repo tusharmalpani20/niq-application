@@ -17,6 +17,7 @@ export function NotificationBell({ organizationId, onNavigate }: { organizationI
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const requestSequence = useRef(0);
+  const channel = useRef<BroadcastChannel | null>(null);
 
   const reload = useCallback(async () => {
     const sequence = ++requestSequence.current;
@@ -30,12 +31,16 @@ export function NotificationBell({ organizationId, onNavigate }: { organizationI
 
   useEffect(() => {
     void reload();
+    if (typeof BroadcastChannel !== "undefined") {
+      channel.current = new BroadcastChannel("niq-notifications");
+      channel.current.onmessage = event => { if (event.data?.organizationId === organizationId) void reload(); };
+    }
     const onWorkspaceChange = (event: Event) => {
       const scope = (event as CustomEvent<{ scope?: string }>).detail?.scope;
-      if (scope === "notification" || scope === "organization") void reload();
+      if (scope === "notification" || scope === "assessment" || scope === "organization") void reload();
     };
     window.addEventListener("niq:workspace-change", onWorkspaceChange);
-    return () => { requestSequence.current++; window.removeEventListener("niq:workspace-change", onWorkspaceChange); };
+    return () => { requestSequence.current++; window.removeEventListener("niq:workspace-change", onWorkspaceChange); channel.current?.close(); channel.current = null; };
   }, [reload]);
 
   useEffect(() => {
@@ -63,7 +68,7 @@ export function NotificationBell({ organizationId, onNavigate }: { organizationI
   async function mutate(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
-    try { await action(); await reload(); } catch (cause) { setError(cause instanceof Error ? cause.message : "The notification could not be updated."); }
+    try { await action(); await reload(); channel.current?.postMessage({ organizationId }); } catch (cause) { setError(cause instanceof Error ? cause.message : "The notification could not be updated."); }
     finally { setBusy(false); }
   }
 
