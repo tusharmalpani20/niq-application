@@ -47,6 +47,14 @@ Keep `FACE_SCAN_ENABLED=false` until CarePlix onboarding, eligibility, capture l
 
 Apply all migrations before starting the API; Compose runs migrations first. The API process runs a bounded database reconciliation loop every `FACE_SCAN_RECONCILE_INTERVAL_MS` milliseconds (default 30000), independently of browser sessions. No separate application worker command is required. Keep the API running to retrieve pending results even when new capture is disabled. Remote failed/expired attempts are checked every five minutes for delayed evidence. Completed scan evidence never rewrites submitted questionnaire results.
 
-The notification bell stores actionable workflow messages. To offer optional browser push alerts, configure the stable VAPID key pair and subject in `.env.example` and apply the latest migrations. The API retries queued push deliveries. Push subscriptions belong to the signed-in session and are revoked on sign-out; users opt in again after signing back in. Push messages contain only a generic task description; assessment details require sign-in. On iPhone, push alerts require HTTPS and a Home Screen installation. Keep VAPID private keys server-side and back them up with the deployment configuration.
-
 After an outage, restore the same scoring origin, deployment and organization identity; rotating its credential is supported. An uncertain request must keep its existing operation key. A definitive setup rejection allows an explicit new attempt after configuration is corrected. Monitor the redacted `Face scan reconciliation unavailable` warning and Scoring's backlog/reconciliation metrics. The application accepts at most 2 MiB and 12000 RGB samples per upload; confirm these provisional limits with measured SDK output before enablement and configure the reverse proxy consistently. No live provider integration or production rollout is implied by the automated fixtures.
+
+## Browser push alerts
+
+The notification bell stores actionable workflow messages without VAPID. To enable optional browser push alerts:
+
+1. Run `bunx web-push generate-vapid-keys --json` once and retain the generated key pair.
+2. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT=mailto:ops@example.com` in the application's `.env` or deployment secrets. Set all three together. Use a monitored operations email address for the subject, keep the private key server-side, and back it up with the deployment configuration. Do not commit it. Reuse the same key pair across API restarts and deployments; changing it requires users to subscribe again.
+3. Apply the latest migrations and restart the API. Each user then opens the notification bell, turns on push alerts for that device, and grants the browser's notification permission.
+
+The API retries queued push deliveries. Push subscriptions belong to the signed-in session and are revoked on sign-out; users opt in again after signing back in. Push messages contain only a generic task description; assessment details require sign-in. On iPhone, push alerts require HTTPS and opening the app from an Add to Home Screen icon. A phone visiting the LAN HTTP development address cannot receive them.
