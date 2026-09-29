@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
-import { organizationMemberships, organizations } from "./schema";
+import { authSessions, organizationMemberships, organizations } from "./schema";
 import { userNotifications } from "./notification-schema";
 
 const entityId = (name: string) => varchar(name, { length: 26 });
@@ -9,6 +9,7 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   id: entityId("id").primaryKey(),
   organizationId: entityId("organization_id").notNull().references(() => organizations.id),
   membershipId: entityId("membership_id").notNull(),
+  sessionId: entityId("session_id").references(() => authSessions.id),
   endpoint: text("endpoint").notNull(),
   p256dh: text("p256dh").notNull(),
   auth: text("auth").notNull(),
@@ -17,6 +18,7 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
 }, table => [
   uniqueIndex("push_subscriptions_endpoint_uidx").on(table.endpoint),
   index("push_subscriptions_membership_idx").on(table.organizationId, table.membershipId),
+  index("push_subscriptions_session_idx").on(table.sessionId),
   foreignKey({ columns: [table.organizationId, table.membershipId], foreignColumns: [organizationMemberships.organizationId, organizationMemberships.id] }),
   check("push_subscriptions_id_ulid_ck", sql`${table.id} ~ '^[0-9A-HJKMNP-TV-Z]{26}$'`),
 ]);

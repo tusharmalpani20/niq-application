@@ -32,6 +32,7 @@ export async function isDatabaseSchemaReady(sql: postgres.Sql): Promise<boolean>
       and to_regclass('public.workspace_events') is not null
       and to_regclass('public.user_notifications') is not null
       and to_regclass('public.push_subscriptions') is not null
+      and exists (select 1 from information_schema.columns where table_schema='public' and table_name='push_subscriptions' and column_name='session_id')
       and to_regclass('public.notification_deliveries') is not null
       and exists (select 1 from information_schema.columns where table_schema='public' and table_name='assessments' and column_name='current_owner_membership_id')
       and exists (select 1 from information_schema.columns where table_schema='public' and table_name='assessment_submissions' and column_name='failure_issues')
