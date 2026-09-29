@@ -16,6 +16,7 @@ import { mountFaceScanConsentRoutes } from "./face-scan-consent-routes";
 import { AssessmentFaceScanService } from "./services/assessment-face-scan";
 import { BoundedBodyError } from "./http/bounded-json";
 import { mountAssessmentRoutes } from "./assessment-routes";
+import { mountWorkspaceNotificationRoutes } from "./workspace-notification-routes";
 import type { AssessmentWorkflowService } from "./services/assessment-workflow";
 
 export type AppDependencies = {
@@ -233,6 +234,7 @@ export function createApp(dependencies: AppDependencies) {
   });
   app.patch("/v1/organizations/:organizationId/users/:membershipId", zValidator("param", idParamsSchema, validationFailure), zValidator("json", updateUserStatusSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.setUserActive(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").membershipId!, context.req.valid("json").active, requestContext(context)))));
   if (dependencies.assessmentWorkflow) {
+    mountWorkspaceNotificationRoutes(app, dependencies.assessmentWorkflow, dependencies.service!, cookieName);
     mountAssessmentRoutes(app, dependencies.assessmentWorkflow);
     mountFaceScanRoutes(app, new AssessmentFaceScanService(dependencies.assessmentWorkflow));
     mountFaceScanConsentRoutes(app, dependencies.assessmentWorkflow);
