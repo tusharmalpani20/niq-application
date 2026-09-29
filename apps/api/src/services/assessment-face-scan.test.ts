@@ -57,7 +57,7 @@ test("start freezes the configured staging employee and replay ignores later ove
   const db={transaction:async(work:any)=>work(tx)};
   // Exercise the real snapshot encryption with an in-memory persistence boundary; no database or provider call.
   const workflow=new AssessmentWorkflowService({db:db as any,config,applicationService:{getPatient:async()=>({dateOfBirth:"1990-05-01",gender:"FEMALE"})} as any});
-  workflow.authorize=async()=>({revision:0,cycle:0,status:"DRAFT",patientId:"patient",workflow:workflow.seal({answers:{height_cm:170,current_weight_kg:65}})}) as any;
+  workflow.authorize=async()=>({revision:0,cycle:0,status:"DRAFT",patientId:"patient",createdByMembershipId:"operator",currentOwnerMembershipId:"operator",workflow:workflow.seal({answers:{height_cm:170,current_weight_kg:65}})}) as any;
   workflow.audit=async()=>{};
   const scans=new AssessmentFaceScanService(workflow);
   scans.transport=async()=>({identity:{origin:"https://scoring.invalid",deploymentId:"deployment",scoringOrganizationId:"client"},credential:"unused"});
@@ -98,14 +98,14 @@ test("scan recovery cannot rewrite reviewed, completed or previous-cycle evidenc
 test("only cancellation of an open scan remains available after scoring", () => {
  const workflow = { editable: () => { throw new Error("Assessment is no longer editable"); }, unseal: () => ({ correctionPerson: null }) } as any;
  const scans = new AssessmentFaceScanService(workflow);
- const actor = { membershipId: "creator" } as any;
- const scored = { status: "SCORED", clinicalReview: null, createdByMembershipId: "creator" } as any;
+ const actor = { membershipId: "creator", role: "DOCTOR", platformRole: "USER" } as any;
+ const scored = { status: "SCORED", clinicalReview: null, createdByMembershipId: "creator", currentOwnerMembershipId: "creator" } as any;
  expect(() => (scans as any).assertMutationAllowed(scored, { state: "REQUESTED", active: true }, "cancel", actor)).not.toThrow();
  expect(() => (scans as any).assertMutationAllowed(scored, { state: "PROCESSING", active: true }, "cancel", actor)).not.toThrow();
  expect(() => (scans as any).assertMutationAllowed(scored, { state: "REQUESTED", active: true }, "signal", actor)).toThrow("Assessment is no longer editable");
  expect(() => (scans as any).assertMutationAllowed({ ...scored, status: "UNDER_REVIEW" }, { state: "REQUESTED", active: true }, "cancel", actor)).toThrow("Assessment is no longer editable");
  expect(() => (scans as any).assertMutationAllowed(scored, { state: "COMPLETED", active: false }, "cancel", actor)).toThrow("Assessment is no longer editable");
- expect(() => (scans as any).assertMutationAllowed({ ...scored, createdByMembershipId: "someone-else" }, { state: "REQUESTED", active: true }, "cancel", actor)).toThrow("Only the assessment creator");
+ expect(() => (scans as any).assertMutationAllowed({ ...scored, currentOwnerMembershipId: "someone-else" }, { state: "REQUESTED", active: true }, "cancel", actor)).toThrow("Only the current assessment owner");
 });
 
 test("late provider completion makes no evidence write after review freezes the cycle", async () => {

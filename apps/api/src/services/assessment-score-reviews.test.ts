@@ -10,19 +10,20 @@ function fixture() {
  const result={formatVersion:2,profile:"NIQ_FINAL_ASSESSMENT",complete:true,score:3,classification:{id:"low",label:"Low",interpretation:""},components:[{id:"item",sectionId:"section",label:"Item",points:3,status:"answered"},{id:"missing",sectionId:"empty",label:"Missing",points:null,status:"unanswered"}],version:"v1",checksum:"a".repeat(64),resultReference:"result-1",calculatedAt:new Date().toISOString(),clinicalUsePermitted:true};
  const rows:any[]=[];const audits:any[]=[];
  const tx:any={select:()=>({from:(table:any)=>table===patients?{where:()=>({for:async()=>[{id:"patient"}]})}:table===organizationMemberships?{innerJoin:()=>({where:()=>({for:async()=>[{role:"DOCTOR"}]})})}:({where:()=>({orderBy:()=>table===assessmentSubmissions?{limit:async()=>[{id:"submission",status:"SUCCEEDED",result}]}:Promise.resolve(table===assessmentFaceScans ? [...scans] : [...rows])})})}),insert:(table:any)=>({values:async(value:any)=>{expect(table).toBe(assessmentScoreReviews);rows.push(value);}})};
- let denied=false, auditFailure=false;
- const workflow={clinicalActor:AssessmentWorkflowService.prototype.clinicalActor,db:{...tx,transaction:async(fn:any)=>{const length=rows.length;try{return await fn(tx);}catch(e){rows.splice(length);throw e;}}},authorize:async()=>{if(denied)throw new Error("denied");return {id:"assessment",organizationId:"org",status:"SCORED",currentSubmissionId:"submission"};},unseal:(value:any)=>structuredClone(value),seal:(value:any)=>structuredClone(value),audit:async(...args:any[])=>{if(auditFailure)throw new Error("audit failed");audits.push(args);}} as unknown as AssessmentWorkflowService;
- return {service:new AssessmentScoreReviewService(workflow,{prepare:async()=>null,process:async()=>{},projection:async()=>({status:"UNAVAILABLE",classification:null,resultReference:null,failureCode:null,canRetry:false})}),scans,rows,audits,result,deny:()=>denied=true,failAudit:()=>auditFailure=true};
+ let denied=false, auditFailure=false, currentOwner="actor-1";
+ const workflow={clinicalActor:AssessmentWorkflowService.prototype.clinicalActor,db:{...tx,transaction:async(fn:any)=>{const length=rows.length;try{return await fn(tx);}catch(e){rows.splice(length);throw e;}}},authorize:async()=>{if(denied)throw new Error("denied");return {id:"assessment",organizationId:"org",status:"SCORED",currentSubmissionId:"submission",currentOwnerMembershipId:currentOwner,createdByMembershipId:"actor-1"};},unseal:(value:any)=>structuredClone(value),seal:(value:any)=>structuredClone(value),audit:async(...args:any[])=>{if(auditFailure)throw new Error("audit failed");audits.push(args);}} as unknown as AssessmentWorkflowService;
+ return {service:new AssessmentScoreReviewService(workflow,{prepare:async()=>null,process:async()=>{},projection:async()=>({status:"UNAVAILABLE",classification:null,resultReference:null,failureCode:null,canRetry:false})}),scans,rows,audits,result,deny:()=>denied=true,failAudit:()=>auditFailure=true,setOwner:(id:string)=>currentOwner=id};
 }
 test("reviews preserve original result, replay idempotently and retain all reviewers",async()=>{
  const f=fixture();const original=JSON.stringify(f.result);
  const first=await f.service.add(actor,"org","assessment",input,{requestId:"r1"});expect(first.overall.reviewedPoints).toBe(4);
  await f.service.add(actor,"org","assessment",input,{requestId:"r2"});expect(f.rows).toHaveLength(1);expect(f.audits).toHaveLength(1);
  await expect(f.service.add(actor,"org","assessment",{...input,points:5},{requestId:"r3"})).rejects.toMatchObject({code:"CONFLICT"});
+ f.setOwner("actor-2");
  const second=await f.service.add({...actor,membershipId:"actor-2",displayName:"Second reviewer"},"org","assessment",{...input,expectedRevision:1,points:6},{requestId:"r4"});
- expect((await f.service.add(actor,"org","assessment",input,{requestId:"late-replay"})).revision).toBe(2);
+ await expect(f.service.add(actor,"org","assessment",input,{requestId:"late-replay"})).rejects.toMatchObject({code:"FORBIDDEN"});
  expect(second.entries.map(e=>e.actorName)).toEqual(["First reviewer","Second reviewer"]);expect(second.entries[1]?.previousPoints).toBe(4);expect(JSON.stringify(f.result)).toBe(original);
- await expect(f.service.add(actor,"org","assessment",{...input,requestKey:"stale-request-12345",points:8},{requestId:"r5"})).rejects.toMatchObject({code:"CONFLICT"});
+ await expect(f.service.add(actor,"org","assessment",{...input,requestKey:"stale-request-12345",points:8},{requestId:"r5"})).rejects.toMatchObject({code:"FORBIDDEN"});
 });
 test("invalid and unscored targets, no-ops and unauthorized actors cannot review",async()=>{
  const f=fixture();
@@ -48,9 +49,11 @@ test("scan reviews retain originals and reviewers without changing questionnaire
  await f.service.add(actor,"org","assessment",scanInput,{requestId:"replay"});
  expect(f.rows).toHaveLength(1);
  await expect(f.service.add(actor,"org","assessment",{...scanInput,requestKey:"another-request-key",points:5},{requestId:"stale"})).rejects.toMatchObject({code:"CONFLICT"});
+ f.setOwner("actor-2");
  const second=await f.service.add({...actor,membershipId:"actor-2",displayName:"Second reviewer"},"org","assessment",{...scanInput,expectedRevision:1,points:4},{requestId:"second"});
  expect(second.entries[1]?.previousPoints).toBe(6);
  expect(second.entries[1]?.actorName).toBe("Second reviewer");
+ f.setOwner("actor-1");
  const restored=await f.service.add(actor,"org","assessment",{...scanInput,requestKey:"restore-scan-request",expectedRevision:2,points:null},{requestId:"restore"});
  expect(restored.scan?.reviewedPoints).toBe(8);
  expect(restored.overall.reviewedPoints).toBe(3);
