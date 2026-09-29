@@ -43,6 +43,7 @@ import { countOverviewRisk, overviewRiskNutritionTargets } from "./overview-risk
 import { loadOverviewSummary } from "./overview-summary";
 import { loadAssessmentRiskCategories } from "./assessment-risk-categories";
 import { myAssessmentAction } from "./my-assessment-action";
+import { pushSubscriptions } from "../db/push-schema";
 export { myAssessmentAction } from "./my-assessment-action";
 import type { ClinicalReviewStored } from "./clinical-review-state";
 
@@ -335,6 +336,7 @@ export class PostgresApplicationService implements ApplicationService {
     if (!session) return;
     await this.db.transaction(async (tx) => {
       await tx.update(authSessions).set({ revokedAt: new Date(), updatedAt: new Date() }).where(eq(authSessions.id, session.id));
+      await tx.update(pushSubscriptions).set({ revokedAt: new Date() }).where(and(eq(pushSubscriptions.sessionId, session.id), isNull(pushSubscriptions.revokedAt)));
       await this.audit(tx, session.organizationId, context, "AUTH_SIGNED_OUT", "session", session.id);
     });
   }

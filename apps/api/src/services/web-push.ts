@@ -1,11 +1,12 @@
-import { and, eq, isNull, lte, or } from "drizzle-orm";
+import { and, eq, gt, isNull, lte, or } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
 import type { ApplicationConfig } from "@niq/application-config";
 import webPush from "web-push";
 import type { Database } from "../db/client";
 import { notificationDeliveries, pushSubscriptions, workspacePresence } from "../db/push-schema";
 import { userNotifications } from "../db/notification-schema";
-import { organizationMemberships, users } from "../db/schema";
+import { authSessions, organizationMemberships, users } from "../db/schema";
+import { keyedHash } from "../security/tokens";
 import type { AssessmentWorkflowService } from "./assessment-workflow";
 import type { Principal } from "./application";
 import { ServiceError } from "./application";
@@ -39,7 +40,29 @@ export class WebPushService {
     return { enabled: this.enabled, publicKey: this.enabled ? this.config.VAPID_PUBLIC_KEY : null };
   }
 
-  async subscribe(actor: Principal, organizationId: string, subscription: BrowserPushSubscription) {
+  private async activeSessionId(actor: Principal, organizationId: string, sessionToken: string): Promise<string> {
+    const tokenHash = await keyedHash(sessionToken, this.config.SESSION_SECRET);
+    const [session] = await this.db.select({ id: authSessions.id }).from(authSessions).where(and(
+      eq(authSessions.tokenHash, tokenHash), eq(authSessions.organizationId, organizationId),
+      eq(authSessions.membershipId, actor.membershipId), eq(authSessions.userId, actor.userId),
+      isNull(authSessions.revokedAt), gt(authSessions.expiresAt, new Date()),
+    ));
+    if (!session) throw new ServiceError("FORBIDDEN", "Your session is no longer active.");
+    return session.id;
+  }
+
+  async subscriptionStatus(actor: Principal, organizationId: string, sessionToken: string, endpoint: string) {
+    this.assertActor(actor, organizationId);
+    const sessionId = await this.activeSessionId(actor, organizationId, sessionToken);
+    const [row] = await this.db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(and(
+      eq(pushSubscriptions.endpoint, endpoint), eq(pushSubscriptions.organizationId, organizationId),
+      eq(pushSubscriptions.membershipId, actor.membershipId), eq(pushSubscriptions.sessionId, sessionId),
+      isNull(pushSubscriptions.revokedAt),
+    ));
+    return { enabled: !!row };
+  }
+
+  async subscribe(actor: Principal, organizationId: string, sessionToken: string, subscription: BrowserPushSubscription) {
     this.assertActor(actor, organizationId);
     if (!this.enabled) throw new ServiceError("VALIDATION_ERROR", "Push notifications are not configured.");
     if (!validPushEndpoint(subscription.endpoint)) throw new ServiceError("VALIDATION_ERROR", "This browser push service is not supported.");
@@ -47,10 +70,11 @@ export class WebPushService {
       .innerJoin(users, eq(users.id, organizationMemberships.userId))
       .where(and(eq(organizationMemberships.organizationId, organizationId), eq(organizationMemberships.id, actor.membershipId), eq(organizationMemberships.userId, actor.userId), eq(organizationMemberships.isActive, true), eq(users.status, "ACTIVE")));
     if (!row) throw new ServiceError("FORBIDDEN", "Your account is no longer active.");
+    const sessionId = await this.activeSessionId(actor, organizationId, sessionToken);
     await this.db.insert(pushSubscriptions).values({ id: createEntityId(), organizationId, membershipId: actor.membershipId,
-      endpoint: subscription.endpoint, p256dh: subscription.keys.p256dh, auth: subscription.keys.auth })
+      sessionId, endpoint: subscription.endpoint, p256dh: subscription.keys.p256dh, auth: subscription.keys.auth })
       .onConflictDoUpdate({ target: pushSubscriptions.endpoint, set: {
-        organizationId, membershipId: actor.membershipId, p256dh: subscription.keys.p256dh, auth: subscription.keys.auth, revokedAt: null,
+        organizationId, membershipId: actor.membershipId, sessionId, p256dh: subscription.keys.p256dh, auth: subscription.keys.auth, revokedAt: null,
       } });
   }
 
@@ -69,7 +93,8 @@ export class WebPushService {
         and(eq(notificationDeliveries.status, "PENDING"), lte(notificationDeliveries.nextAttemptAt, now)),
         and(eq(notificationDeliveries.status, "SENDING"), lte(notificationDeliveries.leaseUntil, now)),
       ))).limit(10).for("update", { skipLocked: true });
-      if (rows.length) await tx.update(notificationDeliveries).set({ status: "SENDING", leaseUntil: new Date(Date.now() + 60_000) })
+      // Ten sequential sends may each wait ten seconds before timing out.
+      if (rows.length) await tx.update(notificationDeliveries).set({ status: "SENDING", leaseUntil: new Date(Date.now() + 180_000) })
         .where(or(...rows.map(row => eq(notificationDeliveries.id, row.id))));
       return rows.map(row => row.id);
     });
@@ -90,6 +115,11 @@ export class WebPushService {
     const skip = async () => this.db.update(notificationDeliveries).set({ status: "SKIPPED", leaseUntil: null }).where(eq(notificationDeliveries.id, id));
     if (!membership || !membership.active || membership.userStatus !== "ACTIVE" || membership.platformRole !== "USER" ||
       subscription.revokedAt || subscription.membershipId !== notification.recipientMembershipId || notification.readAt || notification.dismissedAt) { await skip(); return; }
+    const [session] = subscription.sessionId ? await this.db.select({ id: authSessions.id }).from(authSessions).where(and(
+      eq(authSessions.id, subscription.sessionId), eq(authSessions.organizationId, notification.organizationId),
+      eq(authSessions.membershipId, notification.recipientMembershipId), isNull(authSessions.revokedAt), gt(authSessions.expiresAt, new Date()),
+    )) : [];
+    if (!session) { await skip(); return; }
     const actor: Principal = { userId: membership.userId, organizationId: notification.organizationId, membershipId: notification.recipientMembershipId,
       email: membership.email, displayName: membership.displayName, role: membership.role, platformRole: "USER" };
     try {

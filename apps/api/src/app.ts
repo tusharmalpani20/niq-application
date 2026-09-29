@@ -258,7 +258,7 @@ export function createApp(dependencies: AppDependencies) {
   });
   app.patch("/v1/organizations/:organizationId/users/:membershipId", zValidator("param", idParamsSchema, validationFailure), zValidator("json", updateUserStatusSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.setUserActive(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").membershipId!, context.req.valid("json").active, requestContext(context)))));
   if (dependencies.assessmentWorkflow) {
-    if (dependencies.webPush) mountWebPushRoutes(app, dependencies.webPush);
+    if (dependencies.webPush) mountWebPushRoutes(app, dependencies.webPush, cookieName);
     mountWorkspaceNotificationRoutes(app, dependencies.assessmentWorkflow, dependencies.service!, cookieName);
     mountAssessmentRoutes(app, dependencies.assessmentWorkflow);
     mountFaceScanRoutes(app, new AssessmentFaceScanService(dependencies.assessmentWorkflow));

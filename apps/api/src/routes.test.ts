@@ -36,6 +36,27 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
 }
 
 describe("local authentication routes", () => {
+  test("push status checks the current authenticated session", async () => {
+    const calls: string[] = [];
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService(), assessmentWorkflow: {} as NonNullable<Parameters<typeof createApp>[0]["assessmentWorkflow"]>, webPush: {
+        subscriptionStatus: async (actor: Principal, organizationId: string, token: string, endpoint: string) => {
+          expect(actor).toEqual(principal);
+          expect(organizationId).toBe(principal.organizationId);
+          expect(endpoint).toBe("https://web.push.apple.com/example");
+          calls.push(token);
+          return { enabled: token === "valid-session" };
+        },
+      } as NonNullable<Parameters<typeof createApp>[0]["webPush"]>,
+    });
+    const path = `/v1/organizations/${principal.organizationId}/push/subscriptions/status`;
+    const body = JSON.stringify({ endpoint: "https://web.push.apple.com/example" });
+    const headers = { cookie: "niq_session=valid-session", origin: "http://localhost:5173", "content-type": "application/json" };
+    expect(await (await app.request(path, { method: "POST", headers, body })).json()).toEqual({ enabled: true });
+    expect((await app.request(path, { method: "POST", headers: { ...headers, origin: "http://elsewhere.test" }, body })).status).toBe(403);
+    expect((await app.request(path, { method: "POST", headers: { ...headers, cookie: "" }, body })).status).toBe(401);
+    expect(calls).toEqual(["valid-session"]);
+  });
   test("rejects authenticated mutations from missing or sibling origins", async () => {
     let revoked = 0;
     let tenantInvitations = 0;
