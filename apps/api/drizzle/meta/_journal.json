@@ -239,6 +239,20 @@
       "when": 1790668800000,
       "tag": "0033_overview_summary_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790755200000,
+      "tag": "0034_assessment_ownership",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1790755201000,
+      "tag": "0035_workspace_notifications",
+      "breakpoints": true
     }
   ]
 }
