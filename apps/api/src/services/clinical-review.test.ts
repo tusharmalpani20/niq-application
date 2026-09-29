@@ -17,7 +17,7 @@ const id=createEntityId();
 test("clinical command schemas require explicit appropriate notes, recipient and concurrency values",()=>{
  const base={expectedRevision:0,expectedScoreRevision:0,requestKey:"test-request-123456"};
  for(const action of ["SEND","CLAIM","RESEND"] as const){expect(clinicalReviewActionSchema.safeParse({...base,action}).success).toBe(true);expect(clinicalReviewActionSchema.safeParse({...base,action,reason:"surprise"}).success).toBe(false);}
- for(const action of ["TRANSFER","RETURN_TO_DRAFT","REASSIGN_CORRECTION"] as const){expect(clinicalReviewActionSchema.safeParse({...base,action,assigneeId:id,reason:"Reason"}).success).toBe(true);expect(clinicalReviewActionSchema.safeParse({...base,action,assigneeId:id,reason:"  "}).success).toBe(false);}
+ for(const action of ["TRANSFER","TRANSFER_OWNER","RETURN_TO_DRAFT","REASSIGN_CORRECTION"] as const){expect(clinicalReviewActionSchema.safeParse({...base,action,assigneeId:id,reason:"Reason"}).success).toBe(true);expect(clinicalReviewActionSchema.safeParse({...base,action,assigneeId:id,reason:"  "}).success).toBe(false);}
  expect(clinicalReviewActionSchema.safeParse({...base,action:"COMPLETE",remark:" "}).success).toBe(false);
 });
 describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review PostgreSQL",()=>{

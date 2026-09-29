@@ -7,6 +7,7 @@ export const clinicalReviewActionSchema = z.discriminatedUnion("action", [
  z.object({...base,action:z.literal("SEND")}).strict(),
  z.object({...base,action:z.literal("CLAIM")}).strict(),
  z.object({...base,action:z.literal("TRANSFER"),assigneeId:recipient,reason}).strict(),
+ z.object({...base,action:z.literal("TRANSFER_OWNER"),assigneeId:recipient,reason}).strict(),
  z.object({...base,action:z.literal("RELEASE"),reason}).strict(),
  z.object({...base,action:z.literal("RETURN_TO_DRAFT"),assigneeId:recipient,reason}).strict(),
  z.object({...base,action:z.literal("REASSIGN_CORRECTION"),assigneeId:recipient,reason}).strict(),
@@ -18,6 +19,7 @@ export type ClinicalReviewer = {membershipId:string;displayName:string;role:Memb
 export type ClinicalReviewEvent = {id:string;action:ClinicalReviewAction["action"];revision:number;cycle:number;actor:ClinicalReviewer;assignee:ClinicalReviewer|null;createdAt:string;reason?:string;remark?:string};
 export type ClinicalReview = {
  assessmentId:string;revision:number;scoreRevision:number;cycle:number;
+ currentOwnerMembershipId?:string|null;
  state:"NOT_SUBMITTED"|"QUEUED"|"IN_REVIEW"|"RETURNED"|"AWAITING_RESUBMISSION"|"COMPLETED";
  assignee:ClinicalReviewer|null;correctionPerson:ClinicalReviewer|null;previousReviewer:ClinicalReviewer|null;
  defaultCorrectionPersonId:string|null;returnReason:string|null;finalRemark:string|null;

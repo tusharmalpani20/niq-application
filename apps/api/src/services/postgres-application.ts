@@ -36,6 +36,7 @@ import { hashPassword, keyedHash, randomToken, secureEqual, verifyPassword } fro
 import type { ApplicationService, MfaChallengeResult, OtpDelivery, Principal, RequestContext, SessionResult, SignInResult } from "./application";
 import { ServiceError } from "./application";
 import { facilityAccessCondition } from "./facility-access";
+import { assessmentVisibilityCondition, canSeeAssessment } from "./assessment-access";
 import { facilityTrend } from "./facility-performance";
 import { requestScoringOrganizationInfo, ScoringOrganizationInfoRequestError } from "./scoring-organization-info";
 import { countOverviewRisk, overviewRiskNutritionTargets } from "./overview-risk";
@@ -100,6 +101,14 @@ function databaseMessage(error: unknown): string {
 }
 
 export class PostgresApplicationService implements ApplicationService {
+  private canSeeAssessmentRow(actor: Principal, row: Pick<typeof assessments.$inferSelect, "status" | "currentOwnerMembershipId" | "createdByMembershipId" | "clinicalReview">): boolean {
+    if (row.currentOwnerMembershipId !== null || !row.clinicalReview) return canSeeAssessment(row, actor);
+    const encrypted = (row.clinicalReview as { encrypted?: string }).encrypted;
+    if (!encrypted) throw new ServiceError("CONFLICT", "Assessment review data could not be read.");
+    const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
+    const review = JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key)) as ClinicalReviewStored;
+    return canSeeAssessment(row, actor, review.correctionPerson?.membershipId);
+  }
   constructor(private readonly db: Database, private readonly config: ApplicationConfig, private readonly otpDelivery: OtpDelivery) {}
 
   private async audit(executor: Executor, organizationId: string, context: RequestContext, action: string, resourceType: string, resourceId?: string, actor?: Principal, metadata: Record<string, unknown> = {}) {
@@ -923,7 +932,8 @@ export class PostgresApplicationService implements ApplicationService {
       status: assessments.status,
       currentSubmissionId: assessments.currentSubmissionId,
       createdByMembershipId: assessments.createdByMembershipId,
-      clinicalReview: sql<unknown>`case when ${inArray(assessments.status, ["DRAFT", "SCORED", "COMPLETED"])} then ${assessments.clinicalReview} else null end`,
+      currentOwnerMembershipId: assessments.currentOwnerMembershipId,
+      clinicalReview: assessments.clinicalReview,
       createdAt: assessments.createdAt,
       updatedAt: assessments.updatedAt,
       completedAt: assessments.completedAt,
@@ -932,15 +942,22 @@ export class PostgresApplicationService implements ApplicationService {
       .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
       .leftJoin(facilities, and(eq(facilities.organizationId, assessments.organizationId), eq(facilities.id, assessments.facilityId)))
       .leftJoin(assessmentPriorities, and(eq(assessmentPriorities.organizationId, assessments.organizationId), eq(assessmentPriorities.assessmentId, assessments.id), eq(assessmentPriorities.membershipId, actor.membershipId)))
-      .where(and(eq(assessments.organizationId, organizationId), facilityAccessCondition(actor, organizationId, assessments.facilityId)))
+      .where(and(eq(assessments.organizationId, organizationId), facilityAccessCondition(actor, organizationId, assessments.facilityId), assessmentVisibilityCondition(actor)))
       .orderBy(desc(assessments.createdAt));
     const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
-    const categories = await loadAssessmentRiskCategories(this.db, organizationId, rows, <T>(value: unknown): T => {
+    const visibleRows = rows.filter(row => {
+      if (row.currentOwnerMembershipId !== null || !row.clinicalReview) return canSeeAssessment(row, actor);
+      const encrypted = (row.clinicalReview as { encrypted?: string }).encrypted;
+      if (!encrypted) throw new ServiceError("CONFLICT", "Assessment review data could not be read.");
+      const review = JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key)) as ClinicalReviewStored;
+      return canSeeAssessment(row, actor, review.correctionPerson?.membershipId);
+    });
+    const categories = await loadAssessmentRiskCategories(this.db, organizationId, visibleRows, <T>(value: unknown): T => {
       const encrypted = (value as { encrypted?: string })?.encrypted;
       if (!encrypted) throw new ServiceError("CONFLICT", "Assessment risk data could not be read.");
       return JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key)) as T;
     });
-    return rows.map((row) => {
+    return visibleRows.map((row) => {
       const review = (row.status === "DRAFT" || row.status === "SCORED") && row.clinicalReview ? (() => {
         const encrypted = (row.clinicalReview as { encrypted?: string }).encrypted;
         if (!encrypted) throw new ServiceError("CONFLICT", "Assessment review data could not be read.");
@@ -970,9 +987,9 @@ export class PostgresApplicationService implements ApplicationService {
   async getAssessmentPriority(actor: Principal, organizationId: string, assessmentId: string): Promise<boolean> {
     if (actor.platformRole !== "USER") return false;
     this.ensureOrganizationAccess(actor, organizationId, "assessments.read");
-    const [assessment] = await this.db.select({ id: assessments.id }).from(assessments)
-      .where(and(eq(assessments.organizationId, organizationId), eq(assessments.id, assessmentId), facilityAccessCondition(actor, organizationId, assessments.facilityId)));
-    if (!assessment) throw new ServiceError("NOT_FOUND", "Assessment not found.");
+    const [assessment] = await this.db.select({ id: assessments.id, status: assessments.status, currentOwnerMembershipId: assessments.currentOwnerMembershipId, createdByMembershipId: assessments.createdByMembershipId, clinicalReview: assessments.clinicalReview }).from(assessments)
+      .where(and(eq(assessments.organizationId, organizationId), eq(assessments.id, assessmentId), facilityAccessCondition(actor, organizationId, assessments.facilityId), assessmentVisibilityCondition(actor)));
+    if (!assessment || !this.canSeeAssessmentRow(actor, assessment)) throw new ServiceError("NOT_FOUND", "Assessment not found.");
     const [priority] = await this.db.select({ assessmentId: assessmentPriorities.assessmentId }).from(assessmentPriorities)
       .where(and(eq(assessmentPriorities.organizationId, organizationId), eq(assessmentPriorities.assessmentId, assessmentId), eq(assessmentPriorities.membershipId, actor.membershipId)));
     return Boolean(priority);
@@ -981,9 +998,9 @@ export class PostgresApplicationService implements ApplicationService {
     if (actor.platformRole !== "USER") throw new ServiceError("FORBIDDEN", "Only organization members can mark assessment priority.");
     this.ensureOrganizationAccess(actor, organizationId, "assessments.read");
     // Apply the same facility boundary as assessment reads, including unassigned records.
-    const [assessment] = await this.db.select({ id: assessments.id }).from(assessments)
-      .where(and(eq(assessments.organizationId, organizationId), eq(assessments.id, assessmentId), facilityAccessCondition(actor, organizationId, assessments.facilityId)));
-    if (!assessment) throw new ServiceError("NOT_FOUND", "Assessment not found.");
+    const [assessment] = await this.db.select({ id: assessments.id, status: assessments.status, currentOwnerMembershipId: assessments.currentOwnerMembershipId, createdByMembershipId: assessments.createdByMembershipId, clinicalReview: assessments.clinicalReview }).from(assessments)
+      .where(and(eq(assessments.organizationId, organizationId), eq(assessments.id, assessmentId), facilityAccessCondition(actor, organizationId, assessments.facilityId), assessmentVisibilityCondition(actor)));
+    if (!assessment || !this.canSeeAssessmentRow(actor, assessment)) throw new ServiceError("NOT_FOUND", "Assessment not found.");
     if (isPriority) {
       await this.db.insert(assessmentPriorities).values({ organizationId, assessmentId, membershipId: actor.membershipId }).onConflictDoNothing();
     } else {
@@ -1064,6 +1081,8 @@ export class PostgresApplicationService implements ApplicationService {
         eq(patients.isArchived, false),
         facilityAccessCondition(actor, organizationId, patients.homeFacilityId),
         facilityAccessCondition(actor, organizationId, assessments.facilityId),
+        assessmentVisibilityCondition(actor),
+        sql`(${assessments.currentOwnerMembershipId} = ${actor.membershipId} or ${assessments.status} in ('UNDER_REVIEW','COMPLETED'))`,
       )).groupBy(sql`1`).orderBy(sql`1 desc`);
     return { days: rows.map(row => ({ ...row, actions: row.actions.filter((action): action is typeof actions[number] => actions.includes(action as typeof actions[number])) })) };
   }
@@ -1079,6 +1098,8 @@ export class PostgresApplicationService implements ApplicationService {
       eq(patients.isArchived, false),
       facilityAccessCondition(actor, organizationId, patients.homeFacilityId),
       facilityAccessCondition(actor, organizationId, assessments.facilityId),
+      assessmentVisibilityCondition(actor),
+      sql`(${assessments.currentOwnerMembershipId} = ${actor.membershipId} or ${assessments.status} in ('UNDER_REVIEW','COMPLETED'))`,
     );
     const source = () => this.db.select({
       assessmentId: auditEvents.assessmentId,
@@ -1110,7 +1131,8 @@ export class PostgresApplicationService implements ApplicationService {
     }).from(assessments)
       .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
       .where(and(eq(assessments.organizationId, organizationId), inArray(assessments.id, ids), eq(patients.isArchived, false),
-        facilityAccessCondition(actor, organizationId, patients.homeFacilityId), facilityAccessCondition(actor, organizationId, assessments.facilityId))) : [];
+        facilityAccessCondition(actor, organizationId, patients.homeFacilityId), facilityAccessCondition(actor, organizationId, assessments.facilityId), assessmentVisibilityCondition(actor),
+        sql`(${assessments.currentOwnerMembershipId} = ${actor.membershipId} or ${assessments.status} in ('UNDER_REVIEW','COMPLETED'))`)) : [];
     const detailById = new Map(details.map(detail => [detail.assessmentId, detail]));
     const milestones = ids.length ? await this.db.select({
       assessmentId: auditEvents.assessmentId,

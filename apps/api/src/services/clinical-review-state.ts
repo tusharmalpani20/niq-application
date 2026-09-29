@@ -18,7 +18,7 @@ export function assertCorrectionOwner(service:AssessmentWorkflowService,row:Work
 export function canAdjustClinicalScore(service:AssessmentWorkflowService,row:WorkflowRow,actor:Principal) {
  if(!hasPermission(actor.role,"scores.review"))return false;
  const state=reviewState(service,row);
- return row.status==="SCORED" ? !state.correctionPerson || state.correctionPerson.membershipId===actor.membershipId : row.status==="UNDER_REVIEW" && state.assignee?.membershipId===actor.membershipId;
+ return row.status==="SCORED" ? (row.currentOwnerMembershipId ?? state.correctionPerson?.membershipId ?? row.createdByMembershipId)===actor.membershipId : row.status==="UNDER_REVIEW" && state.assignee?.membershipId===actor.membershipId;
 }
 export async function appendAssessmentHistory(service:AssessmentWorkflowService,tx:WorkflowExecutor,row:WorkflowRow,actor:Principal|null,kind:string,payload:unknown,requestKey?:string) {
  await tx.insert(assessmentHistory).values({id:createEntityId(),organizationId:row.organizationId,assessmentId:row.id,actorId:actor?.membershipId??null,cycle:row.cycle,revision:row.revision,kind,requestKey:requestKey??null,payload:service.seal({actor:actor?{membershipId:actor.membershipId,userId:actor.userId,displayName:actor.displayName}:null,...(payload as object)} )});

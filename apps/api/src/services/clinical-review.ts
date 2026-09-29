@@ -7,9 +7,11 @@ import { decryptPatientData, patientDataKey } from "../security/patient-data";
 import { ServiceError, type Principal, type RequestContext } from "./application";
 import type { AssessmentWorkflowService, WorkflowExecutor, WorkflowRow, StoredWorkflow } from "./assessment-workflow";
 import { facilityAccessCondition } from "./facility-access";
+import { isCurrentAssessmentOwner } from "./assessment-access";
 import { reviewState, canAdjustClinicalScore, appendAssessmentHistory } from "./clinical-review-state";
 import { AssessmentScoreReviewService } from "./assessment-score-reviews";
 import { loadAssessmentRiskCategories, type AssessmentRiskCategory } from "./assessment-risk-categories";
+import { publishWorkspaceChange, type NotificationRecipient } from "./workspace-notifications";
 const clinicalRoles:MembershipRole[]=["DOCTOR","NUTRITIONIST","OTHER_MEDICAL"];
 export class ClinicalReviewService {
  constructor(private service:AssessmentWorkflowService){}
@@ -35,9 +37,10 @@ export class ClinicalReviewService {
   const actions:ClinicalReviewAction["action"][]=[];
   if(row.status==="SCORED") {
    if(s.correctionPerson) {if(correction){actions.push("RESEND","RETURN_TO_DRAFT");} if(admin)actions.push("REASSIGN_CORRECTION");}
-   else {if(row.createdByMembershipId===actor.membershipId && hasPermission(actor.role,"assessments.submit"))actions.push("SEND");if(clinician)actions.push("RETURN_TO_DRAFT");}
+   else {if(isCurrentAssessmentOwner(row,actor) && hasPermission(actor.role,"assessments.submit"))actions.push("SEND");if(clinician)actions.push("RETURN_TO_DRAFT");}
   }
   if(row.status==="DRAFT" && s.correctionPerson && admin)actions.push("REASSIGN_CORRECTION");
+  if(admin && ["DRAFT","SCORED","SCORING_PENDING","SCORING_UNAVAILABLE"].includes(row.status))actions.push("TRANSFER_OWNER");
   if(row.status==="UNDER_REVIEW") {
    if(!s.assignee&&clinician)actions.push("CLAIM");
    if(own||admin){actions.push("TRANSFER","RETURN_TO_DRAFT");if(s.assignee)actions.push("RELEASE");}
@@ -45,7 +48,7 @@ export class ClinicalReviewService {
   }
   const riskClassificationPending=row.status==="UNDER_REVIEW"&&!!row.currentSubmissionId&&!["ORIGINAL","CONFIRMED"].includes((await new AssessmentScoreReviewService(this.service).readProjection(actor,row,tx)).risk?.status??"");
   const eligible=history?await this.eligible(actor,row.organizationId,row.id,tx,row):[];
-  return {riskClassificationPending,assessmentId:row.id,revision:s.revision,scoreRevision:await this.scoreRevision(tx,row),cycle:row.cycle,state:row.status==="COMPLETED"?"COMPLETED":s.correctionPerson?(row.status==="SCORED"?"AWAITING_RESUBMISSION":"RETURNED"):row.status==="UNDER_REVIEW"?(s.assignee?"IN_REVIEW":"QUEUED"):"NOT_SUBMITTED",assignee:s.assignee,correctionPerson:s.correctionPerson,previousReviewer:s.previousReviewer,defaultCorrectionPersonId:eligible.find(r=>r.membershipId===row.createdByMembershipId)?.membershipId??null,returnReason:history?s.returnReason:null,finalRemark:history?s.finalRemark:null,submittedAt:s.submittedAt,completedAt:s.completedAt,history:history?s.history:[],allowedActions:actions,canAdjustScores:canAdjustClinicalScore(this.service,row,actor),canEditDraft:row.status==="DRAFT"&&(!s.correctionPerson||correction)&&hasPermission(actor.role,"assessments.edit")};
+  return {riskClassificationPending,assessmentId:row.id,currentOwnerMembershipId:row.currentOwnerMembershipId??s.correctionPerson?.membershipId??(row.status==="UNDER_REVIEW"||row.status==="COMPLETED"?null:row.createdByMembershipId),revision:s.revision,scoreRevision:await this.scoreRevision(tx,row),cycle:row.cycle,state:row.status==="COMPLETED"?"COMPLETED":s.correctionPerson?(row.status==="SCORED"?"AWAITING_RESUBMISSION":"RETURNED"):row.status==="UNDER_REVIEW"?(s.assignee?"IN_REVIEW":"QUEUED"):"NOT_SUBMITTED",assignee:s.assignee,correctionPerson:s.correctionPerson,previousReviewer:s.previousReviewer,defaultCorrectionPersonId:eligible.find(r=>r.membershipId===(row.currentOwnerMembershipId??s.correctionPerson?.membershipId??row.createdByMembershipId))?.membershipId??null,returnReason:history?s.returnReason:null,finalRemark:history?s.finalRemark:null,submittedAt:s.submittedAt,completedAt:s.completedAt,history:history?s.history:[],allowedActions:actions,canAdjustScores:canAdjustClinicalScore(this.service,row,actor),canEditDraft:row.status==="DRAFT"&&isCurrentAssessmentOwner(row,actor,s.correctionPerson?.membershipId)&&hasPermission(actor.role,"assessments.edit")};
  }
  async read(actor:Principal,org:string,id:string){await this.actor(actor,org);return this.projection(actor,await this.service.authorize(actor,org,id));}
  async queue(actor:Principal,org:string,query:{page:number;pageSize:number;search?:string;facilityId?:string;state?:string;mine?:boolean;risk?:AssessmentRiskCategory}):Promise<ClinicalReviewQueue>{
@@ -113,29 +116,49 @@ export class ClinicalReviewService {
     if(submission?.status!=="SUCCEEDED"||!submission.result)throw new ServiceError("CONFLICT","A confirmed current score is required.");
     score=await new AssessmentScoreReviewService(this.service).readProjection(actor,row,tx);
    }
-   let status=row.status,cycle=row.cycle,currentSubmissionId=row.currentSubmissionId,workflow=row.workflow,completedAt=row.completedAt;
-   const from={status:row.status,assignee:s.assignee,correctionPerson:s.correctionPerson};
+   let status=row.status,cycle=row.cycle,currentSubmissionId=row.currentSubmissionId,workflow=row.workflow,completedAt=row.completedAt,currentOwnerMembershipId=row.currentOwnerMembershipId;
+   const from={status:row.status,assignee:s.assignee,correctionPerson:s.correctionPerson,currentOwnerMembershipId};
    switch(input.action){
-    case "SEND":s.assignee=null;s.submittedAt=now.toISOString();status="UNDER_REVIEW";break;
-    case "CLAIM":s.assignee=eligible.find(r=>r.membershipId===actor.membershipId)??null;if(!s.assignee)throw new ServiceError("FORBIDDEN","Only an eligible clinician can claim this review.");break;
-    case "TRANSFER":if(s.assignee?.membershipId===recipient!.membershipId)throw new ServiceError("VALIDATION_ERROR","Choose a different reviewer.");s.assignee=recipient!;break;
-    case "RELEASE":s.assignee=null;break;
+    case "SEND":s.assignee=null;s.submittedAt=now.toISOString();status="UNDER_REVIEW";currentOwnerMembershipId=null;break;
+    case "CLAIM":s.assignee=eligible.find(r=>r.membershipId===actor.membershipId)??null;if(!s.assignee)throw new ServiceError("FORBIDDEN","Only an eligible clinician can claim this review.");currentOwnerMembershipId=s.assignee.membershipId;break;
+    case "TRANSFER":if(s.assignee?.membershipId===recipient!.membershipId)throw new ServiceError("VALIDATION_ERROR","Choose a different reviewer.");s.assignee=recipient!;currentOwnerMembershipId=recipient!.membershipId;break;
+    case "TRANSFER_OWNER":{
+     if((row.currentOwnerMembershipId??s.correctionPerson?.membershipId??row.createdByMembershipId)===recipient!.membershipId)throw new ServiceError("VALIDATION_ERROR","Choose a different owner.");
+     currentOwnerMembershipId=recipient!.membershipId;
+     if(s.correctionPerson)s.correctionPerson=recipient!;
+     break;
+    }
+    case "RELEASE":s.assignee=null;currentOwnerMembershipId=null;break;
     case "RETURN_TO_DRAFT":{
      s.previousReviewer=row.status==="UNDER_REVIEW"?s.assignee:s.previousReviewer;
-     s.assignee=null;s.correctionPerson=recipient!;s.returnReason=input.reason;status="DRAFT";cycle++;
+     s.assignee=null;s.correctionPerson=recipient!;s.returnReason=input.reason;status="DRAFT";currentOwnerMembershipId=recipient!.membershipId;cycle++;
      // Keep completed evidence selected across corrections without changing its capture cycle.
      await tx.update(assessmentFaceScans).set({isCurrent:false}).where(and(eq(assessmentFaceScans.organizationId,org),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true),sql`(${assessmentFaceScans.state} <> 'COMPLETED' or ${assessmentFaceScans.projection} is null)`));
      const [submission]=await tx.select().from(assessmentSubmissions).where(eq(assessmentSubmissions.id,row.currentSubmissionId!));
      const frozen=this.service.unseal<StoredWorkflow>(submission!.snapshot);workflow=this.service.seal(frozen);currentSubmissionId=null;completedAt=null;break;
     }
-    case "REASSIGN_CORRECTION":if(s.correctionPerson?.membershipId===recipient!.membershipId)throw new ServiceError("VALIDATION_ERROR","Choose a different correction person.");s.correctionPerson=recipient!;s.returnReason=input.reason;break;
-    case "RESEND":s.assignee=eligible.find(r=>r.membershipId===s.previousReviewer?.membershipId)??null;s.correctionPerson=null;s.submittedAt=now.toISOString();status="UNDER_REVIEW";break;
-    case "COMPLETE":if(!["ORIGINAL","CONFIRMED"].includes((score as {risk?:{status:string}})?.risk?.status??""))throw new ServiceError("CONFLICT","Confirm the reviewed risk classification before completing the review.");s.finalRemark=input.remark;s.completedAt=now.toISOString();s.finalSnapshot={score,scans,submissionId:row.currentSubmissionId,scoreRevision:projection.scoreRevision};completedAt=now;status="COMPLETED";break;
+    case "REASSIGN_CORRECTION":if(s.correctionPerson?.membershipId===recipient!.membershipId)throw new ServiceError("VALIDATION_ERROR","Choose a different correction person.");s.correctionPerson=recipient!;s.returnReason=input.reason;currentOwnerMembershipId=recipient!.membershipId;break;
+    case "RESEND":s.assignee=eligible.find(r=>r.membershipId===s.previousReviewer?.membershipId)??null;s.correctionPerson=null;s.submittedAt=now.toISOString();status="UNDER_REVIEW";currentOwnerMembershipId=s.assignee?.membershipId??null;break;
+    case "COMPLETE":if(!["ORIGINAL","CONFIRMED"].includes((score as {risk?:{status:string}})?.risk?.status??""))throw new ServiceError("CONFLICT","Confirm the reviewed risk classification before completing the review.");s.finalRemark=input.remark;s.completedAt=now.toISOString();s.finalSnapshot={score,scans,submissionId:row.currentSubmissionId,scoreRevision:projection.scoreRevision};completedAt=now;status="COMPLETED";currentOwnerMembershipId=null;break;
    }
    s.revision++;s.history.push({id:createEntityId(),action:input.action,revision:s.revision,cycle,actor:{membershipId:actor.membershipId,displayName:actor.displayName,role:actor.role as MembershipRole},assignee:s.correctionPerson??s.assignee,createdAt:now.toISOString(),...("reason"in input?{reason:input.reason}:{}),...("remark"in input?{remark:input.remark}:{})});
-   await appendAssessmentHistory(this.service,tx,row,actor,input.action,{command:input,from,to:{status,assignee:s.assignee,correctionPerson:s.correctionPerson},workflow:this.service.unseal(row.workflow),score,scans},input.requestKey);
-   const [updated]=await tx.update(assessments).set({status,cycle,currentSubmissionId,workflow,clinicalReview:this.service.seal(s),assignedToMembershipId:s.assignee?.membershipId??null,revision:row.revision+1,completedAt,updatedAt:now}).where(and(eq(assessments.id,id),eq(assessments.organizationId,org))).returning();
-   await this.service.audit(tx,actor,context,id,`CLINICAL_REVIEW_${input.action}`,{cycle,revision:s.revision,assigneeId:s.assignee?.membershipId??null,correctionPersonId:s.correctionPerson?.membershipId??null});
+   await appendAssessmentHistory(this.service,tx,row,actor,input.action,{command:input,from,to:{status,assignee:s.assignee,correctionPerson:s.correctionPerson,currentOwnerMembershipId},workflow:this.service.unseal(row.workflow),score,scans},input.requestKey);
+   const [updated]=await tx.update(assessments).set({status,cycle,currentSubmissionId,workflow,clinicalReview:this.service.seal(s),assignedToMembershipId:s.assignee?.membershipId??null,currentOwnerMembershipId,revision:row.revision+1,completedAt,updatedAt:now}).where(and(eq(assessments.id,id),eq(assessments.organizationId,org))).returning();
+   await this.service.audit(tx,actor,context,id,`CLINICAL_REVIEW_${input.action}`,{cycle,revision:s.revision,assigneeId:s.assignee?.membershipId??null,correctionPersonId:s.correctionPerson?.membershipId??null,currentOwnerMembershipId});
+   const reference=formatAssessmentReference(row.serialNumber);
+   const notify=(membershipId:string,kind:NotificationRecipient["kind"]):NotificationRecipient=>({membershipId,kind,reference});
+   let recipients:NotificationRecipient[]=[];
+   if(input.action==="SEND" || input.action==="RELEASE" || input.action==="RESEND") {
+    recipients=s.assignee ? [notify(s.assignee.membershipId,"REVIEW_ASSIGNED")] : eligible.filter(person=>person.membershipId!==actor.membershipId).map(person=>notify(person.membershipId,"REVIEW_AVAILABLE"));
+   } else if(input.action==="TRANSFER") recipients=[notify(recipient!.membershipId,"REVIEW_ASSIGNED")];
+   else if(input.action==="TRANSFER_OWNER") recipients=[notify(recipient!.membershipId,"OWNER_TRANSFERRED")];
+   else if(input.action==="RETURN_TO_DRAFT") recipients=[notify(recipient!.membershipId,"REVIEW_RETURNED")];
+   else if(input.action==="REASSIGN_CORRECTION") recipients=[notify(recipient!.membershipId,"CORRECTION_ASSIGNED")];
+   else if(input.action==="COMPLETE") {
+    const sender=[...s.history].reverse().find(event=>event.action==="SEND"||event.action==="RESEND")?.actor.membershipId??row.createdByMembershipId;
+    if(sender!==actor.membershipId) recipients=[notify(sender,"REVIEW_COMPLETED")];
+   }
+   await publishWorkspaceChange(tx,{organizationId:org,scope:"assessment",assessmentId:id,recipients:recipients.filter(person=>person.membershipId!==actor.membershipId)});
    return this.projection(actor,updated!,tx);
   });
  }

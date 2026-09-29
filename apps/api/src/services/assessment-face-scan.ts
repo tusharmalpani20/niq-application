@@ -9,6 +9,7 @@ import { decryptCredential } from "../security/credential-encryption";
 import { ServiceError, type Principal, type RequestContext } from "./application";
 import { AssessmentWorkflowService, type StoredWorkflow, type WorkflowExecutor, type WorkflowRow } from "./assessment-workflow";
 import { appendAssessmentHistory, assertCorrectionOwner, reviewState } from "./clinical-review-state";
+import { isCurrentAssessmentOwner } from "./assessment-access";
 import { FaceScanConsentService } from "./face-scan-consent";
 const recoverableAssessmentStatuses: Array<typeof assessments.$inferSelect.status> = ["DRAFT", "SCORED", "SCORING_PENDING", "SCORING_UNAVAILABLE"];
 type Row = typeof assessmentFaceScans.$inferSelect;
@@ -354,8 +355,8 @@ export class AssessmentFaceScanService {
     // A pending capture can remain after scoring; cancelling it must be possible before clinical review freezes the cycle.
     if (action === "cancel" && assessment.status === "SCORED" && scan.active && !terminal.has(scan.state)) {
       assertCorrectionOwner(this.workflow,assessment,actor);
-      if (!reviewState(this.workflow,assessment).correctionPerson && assessment.createdByMembershipId !== actor.membershipId)
-        throw new ServiceError("FORBIDDEN", "Only the assessment creator can cancel this scan before clinical review.");
+      if (!isCurrentAssessmentOwner(assessment,actor,reviewState(this.workflow,assessment).correctionPerson?.membershipId))
+        throw new ServiceError("FORBIDDEN", "Only the current assessment owner can cancel this scan before clinical review.");
       return;
     }
     this.workflow.editable(assessment,assessment.revision,actor);

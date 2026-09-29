@@ -13,9 +13,11 @@ import { LocalReportStorage } from "../storage/local-report-storage";
 import type { ApplicationService, Principal, RequestContext } from "./application";
 import { ServiceError } from "./application";
 import { facilityAccessCondition } from "./facility-access";
+import { assessmentVisibilityCondition, canSeeAssessment, isCurrentAssessmentOwner } from "./assessment-access";
 import { requestAssessmentScoringStart, requestAssessmentScoringCalculate, requestAssessmentRiskCategories, AssessmentScoringRequestError, type AssessmentScoringStart } from "./assessment-scoring";
 import { requestScoringOrganizationInfo, ScoringOrganizationInfoRequestError } from "./scoring-organization-info";
 import { AssessmentReportWorkflow } from "./assessment-workflow-reports";
+import { publishWorkspaceChange } from "./workspace-notifications";
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 export type WorkflowExecutor = Database | Tx;
@@ -44,14 +46,15 @@ export class AssessmentWorkflowService {
   async authorize(actor:Principal,organizationId:string,assessmentId:string,executor:WorkflowExecutor=this.db,lock=false):Promise<WorkflowRow> {
     this.clinicalActor(actor,organizationId);
     await this.applicationService.getOrganization(actor,organizationId);
-    const query=executor.select().from(assessments).where(and(eq(assessments.id,assessmentId),eq(assessments.organizationId,organizationId),facilityAccessCondition(actor,organizationId,assessments.facilityId)));
+    const query=executor.select().from(assessments).where(and(eq(assessments.id,assessmentId),eq(assessments.organizationId,organizationId),facilityAccessCondition(actor,organizationId,assessments.facilityId),assessmentVisibilityCondition(actor)));
     const [row]=await (lock?query.for("update"):query);
     if(!row?.workflow) throw new ServiceError("NOT_FOUND","Assessment not found.");
+    if(!canSeeAssessment(row,actor,reviewState(this,row).correctionPerson?.membershipId)) throw new ServiceError("NOT_FOUND","Assessment not found.");
     await this.applicationService.getPatient(actor,organizationId,row.patientId);
     return row;
   }
   editable(row:WorkflowRow,revision:number,actor?:Principal) {
-    if(actor) assertCorrectionOwner(this,row,actor);
+    if(actor) { assertCorrectionOwner(this,row,actor); if(!isCurrentAssessmentOwner(row,actor,reviewState(this,row).correctionPerson?.membershipId)) throw new ServiceError("FORBIDDEN","Only the current assessment owner can change this assessment."); }
     else if(reviewState(this,row).correctionPerson) throw new ServiceError("FORBIDDEN","Correction ownership is required.");
     if(row.status!=="DRAFT") throw new ServiceError("CONFLICT","This assessment is no longer editable.");
     if(row.revision!==revision) throw new ServiceError("CONFLICT","This assessment has changed. Reload before saving.",{revision:row.revision});
@@ -130,11 +133,12 @@ export class AssessmentWorkflowService {
         await tx.insert(questionnaireDefinitions).values({id:definitionId,organizationId,scopeKey:organizationId,key:binding.ruleVersionId,version:binding.checksum,schema:binding.questionnaire,checksum:binding.checksum,isPublished:true,publishedAt:now}).onConflictDoNothing();
         const [definition]=await tx.select().from(questionnaireDefinitions).where(and(eq(questionnaireDefinitions.scopeKey,organizationId),eq(questionnaireDefinitions.key,binding.ruleVersionId),eq(questionnaireDefinitions.version,binding.checksum)));
         if(!definition) throw new Error("Questionnaire binding was not saved");
-        await tx.insert(assessments).values({id,organizationId,patientId:patient.id,facilityId:row.facilityId,questionnaireDefinitionId:definition.id,questionnaireScopeKey:organizationId,createdByMembershipId:actor.membershipId,createdAt:row.createdAt,workflow:this.seal({binding,connection:transport.identity,manifest,patient,answers,heightReferenceYear:referenceYear,heightSource:height?{assessmentId:height.assessmentId,recordedAt:height.capturedAt}:null} satisfies StoredWorkflow)});
+        await tx.insert(assessments).values({id,organizationId,patientId:patient.id,facilityId:row.facilityId,questionnaireDefinitionId:definition.id,questionnaireScopeKey:organizationId,createdByMembershipId:actor.membershipId,currentOwnerMembershipId:actor.membershipId,createdAt:row.createdAt,workflow:this.seal({binding,connection:transport.identity,manifest,patient,answers,heightReferenceYear:referenceYear,heightSource:height?{assessmentId:height.assessmentId,recordedAt:height.capturedAt}:null} satisfies StoredWorkflow)});
         await tx.update(assessmentInitializations).set({status:"READY",assessmentId:id,leaseToken:null,leaseExpiresAt:null,failureCode:null,updatedAt:new Date()}).where(eq(assessmentInitializations.id,id));
         const [created] = await tx.select().from(assessments).where(eq(assessments.id,id));
         await appendAssessmentHistory(this,tx,created!,actor,"CREATED",{workflow:this.unseal(created!.workflow)});
         await this.audit(tx,actor,context,id,"ASSESSMENT_CREATED");
+        await publishWorkspaceChange(tx,{organizationId,scope:"assessment",assessmentId:id});
       });
     } catch(error) {
       await this.db.update(assessmentInitializations).set({status:"FAILED",failureCode:error instanceof AssessmentScoringRequestError?error.code:error instanceof ServiceError?error.code:"INITIALIZATION_FAILED",leaseToken:null,leaseExpiresAt:null,updatedAt:new Date()}).where(and(eq(assessmentInitializations.id,id),eq(assessmentInitializations.leaseToken,token)));
@@ -181,7 +185,7 @@ export class AssessmentWorkflowService {
     const scan=await this.reviewScan(organizationId,id);
     const submissions=await this.db.select({attestation:assessmentSubmissions.attestation}).from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,organizationId),eq(assessmentSubmissions.assessmentId,id))).orderBy(assessmentSubmissions.createdAt,assessmentSubmissions.id);
     const attestations=submissions.filter(item=>item.attestation).map(item=>this.unseal<AssessmentSubmissionAttestation>(item.attestation));
-    return {id:row.id,reference:formatAssessmentReference(row.serialNumber),serialNumber:row.serialNumber,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,isPriority,canEditDraft:row.status === "DRAFT" && hasPermission(actor.role,"assessments.edit") && (!reviewState(this,row).correctionPerson || reviewState(this,row).correctionPerson!.membershipId === actor.membershipId),patient,answers,manifest:form,progress:getAssessmentCompletion(form,answers),reports,reportLimits:{fileBytes:this.config.REPORT_MAX_FILE_BYTES,filesPerReport:this.config.REPORT_MAX_FILES_PER_GROUP,reportsPerAssessment:this.config.REPORT_MAX_GROUPS,assessmentBytes:this.config.REPORT_MAX_ASSESSMENT_BYTES},binding:{version:state.binding.version,checksum:state.binding.checksum},result,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode,nextRetryAt:submission.nextAttemptAt?.toISOString()??null,issues:submission.failureIssues?this.unseal(submission.failureIssues):[]}:null,reviewToken:this.reviewToken(row,patient,answers,reports,scan),attestations,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
+    return {id:row.id,reference:formatAssessmentReference(row.serialNumber),serialNumber:row.serialNumber,organizationId,patientId:row.patientId,facilityId:row.facilityId,status:row.status,revision:row.revision,currentOwnerMembershipId:row.currentOwnerMembershipId??reviewState(this,row).correctionPerson?.membershipId??row.createdByMembershipId,isPriority,canEditDraft:row.status === "DRAFT" && hasPermission(actor.role,"assessments.edit") && isCurrentAssessmentOwner(row,actor,reviewState(this,row).correctionPerson?.membershipId),patient,answers,manifest:form,progress:getAssessmentCompletion(form,answers),reports,reportLimits:{fileBytes:this.config.REPORT_MAX_FILE_BYTES,filesPerReport:this.config.REPORT_MAX_FILES_PER_GROUP,reportsPerAssessment:this.config.REPORT_MAX_GROUPS,assessmentBytes:this.config.REPORT_MAX_ASSESSMENT_BYTES},binding:{version:state.binding.version,checksum:state.binding.checksum},result,submission:submission?{id:submission.id,status:submission.status,failureCode:submission.failureCode,nextRetryAt:submission.nextAttemptAt?.toISOString()??null,issues:submission.failureIssues?this.unseal(submission.failureIssues):[]}:null,reviewToken:this.reviewToken(row,patient,answers,reports,scan),attestations,heightSource:state.heightSource,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString()};
   }
   async save(actor:Principal,organizationId:string,id:string,input:{revision:number;answers:FormAnswers},context:RequestContext) {
     this.clinicalActor(actor,organizationId,"assessments.edit");
@@ -197,6 +201,7 @@ export class AssessmentWorkflowService {
       await appendAssessmentHistory(this,tx,{...row,revision:row.revision+1},actor,"DRAFT_SAVED",{before:state,after:{...state,manifest:form,answers,patient,heightSource:answers.height_cm===state.answers.height_cm?state.heightSource:null}});
       await tx.delete(assessmentAnswers).where(and(eq(assessmentAnswers.organizationId,organizationId),eq(assessmentAnswers.assessmentId,id)));
       await this.audit(tx,actor,context,id,"ASSESSMENT_DRAFT_SAVED",{revision:row.revision+1,changedKeys:[...new Set([...Object.keys(state.answers),...Object.keys(answers)])].filter(key=>JSON.stringify(answers[key])!==JSON.stringify(state.answers[key]))});
+      await publishWorkspaceChange(tx,{organizationId,scope:"assessment",assessmentId:id});
       for(const [questionKey,answer] of Object.entries(answers)) await tx.insert(assessmentAnswers).values({id:createEntityId(),organizationId,assessmentId:id,questionKey,answer:this.seal(answer),answeredByMembershipId:actor.membershipId}).onConflictDoUpdate({target:[assessmentAnswers.assessmentId,assessmentAnswers.questionKey],set:{answer:this.seal(answer),answeredByMembershipId:actor.membershipId,updatedAt:new Date()}});
     });
     return this.read(actor,organizationId,id);
@@ -265,12 +270,13 @@ export class AssessmentWorkflowService {
       await tx.update(assessments).set({status:"SCORING_PENDING",currentSubmissionId:submissionId,workflow:this.seal(frozen),revision:row.revision+1,updatedAt:new Date()}).where(eq(assessments.id,id));
       await appendAssessmentHistory(this,tx,{...row,revision:row.revision+1},actor,"SCORING_SUBMITTED",{submissionId,workflow:frozen,reports:manifest});
       await this.audit(tx,actor,context,id,"ASSESSMENT_SUBMITTED",{submissionId,attestationStatementVersion:attestation.statementVersion,attestedAt:attestation.confirmedAt});
+      await publishWorkspaceChange(tx,{organizationId,scope:"assessment",assessmentId:id});
     });
     return this.retrySubmission(actor,organizationId,id,context);
   }
   async retrySubmission(actor:Principal,organizationId:string,id:string,context:RequestContext,operator=false) {
-    this.clinicalActor(actor,organizationId,"assessments.submit");if(operator&&!hasPermission(actor.role,"assessments.reconcile"))throw new ServiceError("FORBIDDEN","An organization administrator must reconcile this request.");const assessment=await this.authorize(actor,organizationId,id);
-    if(!operator) assertCorrectionOwner(this,assessment,actor);
+    this.clinicalActor(actor,organizationId,operator?"assessments.reconcile":"assessments.submit");const assessment=await this.authorize(actor,organizationId,id);
+    if(!operator && !isCurrentAssessmentOwner(assessment,actor,reviewState(this,assessment).correctionPerson?.membershipId)) throw new ServiceError("FORBIDDEN","Only the current assessment owner can retry scoring.");
     const token=crypto.randomUUID();const now=new Date();
     const [submission]=assessment.currentSubmissionId ? await this.db.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.id,assessment.currentSubmissionId),eq(assessmentSubmissions.organizationId,organizationId),eq(assessmentSubmissions.assessmentId,id))) : [];
     if(!submission) throw new ServiceError("CONFLICT","Submit the assessment first.");
@@ -297,6 +303,7 @@ export class AssessmentWorkflowService {
         ]);
         await appendAssessmentHistory(this,tx,current,actor,"SCORED",{submissionId:submission.id,result:calculated.result});
         await this.audit(tx,actor,context,id,"ASSESSMENT_SCORED",{submissionId:submission.id});
+        await publishWorkspaceChange(tx,{organizationId,scope:"assessment",assessmentId:id});
       });
     } catch(error) {
       const rejected=error instanceof AssessmentScoringRequestError&&error.kind==="rejected";
@@ -311,6 +318,7 @@ export class AssessmentWorkflowService {
         await tx.update(assessments).set({status:rejected?"DRAFT":"SCORING_UNAVAILABLE",updatedAt:new Date()}).where(eq(assessments.id,id));
         await appendAssessmentHistory(this,tx,current,actor,"SCORING_FAILED",{submissionId:submission.id,code,rejected});
         await this.audit(tx,actor,context,id,"ASSESSMENT_SCORING_FAILED",{submissionId:submission.id,code});
+        await publishWorkspaceChange(tx,{organizationId,scope:"assessment",assessmentId:id,recipients:[{membershipId:current.currentOwnerMembershipId??actor.membershipId,kind:"SCORING_FAILED",reference:formatAssessmentReference(current.serialNumber)}]});
       });
     }
     return this.read(actor,organizationId,id);
