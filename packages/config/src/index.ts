@@ -24,6 +24,9 @@ export const applicationConfigSchema = z.object({
   API_HOST: z.string().default("0.0.0.0"),
   API_PORT: z.coerce.number().int().positive().max(65535).default(3000),
   WEB_ORIGIN: z.url().default("http://localhost:5173"),
+  VAPID_PUBLIC_KEY: z.preprocess(value => value === "" ? undefined : value, z.string().regex(/^[A-Za-z0-9_-]{80,100}$/).optional()),
+  VAPID_PRIVATE_KEY: z.preprocess(value => value === "" ? undefined : value, z.string().regex(/^[A-Za-z0-9_-]{40,50}$/).optional()),
+  VAPID_SUBJECT: z.preprocess(value => value === "" ? undefined : value, z.string().refine(value => value.startsWith("mailto:") && z.email().safeParse(value.slice(7)).success, "Use a mailto: email address").optional()),
   DATABASE_URL: z.string().min(1),
   DATABASE_SSL: booleanFromString,
   SCORING_API_URL: optionalUrl,
@@ -59,6 +62,8 @@ export const applicationConfigSchema = z.object({
   REPORT_MAX_ASSESSMENT_BYTES: z.coerce.number().int().positive().default(100 * 1024 * 1024),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 }).superRefine((value, context) => {
+  const vapidConfigured = [value.VAPID_PUBLIC_KEY, value.VAPID_PRIVATE_KEY, value.VAPID_SUBJECT].filter(Boolean).length;
+  if (vapidConfigured !== 0 && vapidConfigured !== 3) context.addIssue({ code: "custom", path: ["VAPID_PUBLIC_KEY"], message: "Configure all VAPID values together" });
   if (value.DEV_FIXED_OTP && value.NODE_ENV !== "development") {
     context.addIssue({ code: "custom", path: ["DEV_FIXED_OTP"], message: "Fixed OTP is allowed only in development" });
   }

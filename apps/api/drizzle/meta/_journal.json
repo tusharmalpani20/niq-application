@@ -253,6 +253,13 @@
       "when": 1790755201000,
       "tag": "0035_workspace_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790755202000,
+      "tag": "0036_web_push",
+      "breakpoints": true
     }
   ]
 }
