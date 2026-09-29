@@ -3,10 +3,12 @@ import type { AssessmentSummary, AuthenticatedUser, Patient } from "@niq/applica
 import { Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listAssessments, listPatients } from "../lib/api";
+import { useWorkspaceRevision } from "../features/notifications/useWorkspaceRevision";
 
 type SearchResult = { key: string; kind: "Patient" | "Assessment"; title: string; detail: string; to: string };
 
 export function WorkspaceSearch({ user, onNavigate }: { user: AuthenticatedUser; onNavigate: (to: string) => void }) {
+  const workspaceRevision = useWorkspaceRevision(["assessment", "patient"]);
   const canReadPatients = hasPermission(user.role, "patients.read");
   const canReadAssessments = hasPermission(user.role, "assessments.read");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -36,7 +38,7 @@ export function WorkspaceSearch({ user, onNavigate }: { user: AuthenticatedUser;
       setLoading(false);
     });
     return () => { active = false; };
-  }, [showResults, user.organizationId, canReadPatients, canReadAssessments]);
+  }, [showResults, user.organizationId, canReadPatients, canReadAssessments, workspaceRevision]);
 
   useEffect(() => {
     const closeOutside = (event: PointerEvent) => {

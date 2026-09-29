@@ -21,10 +21,12 @@ import { StatusBadge } from "../components/StatusBadge";
 import { ApiRequestError, createFacility, listFacilities } from "../lib/api";
 import { Icon } from "../lib/icons";
 import { facilityUrl } from "../lib/facility-url";
+import { useWorkspaceRevision } from "../features/notifications/useWorkspaceRevision";
 
 const pageSize = 10;
 
 export function FacilitiesPage() {
+  const workspaceRevision = useWorkspaceRevision(["facility", "patient", "assessment"]);
   const user = useOutletContext<AuthenticatedUser>();
   const canManage = hasPermission(user.role, "facilities.manage");
   const location = useLocation();
@@ -55,7 +57,7 @@ export function FacilitiesPage() {
       .then((items) => { if (active) { setFacilities(items); setLoadState("ready"); } })
       .catch(() => { if (active) setLoadState("error"); });
     return () => { active = false; };
-  }, [user.organizationId, reload]);
+  }, [user.organizationId, reload, workspaceRevision]);
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();

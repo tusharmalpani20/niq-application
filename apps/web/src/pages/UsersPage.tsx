@@ -20,9 +20,11 @@ import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { TeamEmptyIllustration } from "../components/TeamEmptyIllustration";
 import { UserInvitationDialog, userRoleLabels } from "../components/UserInvitationDialog";
 import { getOrganization, listFacilities, listOrganizationUsers } from "../lib/api";
+import { useWorkspaceRevision } from "../features/notifications/useWorkspaceRevision";
 
 type Invitation = OrganizationDetails["invitations"][number];
 export function UsersPage() {
+  const workspaceRevision = useWorkspaceRevision(["users", "facility"]);
   const currentUser = useOutletContext<AuthenticatedUser>();
   const [users, setUsers] = useState<OrganizationUser[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -53,7 +55,7 @@ export function UsersPage() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Users could not be loaded."); }
     finally { setLoading(false); }
   }, [currentUser.organizationId]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, workspaceRevision]);
   const normalized = query.trim().toLowerCase();
   const filteredUsers = users.filter((user) => (user.displayName + " " + user.email).toLowerCase().includes(normalized) && (role === "all" || user.role === role) && (status === "all" || (status === "active" ? user.active && user.status === "ACTIVE" : !user.active || user.status !== "ACTIVE")));
   const filteredInvitations = invitations.filter((item) => item.email.toLowerCase().includes(normalized) && (role === "all" || item.role === role));
