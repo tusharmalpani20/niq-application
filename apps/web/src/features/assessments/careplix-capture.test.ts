@@ -51,12 +51,12 @@ test("SDK errors are user-safe and stop capture", async () => {
   f.error(); expect(message).toContain("Camera access"); expect(message).not.toContain("private"); expect(f.counts().tracks).toBe(1); controller.cancel();
 });
 
-test("requests a 30-second camera capture", async () => {
+test("requests a 60-second camera capture", async () => {
   let duration = 0;
   const f = fixture(async options => { duration = options.scanDuration; });
   const controller = createCaptureController(async () => f.sdk);
   await controller.start(f.elements, { frame: () => {}, finish: () => {}, error: () => {} });
-  expect(duration).toBe(30);
+  expect(duration).toBe(60);
   controller.cancel();
 });
 

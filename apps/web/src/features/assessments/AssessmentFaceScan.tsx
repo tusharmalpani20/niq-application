@@ -312,7 +312,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
         <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground" aria-hidden="true"><Info className="size-6" strokeWidth={2.5} /></span>
         <div className="min-w-0 space-y-2 text-sm text-foreground">
           <p className="font-semibold">Before you start</p>
-          <p>Keep your face still and well-lit for 30 seconds. Follow the position guidance during capture.</p>
+          <p>Keep your face still and well-lit for 60 seconds. Follow the position guidance during capture.</p>
           <p><strong>Stay on this page.</strong> Clicking elsewhere stops the scan.</p>
         </div>
       </div>
