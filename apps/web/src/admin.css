@@ -329,6 +329,10 @@
 .client-workspace [data-slot="tabs-trigger"][data-selected] { color: var(--primary); }
 .client-workspace [data-slot="tabs-trigger"]::after { background: var(--primary); }
 .client-workspace [data-slot="tabs-trigger"] [data-slot="badge"] { background: var(--muted); color: var(--foreground); }
+.client-workspace .assessment-list-tabs { height: auto; padding-block: 0; }
+.client-workspace .assessment-list-tabs [data-slot="tabs-trigger"] { height: auto; align-self: stretch; }
+[data-slot="tabs-list"][data-variant="line"] [data-slot="tabs-trigger"]:not([data-selected]):not([data-disabled]):is(:hover, :focus-visible) { color: var(--primary); }
+[data-slot="tabs-list"][data-variant="line"] [data-slot="tabs-trigger"]:not([data-selected]):not([data-disabled]):is(:hover, :focus-visible)::after { opacity: .45; }
 :root[data-app-area="client"] [data-slot="dialog-content"] [data-slot="input"] { height: 2.5rem; }
 
 /* Connection identity follows tenant branding. Service status badges remain semantic. */
