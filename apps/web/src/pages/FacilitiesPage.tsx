@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { FacilityEmptyIllustration } from "../components/FacilityEmptyIllustration";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
@@ -24,6 +25,23 @@ import { facilityUrl } from "../lib/facility-url";
 import { useWorkspaceRevision } from "../features/notifications/useWorkspaceRevision";
 
 const pageSize = 10;
+
+function FacilitiesSkeleton({ showActions }: { showActions: boolean }) {
+  return <section className="surface table-surface mobile-list-surface" role="status" aria-label="Loading facilities">
+    <span className="sr-only">Loading facilities…</span>
+    <div className="mobile-card-list" aria-hidden="true">{Array.from({ length: 4 }, (_, index) => <article className="mobile-data-card list-mobile-card" key={index}>
+      <div className="mobile-card-heading"><div className="mobile-card-primary flex-1"><Skeleton className="h-4 w-40 max-w-full motion-reduce:animate-none" /><Skeleton className="h-3 w-32 max-w-full motion-reduce:animate-none" /></div>{showActions && <div className="mobile-card-actions"><Skeleton className="size-8 motion-reduce:animate-none" /><Skeleton className="size-8 motion-reduce:animate-none" /></div>}</div>
+      <Skeleton className="h-6 w-20 rounded-full motion-reduce:animate-none" />
+    </article>)}</div>
+    <div className="desktop-table p-5" aria-hidden="true"><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th>Facility</th><th>Code</th><th>Timezone</th><th>Status</th>{showActions && <th>Actions</th>}</tr></thead><tbody>{Array.from({ length: 6 }, (_, index) => <tr key={index}>
+      <td><Skeleton className="h-4 w-44 max-w-full motion-reduce:animate-none" /></td>
+      <td><Skeleton className="h-4 w-16 motion-reduce:animate-none" /></td>
+      <td><Skeleton className="h-4 w-28 motion-reduce:animate-none" /></td>
+      <td><Skeleton className="h-6 w-20 rounded-full motion-reduce:animate-none" /></td>
+      {showActions && <td><div className="flex gap-2"><Skeleton className="size-8 motion-reduce:animate-none" /><Skeleton className="size-8 motion-reduce:animate-none" /></div></td>}
+    </tr>)}</tbody></table></div></div>
+  </section>;
+}
 
 export function FacilitiesPage() {
   const workspaceRevision = useWorkspaceRevision(["facility", "patient", "assessment"]);
@@ -53,6 +71,7 @@ export function FacilitiesPage() {
 
   useEffect(() => {
     let active = true;
+    setLoadState("loading");
     listFacilities(user.organizationId)
       .then((items) => { if (active) { setFacilities(items); setLoadState("ready"); } })
       .catch(() => { if (active) setLoadState("error"); });
@@ -86,8 +105,7 @@ export function FacilitiesPage() {
   if (canManage) columns.push({ id: "actions", header: "Actions", cell: ({ row }) => actions(row.original) });
   const hasFilters = query.trim() || status !== "all";
   const emptyContent = <div className={`table-empty-content${loadState === "ready" && !hasFilters ? " illustrated-empty-state" : ""}`}>
-    {loadState === "loading" ? <span>Loading facilities…</span>
-      : loadState === "error" ? <><strong>Facilities could not be loaded</strong><Button variant="outline" onPress={() => { setLoadState("loading"); setReload((n) => n + 1); }}>Retry</Button></>
+    {loadState === "error" ? <><strong>Facilities could not be loaded</strong><Button variant="outline" onPress={() => { setLoadState("loading"); setReload((n) => n + 1); }}>Retry</Button></>
       : hasFilters ? <><strong>No matching facilities</strong><span>Try changing the search or filter.</span></>
       : <><FacilityEmptyIllustration /><strong>No facilities yet</strong><span>{canManage ? "Add a facility to organize patients and staff access." : "Facilities will appear here once added."}</span>{canManage && <Button onPress={() => setShowForm(true)}>Add facility</Button>}</>}
   </div>;
@@ -95,12 +113,12 @@ export function FacilitiesPage() {
   return <>
     <h1 className="patient-page-title">Facilities</h1>
     <div className="patient-list-header">
-      <div className="patient-list-heading"><span className="patient-list-label">Facilities</span><span>{filtered.length}</span></div>
+      <div className="patient-list-heading"><span className="patient-list-label">Facilities</span>{loadState === "loading" ? <Skeleton className="h-3 w-6 motion-reduce:animate-none" aria-label="Loading facility count" /> : <span>{filtered.length}</span>}</div>
       <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search facilities" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search facilities…" /></InputGroup>{canManage && <TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="Add facility" onPress={() => setShowForm(true)}><Icon name="plus" size={20}/></Button><Tooltip>Add facility</Tooltip></TooltipTrigger>}</div>
     </div>
     <div className="patient-filter-bar facility-filter-bar"><Select aria-label="Filter by status" selectedKey={status} onSelectionChange={(key) => { setStatus(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All statuses</SelectItem><SelectItem id="ACTIVE">Active</SelectItem><SelectItem id="INACTIVE">Deactivated</SelectItem></SelectContent></Select></div>
-    <section className="surface table-surface mobile-list-surface"><div className="mobile-card-list">{visibleFacilities.length ? visibleFacilities.map((facility) => <article className="mobile-data-card list-mobile-card" key={facility.id}><div className="mobile-card-heading"><div className="mobile-card-primary"><Link className="font-normal text-primary hover:underline focus-visible:underline" to={facilityUrl(facility)}>{facility.name}</Link><span>{facility.code} · {facility.timezone}</span></div>{canManage && <div className="mobile-card-actions">{actions(facility)}</div>}</div><StatusBadge status={facility.status === "ACTIVE" ? "Active" : "Deactivated"}/></article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visibleFacilities} label="Facilities" emptyContent={emptyContent}/></div></section>
-    {filtered.length > 0 && <Pagination className="mt-4" aria-label="Facilities pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={page === 1} onPress={() => setPage((current) => current - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {page} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={page === pageCount} onPress={() => setPage((current) => current + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
+    {loadState === "loading" ? <FacilitiesSkeleton showActions={canManage} /> : <section className="surface table-surface mobile-list-surface"><div className="mobile-card-list">{visibleFacilities.length ? visibleFacilities.map((facility) => <article className="mobile-data-card list-mobile-card" key={facility.id}><div className="mobile-card-heading"><div className="mobile-card-primary"><Link className="font-normal text-primary hover:underline focus-visible:underline" to={facilityUrl(facility)}>{facility.name}</Link><span>{facility.code} · {facility.timezone}</span></div>{canManage && <div className="mobile-card-actions">{actions(facility)}</div>}</div><StatusBadge status={facility.status === "ACTIVE" ? "Active" : "Deactivated"}/></article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visibleFacilities} label="Facilities" emptyContent={emptyContent}/></div></section>}
+    {loadState === "ready" && filtered.length > 0 && <Pagination className="mt-4" aria-label="Facilities pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={page === 1} onPress={() => setPage((current) => current - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {page} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={page === pageCount} onPress={() => setPage((current) => current + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
     {showForm && canManage && <FacilityDialog organizationId={user.organizationId} facility={editing} onClose={() => { setShowForm(false); setEditing(null); }} onSaved={saved} />}
     <AlertDialog ariaLabel="Change facility status" isOpen={!!changingStatus} isDismissable={!savingStatus} onOpenChange={(open) => { if (!open && !savingStatus) setChangingStatus(null); }}>
       <AlertDialogHeader><AlertDialogTitle>{changingStatus?.status === "ACTIVE" ? "Deactivate" : "Activate"} {changingStatus?.name}?</AlertDialogTitle><AlertDialogDescription>{changingStatus?.status === "ACTIVE" ? "New patients cannot be registered at this facility while it is inactive. Existing records are kept." : "This facility will be available for patient registration again."}</AlertDialogDescription></AlertDialogHeader>
