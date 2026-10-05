@@ -449,6 +449,28 @@ export const assessmentSummarySchema = z.object({
 
 export const assessmentListResponseSchema = z.object({ items: z.array(assessmentSummarySchema) });
 
+export const assessmentPageQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(10),
+  tab: z.enum(["assessments", "my-work", "completed"]).default("assessments"),
+  facility: z.string().default("all"),
+  status: z.string().default("all"),
+  risk: z.enum(["all", "low", "moderate", "high"]).default("all"),
+  query: z.string().max(200).default(""),
+});
+
+export const assessmentPageResponseSchema = assessmentListResponseSchema.extend({
+  total: z.number().int().nonnegative(),
+  allCount: z.number().int().nonnegative(),
+  myWorkCount: z.number().int().nonnegative(),
+  completedCount: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+
+export type AssessmentPageQuery = z.infer<typeof assessmentPageQuerySchema>;
+export type AssessmentPageResponse = z.infer<typeof assessmentPageResponseSchema>;
+
 export const measurementProvenanceSchema = z.enum([
   "AUTO_FACE_SCAN",
   "AUTOMATED_MANUAL_FALLBACK",

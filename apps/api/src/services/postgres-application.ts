@@ -2,7 +2,7 @@ import { correctPatientDob as correctDob, correctPatientMrn as correctMrn, editP
 import { faceScanSessionSchema } from "../../../../packages/contracts/src/face-scan";
 import { formatAssessmentReference, hasPermission, type Permission } from "@niq/application-contracts";
 import type { ApplicationConfig } from "@niq/application-config";
-import type { AcceptInvitation, ActivateScoring, BootstrapAdmin, CorrectPatientDob, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
+import type { AcceptInvitation, ActivateScoring, AssessmentPageQuery, BootstrapAdmin, CorrectPatientDob, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
 import { and, desc, eq, gt, gte, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -43,6 +43,7 @@ import { countOverviewRisk, overviewRiskNutritionTargets } from "./overview-risk
 import { loadOverviewSummary } from "./overview-summary";
 import { loadAssessmentRiskCategories } from "./assessment-risk-categories";
 import { myAssessmentAction } from "./my-assessment-action";
+import { listAssessmentPage } from "./assessment-page";
 import { pushSubscriptions } from "../db/push-schema";
 export { myAssessmentAction } from "./my-assessment-action";
 import type { ClinicalReviewStored } from "./clinical-review-state";
@@ -985,6 +986,10 @@ export class PostgresApplicationService implements ApplicationService {
         completedAt: row.completedAt,
       };
     });
+  }
+  async listAssessmentPage(actor: Principal, organizationId: string, options: AssessmentPageQuery) {
+    this.ensureOrganizationAccess(actor, organizationId, "assessments.list");
+    return listAssessmentPage(this.db, actor, organizationId, options, this.config.SESSION_SECRET, this.config.PATIENT_DATA_ENCRYPTION_KEY);
   }
   async getAssessmentPriority(actor: Principal, organizationId: string, assessmentId: string): Promise<boolean> {
     if (actor.platformRole !== "USER") return false;

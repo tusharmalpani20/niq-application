@@ -2,6 +2,8 @@ import type {
   MembershipRole,
   OverviewRisk,
   OverviewSummary,
+  AssessmentPageQuery,
+  AssessmentPageResponse,
   AcceptInvitation,
   ActivateScoring,
   BootstrapAdmin,
@@ -95,6 +97,7 @@ export interface ApplicationService {
   listPatients(actor: Principal, organizationId: string): Promise<unknown[]>;
   getPatient(actor: Principal, organizationId: string, patientLocator: string): Promise<unknown>;
   listAssessments(actor: Principal, organizationId: string): Promise<unknown[]>;
+  listAssessmentPage(actor: Principal, organizationId: string, options: AssessmentPageQuery): Promise<AssessmentPageResponse>;
   setAssessmentPriority(actor: Principal, organizationId: string, assessmentId: string, isPriority: boolean): Promise<{ assessmentId: string; isPriority: boolean }>;
   getAssessmentPriority(actor: Principal, organizationId: string, assessmentId: string): Promise<boolean>;
   getOverviewRisk(actor: Principal, organizationId: string): Promise<OverviewRisk>;

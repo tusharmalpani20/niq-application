@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { acceptInvitationSchema, assessmentListResponseSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, createPlatformAdministratorInvitationSchema, DEFAULT_ORGANIZATION_BRANDING, errorCodeSchema, measurementProvenanceSchema, onboardOrganizationSchema, patientReferenceSchema, signInRequestSchema, signInResponseSchema, updateOrganizationSchema } from "./index";
+import { acceptInvitationSchema, assessmentListResponseSchema, assessmentPageQuerySchema, assessmentPageResponseSchema, createAssessmentSchema, createOrganizationSchema, createPatientSchema, createPlatformAdministratorInvitationSchema, DEFAULT_ORGANIZATION_BRANDING, errorCodeSchema, measurementProvenanceSchema, onboardOrganizationSchema, patientReferenceSchema, signInRequestSchema, signInResponseSchema, updateOrganizationSchema } from "./index";
 
 const organizationId = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const patientId = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
@@ -82,6 +82,9 @@ describe("application contracts", () => {
     expect(assessmentListResponseSchema.parse({ items: [summary] }).items[0]?.createdAt).toBeInstanceOf(Date);
     expect(assessmentListResponseSchema.safeParse({ items: [{ ...summary, riskCategory: "high" }] }).success).toBe(true);
     expect(assessmentListResponseSchema.safeParse({ items: [{ ...summary, status: "UNKNOWN" }] }).success).toBe(false);
+    expect(assessmentPageResponseSchema.safeParse({ items: [summary], total: 1, allCount: 1, myWorkCount: 1, completedCount: 0, page: 1, pageSize: 10 }).success).toBe(true);
+    expect(assessmentPageQuerySchema.parse({ page: "2", pageSize: "10" })).toMatchObject({ page: 2, pageSize: 10, risk: "all" });
+    expect(assessmentPageQuerySchema.safeParse({ pageSize: "1000" }).success).toBe(false);
   });
 
   test("accepts only canonical uppercase ULIDs for entity references", () => {
