@@ -96,6 +96,8 @@ test("loads the next assessment page from the API", async () => {
 
 test("open-assessment link shows only drafts and assessments ready for scoring", async () => {
   await renderAssessments("/assessments?status=OPEN", records, () => {
+    expect(document.querySelector('[aria-label="Filter by status"]')?.textContent).toContain("Open assessments");
+    expect(document.body.textContent).not.toContain("Showing open assessments");
     const table = document.querySelector('[aria-label="Assessments"]');
     expect(table?.textContent).toContain("ASM-000001");
     expect(table?.textContent).toContain("ASM-000002");
