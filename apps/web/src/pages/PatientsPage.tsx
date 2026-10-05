@@ -1,6 +1,6 @@
 import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility, Patient } from "@niq/application-contracts";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { ArrowDownUp, Building2, CalendarDays, ClipboardCheck, Clock3, Download, Eye, HeartHandshake, IdCard, Mail, Pencil, Phone, Search, Send, Star, TriangleAlert, UserRound, UsersRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { PatientForm, PatientFormDialog } from "../components/PatientForm";
@@ -22,15 +23,32 @@ import { PatientAssessmentOverview } from "../components/PatientAssessmentOvervi
 import { PatientEmptyIllustration } from "../components/PatientEmptyIllustration";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
-import { getPatient, listAssessments, listFacilities, listPatients, setAssessmentPriority } from "../lib/api";
+import { getPatient, listAssessments, listFacilities, listPatientPage, setAssessmentPriority } from "../lib/api";
 import { Icon } from "../lib/icons";
 
 import { DateDisplay } from "../components/DateDisplay";
 import { StatusBadge } from "../components/StatusBadge";
-import { patientAgeLabel, latestAssessmentDates, assessmentStatusLabels, sortPatientRows, type PatientSort } from "../lib/patient-display";
+import { patientAgeLabel, assessmentStatusLabels, type PatientSort } from "../lib/patient-display";
 
 const pageSize = 10;
 type PatientRow = { id: string; reference: string; displayName: string; age: string; createdAt: Date; gender: string; facility: string; facilityId: string | null; lastAssessment: Date | null };
+
+function PatientsSkeleton({ showActions }: { showActions: boolean }) {
+  return <section className="surface table-surface mobile-list-surface" role="status" aria-label="Loading patients">
+    <span className="sr-only">Loading patients…</span>
+    <div className="mobile-card-list" aria-hidden="true">{Array.from({ length: 4 }, (_, index) => <article className="mobile-data-card list-mobile-card" key={index}>
+      <div className="mobile-card-heading"><div className="mobile-card-primary min-w-0 flex-1"><Skeleton className="h-4 w-36 max-w-full motion-reduce:animate-none" /><Skeleton className="h-3 w-48 max-w-full motion-reduce:animate-none" /></div>{showActions && <div className="mobile-card-actions"><Skeleton className="size-8 motion-reduce:animate-none" /></div>}</div>
+      <Skeleton className="h-3 w-32 max-w-full motion-reduce:animate-none" />
+    </article>)}</div>
+    <div className="desktop-table p-5" aria-hidden="true"><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th>Patient</th><th>Age / gender</th><th>Facility</th><th>Last assessment</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{Array.from({ length: 6 }, (_, index) => <tr key={index}>
+      <td><div className="grid gap-2"><Skeleton className="h-4 w-36 max-w-full motion-reduce:animate-none" /><Skeleton className="h-3 w-20 motion-reduce:animate-none" /></div></td>
+      <td><Skeleton className="h-4 w-28 motion-reduce:animate-none" /></td>
+      <td><Skeleton className="h-4 w-32 motion-reduce:animate-none" /></td>
+      <td><Skeleton className="h-4 w-24 motion-reduce:animate-none" /></td>
+      <td><div className="flex justify-end gap-2">{showActions && <Skeleton className="size-8 motion-reduce:animate-none" />}<Skeleton className="size-8 motion-reduce:animate-none" /></div></td>
+    </tr>)}</tbody></table></div></div>
+  </section>;
+}
 
 const genderLabel = (gender: Patient["gender"]) => gender[0] + gender.slice(1).toLowerCase();
 const formatPatientDate = (value: string | Date) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(typeof value === "string" ? `${value}T00:00:00` : value));
@@ -40,7 +58,7 @@ function PatientDetailField({ icon: FieldIcon, label, value, action, wide = fals
     <div className="min-w-0 flex-1"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 flex min-w-0 items-center gap-1 text-sm font-semibold text-foreground"><span className="min-w-0 break-words">{value}</span>{action}</dd></div>
   </div>;
 }
-const patientRow = (patient: Patient, dates: Map<string, Date>): PatientRow => ({
+const patientRow = (patient: Patient & { lastAssessmentAt: Date | null }): PatientRow => ({
   id: patient.id,
   reference: patient.reference,
   displayName: patient.displayName,
@@ -49,7 +67,7 @@ const patientRow = (patient: Patient, dates: Map<string, Date>): PatientRow => (
   gender: genderLabel(patient.gender),
   facility: patient.homeFacility?.name ?? "—",
   facilityId: patient.homeFacility?.id ?? null,
-  lastAssessment: dates.get(patient.id) ?? null,
+  lastAssessment: patient.lastAssessmentAt,
 });
 
 const assessmentAction = (record: AssessmentSummary) => {
@@ -72,61 +90,55 @@ export function PatientsPage() {
   const user = useOutletContext<AuthenticatedUser>();
   const [searchParams, setSearchParams] = useSearchParams();
   const registeredThisMonth = searchParams.get("registered") === "this-month";
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const [patients, setPatients] = useState<Array<Patient & { lastAssessmentAt: Date | null }>>([]);
+  const [total, setTotal] = useState(0);
   const [facilityOptions, setFacilityOptions] = useState<Facility[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [facility, setFacility] = useState(() => searchParams.get("facility") ?? "all");
   const [gender, setGender] = useState("all");
   const [sort, setSort] = useState<PatientSort>("assessment-newest");
   const [page, setPage] = useState(1);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
-  const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
-  const [assessmentState, setAssessmentState] = useState<"loading" | "ready" | "error">("loading");
   const [reload, setReload] = useState(0);
   useEffect(() => { setFacility(searchParams.get("facility") ?? "all"); setPage(1); }, [searchParams]);
-  useEffect(() => { if (assessmentState === "error" && sort.startsWith("assessment-")) setSort("registered-newest"); }, [assessmentState, sort]);
-  const patientRecords = useMemo(() => { const dates = latestAssessmentDates(assessments); return patients.map(patient => patientRow(patient, dates)); }, [patients, assessments]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
   useEffect(() => {
     let active = true;
-    setLoadState("loading");
-    setPatients([]);
-    Promise.all([listPatients(user.organizationId), listFacilities(user.organizationId)])
-      .then(([patientItems, facilityItems]) => {
-        if (!active) return;
-        setPatients(patientItems);
-        setFacilityOptions(facilityItems);
-        setLoadState("ready");
-      })
-      .catch(() => { if (active) setLoadState("error"); });
-    setAssessmentState("loading");
-    listAssessments(user.organizationId).then(items => { if (active) { setAssessments(items); setAssessmentState("ready"); } }).catch(() => { if (active) setAssessmentState("error"); });
+    listFacilities(user.organizationId).then(items => { if (active) setFacilityOptions(items); }).catch(() => { if (active) setFacilityOptions([]); });
     return () => { active = false; };
   }, [user.organizationId, reload, workspaceRevision]);
-  const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return sortPatientRows(patientRecords.filter((patient) => {
-      const createdAt = patient.createdAt;
-      const now = new Date();
-      if (registeredThisMonth && (!createdAt || createdAt.getFullYear() !== now.getFullYear() || createdAt.getMonth() !== now.getMonth())) return false;
-      const matchesQuery = !normalizedQuery || `${patient.reference} ${patient.displayName} ${patient.facility}`.toLowerCase().includes(normalizedQuery);
-      return matchesQuery && (facility === "all" || patient.facilityId === facility) && (gender === "all" || patient.gender === gender);
-    }), sort);
-  }, [facility, gender, patientRecords, query, registeredThisMonth, sort]);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const currentPage = Math.min(page, pageCount);
-  const visiblePatients = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), sort });
+    if (debouncedQuery) params.set("query", debouncedQuery);
+    if (facility !== "all") params.set("facility", facility);
+    if (gender !== "all") params.set("gender", gender);
+    if (registeredThisMonth) params.set("registered", "this-month");
+    setLoadState("loading");
+    listPatientPage(user.organizationId, params, controller.signal)
+      .then(result => { if (!controller.signal.aborted) { setPatients(result.items); setTotal(result.total); setLoadState("ready"); } })
+      .catch(() => { if (!controller.signal.aborted) setLoadState("error"); });
+    return () => controller.abort();
+  }, [user.organizationId, page, sort, debouncedQuery, facility, gender, registeredThisMonth, reload, workspaceRevision]);
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  useEffect(() => { setPage(current => Math.min(current, pageCount)); }, [pageCount]);
+  const showLoading = loadState === "loading" || query.trim() !== debouncedQuery;
+  const visiblePatients = patients.map(patientRow);
   const editAction = (patient: PatientRow) => hasPermission(user.role, "patients.edit") && <TooltipTrigger><Button variant="ghost" size="icon-sm" aria-label={`Edit ${patient.reference}`} onPress={() => setEditingPatient(patients.find(item => item.id === patient.id) ?? null)}><Pencil className="size-4" /></Button><Tooltip>Edit patient</Tooltip></TooltipTrigger>;
   const columns: Array<DataTableColumn<PatientRow>> = [
     { id: "patient", header: "Patient", cell: ({ row }) => <Link className="group grid gap-1 text-foreground" to={`/patients/${row.original.reference}`}><span className="font-normal text-primary group-hover:underline group-focus-visible:underline">{row.original.displayName}</span><span className="text-xs text-muted-foreground">{row.original.reference}</span></Link> },
     { id: "ageGender", header: "Age / gender", cell: ({ row }) => `${row.original.age ?? "—"} · ${row.original.gender}` },
-    { accessorKey: "facility", header: "Facility" }, { id: "lastAssessment", header: "Last assessment", cell: ({ row }) => assessmentState === "error" ? "Unavailable" : assessmentState === "loading" ? "Loading…" : row.original.lastAssessment ? <DateDisplay value={row.original.lastAssessment} /> : "No assessments" },
+    { accessorKey: "facility", header: "Facility" }, { id: "lastAssessment", header: "Last assessment", cell: ({ row }) => row.original.lastAssessment ? <DateDisplay value={row.original.lastAssessment} /> : "No assessments" },
     { id: "actions", header: () => <span className="sr-only">Actions</span>, cell: ({ row }) => <div className="flex items-center justify-end gap-1">{editAction(row.original)}<RouterButtonLink variant="ghost" size="icon-sm" to={`/patients/${row.original.reference}`} aria-label={`Open ${row.original.reference}`}><Icon name="chevron" size={18}/></RouterButtonLink></div> },
   ];
   const hasFilters = query.trim() || facility !== "all" || gender !== "all" || registeredThisMonth;
   const emptyContent = <div className={`table-empty-content${loadState === "ready" && !hasFilters ? " illustrated-empty-state" : ""}`}>
-    {loadState === "loading" ? <span>Loading patients…</span>
-      : loadState === "error" ? <><strong>Patients could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></>
+    {loadState === "error" ? <><strong>Patients could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></>
       : hasFilters
       ? <><strong>No matching patients</strong><span>Try changing the search or filters.</span></>
       : <><PatientEmptyIllustration /><strong>No patients to display</strong><span>Patients will appear here when available.</span></>}
@@ -134,24 +146,23 @@ export function PatientsPage() {
   return <>
     <h1 className="patient-page-title">Patients</h1>
     <div className="patient-list-header">
-      <div className="patient-list-heading"><span className="patient-list-label">Patients</span><span>{filtered.length}</span></div>
-      <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search patients" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search patients…" /></InputGroup></div>
+      <div className="patient-list-heading"><span className="patient-list-label">Patients</span>{showLoading ? <Skeleton className="h-3 w-7 motion-reduce:animate-none" aria-label="Loading patient count" /> : <span>{total}</span>}</div>
+      <div className="patient-search-actions"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="Search patients" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); setLoadState("loading"); }} placeholder="Search patients…" /></InputGroup></div>
     </div>
     {registeredThisMonth && <div className="flex items-center gap-3 text-sm"><span>Registered this month ({new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })})</span><Button variant="link" onPress={() => { setSearchParams(params => { params.delete("registered"); return params; }); setPage(1); }}>Clear</Button></div>}
     <div className="patient-filter-bar">
       <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { const selected = String(key); setFacility(selected); setSearchParams(params => { if (selected === "all") params.delete("facility"); else params.set("facility", selected); return params; }); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilityOptions.map((item) => <SelectItem key={item.id} id={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
       <Select aria-label="Filter by gender" selectedKey={gender} onSelectionChange={(key) => { setGender(String(key)); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All genders</SelectItem><SelectItem id="Female">Female</SelectItem><SelectItem id="Male">Male</SelectItem><SelectItem id="Other">Other</SelectItem><SelectItem id="Unknown">Unknown</SelectItem></SelectContent></Select>
-      <div className="patient-sort-control"><span className="patient-sort-label"><ArrowDownUp aria-hidden="true" className="size-4" />Sort by</span><Select aria-label="Sort patients" selectedKey={sort} onSelectionChange={(key) => { setSort(String(key) as PatientSort); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="registered-newest">Registration date: newest first</SelectItem><SelectItem id="registered-oldest">Registration date: oldest first</SelectItem><SelectItem id="assessment-newest" isDisabled={assessmentState === "error"}>Last assessment: newest first</SelectItem><SelectItem id="assessment-oldest" isDisabled={assessmentState === "error"}>Last assessment: oldest first</SelectItem></SelectContent></Select></div>
+      <div className="patient-sort-control"><span className="patient-sort-label"><ArrowDownUp aria-hidden="true" className="size-4" />Sort by</span><Select aria-label="Sort patients" selectedKey={sort} onSelectionChange={(key) => { setSort(String(key) as PatientSort); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="registered-newest">Registration date: newest first</SelectItem><SelectItem id="registered-oldest">Registration date: oldest first</SelectItem><SelectItem id="assessment-newest">Last assessment: newest first</SelectItem><SelectItem id="assessment-oldest">Last assessment: oldest first</SelectItem></SelectContent></Select></div>
     </div>
-    {assessmentState === "error" && <Alert><AlertDescription>Assessment history could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button></AlertDescription></Alert>}
-    <section className="surface table-surface mobile-list-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><article className="mobile-data-card list-mobile-card" key={patient.id}>
+    {showLoading ? <PatientsSkeleton showActions={hasPermission(user.role, "patients.edit")} /> : <section className="surface table-surface mobile-list-surface"><div className="mobile-card-list">{visiblePatients.length ? visiblePatients.map((patient)=><article className="mobile-data-card list-mobile-card" key={patient.id}>
       <div className="mobile-card-heading"><Link className="group mobile-card-primary min-w-0 flex-1" to={`/patients/${patient.reference}`}><span className="patient-list-name font-normal group-hover:underline group-focus-visible:underline">{patient.displayName}</span><span>{patient.reference} · {patient.age ?? "—"} · {patient.gender}</span></Link><div className="mobile-card-actions">{editAction(patient)}</div></div>
       <span>{patient.facility}</span>
     </article>) : emptyContent}</div>
       <div className="desktop-table p-5"><DataTable columns={columns} data={visiblePatients} label="Patients" emptyContent={emptyContent} /></div>
-    </section>
-    {filtered.length > 0 && <Pagination className="mt-4" aria-label="Patients pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
-    {editingPatient && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={editingPatient} canCorrectIdentity={user.role === "ORGANIZATION_ADMIN"} onClose={() => setEditingPatient(null)} onSaved={updated => { setPatients(current => current.map(item => item.id === updated.id ? updated : item)); setEditingPatient(null); }} />}
+    </section>}
+    {!showLoading && loadState === "ready" && total > 0 && <Pagination className="mt-4" aria-label="Patients pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={page === 1} onPress={() => setPage(page - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {page} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={page === pageCount} onPress={() => setPage(page + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
+    {editingPatient && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={editingPatient} canCorrectIdentity={user.role === "ORGANIZATION_ADMIN"} onClose={() => setEditingPatient(null)} onSaved={() => { setEditingPatient(null); setReload(current => current + 1); }} />}
   </>;
 }
 
