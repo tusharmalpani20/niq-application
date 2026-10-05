@@ -185,6 +185,7 @@ test("bottom cards show recent patients and data-backed nutrition insights", asy
   await renderOverview("DOCTOR", body => {
     const cards = body.querySelector('[aria-label="Recent patients and NIQ insights"]');
     expect(cards?.textContent).toContain("Example Patient");
+    expect(cards?.querySelector('a[href="/patients/PAT-1"]')?.className).toContain("text-primary hover:underline");
     expect(cards?.textContent).toContain("ASM-000001");
     expect(cards?.textContent).toContain("Key nutrition insights");
     expect(cards?.textContent).toContain("At nutritional risk1 of 1 patient (100%) · no 30-day comparison yet");
