@@ -318,6 +318,18 @@
   .client-workspace .content:has(.assessment-list-tabs) .mobile-card-list { padding: 0; }
   .client-workspace .content:has(.assessment-list-tabs) .mobile-data-card { background: var(--surface); }
 }
+@media (min-width: 621px) and (max-width: 760px) {
+  .client-workspace .mobile-list-surface { border: 0; background: transparent; box-shadow: none; }
+  .client-workspace .mobile-list-surface .desktop-table { display: none; }
+  .client-workspace .mobile-list-surface .mobile-card-list { display: grid; gap: .7rem; padding: 0; }
+  .client-workspace .mobile-list-surface .mobile-data-card { display: grid; gap: .65rem; padding: .9rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); text-decoration: none; }
+  .client-workspace .mobile-list-surface .table-empty-content { border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); padding: 1rem; }
+  .client-workspace .content:has(.assessment-list-tabs) .desktop-table { display: none; }
+  .client-workspace .content:has(.assessment-list-tabs) .mobile-card-list { display: grid; gap: .7rem; padding: 0; }
+  .client-workspace .content:has(.assessment-list-tabs) .table-surface { border: 0; background: transparent; box-shadow: none; }
+  .client-workspace .content:has(.assessment-list-tabs) .mobile-data-card { display: grid; gap: .65rem; padding: .9rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); text-decoration: none; }
+  .client-workspace .content:has(.assessment-list-tabs) .table-empty-content { border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); padding: 1rem; }
+}
 @media (max-width: 360px) {
   .client-workspace .assessment-filter-bar { grid-template-columns: minmax(0, 1fr); }
 }
