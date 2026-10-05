@@ -153,6 +153,7 @@
 .brand-marks-partner { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: .12rem; padding-left: .9rem; border-left: 1px solid var(--border); }
 .brand-marks-partner-logo { display: block; width: 7.7rem; height: 2.55rem; object-fit: contain; }
 .brand-marks-partner-caption { color: var(--muted-foreground); font-size: .72rem; font-weight: 600; line-height: 1; letter-spacing: .01em; white-space: nowrap; }
+.brand-marks-workspace .brand-marks-partner-caption { font-size: .62rem; }
 .brand-marks-organization-logo { display: block; max-width: min(13rem, 100%); height: 2.75rem; object-fit: contain; object-position: left center; }
 .brand-marks-sidebar { gap: .35rem; }
 .brand-marks-sidebar .brand-marks-application-logo { width: 2.6rem; height: 2.25rem; }
@@ -278,7 +279,7 @@
   :is(.admin-workspace, .client-workspace) .content { padding-top: calc(8.5rem + env(safe-area-inset-top)); padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 480px) {
-  .brand-marks-workspace .brand-marks-partner-caption { font-size: .68rem; }
+  .brand-marks-workspace .brand-marks-partner-caption { font-size: .6rem; }
 }
 .client-workspace .patient-page-title { font-size: clamp(1.65rem, 3vw, 2rem); margin-bottom: 1.75rem; }
 .client-workspace .patient-list-header { flex-wrap: wrap; }
