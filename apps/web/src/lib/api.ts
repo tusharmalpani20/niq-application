@@ -1,6 +1,7 @@
 import {
   acceptInvitationSchema,
   assessmentListResponseSchema,
+  assessmentPageResponseSchema,
   activateScoringResponseSchema,
   activateScoringSchema,
   apiErrorSchema,
@@ -268,6 +269,11 @@ export async function listPatients(organizationId: string): Promise<Patient[]> {
 export async function listAssessments(organizationId: string): Promise<AssessmentSummary[]> {
   const response = await fetch(`/api/v1/organizations/${organizationId}/assessments`, { credentials: "include" });
   return assessmentListResponseSchema.parse(await responseBody(response)).items;
+}
+
+export async function listAssessmentPage(organizationId: string, params: URLSearchParams, signal?: AbortSignal) {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/assessments/page?${params}`, { credentials: "include", signal });
+  return assessmentPageResponseSchema.parse(await responseBody(response));
 }
 
 export async function setAssessmentPriority(organizationId: string, assessmentId: string, isPriority: boolean): Promise<void> {

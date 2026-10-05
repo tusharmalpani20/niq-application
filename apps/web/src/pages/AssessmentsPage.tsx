@@ -4,7 +4,7 @@ import { listClinicalReviews } from "../features/assessments/clinical-review-api
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { assessmentStatusSchema, hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, ClinicalReview, Facility } from "@niq/application-contracts";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { ClipboardCheck, Clock3, Download, Eye, Pencil, Search, Send, Star, TriangleAlert, UserRoundCheck, X } from "lucide-react";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
@@ -12,14 +12,14 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
 import { AssessmentEmptyIllustration } from "../components/AssessmentEmptyIllustration";
 import { RouterButtonLink } from "../components/RouterButtonLink";
 import { StatusBadge } from "../components/StatusBadge";
-import { listAssessments, listFacilities, setAssessmentPriority } from "../lib/api";
+import { listAssessmentPage, listFacilities, setAssessmentPriority } from "../lib/api";
 import { changeClinicalReview, getClinicalReview } from "../features/assessments/clinical-review-api";
 import { AssessmentRequestError } from "../features/assessments/workflow-api";
-import { facilityWorkStatuses, openAssessmentStatuses } from "../lib/assessment-work";
 
 import { Icon } from "../lib/icons";
 
@@ -62,21 +62,6 @@ const initialTab = (params: URLSearchParams, canOpen: boolean): AssessmentTab =>
   if (["COMPLETED", "COMPLETED_THIS_MONTH"].includes(status)) return "completed";
   return "assessments";
 };
-const matchesTab = (record: AssessmentSummary, tab: AssessmentTab) => {
-  if (tab === "my-work") return !!record.myAction;
-  if (tab === "completed") return record.status === "COMPLETED";
-  return true;
-};
-const matchesStatus = (record: AssessmentSummary, status: string, now: Date) => {
-  if (status === "all") return true;
-  if (status === "WORK") return facilityWorkStatuses.has(record.status);
-  if (status === "OPEN") return openAssessmentStatuses.has(record.status);
-  if (status === "MY_ACTIONS") return !!record.myAction;
-  if (status === "EDIT_DRAFT" || status === "SEND_FOR_REVIEW" || status === "CORRECT_DRAFT") return record.myAction === status;
-  if (status === "PRIORITY") return record.isPriority;
-  if (status === "COMPLETED_THIS_MONTH") return record.status === "COMPLETED" && record.completedAt !== null && record.completedAt.getFullYear() === now.getFullYear() && record.completedAt.getMonth() === now.getMonth();
-  return record.status === status;
-};
 const assessmentListStatus = (record: AssessmentSummary, tab: AssessmentTab) => tab === "my-work" && record.myAction === "CORRECT_DRAFT" ? "Needs correction" : tab === "my-work" && record.myAction === "SEND_FOR_REVIEW" ? "Ready to send" : assessmentStatusLabels[record.status];
 const assessmentActionLabel = (record: AssessmentSummary) => {
   if (record.myAction === "CORRECT_DRAFT") return "Make corrections";
@@ -104,6 +89,25 @@ const assessmentActionIcon = (record: AssessmentSummary) => {
   }
 };
 
+function AssessmentListSkeleton({ showActions }: { showActions: boolean }) {
+  return <section className="surface table-surface" role="status" aria-label="Loading assessments">
+    <span className="sr-only">Loading assessments…</span>
+    <div className="mobile-card-list" aria-hidden="true">{Array.from({ length: 4 }, (_, index) => <article className="mobile-data-card list-mobile-card assessment-mobile-card" key={index}>
+      <div className="mobile-card-heading"><div className="mobile-card-primary flex-1"><Skeleton className="h-4 w-28 motion-reduce:animate-none" /><Skeleton className="h-4 w-36 max-w-full motion-reduce:animate-none" /><Skeleton className="h-3 w-16 motion-reduce:animate-none" /></div>{showActions && <div className="mobile-card-actions"><Skeleton className="size-8 motion-reduce:animate-none" /></div>}</div>
+      <div className="mobile-card-meta"><Skeleton className="h-6 w-24 rounded-full motion-reduce:animate-none" /><Skeleton className="h-3 w-32 motion-reduce:animate-none" /></div>
+      {showActions && <div className="assessment-card-footer"><Skeleton className="h-9 w-36 motion-reduce:animate-none" /></div>}
+    </article>)}</div>
+    <div className="desktop-table p-5" aria-hidden="true"><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th>Assessment</th><th>Patient</th><th>Facility</th><th>Started</th><th>Status</th>{showActions && <th className="text-right">Actions</th>}</tr></thead><tbody>{Array.from({ length: 6 }, (_, index) => <tr key={index}>
+      <td><Skeleton className="h-4 w-28 motion-reduce:animate-none" /></td>
+      <td><div className="grid gap-2"><Skeleton className="h-4 w-32 motion-reduce:animate-none" /><Skeleton className="h-3 w-16 motion-reduce:animate-none" /></div></td>
+      <td><Skeleton className="h-4 w-28 motion-reduce:animate-none" /></td>
+      <td><Skeleton className="h-4 w-20 motion-reduce:animate-none" /></td>
+      <td><Skeleton className="h-6 w-24 rounded-full motion-reduce:animate-none" /></td>
+      {showActions && <td><div className="flex justify-end gap-2"><Skeleton className="h-8 w-28 motion-reduce:animate-none" /><Skeleton className="size-8 motion-reduce:animate-none" /></div></td>}
+    </tr>)}</tbody></table></div></div>
+  </section>;
+}
+
 export function AssessmentsPage() {
   const workspaceRevision = useWorkspaceRevision(["assessment", "patient", "facility"]);
   const user = useOutletContext<AuthenticatedUser>();
@@ -113,10 +117,13 @@ export function AssessmentsPage() {
   const canCreate = hasPermission(user.role, "assessments.create");
   const [tab, setTab] = useState<AssessmentTab>(() => initialTab(searchParams, canOpen));
   const [records, setRecords] = useState<AssessmentSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState<{ all: number; myWork: number; completed: number } | null>(null);
   const [reviewCount, setReviewCount] = useState<number | null>(null);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [reload, setReload] = useState(0);
   const [query, setQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [reviewQuery, setReviewQuery] = useState("");
   const [facility, setFacility] = useState(() => searchParams.get("facility") ?? "all");
   const [status, setStatus] = useState(() => tabStatus(searchParams, initialTab(searchParams, canOpen)));
@@ -135,7 +142,9 @@ export function AssessmentsPage() {
     setPriorityBusy(record.id); setPriorityError("");
     try {
       await setAssessmentPriority(user.organizationId, record.id, !record.isPriority);
-      setRecords(items => items.map(item => item.id === record.id ? { ...item, isPriority: !record.isPriority } : item));
+      setRecords(items => items.flatMap(item => item.id === record.id ? status === "PRIORITY" && record.isPriority ? [] : [{ ...item, isPriority: !record.isPriority }] : [item]));
+      if (status === "PRIORITY" && record.isPriority) setTotal(count => Math.max(0, count - 1));
+      setReload(value => value + 1);
     } catch (cause) { setPriorityError(cause instanceof Error ? cause.message : "Could not update priority. Please try again."); }
     finally { setPriorityBusy(null); }
   };
@@ -166,9 +175,27 @@ export function AssessmentsPage() {
     setPage(1);
   }, [canOpen, reviewFilter, searchParams]);
   useEffect(() => {
-    let active = true;
+    const timer = setTimeout(() => setSearchQuery(query.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [query]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ page: String(page), pageSize: String(assessmentPageSize), tab: tab === "clinical-reviews" ? "assessments" : tab, facility, status, risk, query: searchQuery });
     setLoadState("loading");
-    Promise.all([listAssessments(user.organizationId), listFacilities(user.organizationId)]).then(([items, facilities]) => { if (active) { setRecords(items); setFacilities(facilities); setLoadState("ready"); } }).catch(() => { if (active) setLoadState("error"); });
+    listAssessmentPage(user.organizationId, params, controller.signal).then(result => {
+      if (controller.signal.aborted) return;
+      const lastPage = Math.max(1, Math.ceil(result.total / assessmentPageSize));
+      if (page > lastPage) { setPage(lastPage); return; }
+      setRecords(result.items);
+      setTotal(result.total);
+      setCounts({ all: result.allCount, myWork: result.myWorkCount, completed: result.completedCount });
+      setLoadState("ready");
+    }).catch(() => { if (!controller.signal.aborted) setLoadState("error"); });
+    return () => controller.abort();
+  }, [user.organizationId, page, tab, facility, status, risk, searchQuery, reload, workspaceRevision]);
+  useEffect(() => {
+    let active = true;
+    listFacilities(user.organizationId).then(items => { if (active) setFacilities(items); }).catch(() => {});
     return () => { active = false; };
   }, [user.organizationId, reload, workspaceRevision]);
   useEffect(() => {
@@ -180,19 +207,9 @@ export function AssessmentsPage() {
       .catch(() => { if (!controller.signal.aborted) setReviewCount(null); });
     return () => controller.abort();
   }, [canOpen, user.organizationId, reload, workspaceRevision]);
-  const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    const now = new Date();
-    return records.filter((record) => {
-      const matchesQuery = !normalizedQuery || `${record.reference} ${record.patient.reference} ${record.patient.displayName} ${record.facility?.name ?? ""}`.toLowerCase().includes(normalizedQuery);
-      return matchesQuery && (facility === "all" || record.facility?.id === facility) && matchesTab(record, tab) && matchesStatus(record, status, now) && (risk === "all" || record.riskCategory === risk);
-    });
-  }, [facility, query, records, risk, status, tab]);
-  const myWorkCount = records.filter(record => !!record.myAction).length;
-  const completedCount = records.filter(record => record.status === "COMPLETED").length;
-  const pageCount = Math.max(1, Math.ceil(filtered.length / assessmentPageSize));
+  const pageCount = Math.max(1, Math.ceil(total / assessmentPageSize));
   const currentPage = Math.min(page, pageCount);
-  const visible = filtered.slice((currentPage - 1) * assessmentPageSize, currentPage * assessmentPageSize);
+  const visible = records;
   const visibleReviewIds = canOpen && tab === "assessments" ? visible.filter(record => record.status === "UNDER_REVIEW").map(record => record.id).join(",") : "";
   useEffect(() => {
     const controller = new AbortController();
@@ -237,21 +254,21 @@ export function AssessmentsPage() {
   const emptyContent = <div className={`table-empty-content${loadState === "ready" && !hasFilters ? " illustrated-empty-state" : ""}`}>{loadState === "loading" ? <span>Loading assessments…</span> : loadState === "error" ? <><strong>Assessments could not be loaded</strong><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></> : hasFilters ? <><strong>No matching assessments</strong><span>Try changing the search or filters.</span></> : tab === "my-work" ? <><AssessmentEmptyIllustration /><strong>Nothing needs your action</strong><span>Drafts, corrections, and assessments ready to send will appear here.</span></> : tab === "completed" ? <><AssessmentEmptyIllustration /><strong>No completed assessments yet</strong><span>Completed assessments will appear here.</span></> : <><AssessmentEmptyIllustration /><strong>No assessments to display</strong><span>Assessments will appear here when available.</span>{canCreate && <RouterButtonLink to="/assessments/new">New assessment</RouterButtonLink>}</>}</div>;
   const assessmentContent = <>
     {(priorityError || claimError) && <p role="alert" className="mb-3 text-sm text-destructive">{priorityError || claimError}</p>}
-    <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card list-mobile-card assessment-mobile-card" key={record.id}>
+    {loadState === "loading" ? <AssessmentListSkeleton showActions={canOpen} /> : <section className="surface table-surface"><div className="mobile-card-list">{visible.length ? visible.map((record) => <article className="mobile-data-card list-mobile-card assessment-mobile-card" key={record.id}>
       <div className="mobile-card-heading">
         <div className="mobile-card-primary">{canOpen ? <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}<Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${record.patient.reference}`}>{record.patient.displayName}</Link><span>{record.patient.reference}</span></div>
         {canOpen && <div className="mobile-card-actions">{priorityButton(record)}</div>}
       </div>
       <div className="mobile-card-meta"><StatusBadge status={assessmentListStatus(record, tab)}/><span>{record.facility?.name ?? "No facility"} · {assessmentDate(record.createdAt)}</span></div>
       {canOpen && <div className="assessment-card-footer">{openButton(record)}<div className="assessment-card-secondary">{claimButton(record)}{downloadButton(record)}</div></div>}
-    </article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>
-    {filtered.length > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={loadState !== "ready" || currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
+    </article>) : emptyContent}</div><div className="desktop-table p-5"><DataTable columns={columns} data={visible} label="Assessments" emptyContent={emptyContent} /></div></section>}
+    {loadState === "ready" && total > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === 1} onPress={() => setPage(currentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {currentPage} of {pageCount}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={currentPage === pageCount} onPress={() => setPage(currentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
   </>;
   return <>
     <h1 className="patient-page-title">Assessments</h1>
     <Tabs selectedKey={tab} onSelectionChange={key => selectTab(String(key) as AssessmentTab)}>
     <div className="assessment-list-toolbar flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-border max-[620px]:flex-col max-[620px]:items-stretch">
-      <TabsList variant="line" aria-label="Assessment lists" className="assessment-list-tabs max-w-full self-stretch"><TabsTrigger id="assessments">All assessments <span className="ml-2 text-xs">{records.length}</span></TabsTrigger>{canOpen && <TabsTrigger id="my-work">My work <span className="ml-2 text-xs">{myWorkCount}</span></TabsTrigger>}{canOpen && <TabsTrigger id="clinical-reviews">Clinical reviews {reviewCount !== null && <span className="ml-2 text-xs">{reviewCount}</span>}</TabsTrigger>}<TabsTrigger id="completed">Completed <span className="ml-2 text-xs">{completedCount}</span></TabsTrigger></TabsList>
+      <TabsList variant="line" aria-label="Assessment lists" className="assessment-list-tabs max-w-full self-stretch"><TabsTrigger id="assessments">All assessments {counts ? <span className="ml-2 text-xs">{counts.all}</span> : <Skeleton className="ml-2 inline-block h-3 w-6 motion-reduce:animate-none" />}</TabsTrigger>{canOpen && <TabsTrigger id="my-work">My work {counts ? <span className="ml-2 text-xs">{counts.myWork}</span> : <Skeleton className="ml-2 inline-block h-3 w-6 motion-reduce:animate-none" />}</TabsTrigger>}{canOpen && <TabsTrigger id="clinical-reviews">Clinical reviews {reviewCount !== null && <span className="ml-2 text-xs">{reviewCount}</span>}</TabsTrigger>}<TabsTrigger id="completed">Completed {counts ? <span className="ml-2 text-xs">{counts.completed}</span> : <Skeleton className="ml-2 inline-block h-3 w-6 motion-reduce:animate-none" />}</TabsTrigger></TabsList>
       <div className="patient-search-actions ml-auto max-[620px]:ml-0"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label={tab === "clinical-reviews" ? "Search clinical reviews" : "Search by assessment ID, patient name or patient ID"} value={tab === "clinical-reviews" ? reviewQuery : query} onChange={(event) => { if (tab === "clinical-reviews") setReviewQuery(event.target.value); else { setQuery(event.target.value); setPage(1); } }} placeholder="Search assessments or patients…" /></InputGroup>{canCreate && <TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="New assessment" onPress={() => navigate("/assessments/new")}><Icon name="plus" size={20}/></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>
     </div>
     <div className="patient-filter-bar assessment-filter-bar">

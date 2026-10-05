@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { AuthenticatedUser, ClinicalReviewQueue as Queue, ClinicalReviewQueueItem } from "@niq/application-contracts";
 import { Eye, Star, UserRoundCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type DataTableColumn } from "@/components/DataTable";
 import { ClinicalReviewEmptyIllustration } from "@/components/ClinicalReviewEmptyIllustration";
 import { RouterButtonLink } from "@/components/RouterButtonLink";
@@ -16,6 +17,28 @@ const reviewStage = (item: ClinicalReviewQueueItem) => item.review.state === "RE
 const reviewOwner = (item: ClinicalReviewQueueItem) => item.review.correctionPerson ? `Corrections: ${item.review.correctionPerson.displayName}` : item.review.assignee ? `Reviewer: ${item.review.assignee.displayName}` : "Awaiting reviewer";
 const reviewDate = (item: ClinicalReviewQueueItem) => item.review.submittedAt ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(item.review.submittedAt)) : "—";
 const openReview = (item: ClinicalReviewQueueItem) => <RouterButtonLink variant="outline" size="sm" className="whitespace-nowrap" to={`/assessments/${item.reference}`} aria-label={`View review ${item.reference}`}><Eye className="size-4" aria-hidden="true" />View review</RouterButtonLink>;
+
+function ClinicalReviewSkeleton() {
+  return <section className="surface table-surface" role="status" aria-label="Loading clinical reviews">
+    <span className="sr-only">Loading clinical reviews…</span>
+    <div className="mobile-card-list" aria-hidden="true">{Array.from({ length: 4 }, (_, index) => <article className="mobile-data-card list-mobile-card assessment-mobile-card" key={index}>
+      <div className="mobile-card-heading"><div className="mobile-card-primary flex-1"><Skeleton className="h-4 w-28 motion-reduce:animate-none" /><Skeleton className="h-4 w-36 max-w-full motion-reduce:animate-none" /><Skeleton className="h-3 w-16 motion-reduce:animate-none" /></div><div className="mobile-card-actions"><Skeleton className="size-8 motion-reduce:animate-none" /></div></div>
+      <Skeleton className="h-6 w-28 rounded-full motion-reduce:animate-none" />
+      <Skeleton className="h-3 w-44 max-w-full motion-reduce:animate-none" />
+      <Skeleton className="h-3 w-32 motion-reduce:animate-none" />
+      <div className="assessment-card-footer"><Skeleton className="h-8 w-36 motion-reduce:animate-none" /><Skeleton className="h-8 w-20 motion-reduce:animate-none" /></div>
+    </article>)}</div>
+    <div className="desktop-table p-5" aria-hidden="true"><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th>Assessment</th><th>Patient</th><th>Facility</th><th>Stage</th><th>Assigned to</th><th>Sent for review</th><th className="text-right">Actions</th></tr></thead><tbody>{Array.from({ length: 6 }, (_, index) => <tr key={index}>
+      <td><Skeleton className="h-4 w-28 motion-reduce:animate-none" /></td>
+      <td><div className="grid gap-2"><Skeleton className="h-4 w-32 motion-reduce:animate-none" /><Skeleton className="h-3 w-16 motion-reduce:animate-none" /></div></td>
+      <td><Skeleton className="h-4 w-24 motion-reduce:animate-none" /></td>
+      <td><Skeleton className="h-6 w-28 rounded-full motion-reduce:animate-none" /></td>
+      <td><Skeleton className="h-4 w-32 motion-reduce:animate-none" /></td>
+      <td><Skeleton className="h-4 w-20 motion-reduce:animate-none" /></td>
+      <td><div className="flex justify-end gap-2"><Skeleton className="h-8 w-24 motion-reduce:animate-none" /><Skeleton className="size-8 motion-reduce:animate-none" /></div></td>
+    </tr>)}</tbody></table></div></div>
+  </section>;
+}
 
 export function ClinicalReviewQueue({ user, query, facilityId, state, risk, canCreate, onPriorityChange, onViewAssessments }: { user: AuthenticatedUser; query: string; facilityId: string; state: string; risk: string; canCreate: boolean; onPriorityChange: (assessmentId: string, isPriority: boolean) => void; onViewAssessments: () => void }) {
   const workspaceRevision = useWorkspaceRevision(["assessment", "patient", "facility"]);
@@ -81,11 +104,11 @@ export function ClinicalReviewQueue({ user, query, facilityId, state, risk, canC
     { id: "sent", header: "Sent for review", cell: ({ row }) => reviewDate(row.original) },
     { id: "actions", header: () => <span className="block text-right">Actions</span>, cell: ({ row }) => reviewActions(row.original) },
   ];
-  const unfilteredEmpty = !loading && !error && !data?.total && !query.trim() && facilityId === "all" && state === "all" && risk === "all";
-  const empty = <div className={`table-empty-content${unfilteredEmpty ? " illustrated-empty-state" : ""}`}>{loading ? <p role="status">Loading clinical reviews…</p> : error ? <><p role="alert">{error}</p><Button variant="outline" onPress={() => setRetry(value => value + 1)}>Retry</Button></> : unfilteredEmpty ? <><ClinicalReviewEmptyIllustration /><strong>No clinical reviews yet</strong><span>Reviews will appear after an assessment is sent for review.</span><div className="flex flex-wrap justify-center gap-2">{canCreate && <RouterButtonLink to="/assessments/new">New assessment</RouterButtonLink>}<Button variant="outline" onPress={onViewAssessments}>View assessments</Button></div></> : <p>No clinical reviews match these filters.</p>}</div>;
+  const unfilteredEmpty = !error && !data?.total && !query.trim() && facilityId === "all" && state === "all" && risk === "all";
+  const empty = <div className={`table-empty-content${unfilteredEmpty ? " illustrated-empty-state" : ""}`}>{error ? <><p role="alert">{error}</p><Button variant="outline" onPress={() => setRetry(value => value + 1)}>Retry</Button></> : unfilteredEmpty ? <><ClinicalReviewEmptyIllustration /><strong>No clinical reviews yet</strong><span>Reviews will appear after an assessment is sent for review.</span><div className="flex flex-wrap justify-center gap-2">{canCreate && <RouterButtonLink to="/assessments/new">New assessment</RouterButtonLink>}<Button variant="outline" onPress={onViewAssessments}>View assessments</Button></div></> : <p>No clinical reviews match these filters.</p>}</div>;
   return <div className="space-y-4">
     {(claimError || priorityError) && <p role="alert" className="text-sm text-destructive">{claimError || priorityError}</p>}
-    <section className="surface table-surface"><div className="mobile-card-list">{data?.items.length ? data.items.map(item => <article className="mobile-data-card list-mobile-card" key={item.assessmentId}><div className="mobile-card-heading"><div className="mobile-card-primary"><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${item.reference}`}>{item.reference}</Link><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${item.patient.reference}`}>{item.patient.displayName}</Link><span>{item.patient.reference}</span></div><div className="mobile-card-actions">{openReview(item)}{priorityButton(item)}</div></div><StatusBadge status={reviewStage(item)} /><span>{item.facility?.name ?? "No facility"} · {reviewOwner(item)}</span><span>Sent for review: {reviewDate(item)}</span>{canClaim(item) && <div className="mobile-card-actions">{claimButton(item)}</div>}</article>) : empty}</div><div className="desktop-table p-5"><DataTable columns={columns} data={data?.items ?? []} label="Clinical reviews" emptyContent={empty} /></div></section>
-    {!!data?.total && data.total > data.pageSize && <div className="flex items-center justify-center gap-3"><Button variant="outline" size="sm" isDisabled={loading || page <= 1} onPress={() => setPage(value => value - 1)}>Previous</Button><span className="text-sm text-muted-foreground" role="status">Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="outline" size="sm" isDisabled={loading || page * data.pageSize >= data.total} onPress={() => setPage(value => value + 1)}>Next</Button></div>}
+    {loading ? <ClinicalReviewSkeleton /> : <section className="surface table-surface"><div className="mobile-card-list">{data?.items.length ? data.items.map(item => <article className="mobile-data-card list-mobile-card assessment-mobile-card" key={item.assessmentId}><div className="mobile-card-heading"><div className="mobile-card-primary"><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${item.reference}`}>{item.reference}</Link><Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/patients/${item.patient.reference}`}>{item.patient.displayName}</Link><span>{item.patient.reference}</span></div><div className="mobile-card-actions">{priorityButton(item)}</div></div><StatusBadge status={reviewStage(item)} /><span>{item.facility?.name ?? "No facility"} · {reviewOwner(item)}</span><span>Sent for review: {reviewDate(item)}</span><div className="assessment-card-footer">{openReview(item)}{canClaim(item) && <div className="assessment-card-secondary">{claimButton(item)}</div>}</div></article>) : empty}</div><div className="desktop-table p-5"><DataTable columns={columns} data={data?.items ?? []} label="Clinical reviews" emptyContent={empty} /></div></section>}
+    {!loading && !!data?.total && data.total > data.pageSize && <div className="flex items-center justify-center gap-3"><Button variant="outline" size="sm" isDisabled={page <= 1} onPress={() => setPage(value => value - 1)}>Previous</Button><span className="text-sm text-muted-foreground" role="status">Page {page} of {Math.ceil(data.total / data.pageSize)}</span><Button variant="outline" size="sm" isDisabled={page * data.pageSize >= data.total} onPress={() => setPage(value => value + 1)}>Next</Button></div>}
   </div>;
 }

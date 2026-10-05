@@ -11,19 +11,48 @@ const patient = { id, reference: "PAT-1", displayName: "Example Patient" };
 const records = ["DRAFT", "READY_FOR_SCORING", "SCORED"].map((status, index) => ({ id: `${id.slice(0, -1)}${index + 1}`, reference: `ASM-00000${index + 1}`, serialNumber: index + 1, organizationId: id, patient, facility: null, status, myAction: null as string | null, isPriority: false, createdAt: date, completedAt: null, riskCategory: null as "low" | "moderate" | "high" | null }));
 type AssessmentFixture = Omit<(typeof records)[number], "facility" | "completedAt"> & { facility: { id: string; name: string } | null; completedAt: string | null };
 
-async function renderAssessments(path: string, items: AssessmentFixture[], verify: (priorityWrites: boolean[]) => void | Promise<void>, reviewItems: unknown[] = [], reviewRequests: string[] = [], claimCommands: unknown[] = []) {
+function assessmentPage(items: AssessmentFixture[], input: string) {
+  const params = new URL(input, "http://localhost").searchParams;
+  const tab = params.get("tab") ?? "assessments";
+  const status = params.get("status") ?? "all";
+  const facility = params.get("facility") ?? "all";
+  const risk = params.get("risk") ?? "all";
+  const query = (params.get("query") ?? "").toLowerCase();
+  const now = new Date();
+  const matching = items.filter(item => {
+    const matchesStatus = status === "all" || status === item.status ||
+      (status === "WORK" && ["DRAFT", "READY_FOR_SCORING", "SCORING_UNAVAILABLE", "UNDER_REVIEW"].includes(item.status)) ||
+      (status === "OPEN" && ["DRAFT", "READY_FOR_SCORING"].includes(item.status)) ||
+      (status === "MY_ACTIONS" && !!item.myAction) ||
+      (["EDIT_DRAFT", "CORRECT_DRAFT", "SEND_FOR_REVIEW"].includes(status) && item.myAction === status) ||
+      (status === "PRIORITY" && item.isPriority) ||
+      (status === "COMPLETED_THIS_MONTH" && item.status === "COMPLETED" && !!item.completedAt && new Date(item.completedAt).getMonth() === now.getMonth() && new Date(item.completedAt).getFullYear() === now.getFullYear());
+    return matchesStatus && (tab !== "my-work" || !!item.myAction) && (tab !== "completed" || item.status === "COMPLETED") &&
+      (facility === "all" || item.facility?.id === facility) && (risk === "all" || item.riskCategory === risk) &&
+      (!query || `${item.reference} ${item.patient.reference} ${item.patient.displayName} ${item.facility?.name ?? ""}`.toLowerCase().includes(query));
+  });
+  const page = Number(params.get("page") ?? "1");
+  const pageSize = Number(params.get("pageSize") ?? "10");
+  return { items: matching.slice((page - 1) * pageSize, page * pageSize), total: matching.length, allCount: items.length,
+    myWorkCount: items.filter(item => !!item.myAction).length, completedCount: items.filter(item => item.status === "COMPLETED").length, page, pageSize };
+}
+
+async function renderAssessments(path: string, items: AssessmentFixture[], verify: (priorityWrites: boolean[]) => void | Promise<void>, reviewItems: unknown[] = [], reviewRequests: string[] = [], claimCommands: unknown[] = [], assessmentGate?: Promise<void>, reviewGate?: Promise<void>) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, SVGElement: dom.window.SVGElement, Element: dom.window.Element, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { value, configurable: true });
   const priorityWrites: boolean[] = [];
+  let storedItems = [...items];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (init?.method === "PATCH" && String(input).endsWith("/priority")) { priorityWrites.push(JSON.parse(String(init.body)).isPriority); return Response.json({ assessmentId: records[0]?.id, isPriority: priorityWrites.at(-1) }); }
+    if (init?.method === "PATCH" && String(input).endsWith("/priority")) { const isPriority = JSON.parse(String(init.body)).isPriority as boolean; priorityWrites.push(isPriority); const assessmentId = String(input).match(/\/assessments\/([^/]+)\/priority$/)?.[1]; storedItems = storedItems.map(item => item.id === assessmentId ? { ...item, isPriority } : item); return Response.json({ assessmentId, isPriority }); }
     if (init?.method === "POST" && String(input).endsWith("/clinical-review")) { claimCommands.push(JSON.parse(String(init.body))); return Response.json({}); }
     const reviewId = String(input).match(/\/assessments\/([^/]+)\/clinical-review$/)?.[1];
     if (reviewId) return Response.json((reviewItems as Array<{ assessmentId: string; review: unknown }>).find(item => item.assessmentId === reviewId)?.review ?? {});
     if (String(input).includes("/clinical-reviews?")) reviewRequests.push(String(input));
-    return Response.json(String(input).includes("/clinical-reviews?") ? { items: reviewItems, total: reviewItems.length || 2, page: 1, pageSize: 10 } : String(input).endsWith("/assessments") ? { items } : { items: [] });
+    if (String(input).includes("/assessments/page?")) { await assessmentGate; return Response.json(assessmentPage(storedItems, String(input))); }
+    if (String(input).includes("/clinical-reviews?")) { await reviewGate; return Response.json({ items: reviewItems, total: reviewItems.length || 2, page: 1, pageSize: 10 }); }
+    return Response.json({ items: [] });
   }) as typeof fetch;
   const user = { userId: id, organizationId: id, membershipId: id, email: "doctor@example.test", displayName: "Doctor", role: "DOCTOR", platformRole: "USER" };
   const router = createMemoryRouter([{ element: <Outlet context={user} />, children: [{ path: "/assessments", element: <AssessmentsPage /> }] }], { initialEntries: [path] });
@@ -36,6 +65,34 @@ async function renderAssessments(path: string, items: AssessmentFixture[], verif
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as Record<string, unknown>)[key]; }
   }
 }
+
+test("shows responsive assessment placeholders until the list finishes loading", async () => {
+  let finishLoading!: () => void;
+  const gate = new Promise<void>(resolve => { finishLoading = resolve; });
+  await renderAssessments("/assessments", records, async () => {
+    const loading = document.querySelector('[role="status"][aria-label="Loading assessments"]');
+    expect(loading?.querySelectorAll(".mobile-card-list article")).toHaveLength(4);
+    expect(loading?.querySelectorAll(".desktop-table tbody tr")).toHaveLength(6);
+    expect(loading?.querySelector(".mobile-card-heading .mobile-card-actions")).not.toBeNull();
+    expect(document.querySelector('[aria-label="Assessments pagination"]')).toBeNull();
+    await act(async () => { finishLoading(); await gate; await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(document.querySelector('[role="status"][aria-label="Loading assessments"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Assessments"]')?.textContent).toContain("ASM-000001");
+  }, [], [], [], gate);
+});
+
+test("loads the next assessment page from the API", async () => {
+  const items = Array.from({ length: 12 }, (_, index) => ({ ...records[0]!, id: `${id.slice(0, -2)}${String(index + 1).padStart(2, "0")}`, reference: `ASM-${String(index + 1).padStart(6, "0")}`, serialNumber: index + 1 }));
+  await renderAssessments("/assessments", items, async () => {
+    expect(document.querySelector('[aria-label="Assessments"]')?.textContent).toContain("ASM-000010");
+    expect(document.querySelector('[aria-label="Assessments"]')?.textContent).not.toContain("ASM-000011");
+    const next = [...document.querySelectorAll<HTMLButtonElement>('[aria-label="Assessments pagination"] button')].at(-1)!;
+    await act(async () => { next.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(document.querySelector('[aria-label="Assessments"]')?.textContent).toContain("ASM-000011");
+    expect(document.querySelector('[aria-label="Assessments"]')?.textContent).not.toContain("ASM-000001");
+    expect(document.querySelector('[aria-label="Assessments pagination"]')?.textContent).toContain("Page 2 of 2");
+  });
+});
 
 test("open-assessment link shows only drafts and assessments ready for scoring", async () => {
   await renderAssessments("/assessments?status=OPEN", records, () => {
@@ -59,7 +116,7 @@ test("priority filter and star control reflect a saved change", async () => {
     expect(remove.getAttribute("aria-pressed")).toBe("true");
     await act(async () => { remove.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(writes).toEqual([false]);
-    expect(table?.textContent).not.toContain("ASM-000001");
+    expect(document.querySelector('[aria-label="Assessments"]')?.textContent).not.toContain("ASM-000001");
   });
 });
 
@@ -194,6 +251,21 @@ test("clinical reviews tab shows its unfiltered total", async () => {
   });
 });
 
+test("clinical review loading uses responsive placeholders", async () => {
+  let finishLoading!: () => void;
+  const gate = new Promise<void>(resolve => { finishLoading = resolve; });
+  const reviews = [{ assessmentId: id, reference: "ASM-000001", patient, facility: null, review: { state: "QUEUED", submittedAt: date, assignee: null, correctionPerson: null } }];
+  await renderAssessments("/assessments?tab=clinical-reviews", records, async () => {
+    const loading = document.querySelector('[role="status"][aria-label="Loading clinical reviews"]');
+    expect(loading?.querySelectorAll(".mobile-card-list article")).toHaveLength(4);
+    expect(loading?.querySelectorAll(".desktop-table tbody tr")).toHaveLength(6);
+    expect(loading?.querySelector(".mobile-card-list .assessment-card-footer")).not.toBeNull();
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 180)); finishLoading(); await gate; await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(document.querySelector('[role="status"][aria-label="Loading clinical reviews"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Clinical reviews"]')?.textContent).toContain("ASM-000001");
+  }, reviews, [], [], undefined, gate);
+});
+
 test("clinical reviews filters the backend queue by facility", async () => {
   const requests: string[] = [];
   await renderAssessments(`/assessments?tab=clinical-reviews&facility=${id}`, records, async () => {
@@ -217,7 +289,7 @@ test("clinical review rows show stage and a compact open action", async () => {
     expect(open?.getAttribute("href")).toBe("/assessments/ASM-000001");
     expect(open?.textContent).toBe("View review");
     expect(open?.querySelector("svg.lucide-eye")).not.toBeNull();
-    expect(document.querySelector('.mobile-card-list a[aria-label="View review ASM-000001"]')).not.toBeNull();
+    expect(document.querySelector('.mobile-card-list .assessment-card-footer a[aria-label="View review ASM-000001"]')).not.toBeNull();
   }, reviews);
 });
 
@@ -228,6 +300,9 @@ test("eligible clinicians can claim an awaiting review from the queue", async ()
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 200)); });
     const claim = document.querySelector<HTMLButtonElement>('[aria-label="Clinical reviews"] button');
     expect(claim?.textContent).toBe("Claim");
+    const mobileFooter = document.querySelector(".mobile-card-list .assessment-card-footer");
+    expect(mobileFooter?.querySelector('a[aria-label="View review ASM-000001"]')).not.toBeNull();
+    expect(mobileFooter?.querySelector("button")?.textContent).toBe("Claim");
     await act(async () => { claim?.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(commands).toHaveLength(1);
     expect(commands[0]).toMatchObject({ action: "CLAIM", expectedRevision: 3, expectedScoreRevision: 2 });
