@@ -169,6 +169,7 @@ test("completed assessments show the reviewed score and trend", async () => {
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("10 points");
     expect(body.querySelector('[aria-label="Latest assessment"]')?.textContent).toContain("Low Risk");
     expect(body.querySelector('[aria-label="Assessment stages"] [aria-current="step"]')?.textContent).toContain("Completed");
+    expect([...body.querySelectorAll('[aria-label="Assessment stages"] li')].every(stage => stage.querySelector('svg.lucide-check'))).toBe(true);
     expect(body.querySelectorAll('[aria-label="Assessment stages"] time')).toHaveLength(4);
     expect(body.querySelector('[aria-label="Assessment stages"] time[datetime="2026-09-23T02:30:00.000Z"]')).not.toBeNull();
     expect(body.querySelector('[aria-label="Latest assessment"] [data-testid="patient-risk-label"]')?.getAttribute("style")).toContain("220, 61, 80");
