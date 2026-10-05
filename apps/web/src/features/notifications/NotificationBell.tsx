@@ -84,10 +84,11 @@ export function NotificationBell({ organizationId, onNavigate }: { organizationI
   }
 
   return <div className="notification-bell relative shrink-0" ref={root}>
-    <button ref={button} type="button" aria-label={`Notifications${inbox.unreadCount ? `, ${inbox.unreadCount} unread` : ""}`} aria-expanded={open} aria-controls="notification-inbox" className="relative grid size-9 place-items-center rounded-full text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" onClick={() => { setOpen((current) => !current); if (!open) void reload(); }}>
+    <button ref={button} type="button" aria-label={`Notifications${inbox.unreadCount ? `, ${inbox.unreadCount} unread` : ""}`} aria-expanded={open} aria-controls="notification-inbox" className="peer relative grid size-9 place-items-center rounded-full text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" onClick={() => { setOpen((current) => !current); if (!open) void reload(); }}>
       <Bell className="size-[18px]" aria-hidden="true" />
       {inbox.unreadCount > 0 && <span aria-hidden="true" className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold leading-4 text-primary-foreground">{inbox.unreadCount > 99 ? "99+" : inbox.unreadCount}</span>}
     </button>
+    {!open && <span aria-hidden="true" className="pointer-events-none absolute right-0 top-[calc(100%+.4rem)] z-50 rounded-md bg-foreground px-2 py-1 text-xs text-background opacity-0 shadow-sm transition-opacity peer-hover:opacity-100 peer-focus-visible:opacity-100">Notifications</span>}
     {open && <section id="notification-inbox" aria-label="Notifications" className="absolute right-0 top-[calc(100%+.75rem)] z-50 flex max-h-[min(32rem,70svh)] w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xl">
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
         <h2 className="text-base font-semibold">Notifications</h2>
