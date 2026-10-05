@@ -19,7 +19,9 @@ function assessmentPage(items: AssessmentFixture[], input: string) {
   const risk = params.get("risk") ?? "all";
   const query = (params.get("query") ?? "").toLowerCase();
   const now = new Date();
-  const matching = items.filter(item => {
+  const shared = items.filter(item => (facility === "all" || item.facility?.id === facility) && (risk === "all" || item.riskCategory === risk) &&
+    (!query || `${item.reference} ${item.patient.reference} ${item.patient.displayName} ${item.facility?.name ?? ""}`.toLowerCase().includes(query)));
+  const matching = shared.filter(item => {
     const matchesStatus = status === "all" || status === item.status ||
       (status === "WORK" && ["DRAFT", "READY_FOR_SCORING", "SCORING_UNAVAILABLE", "UNDER_REVIEW"].includes(item.status)) ||
       (status === "OPEN" && ["DRAFT", "READY_FOR_SCORING"].includes(item.status)) ||
@@ -27,14 +29,14 @@ function assessmentPage(items: AssessmentFixture[], input: string) {
       (["EDIT_DRAFT", "CORRECT_DRAFT", "SEND_FOR_REVIEW"].includes(status) && item.myAction === status) ||
       (status === "PRIORITY" && item.isPriority) ||
       (status === "COMPLETED_THIS_MONTH" && item.status === "COMPLETED" && !!item.completedAt && new Date(item.completedAt).getMonth() === now.getMonth() && new Date(item.completedAt).getFullYear() === now.getFullYear());
-    return matchesStatus && (tab !== "my-work" || !!item.myAction) && (tab !== "completed" || item.status === "COMPLETED") &&
-      (facility === "all" || item.facility?.id === facility) && (risk === "all" || item.riskCategory === risk) &&
-      (!query || `${item.reference} ${item.patient.reference} ${item.patient.displayName} ${item.facility?.name ?? ""}`.toLowerCase().includes(query));
+    return matchesStatus && (tab !== "my-work" || !!item.myAction) && (tab !== "completed" || item.status === "COMPLETED");
   });
   const page = Number(params.get("page") ?? "1");
   const pageSize = Number(params.get("pageSize") ?? "10");
-  return { items: matching.slice((page - 1) * pageSize, page * pageSize), total: matching.length, allCount: items.length,
-    myWorkCount: items.filter(item => !!item.myAction).length, completedCount: items.filter(item => item.status === "COMPLETED").length, page, pageSize };
+  return { items: matching.slice((page - 1) * pageSize, page * pageSize), total: matching.length,
+    allCount: tab === "assessments" ? matching.length : shared.length,
+    myWorkCount: tab === "my-work" ? matching.length : shared.filter(item => !!item.myAction).length,
+    completedCount: tab === "completed" ? matching.length : shared.filter(item => item.status === "COMPLETED").length, page, pageSize };
 }
 
 async function renderAssessments(path: string, items: AssessmentFixture[], verify: (priorityWrites: boolean[]) => void | Promise<void>, reviewItems: unknown[] = [], reviewRequests: string[] = [], claimCommands: unknown[] = [], assessmentGate?: Promise<void>, reviewGate?: Promise<void>) {
@@ -233,7 +235,29 @@ test("clinical review risk filter is sent with other queue filters", async () =>
       const params = new URL(url, "http://localhost").searchParams;
       return params.get("risk") === "high" && params.get("facilityId") === id && params.get("state") === "QUEUED" && params.get("page") === "1";
     })).toBe(true);
+    expect(requests.some(url => {
+      const params = new URL(url, "http://localhost").searchParams;
+      return params.get("risk") === "high" && params.get("facilityId") === id && params.get("state") === "QUEUED" && params.get("pageSize") === "1";
+    })).toBe(true);
   }, [], requests);
+});
+
+test("shared filters update every assessment tab count while status changes only the active count", async () => {
+  const here = { id, name: "Bengaluru" };
+  const elsewhere = { id: `${id.slice(0, -1)}Z`, name: "Elsewhere" };
+  const items = [
+    { ...records[0]!, facility: here, myAction: "EDIT_DRAFT", riskCategory: "high" as const },
+    { ...records[1]!, facility: here, myAction: null, riskCategory: "high" as const },
+    { ...records[2]!, facility: here, status: "COMPLETED", completedAt: date, riskCategory: "low" as const },
+    { ...records[0]!, id: `${id.slice(0, -1)}4`, reference: "ASM-000004", facility: elsewhere, myAction: "EDIT_DRAFT", riskCategory: "high" as const },
+  ];
+  await renderAssessments(`/assessments?facility=${id}&risk=high&status=DRAFT`, items, () => {
+    const tabs = document.querySelector('[data-slot="tabs-list"]')?.textContent ?? "";
+    expect(tabs).toMatch(/All assessments\s*1/);
+    expect(tabs).toMatch(/My work\s*1/);
+    expect(tabs).toMatch(/Completed\s*0/);
+    expect(document.querySelector('[aria-label="Assessments pagination"]')?.textContent).toContain("Page 1 of 1");
+  });
 });
 
 test("a scoring issue remains visible when opened from an older status link", async () => {

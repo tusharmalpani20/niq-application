@@ -42,6 +42,7 @@ const initialStatus = (params: URLSearchParams) => {
 };
 const tabStatus = (params: URLSearchParams, tab: AssessmentTab) => {
   const status = initialStatus(params);
+  if (tab === "clinical-reviews") return "all";
   if (tab === "my-work") return ["EDIT_DRAFT", "CORRECT_DRAFT", "SEND_FOR_REVIEW"].includes(status) ? status : "all";
   if (tab === "completed") return status === "COMPLETED_THIS_MONTH" ? status : "all";
   return status;
@@ -120,11 +121,11 @@ export function AssessmentsPage() {
   const [total, setTotal] = useState(0);
   const [counts, setCounts] = useState<{ all: number; myWork: number; completed: number } | null>(null);
   const [reviewCount, setReviewCount] = useState<number | null>(null);
+  const [reviewCountFailed, setReviewCountFailed] = useState(false);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [reload, setReload] = useState(0);
   const [query, setQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [reviewQuery, setReviewQuery] = useState("");
   const [facility, setFacility] = useState(() => searchParams.get("facility") ?? "all");
   const [status, setStatus] = useState(() => tabStatus(searchParams, initialTab(searchParams, canOpen)));
   const [risk, setRisk] = useState(() => initialRisk(searchParams));
@@ -158,6 +159,9 @@ export function AssessmentsPage() {
   const selectTab = (next: AssessmentTab) => {
     setTab(next);
     setPage(1);
+    setCounts(null);
+    setReviewCount(null);
+    setReviewState("all");
     setSearchParams(params => {
       const updated = new URLSearchParams(params);
       if (next === "assessments") updated.delete("tab"); else updated.set("tab", next);
@@ -182,6 +186,7 @@ export function AssessmentsPage() {
     const controller = new AbortController();
     const params = new URLSearchParams({ page: String(page), pageSize: String(assessmentPageSize), tab: tab === "clinical-reviews" ? "assessments" : tab, facility, status, risk, query: searchQuery });
     setLoadState("loading");
+    setCounts(null);
     listAssessmentPage(user.organizationId, params, controller.signal).then(result => {
       if (controller.signal.aborted) return;
       const lastPage = Math.max(1, Math.ceil(result.total / assessmentPageSize));
@@ -202,11 +207,22 @@ export function AssessmentsPage() {
     if (!canOpen) return;
     const controller = new AbortController();
     setReviewCount(null);
-    listClinicalReviews(user.organizationId, new URLSearchParams({ page: "1", pageSize: "1" }), controller.signal)
+    setReviewCountFailed(false);
+    const params = new URLSearchParams({ page: "1", pageSize: "1" });
+    if (facility !== "all") params.set("facilityId", facility);
+    if (risk !== "all") params.set("risk", risk);
+    if (searchQuery) params.set("search", searchQuery);
+    if (tab === "clinical-reviews" && reviewState !== "all") params.set("state", reviewState);
+    listClinicalReviews(user.organizationId, params, controller.signal)
       .then(result => { if (!controller.signal.aborted) setReviewCount(result.total); })
-      .catch(() => { if (!controller.signal.aborted) setReviewCount(null); });
+      .catch(() => { if (!controller.signal.aborted) setReviewCountFailed(true); });
     return () => controller.abort();
-  }, [canOpen, user.organizationId, reload, workspaceRevision]);
+  }, [canOpen, user.organizationId, facility, risk, searchQuery, tab, reviewState, reload, workspaceRevision]);
+  const countPending = query.trim() !== searchQuery;
+  const countBadge = (count: number | null, failed = false) => !countPending && count !== null
+    ? <span className="ml-2 text-xs">{count}</span>
+    : !countPending && failed ? <span className="ml-2 text-xs">—</span>
+    : <Skeleton className="ml-2 inline-block h-3 w-6 motion-reduce:animate-none" />;
   const pageCount = Math.max(1, Math.ceil(total / assessmentPageSize));
   const currentPage = Math.min(page, pageCount);
   const visible = records;
@@ -268,8 +284,8 @@ export function AssessmentsPage() {
     <h1 className="patient-page-title">Assessments</h1>
     <Tabs selectedKey={tab} onSelectionChange={key => selectTab(String(key) as AssessmentTab)}>
     <div className="assessment-list-toolbar flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-border max-[620px]:flex-col max-[620px]:items-stretch">
-      <TabsList variant="line" aria-label="Assessment lists" className="assessment-list-tabs max-w-full self-stretch"><TabsTrigger id="assessments">All assessments {counts ? <span className="ml-2 text-xs">{counts.all}</span> : <Skeleton className="ml-2 inline-block h-3 w-6 motion-reduce:animate-none" />}</TabsTrigger>{canOpen && <TabsTrigger id="my-work">My work {counts ? <span className="ml-2 text-xs">{counts.myWork}</span> : <Skeleton className="ml-2 inline-block h-3 w-6 motion-reduce:animate-none" />}</TabsTrigger>}{canOpen && <TabsTrigger id="clinical-reviews">Clinical reviews {reviewCount !== null && <span className="ml-2 text-xs">{reviewCount}</span>}</TabsTrigger>}<TabsTrigger id="completed">Completed {counts ? <span className="ml-2 text-xs">{counts.completed}</span> : <Skeleton className="ml-2 inline-block h-3 w-6 motion-reduce:animate-none" />}</TabsTrigger></TabsList>
-      <div className="patient-search-actions ml-auto max-[620px]:ml-0"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label={tab === "clinical-reviews" ? "Search clinical reviews" : "Search by assessment ID, patient name or patient ID"} value={tab === "clinical-reviews" ? reviewQuery : query} onChange={(event) => { if (tab === "clinical-reviews") setReviewQuery(event.target.value); else { setQuery(event.target.value); setPage(1); } }} placeholder="Search assessments or patients…" /></InputGroup>{canCreate && <TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="New assessment" onPress={() => navigate("/assessments/new")}><Icon name="plus" size={20}/></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>
+      <TabsList variant="line" aria-label="Assessment lists" className="assessment-list-tabs max-w-full self-stretch"><TabsTrigger id="assessments">All assessments {countBadge(counts?.all ?? null, loadState === "error")}</TabsTrigger>{canOpen && <TabsTrigger id="my-work">My work {countBadge(counts?.myWork ?? null, loadState === "error")}</TabsTrigger>}{canOpen && <TabsTrigger id="clinical-reviews">Clinical reviews {countBadge(reviewCount, reviewCountFailed)}</TabsTrigger>}<TabsTrigger id="completed">Completed {countBadge(counts?.completed ?? null, loadState === "error")}</TabsTrigger></TabsList>
+      <div className="patient-search-actions ml-auto max-[620px]:ml-0"><InputGroup className="h-10"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label={tab === "clinical-reviews" ? "Search clinical reviews" : "Search by assessment ID, patient name or patient ID"} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search assessments or patients…" /></InputGroup>{canCreate && <TooltipTrigger><Button className="size-10 shrink-0" size="icon-lg" aria-label="New assessment" onPress={() => navigate("/assessments/new")}><Icon name="plus" size={20}/></Button><Tooltip>New assessment</Tooltip></TooltipTrigger>}</div>
     </div>
     <div className="patient-filter-bar assessment-filter-bar">
       <Select aria-label="Filter by facility" selectedKey={facility} onSelectionChange={(key) => { const selected = String(key); setFacility(selected); setSearchParams(params => { if (selected === "all") params.delete("facility"); else params.set("facility", selected); return params; }); setPage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem id="all">All facilities</SelectItem>{facilities.map(item => <SelectItem id={item.id} key={item.id}>{item.name}</SelectItem>)}</SelectContent></Select>
@@ -281,7 +297,7 @@ export function AssessmentsPage() {
     {quickFilter && <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground"><span>Showing {quickFilter.toLowerCase()}</span><Button variant="ghost" size="sm" aria-label={`Clear ${quickFilter} filter`} onPress={() => setSearchParams(params => { const updated = new URLSearchParams(params); updated.delete("status"); return updated; })}><X className="size-4" aria-hidden="true" />Clear</Button></div>}
     <TabsContent id="assessments">{tab === "assessments" && assessmentContent}</TabsContent>
     {canOpen && <TabsContent id="my-work">{tab === "my-work" && assessmentContent}</TabsContent>}
-    {canOpen && <TabsContent id="clinical-reviews"><ClinicalReviewQueue key={`${user.organizationId}:${user.membershipId}:${reviewFilter}`} user={user} query={reviewQuery} facilityId={facility} state={reviewState} risk={risk} canCreate={canCreate} onPriorityChange={(id, isPriority) => setRecords(items => items.map(item => item.id === id ? { ...item, isPriority } : item))} onViewAssessments={() => selectTab("assessments")} /></TabsContent>}
+    {canOpen && <TabsContent id="clinical-reviews"><ClinicalReviewQueue key={`${user.organizationId}:${user.membershipId}:${reviewFilter}`} user={user} query={searchQuery} facilityId={facility} state={reviewState} risk={risk} canCreate={canCreate} onPriorityChange={(id, isPriority) => setRecords(items => items.map(item => item.id === id ? { ...item, isPriority } : item))} onViewAssessments={() => selectTab("assessments")} /></TabsContent>}
     <TabsContent id="completed">{tab === "completed" && assessmentContent}</TabsContent></Tabs>
   </>;
 }
