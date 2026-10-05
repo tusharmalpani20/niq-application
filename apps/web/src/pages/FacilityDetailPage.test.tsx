@@ -17,7 +17,7 @@ const team = [
   { membershipId: otherId, userId: otherId, email: "other@example.test", displayName: "Other Doctor", status: "ACTIVE", role: "DOCTOR", active: true, facilities: [{ id: otherId, name: "Elsewhere" }], createdAt: facility.createdAt },
 ];
 
-async function renderDetail(role: MembershipRole, verify: (body: HTMLElement, requested: string[], path: string) => void, id = facilityId) {
+async function renderDetail(role: MembershipRole, verify: (body: HTMLElement, requested: string[], path: string) => void | Promise<void>, id = facilityId, facilityGate?: Promise<void>, routeFacility?: unknown) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -25,7 +25,7 @@ async function renderDetail(role: MembershipRole, verify: (body: HTMLElement, re
   const requested: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input); requested.push(url);
-    if (url.endsWith("/facilities")) return Response.json({ items: [facility] });
+    if (url.endsWith("/facilities")) { await facilityGate; return Response.json({ items: [facility] }); }
     if (url.endsWith("/patients")) return Response.json({ items: [patient] });
     if (url.endsWith("/assessments")) return Response.json({ items: [assessment] });
     if (url.endsWith("/users")) return Response.json({ items: team });
@@ -40,16 +40,64 @@ async function renderDetail(role: MembershipRole, verify: (body: HTMLElement, re
     return Response.json({}, { status: 404 });
   }) as typeof fetch;
   const user = { userId: facilityId, organizationId: facilityId, membershipId: facilityId, email: "user@example.test", displayName: "Example User", role, platformRole: "USER" };
-  const router = createMemoryRouter([{ element: <Outlet context={user} />, children: [{ path: "/facilities/:facilityId", element: <FacilityDetailPage /> }] }], { initialEntries: [`/facilities/${id}`] });
+  const router = createMemoryRouter([{ element: <Outlet context={user} />, children: [{ path: "/facilities/:facilityId", element: <FacilityDetailPage /> }] }], { initialEntries: [{ pathname: `/facilities/${id}`, state: routeFacility ? { facility: routeFacility } : null }] });
   const root = createRoot(document.getElementById("root")!);
   try {
     await act(async () => { root.render(<RouterProvider router={router} />); await new Promise(resolve => setTimeout(resolve, 0)); });
-    verify(document.body, requested, router.state.location.pathname);
+    await verify(document.body, requested, router.state.location.pathname);
   } finally {
     await act(async () => root.unmount()); router.dispose(); dom.window.close();
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as Record<string, unknown>)[key]; }
   }
 }
+
+test("shows the full facility detail skeleton until data is ready", async () => {
+  let finishLoading!: () => void;
+  const gate = new Promise<void>(resolve => { finishLoading = resolve; });
+  await renderDetail("ORGANIZATION_ADMIN", async body => {
+    const loading = body.querySelector('[role="status"][aria-label="Loading facility"]');
+    expect(loading).not.toBeNull();
+    expect(loading?.querySelectorAll('[aria-label="Facility at a glance"] > .surface')).toHaveLength(4);
+    expect(loading?.querySelectorAll('[aria-label="Facility performance"] .surface')).toHaveLength(3);
+    expect(loading?.querySelector('[aria-label="Patient risk categories"]')).not.toBeNull();
+    expect(loading?.querySelectorAll('.mt-6.grid > .surface')).toHaveLength(2);
+    expect(loading?.querySelector('[aria-label="Facility team"]')).not.toBeNull();
+    await act(async () => { finishLoading(); await gate; await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(body.querySelector('[aria-label="Loading facility"]')).toBeNull();
+    expect(body.querySelector('h1')?.textContent).toBe("Hyderabad");
+  }, facilityId, gate);
+});
+
+test("shows known facility details while the overview loads, then refreshes them", async () => {
+  let finishLoading!: () => void;
+  const gate = new Promise<void>(resolve => { finishLoading = resolve; });
+  await renderDetail("ORGANIZATION_ADMIN", async body => {
+    expect(body.querySelector('[aria-label="Loading facility"] h1')?.textContent).toBe("Earlier name");
+    expect(body.querySelector('[aria-label="Loading facility"]')?.textContent).toContain("HYD · Asia/Kolkata");
+    await act(async () => { finishLoading(); await gate; await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(body.querySelector('h1')?.textContent).toBe("Hyderabad");
+  }, "hyd", gate, { ...facility, name: "Earlier name" });
+});
+
+test("does not display route state from another organization", async () => {
+  let finishLoading!: () => void;
+  const gate = new Promise<void>(resolve => { finishLoading = resolve; });
+  await renderDetail("ORGANIZATION_ADMIN", async body => {
+    expect(body.querySelector('[aria-label="Loading facility"] h1')).toBeNull();
+    await act(async () => { finishLoading(); await gate; await new Promise(resolve => setTimeout(resolve, 0)); });
+  }, "hyd", gate, { ...facility, organizationId: otherId });
+});
+
+test("support loading view omits restricted performance and team sections", async () => {
+  let finishLoading!: () => void;
+  const gate = new Promise<void>(resolve => { finishLoading = resolve; });
+  await renderDetail("SUPPORT", async body => {
+    const loading = body.querySelector('[aria-label="Loading facility"]');
+    expect(loading?.querySelector('[aria-label="Facility performance"]')).toBeNull();
+    expect(loading?.querySelector('[aria-label="Facility team"]')).toBeNull();
+    await act(async () => { finishLoading(); await gate; await new Promise(resolve => setTimeout(resolve, 0)); });
+  }, facilityId, gate);
+});
 
 test("admin sees facility metrics, assigned team, and management actions", async () => {
   await renderDetail("ORGANIZATION_ADMIN", (body, requested, path) => {
@@ -73,10 +121,29 @@ test("admin sees facility metrics, assigned team, and management actions", async
     expect(requested.some(url => url.endsWith(`/facilities/${facilityId}/performance`))).toBe(true);
     expect(body.querySelector('[aria-label="Facility performance"]')?.textContent).toContain("Assessments scored4");
     expect(body.querySelector('[aria-label="Facility performance"]')?.textContent).toContain("Face scans completed3");
+    expect(body.querySelector('[aria-label="Facility performance"] a')).toBeNull();
+    expect(body.querySelector('a[href="/assessments/ASM-000001"]')?.className).toContain("text-primary hover:underline");
+    expect(body.querySelector('a[href="/patients/PAT-2"]')?.className).toContain("text-primary hover:underline");
     expect(body.querySelector('[aria-label="Facility performance"] [aria-label="Up 300 percent"]')).not.toBeNull();
     expect(body.querySelector('[aria-label="Facility performance"] [aria-label="Down 40 percent"]')).not.toBeNull();
     expect(body.querySelector('[aria-label="Patient risk categories"] [role="img"]')?.getAttribute("aria-label")).toContain("3 assessed patients");
     expect(body.querySelector('[aria-label="Patient risk categories"] [role="img"]')?.getAttribute("aria-label")).toContain("High risk: 1");
+  });
+});
+
+test("facility risk legend selects a category and restores the total", async () => {
+  await renderDetail("ORGANIZATION_ADMIN", async body => {
+    const chart = body.querySelector('[aria-label="Patient risk categories"]')!;
+    const moderate = [...chart.querySelectorAll("button")].find(button => button.textContent?.includes("Moderate risk"))!;
+    expect(chart.querySelector('[role="img"] strong')?.textContent).toBe("3");
+    await act(async () => moderate.click());
+    expect(moderate.getAttribute("aria-pressed")).toBe("true");
+    expect(chart.querySelector('[role="img"] strong')?.textContent).toBe("1");
+    expect(chart.querySelector('[role="img"]')?.getAttribute("style")).toContain("color-mix");
+    expect(moderate.className).toContain("bg-muted");
+    await act(async () => moderate.click());
+    expect(chart.querySelector('[role="img"] strong')?.textContent).toBe("3");
+    expect(chart.querySelector('[role="img"]')?.getAttribute("style")).not.toContain("color-mix");
   });
 });
 
