@@ -70,36 +70,42 @@ export async function listAssessmentPage(db: Database, actor: Principal, organiz
     if (!canSeeAssessment(row, actor, correctionPersonId)) return [];
     return [{ ...row, myAction: !row.patientArchived && row.patientAccessible ? myAssessmentAction(actor, row, correctionPersonId) : null }];
   });
-  const allCount = candidates.length;
-  const myWorkCount = candidates.filter(row => row.myAction !== null).length;
-  const completedCount = candidates.filter(row => row.status === "COMPLETED").length;
-  let filtered = candidates.filter(row =>
-    (options.tab !== "my-work" || row.myAction !== null) &&
-    (options.tab !== "completed" || row.status === "COMPLETED") &&
-    (options.facility === "all" || row.facilityId === options.facility) &&
-    matchesStatus(row, options.status, new Date()));
+  // Shared filters define the population represented by every tab badge.
+  let shared = candidates.filter(row => options.facility === "all" || row.facilityId === options.facility);
 
   const normalizedQuery = options.query.trim().toLowerCase();
   const nameByPatient = new Map<string, string>();
   if (normalizedQuery) {
-    const unmatched = filtered.filter(row => !`${formatAssessmentReference(row.serialNumber)} ${row.patientReferencePrefix}-${row.patientSerialNumber} ${row.facilityName ?? ""}`.toLowerCase().includes(normalizedQuery));
+    const unmatched = shared.filter(row => !`${formatAssessmentReference(row.serialNumber)} ${row.patientReferencePrefix}-${row.patientSerialNumber} ${row.facilityName ?? ""}`.toLowerCase().includes(normalizedQuery));
     const patientIds = [...new Set(unmatched.map(row => row.patientId))];
     if (patientIds.length) {
       const profiles = await db.select({ id: patients.id, encryptedProfile: patients.encryptedProfile }).from(patients)
         .where(and(eq(patients.organizationId, organizationId), inArray(patients.id, patientIds)));
       for (const profile of profiles) nameByPatient.set(profile.id, (JSON.parse(decryptPatientData(profile.encryptedProfile, key)) as { name: string }).name);
     }
-    filtered = filtered.filter(row => `${formatAssessmentReference(row.serialNumber)} ${row.patientReferencePrefix}-${row.patientSerialNumber} ${nameByPatient.get(row.patientId) ?? ""} ${row.facilityName ?? ""}`.toLowerCase().includes(normalizedQuery));
+    shared = shared.filter(row => `${formatAssessmentReference(row.serialNumber)} ${row.patientReferencePrefix}-${row.patientSerialNumber} ${nameByPatient.get(row.patientId) ?? ""} ${row.facilityName ?? ""}`.toLowerCase().includes(normalizedQuery));
   }
 
-  // Risk categories depend on encrypted review and scoring state. Resolve the full
-  // filtered set only when the user chooses a risk filter.
+  // Risk categories depend on encrypted review and scoring state. Resolve the
+  // shared set only when risk filtering requires counts for every tab.
   let riskById = new Map<string, AssessmentSummary["riskCategory"]>();
-  if (options.risk !== "all" && filtered.length) {
-    riskById = await categoriesForRows(db, organizationId, filtered, key);
-    filtered = filtered.filter(row => riskById.get(row.id) === options.risk);
+  if (options.risk !== "all" && shared.length) {
+    riskById = await categoriesForRows(db, organizationId, shared, key);
+    shared = shared.filter(row => riskById.get(row.id) === options.risk);
   }
+  let allCount = shared.length;
+  let myWorkCount = shared.filter(row => row.myAction !== null).length;
+  let completedCount = shared.filter(row => row.status === "COMPLETED").length;
+  const filtered = shared.filter(row =>
+    (options.tab !== "my-work" || row.myAction !== null) &&
+    (options.tab !== "completed" || row.status === "COMPLETED") &&
+    matchesStatus(row, options.status, new Date()));
   const total = filtered.length;
+  // A tab-specific status filter changes its own badge, while other badges
+  // continue to show the counts reached by the shared filters.
+  if (options.tab === "my-work") myWorkCount = total;
+  else if (options.tab === "completed") completedCount = total;
+  else allCount = total;
   const visible = filtered.slice((options.page - 1) * options.pageSize, options.page * options.pageSize);
   if (options.risk === "all" && visible.length) riskById = await categoriesForRows(db, organizationId, visible, key);
   const missingNames = [...new Set(visible.filter(row => !nameByPatient.has(row.patientId)).map(row => row.patientId))];

@@ -56,12 +56,18 @@ describe.skipIf(process.env.ASSESSMENT_PAGE_TEST !== "1")("assessment page again
   test("filters encrypted names, risk, status, and personal priorities", async () => {
     const names = await service.listAssessmentPage(actor, "org", { ...options, query: "Beta Patient" });
     expect(names.items.map(item => item.id)).toEqual(["high", "legacy"]);
+    expect(names).toMatchObject({ total: 2, allCount: 2, myWorkCount: 1, completedCount: 1 });
     const risk = await service.listAssessmentPage(actor, "org", { ...options, risk: "high" });
-    expect(risk.total).toBe(1);
+    expect(risk).toMatchObject({ total: 1, allCount: 1, myWorkCount: 0, completedCount: 1 });
     expect(risk.items[0]?.id).toBe("high");
     const correction = await service.listAssessmentPage(actor, "org", { ...options, status: "CORRECT_DRAFT" });
     expect(correction.items.map(item => item.id)).toEqual(["legacy"]);
+    expect(correction).toMatchObject({ total: 1, allCount: 1, myWorkCount: 2, completedCount: 2 });
     const priority = await service.listAssessmentPage(actor, "org", { ...options, status: "PRIORITY" });
     expect(priority.items.map(item => item.id)).toEqual(["owned"]);
+    const myWork = await service.listAssessmentPage(actor, "org", { ...options, tab: "my-work", status: "CORRECT_DRAFT" });
+    expect(myWork).toMatchObject({ total: 1, allCount: 4, myWorkCount: 1, completedCount: 2 });
+    const completed = await service.listAssessmentPage(actor, "org", { ...options, tab: "completed", status: "DRAFT" });
+    expect(completed).toMatchObject({ total: 0, allCount: 4, myWorkCount: 2, completedCount: 0 });
   });
 });
