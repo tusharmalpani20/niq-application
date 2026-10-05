@@ -409,6 +409,23 @@ export const patientSchema = z.object({
 });
 
 export const patientListResponseSchema = z.object({ items: z.array(patientSchema) });
+export const patientPageQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(10),
+  facility: z.string().default("all"),
+  gender: z.enum(["all", "Female", "Male", "Other", "Unknown"]).default("all"),
+  sort: z.enum(["registered-newest", "registered-oldest", "assessment-newest", "assessment-oldest"]).default("assessment-newest"),
+  query: z.string().max(200).default(""),
+  registered: z.enum(["all", "this-month"]).default("all"),
+});
+export const patientPageResponseSchema = z.object({
+  items: z.array(patientSchema.extend({ lastAssessmentAt: z.coerce.date().nullable() })),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type PatientPageQuery = z.infer<typeof patientPageQuerySchema>;
+export type PatientPageResponse = z.infer<typeof patientPageResponseSchema>;
 export const createPatientSchema = z.object({
   organizationId: idSchema,
   homeFacilityId: idSchema.nullable().optional(),

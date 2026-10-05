@@ -28,6 +28,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     getScoringOrganizationInfo: async () => ({}),
     createFacility: async () => ({}), listFacilities: async () => [], getFacilityPerformance: async () => ({}), updateFacility: async () => ({}),
     updatePatient: async () => ({}), correctPatientMrn: async () => ({}), correctPatientDob: async () => ({}), updateOrganizationUser: async () => ({}),
+    listPatientPage: async (_actor, _org, options) => ({ items: [], total: 0, page: options.page, pageSize: options.pageSize }),
     createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listAssessments: async () => [], listAssessmentPage: async (_actor, _org, options) => ({ items: [], total: 0, allCount: 0, myWorkCount: 0, completedCount: 0, page: options.page, pageSize: options.pageSize }), getAssessmentPriority: async () => false, setAssessmentPriority: async (_actor, _organizationId, assessmentId, isPriority) => ({ assessmentId, isPriority }), getOverviewRisk: async () => ({ highRiskPatients: 0, highRiskPatients30DaysAgo: 0, assessedPatients: 0, categories: { low: 0, moderate: 0, high: 0 }, categories30DaysAgo: { low: 0, moderate: 0, high: 0 }, highRiskAssessments: [], nutrition: { protein: { assessed: 0, inadequate: 0 }, eatingBarrier: { assessed: 0, top: null } } }), getOverviewSummary: async (_actor, _org, priorityPage, recentPage) => ({ patientCount: 0, patientsAdded30Days: 0, completedCount: 0, completedAdded30Days: 0, myAssessmentActions: 0, readyToSend: 0, correctionsToMake: 0, scoringIssues: 0, priority: { total: 0, page: priorityPage, pageSize: 3, items: [] }, recent: { total: 0, page: recentPage, pageSize: 4, items: [] } }), getOverviewActivity: async () => ({ days: [] }), getOverviewActivityDay: async () => ({ assessmentCount: 0, milestoneCount: 0, pageCount: 0, assessments: [] }),
     invitationAccess: async () => ({ allFacilities: true }), manageUserInvitation: async () => ({ invitation: {}, token: "replacement-token" }),
     inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
@@ -334,6 +335,24 @@ describe("local authentication routes", () => {
     expect(observedOrganization).toBe(principal.organizationId);
     expect(observedReference).toBe("PAT-1");
     expect(await response.json()).toEqual(patient);
+  });
+
+  test("validates and forwards paginated patient filters", async () => {
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({ listPatientPage: async (actor, organizationId, options) => {
+        expect(actor).toEqual(principal);
+        expect(organizationId).toBe(principal.organizationId);
+        expect(options).toEqual({ page: 2, pageSize: 10, facility: "facility-1", gender: "Female", sort: "assessment-oldest", query: "PAT-11", registered: "this-month" });
+        return { items: [], total: 21, page: options.page, pageSize: options.pageSize };
+      } }),
+    });
+    const path = `/v1/organizations/${principal.organizationId}/patients/page`;
+    const response = await app.request(`${path}?page=2&pageSize=10&facility=facility-1&gender=Female&sort=assessment-oldest&query=PAT-11&registered=this-month`, { headers: { cookie: "niq_session=valid-session" } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ items: [], total: 21, page: 2, pageSize: 10 });
+    expect((await app.request(`${path}?page=0`, { headers: { cookie: "niq_session=valid-session" } })).status).toBe(400);
+    expect((await app.request(`${path}?gender=invalid`, { headers: { cookie: "niq_session=valid-session" } })).status).toBe(400);
+    expect((await app.request(path)).status).toBe(401);
   });
 
   test("rejects malformed patient references", async () => {

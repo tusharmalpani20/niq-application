@@ -2,9 +2,9 @@ import { correctPatientDob as correctDob, correctPatientMrn as correctMrn, editP
 import { faceScanSessionSchema } from "../../../../packages/contracts/src/face-scan";
 import { formatAssessmentReference, hasPermission, type Permission } from "@niq/application-contracts";
 import type { ApplicationConfig } from "@niq/application-config";
-import type { AcceptInvitation, ActivateScoring, AssessmentPageQuery, BootstrapAdmin, CorrectPatientDob, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
+import type { AcceptInvitation, ActivateScoring, AssessmentPageQuery, BootstrapAdmin, CorrectPatientDob, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, PatientPageQuery, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
-import { and, desc, eq, gt, gte, inArray, isNull, lt, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, max, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "../db/client";
 import {
@@ -893,6 +893,67 @@ export class PostgresApplicationService implements ApplicationService {
     }).from(patients).leftJoin(facilities, and(eq(facilities.organizationId, patients.organizationId), eq(facilities.id, patients.homeFacilityId)))
       .where(and(eq(patients.organizationId, organizationId), eq(patients.isArchived, false), facilityAccessCondition(actor, organizationId, patients.homeFacilityId))).orderBy(desc(patients.createdAt));
     return rows.map((row) => this.presentPatient(row));
+  }
+  async listPatientPage(actor: Principal, organizationId: string, options: PatientPageQuery) {
+    this.ensureOrganizationAccess(actor, organizationId, "patients.read");
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const conditions = [
+      eq(patients.organizationId, organizationId), eq(patients.isArchived, false),
+      facilityAccessCondition(actor, organizationId, patients.homeFacilityId),
+      ...(options.facility === "all" ? [] : [eq(patients.homeFacilityId, options.facility)]),
+      ...(options.gender === "all" ? [] : [eq(patients.gender, options.gender.toUpperCase() as typeof patients.$inferSelect.gender)]),
+      ...(options.registered === "this-month" ? [gte(patients.createdAt, monthStart), lt(patients.createdAt, nextMonth)] : []),
+    ];
+    const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
+    const normalizedQuery = options.query.trim().toLowerCase();
+    if (normalizedQuery) {
+      // Names are encrypted, so search only the scoped candidate profiles. Full patient data is loaded after paging.
+      const candidates = await this.db.select({
+        id: patients.id, referencePrefix: patients.referencePrefix, serialNumber: patients.serialNumber,
+        encryptedProfile: patients.encryptedProfile, facilityName: facilities.name,
+      }).from(patients)
+        .leftJoin(facilities, and(eq(facilities.organizationId, patients.organizationId), eq(facilities.id, patients.homeFacilityId)))
+        .where(and(...conditions));
+      const ids = candidates.filter(row => {
+        const name = patientProfileSchema.parse(JSON.parse(decryptPatientData(row.encryptedProfile, key))).name;
+        return `${row.referencePrefix}-${row.serialNumber} ${name} ${row.facilityName ?? ""}`.toLowerCase().includes(normalizedQuery);
+      }).map(row => row.id);
+      if (!ids.length) return { items: [], total: 0, page: options.page, pageSize: options.pageSize };
+      conditions.push(inArray(patients.id, ids));
+    }
+    const [{ total } = { total: 0 }] = await this.db.select({ total: count() }).from(patients).where(and(...conditions));
+    if (!total) return { items: [], total: 0, page: options.page, pageSize: options.pageSize };
+    // The date must not reveal assessments outside the actor's visible work. Encrypted
+    // legacy correction assignments cannot be checked in SQL, so they are excluded here.
+    const assessmentScope = actor.platformRole !== "USER" ? sql`false`
+      : actor.role === "ORGANIZATION_ADMIN" ? sql`true`
+      : sql`((${assessments.status} not in ('COMPLETED', 'VOIDED') and ${assessments.currentOwnerMembershipId} = ${actor.membershipId})
+          or (${assessments.status} not in ('COMPLETED', 'VOIDED', 'UNDER_REVIEW') and ${assessments.currentOwnerMembershipId} is null and ${assessments.clinicalReview} is null and ${assessments.createdByMembershipId} = ${actor.membershipId})
+          ${hasPermission(actor.role, "assessments.read") ? sql`or ${assessments.status} in ('UNDER_REVIEW', 'COMPLETED')` : sql``})`;
+    const latest = this.db.select({ patientId: assessments.patientId, lastAssessmentAt: max(assessments.createdAt).as("last_assessment_at") })
+      .from(assessments)
+      .where(and(eq(assessments.organizationId, organizationId), facilityAccessCondition(actor, organizationId, assessments.facilityId), assessmentScope))
+      .groupBy(assessments.patientId).as("latest_assessment");
+    const sortOrder = options.sort === "registered-newest" ? [desc(patients.createdAt)]
+      : options.sort === "registered-oldest" ? [asc(patients.createdAt)]
+      : options.sort === "assessment-oldest" ? [sql`${latest.lastAssessmentAt} asc nulls last`]
+      : [sql`${latest.lastAssessmentAt} desc nulls last`];
+    const rows = await this.db.select({
+      id: patients.id, organizationId: patients.organizationId, referencePrefix: patients.referencePrefix,
+      serialNumber: patients.serialNumber, dateOfBirth: patients.dateOfBirth, gender: patients.gender,
+      encryptedProfile: patients.encryptedProfile, encryptedExternalReference: patients.encryptedExternalReference,
+      facilityId: facilities.id, facilityName: facilities.name,
+      createdAt: patients.createdAt, updatedAt: patients.updatedAt,
+      lastAssessmentAt: latest.lastAssessmentAt,
+    }).from(patients)
+      .leftJoin(facilities, and(eq(facilities.organizationId, patients.organizationId), eq(facilities.id, patients.homeFacilityId)))
+      .leftJoin(latest, eq(latest.patientId, patients.id))
+      .where(and(...conditions))
+      .orderBy(...sortOrder, asc(patients.referencePrefix), sql`${patients.serialNumber}::text`, asc(patients.id))
+      .limit(options.pageSize).offset((options.page - 1) * options.pageSize);
+    return { items: rows.map(row => ({ ...this.presentPatient(row), lastAssessmentAt: row.lastAssessmentAt })), total, page: options.page, pageSize: options.pageSize };
   }
   async getPatient(actor: Principal, organizationId: string, patientLocator: string) {
     this.ensureOrganizationAccess(actor, organizationId, "patients.read");

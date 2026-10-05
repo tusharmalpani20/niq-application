@@ -4,6 +4,8 @@ import type {
   OverviewSummary,
   AssessmentPageQuery,
   AssessmentPageResponse,
+  PatientPageQuery,
+  PatientPageResponse,
   AcceptInvitation,
   ActivateScoring,
   BootstrapAdmin,
@@ -95,6 +97,7 @@ export interface ApplicationService {
   updateOrganizationUser(actor: Principal, organizationId: string, membershipId: string, input: UpdateOrganizationUser, context: RequestContext): Promise<unknown>;
   createPatient(actor: Principal, organizationId: string, input: RegisterPatient, context: RequestContext): Promise<unknown>;
   listPatients(actor: Principal, organizationId: string): Promise<unknown[]>;
+  listPatientPage(actor: Principal, organizationId: string, options: PatientPageQuery): Promise<PatientPageResponse>;
   getPatient(actor: Principal, organizationId: string, patientLocator: string): Promise<unknown>;
   listAssessments(actor: Principal, organizationId: string): Promise<unknown[]>;
   listAssessmentPage(actor: Principal, organizationId: string, options: AssessmentPageQuery): Promise<AssessmentPageResponse>;
