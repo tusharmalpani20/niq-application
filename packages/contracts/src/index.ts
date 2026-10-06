@@ -466,6 +466,19 @@ export const assessmentSummarySchema = z.object({
 
 export const assessmentListResponseSchema = z.object({ items: z.array(assessmentSummarySchema) });
 
+export const patientAssessmentPageQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(10),
+});
+export const patientAssessmentPageResponseSchema = assessmentListResponseSchema.extend({
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  overviewItems: z.array(assessmentSummarySchema),
+});
+export type PatientAssessmentPageQuery = z.infer<typeof patientAssessmentPageQuerySchema>;
+export type PatientAssessmentPageResponse = z.infer<typeof patientAssessmentPageResponseSchema>;
+
 export const assessmentPageQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(10),

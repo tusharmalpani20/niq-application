@@ -74,6 +74,15 @@ describe.skipIf(!process.env.FACILITY_TEST_SOCKET)("facility access against Post
     await expect(service.listPatientAssessments(actor, "org", "PAT-2")).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(service.listPatientAssessments(actor, "other", "PAT-1")).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+  test("pages patient history while keeping overview items", async () => {
+    const page = await service.listPatientAssessmentPage(actor, "org", "PAT-1", { page: 1, pageSize: 1 });
+    expect(page).toMatchObject({ total: 1, page: 1, pageSize: 1 });
+    expect(page.items.map(row => row.id)).toEqual(["assessment-a"]);
+    expect(page.overviewItems.map(row => row.id)).toEqual(["assessment-a"]);
+    const emptyPage = await service.listPatientAssessmentPage(actor, "org", "PAT-1", { page: 2, pageSize: 1 });
+    expect(emptyPage).toMatchObject({ items: [], total: 1, overviewItems: [expect.objectContaining({ id: "assessment-a" })] });
+    await expect(service.listPatientAssessmentPage(actor, "org", "PAT-2", { page: 1, pageSize: 1 })).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
   test("includes all completed assessments at an admin's assigned facilities", async () => {
     await client`update assessments set status = 'COMPLETED', completed_at = now()`;
     try {

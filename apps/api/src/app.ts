@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { acceptInvitationSchema, activateScoringSchema, assessmentPageQuerySchema, bootstrapAdminSchema, correctPatientDobSchema, correctPatientMrnSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, createPlatformAdministratorInvitationSchema, idSchema, onboardOrganizationSchema, organizationSlugSchema, patientPageQuerySchema, patientReferenceSchema, registerPatientSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, updatePatientSchema, updateOrganizationUserSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
+import { acceptInvitationSchema, activateScoringSchema, assessmentPageQuerySchema, bootstrapAdminSchema, correctPatientDobSchema, correctPatientMrnSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, createPlatformAdministratorInvitationSchema, idSchema, onboardOrganizationSchema, organizationSlugSchema, patientAssessmentPageQuerySchema, patientPageQuerySchema, patientReferenceSchema, registerPatientSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, updatePatientSchema, updateOrganizationUserSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
@@ -218,6 +218,10 @@ export function createApp(dependencies: AppDependencies) {
   app.get("/v1/organizations/:organizationId/patients/:patientLocator/assessments", zValidator("param", patientParamsSchema, validationFailure), async (context) => {
     context.header("Cache-Control", "private, no-store");
     return context.json({ items: await dependencies.service!.listPatientAssessments(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").patientLocator) });
+  });
+  app.get("/v1/organizations/:organizationId/patients/:patientLocator/assessments/page", zValidator("param", patientParamsSchema, validationFailure), zValidator("query", patientAssessmentPageQuerySchema, validationFailure), async (context) => {
+    context.header("Cache-Control", "private, no-store");
+    return context.json(jsonValue(await dependencies.service!.listPatientAssessmentPage(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("param").patientLocator, context.req.valid("query"))));
   });
   app.get("/v1/organizations/:organizationId/assessments", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json({ items: await dependencies.service!.listAssessments(context.get("principal"), context.req.valid("param").organizationId) }));
   app.get("/v1/organizations/:organizationId/assessments/page", zValidator("param", idParamsSchema, validationFailure), zValidator("query", assessmentPageQuerySchema, validationFailure), async (context) => {

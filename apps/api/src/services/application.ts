@@ -6,6 +6,8 @@ import type {
   AssessmentPageResponse,
   PatientPageQuery,
   PatientPageResponse,
+  PatientAssessmentPageQuery,
+  PatientAssessmentPageResponse,
   AcceptInvitation,
   ActivateScoring,
   BootstrapAdmin,
@@ -100,6 +102,7 @@ export interface ApplicationService {
   listPatientPage(actor: Principal, organizationId: string, options: PatientPageQuery): Promise<PatientPageResponse>;
   getPatient(actor: Principal, organizationId: string, patientLocator: string): Promise<unknown>;
   listPatientAssessments(actor: Principal, organizationId: string, patientLocator: string): Promise<unknown[]>;
+  listPatientAssessmentPage(actor: Principal, organizationId: string, patientLocator: string, options: PatientAssessmentPageQuery): Promise<PatientAssessmentPageResponse>;
   listAssessments(actor: Principal, organizationId: string): Promise<unknown[]>;
   listAssessmentPage(actor: Principal, organizationId: string, options: AssessmentPageQuery): Promise<AssessmentPageResponse>;
   setAssessmentPriority(actor: Principal, organizationId: string, assessmentId: string, isPriority: boolean): Promise<{ assessmentId: string; isPriority: boolean }>;

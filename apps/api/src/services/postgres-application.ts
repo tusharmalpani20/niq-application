@@ -2,7 +2,7 @@ import { correctPatientDob as correctDob, correctPatientMrn as correctMrn, editP
 import { faceScanSessionSchema } from "../../../../packages/contracts/src/face-scan";
 import { formatAssessmentReference, hasPermission, type Permission } from "@niq/application-contracts";
 import type { ApplicationConfig } from "@niq/application-config";
-import type { AcceptInvitation, ActivateScoring, AssessmentPageQuery, BootstrapAdmin, CorrectPatientDob, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, PatientPageQuery, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
+import type { AcceptInvitation, ActivateScoring, AssessmentPageQuery, BootstrapAdmin, CorrectPatientDob, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, PatientAssessmentPageQuery, PatientPageQuery, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, max, ne, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -983,11 +983,45 @@ export class PostgresApplicationService implements ApplicationService {
     const patient = await this.getPatient(actor, organizationId, patientLocator) as { id: string };
     return this.listAssessmentsForPatient(actor, organizationId, patient.id);
   }
+  async listPatientAssessmentPage(actor: Principal, organizationId: string, patientLocator: string, options: PatientAssessmentPageQuery) {
+    const patient = await this.getPatient(actor, organizationId, patientLocator) as { id: string };
+    this.ensureOrganizationAccess(actor, organizationId, "assessments.list");
+    // Legacy correction ownership is encrypted, so resolve visibility from
+    // lightweight rows before selecting the page's full assessment summaries.
+    const candidates = await this.db.select({
+      id: assessments.id,
+      status: assessments.status,
+      currentOwnerMembershipId: assessments.currentOwnerMembershipId,
+      createdByMembershipId: assessments.createdByMembershipId,
+      clinicalReview: assessments.clinicalReview,
+    }).from(assessments).where(and(
+      eq(assessments.organizationId, organizationId),
+      eq(assessments.patientId, patient.id),
+      facilityAccessCondition(actor, organizationId, assessments.facilityId),
+      assessmentVisibilityCondition(actor),
+    )).orderBy(desc(assessments.createdAt), desc(assessments.id));
+    const visible = candidates.filter(row => this.canSeeAssessmentRow(actor, row));
+    const pageIds = visible.slice((options.page - 1) * options.pageSize, options.page * options.pageSize).map(row => row.id);
+    const overviewIds = [...new Set([
+      ...visible.slice(0, 1).map(row => row.id),
+      ...visible.filter(row => ["SCORED", "UNDER_REVIEW", "COMPLETED"].includes(row.status)).slice(0, 8).map(row => row.id),
+    ])];
+    const summaries = await this.listAssessmentsForPatient(actor, organizationId, patient.id, [...new Set([...pageIds, ...overviewIds])]);
+    const byId = new Map(summaries.map(row => [row.id, row]));
+    return {
+      items: pageIds.flatMap(id => { const row = byId.get(id); return row ? [row] : []; }),
+      total: visible.length,
+      page: options.page,
+      pageSize: options.pageSize,
+      overviewItems: overviewIds.flatMap(id => { const row = byId.get(id); return row ? [row] : []; }),
+    };
+  }
   async listAssessments(actor: Principal, organizationId: string) {
     return this.listAssessmentsForPatient(actor, organizationId);
   }
-  private async listAssessmentsForPatient(actor: Principal, organizationId: string, patientId?: string) {
+  private async listAssessmentsForPatient(actor: Principal, organizationId: string, patientId?: string, assessmentIds?: string[]) {
     this.ensureOrganizationAccess(actor, organizationId, "assessments.list");
+    if (assessmentIds && assessmentIds.length === 0) return [];
     const rows = await this.db.select({
       id: assessments.id,
       serialNumber: assessments.serialNumber,
@@ -1013,8 +1047,8 @@ export class PostgresApplicationService implements ApplicationService {
       .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
       .leftJoin(facilities, and(eq(facilities.organizationId, assessments.organizationId), eq(facilities.id, assessments.facilityId)))
       .leftJoin(assessmentPriorities, and(eq(assessmentPriorities.organizationId, assessments.organizationId), eq(assessmentPriorities.assessmentId, assessments.id), eq(assessmentPriorities.membershipId, actor.membershipId)))
-      .where(and(eq(assessments.organizationId, organizationId), patientId ? eq(assessments.patientId, patientId) : undefined, facilityAccessCondition(actor, organizationId, assessments.facilityId), assessmentVisibilityCondition(actor)))
-      .orderBy(desc(assessments.createdAt));
+      .where(and(eq(assessments.organizationId, organizationId), patientId ? eq(assessments.patientId, patientId) : undefined, assessmentIds ? inArray(assessments.id, assessmentIds) : undefined, facilityAccessCondition(actor, organizationId, assessments.facilityId), assessmentVisibilityCondition(actor)))
+      .orderBy(desc(assessments.createdAt), desc(assessments.id));
     const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
     const visibleRows = rows.filter(row => {
       if (row.currentOwnerMembershipId !== null || !row.clinicalReview) return canSeeAssessment(row, actor);
