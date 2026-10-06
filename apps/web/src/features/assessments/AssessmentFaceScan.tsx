@@ -21,6 +21,17 @@ const labels: Record<FaceScanSession["state"], string> = {
 };
 const terminal = new Set(["COMPLETED", "FAILED", "EXPIRED", "CANCELLED"]);
 const cancellable = new Set(["REQUESTED", "UPLOAD_ACCEPTED", "PAUSED"]);
+function failedScanMessage(code: string | null): string {
+  switch (code) {
+    case "MONTHLY_LIMIT_REACHED": return "The monthly face-scan limit has been reached. The camera cannot start until the limit resets or an administrator increases it. You can continue the questionnaire.";
+    case "CAPABILITY_DISABLED": case "FACE_SCAN_DISABLED": return "Face scanning is not enabled for this scoring connection. Ask your administrator to check access before trying again.";
+    case "FACE_SCAN_MAPPING_UNAVAILABLE": return "The face-scan scoring rule is unavailable. Ask your administrator to check the scoring setup before trying again.";
+    case "UNAUTHORIZED": case "CLIENT_NOT_ALLOWED": return "The scan service rejected this connection. Ask your administrator to check its credentials and access before trying again.";
+    case "DEVICE_NOT_SUPPORTED": return "This device is not supported by the scan service. Try a supported device before starting another scan.";
+    case "SCAN_NOT_SUBMITTED": return "The previous scan was not submitted. Check camera access and keep this page open while trying again.";
+    default: return code ? `The scan could not start or finish (${code}). Contact support if it happens again.` : "The scan didn’t finish. Please try again.";
+  }
+}
 export type MissingScanInput = "dob" | "gender" | "heightCm" | "weightKg";
 export function missingScanInputs(record: AssessmentWorkflow): MissingScanInput[] {
   const parsed = faceScanContextSchema.safeParse({
@@ -267,6 +278,9 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   }
   const canStart = !session || terminal.has(session.state) || session.state === "REQUESTED";
   const noRecordedScan = !!data && record.status !== "DRAFT" && !session && data.sessions.length === 0;
+  const startButtonLabel = session?.state === "REQUESTED" ? "Resume capture"
+    : session?.state === "FAILED" ? session.failureCode === "MONTHLY_LIMIT_REACHED" ? "Retry after limit resets" : "Try again"
+    : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start face scan";
   return <div hidden={!active} className="space-y-5">
     {!data && !stale && <p role="status">Loading face scan…</p>}
     {stale && <div role="alert" className="space-y-2"><p>Scan status could not be refreshed. Any accepted scan continues processing.</p><Button variant="outline" onPress={() => { void refresh().catch(() => setStale(true)); }}>Refresh scan status</Button></div>}
@@ -280,7 +294,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {session && session.state !== "UPLOAD_ACCEPTED" && session.state !== "PROCESSING" && !(session.state === "COMPLETED" && session.result) && <p role="status" className="font-medium">{statusLabel}{stale ? " · Last known status" : ""}</p>}
     {session?.state === "RECONCILIATION_REQUIRED" && <p className="text-sm text-muted-foreground">{rejected ? "The scan could not be processed. Please contact support before trying again. You can continue filling in the form." : "Your scan result is not available. You can continue filling in the form. Please contact support before trying another scan."}</p>}
     {session?.state === "PAUSED" && <p className="text-sm text-muted-foreground">The service has paused this scan. Its saved status will update when processing can continue.</p>}
-    {session?.state === "FAILED" && <p className="text-sm text-muted-foreground">The scan didn’t finish. Please try again.</p>}
+    {session?.state === "FAILED" && <p className="text-sm text-muted-foreground">{failedScanMessage(session.failureCode)}</p>}
     {session?.state === "EXPIRED" && <p className="text-sm text-muted-foreground">The attempt started on {new Date(session.createdAt).toLocaleString()} ended before analysis, so there is no measurement from that attempt. This record remains in the scan history. A new scan would measure the patient at a new time.</p>}
     {session?.state === "COMPLETED" && record.status === "DRAFT" && <p className="text-sm text-muted-foreground">{hasUsableFaceScan(session) ? "The saved face scan is retained. Scan again only if a new measurement is needed." : "This scan did not produce a usable result. Scan again before submitting the assessment."}</p>}
     {changedScanInputs.length > 0 && <p role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm">The saved scan used different {changedScanInputs.join(", ")}. Its results still reflect the original scan details shown below; changing questionnaire answers does not update those results.</p>}
@@ -291,7 +305,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
         <summary className="cursor-pointer text-sm font-medium">{previous.state === "COMPLETED" ? "Completed scan" : labels[previous.state]} · {new Date(previous.completedAt ?? previous.createdAt).toLocaleString()}</summary>
         <div className="pt-3">{previous.state === "COMPLETED" && previous.result
           ? <FaceScanResults session={previous}/>
-          : <p className="text-sm text-muted-foreground">This attempt did not produce a measurement.</p>}</div>
+          : <p className="text-sm text-muted-foreground">{previous.state === "FAILED" ? failedScanMessage(previous.failureCode) : "This attempt did not produce a measurement."}</p>}</div>
       </details>)}
     </section>}
     {createPortal(<div hidden={phase !== "capturing" && phase !== "preparing"} className="face-scan-capture-overlay" role="dialog" aria-modal="true" aria-label="Face scan camera">
@@ -319,7 +333,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
       <div className="space-y-2"><p className="text-sm font-medium">Posture <span aria-hidden="true" className="text-destructive">*</span></p><ChoiceGroup id="face-scan-posture" label="Posture" options={scanPostureOptions} value={selectedPosture} onChange={value => { setPosture(value as ScanPosture); }} required disabled={disabled || session?.state === "REQUESTED" || (startKey.current !== null && !terminal.has(session?.state ?? ""))} iconTiles renderIcon={optionId => optionId === "resting" ? <Armchair className="size-6" strokeWidth={2} /> : <PersonStanding className="size-6" strokeWidth={2} />} /></div>
       {session?.state === "REQUESTED" && <p className="text-sm">This attempt uses {session.context.heightCm} cm and {session.context.weightKg} kg, {scanPostureLabels[session.context.posture].toLowerCase()}. Cancel it to use changed details.</p>}
       <p role="status" className="text-sm text-muted-foreground">{consentApproval?.assessmentId !== record.id ? "Checking patient consent…" : consentReady ? "Patient consent recorded" : "Patient consent needed before capture"}</p>
-      <div className="flex flex-wrap gap-3"><Button className="min-h-11 w-full border border-primary font-semibold shadow-sm disabled:border-primary/50 disabled:bg-background disabled:text-foreground disabled:opacity-100 data-disabled:border-primary/50 data-disabled:bg-background data-disabled:text-foreground data-disabled:opacity-100" isDisabled={disabled || !selectedPosture || stale} onPress={openConsent}><ScanFace className="size-4" aria-hidden="true"/>{session?.state === "REQUESTED" ? "Resume capture" : session?.state === "FAILED" ? "Try again" : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start face scan"}</Button>{session?.state === "COMPLETED" && <Button variant="outline" onPress={() => { setRescanRequested(false); }}>Keep current results</Button>}{session?.state === "REQUESTED" && <Button variant="outline" isDisabled={disabled} onPress={() => { void cancel(); }}>Cancel attempt</Button>}</div>
+      <div className="flex flex-wrap gap-3"><Button className="min-h-11 w-full border border-primary font-semibold shadow-sm disabled:border-primary/50 disabled:bg-background disabled:text-foreground disabled:opacity-100 data-disabled:border-primary/50 data-disabled:bg-background data-disabled:text-foreground data-disabled:opacity-100" isDisabled={disabled || !selectedPosture || stale} onPress={openConsent}><ScanFace className="size-4" aria-hidden="true"/>{startButtonLabel}</Button>{session?.state === "COMPLETED" && <Button variant="outline" onPress={() => { setRescanRequested(false); }}>Keep current results</Button>}{session?.state === "REQUESTED" && <Button variant="outline" isDisabled={disabled} onPress={() => { void cancel(); }}>Cancel attempt</Button>}</div>
       {consentOpen && <Dialog isOpen ariaLabel="Patient consent before face scan" className="facility-dialog face-scan-consent-dialog" onOpenChange={open => { if (!open) cameraCheckVersion.current++; setConsentOpen(open); }}>
         <DialogHeader><DialogTitle className="text-lg font-semibold">Before the face scan</DialogTitle></DialogHeader>
         <div className="facility-dialog-fields min-h-0 overflow-y-auto">
