@@ -15,7 +15,7 @@ import { getFaceScanConsent } from "./face-scan-consent-api";
 
 type Phase = "idle" | "preparing" | "capturing" | "uploading" | "upload_failed";
 const labels: Record<FaceScanSession["state"], string> = {
-  REQUESTED: "Ready to capture", UPLOAD_ACCEPTED: "Scan queued for analysis", PROCESSING: "Processing scan",
+  REQUESTED: "Ready to capture", UPLOAD_ACCEPTED: "Scan being processed", PROCESSING: "Scan being processed",
   COMPLETED: "Scan complete", RECONCILIATION_REQUIRED: "Scan result unavailable", FAILED: "Scan failed",
   EXPIRED: "No scan result", CANCELLED: "Scan cancelled", PAUSED: "Scan paused",
 };
@@ -314,7 +314,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {session && (session.state === "UPLOAD_ACCEPTED" || session.state === "PROCESSING") && <div role="status" aria-label="Scan analysis status" className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
       <LoaderCircle className="mt-0.5 size-5 shrink-0 animate-spin text-primary motion-reduce:animate-none" aria-hidden="true" />
-      <div><p className="font-semibold">{statusLabel}{stale ? " · Last known status" : ""}</p><p className="mt-1 text-sm text-muted-foreground">{session.state === "UPLOAD_ACCEPTED" ? "Your scan is saved and waiting for analysis to begin." : "Your scan is being analysed. Results will appear here when ready."} You can continue the questionnaire.</p></div>
+      <div><p className="font-semibold">{statusLabel}{stale ? " · Last known status" : ""}</p><p className="mt-1 text-sm text-muted-foreground">You can continue the questionnaire. Results will appear here when ready.</p></div>
     </div>}
     {session && session.state !== "UPLOAD_ACCEPTED" && session.state !== "PROCESSING" && !(session.state === "COMPLETED" && session.result) && <p role="status" className="font-medium">{statusLabel}{stale ? " · Last known status" : ""}</p>}
     {session?.state === "RECONCILIATION_REQUIRED" && <p className="text-sm text-muted-foreground">{rejected ? "The scan could not be processed. Please contact support before trying again. You can continue filling in the form." : "Your scan result is not available. You can continue filling in the form. Please contact support before trying another scan."}</p>}

@@ -304,7 +304,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   }
   const index = tabs.findIndex(tab => tab.id === sectionId);
   const locked = busy || reportBusy || scanBusy || reviewBusy || conflict;
-  const scanStepStatus = scanStatus === "Scan complete" ? "Done" : scanStatus === "Face scan ready" ? "Pending" : scanStatus === "Capturing scan" ? "Capturing" : scanStatus === "Preparing scan" ? "Preparing" : scanStatus === "Uploading scan" ? "Uploading" : scanStatus.replace(/^Face scan |^Scan /, "");
+  const scanStepStatus = scanStatus === "Scan complete" ? "Done" : scanStatus === "Face scan ready" ? "Pending" : scanStatus === "Scan being processed" ? "Processing" : scanStatus === "Capturing scan" ? "Capturing" : scanStatus === "Preparing scan" ? "Preparing" : scanStatus === "Uploading scan" ? "Uploading" : scanStatus.replace(/^Face scan |^Scan /, "");
   const issueSections = new Set<string>();
   if (!scored) {
     for (const section of record.manifest.sections) {
