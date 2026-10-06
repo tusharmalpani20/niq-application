@@ -4,6 +4,7 @@ import {
   check,
   date,
   customType,
+  doublePrecision,
   foreignKey,
   index,
   integer,
@@ -426,6 +427,8 @@ export const assessments = pgTable(
     cycle: integer("cycle").notNull().default(0),
     scoredAt: timestamp("scored_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    finalScore: doublePrecision("final_score"),
+    finalRiskCategory: text("final_risk_category").$type<"low" | "moderate" | "high">(),
     ...timestamps,
   },
   (table): PgTableExtraConfigValue[] => [
@@ -438,6 +441,9 @@ export const assessments = pgTable(
     index("assessments_org_current_owner_idx").on(table.organizationId, table.currentOwnerMembershipId),
     index("assessments_overview_patient_recent_idx").on(table.organizationId, table.patientId, table.createdAt),
     index("assessments_overview_completed_idx").on(table.organizationId, table.completedAt).where(sql`${table.status} = 'COMPLETED'`),
+    index("assessments_completed_patient_latest_idx").on(table.organizationId, table.patientId, table.completedAt.desc(), table.id.desc()).where(sql`${table.status} = 'COMPLETED'`),
+    check("assessments_final_score_ck", sql`${table.finalScore} IS NULL OR (${table.finalScore} >= 0 AND ${table.finalScore} <= 9007199254740991)`),
+    check("assessments_final_risk_category_ck", sql`${table.finalRiskCategory} IS NULL OR ${table.finalRiskCategory} IN ('low', 'moderate', 'high')`),
     foreignKey({
       name: "assessments_org_patient_fk",
       columns: [table.organizationId, table.patientId],

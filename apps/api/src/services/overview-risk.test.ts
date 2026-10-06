@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { countOverviewRisk, overviewRiskNutritionTargets, riskCategoryFromFinalSnapshot } from "./overview-risk";
+import { countOverviewRisk, countOverviewRiskCategories, finalResultFromSnapshot, overviewRiskNutritionTargets, riskCategoryFromFinalSnapshot } from "./overview-risk";
 
 const row = (id: string, patientId: string, date: string, status: string, classification: { id: string; label: string } | null) => ({
   id, patientId, completedAt: new Date(date), clinicalReview: { finalSnapshot: { score: { risk: { status, classification } } } },
@@ -9,6 +9,23 @@ test("list filtering uses the reviewed category and ignores unavailable classifi
   expect(riskCategoryFromFinalSnapshot(row("1", "one", "2026-09-01", "CONFIRMED", { id: "high_risk", label: "High Risk" }).clinicalReview.finalSnapshot)).toBe("high");
   expect(riskCategoryFromFinalSnapshot(row("2", "two", "2026-09-01", "PENDING", { id: "high", label: "High Risk" }).clinicalReview.finalSnapshot)).toBeNull();
   expect(riskCategoryFromFinalSnapshot(null)).toBeNull();
+});
+
+test("materializes the clinician-approved score and category from the final snapshot", () => {
+  expect(finalResultFromSnapshot({ score: { overall: { reviewedPoints: 72.5 }, risk: { status: "CONFIRMED", classification: { id: "high_risk", label: "High Risk" } } } }))
+    .toEqual({ finalScore: 72.5, finalRiskCategory: "high" });
+  expect(finalResultFromSnapshot({ score: { overall: { reviewedPoints: null }, risk: { status: "UNAVAILABLE", classification: null } } }))
+    .toEqual({ finalScore: null, finalRiskCategory: null });
+});
+
+test("saved categories count without decrypting completed reviews", () => {
+  const rows = [
+    { ...row("01", "one", "2026-09-01", "CONFIRMED", { id: "high", label: "High Risk" }), clinicalReview: null, finalRiskCategory: "high" as const },
+    { ...row("02", "one", "2026-09-02", "CONFIRMED", { id: "low", label: "Low Risk" }), clinicalReview: null, finalRiskCategory: "low" as const },
+  ];
+  expect(countOverviewRiskCategories(rows, () => { throw new Error("Unexpected decrypt"); }, new Date("2026-09-30"))).toMatchObject({
+    highRiskPatients: 0, categories: { low: 1, moderate: 0, high: 0 },
+  });
 });
 
 test("counts one confirmed high risk category per patient from the latest completed assessment", () => {

@@ -236,6 +236,10 @@ export function createApp(dependencies: AppDependencies) {
     context.header("Cache-Control", "private, no-store");
     return context.json(await dependencies.service!.getOverviewRisk(context.get("principal"), context.req.valid("param").organizationId));
   });
+  app.get("/v1/organizations/:organizationId/overview-nutrition", zValidator("param", idParamsSchema, validationFailure), async (context) => {
+    context.header("Cache-Control", "private, no-store");
+    return context.json(await dependencies.service!.getOverviewNutrition(context.get("principal"), context.req.valid("param").organizationId));
+  });
   app.get("/v1/organizations/:organizationId/overview-summary", zValidator("param", idParamsSchema, validationFailure), zValidator("query", z.object({ priorityPage: z.coerce.number().int().min(1).max(100000).default(1), recentPage: z.coerce.number().int().min(1).max(100000).default(1) }), validationFailure), async (context) => {
     context.header("Cache-Control", "private, no-store");
     const { priorityPage, recentPage } = context.req.valid("query");

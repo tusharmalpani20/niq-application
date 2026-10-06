@@ -39,7 +39,7 @@ import { facilityAccessCondition } from "./facility-access";
 import { assessmentVisibilityCondition, canSeeAssessment } from "./assessment-access";
 import { facilityTrend } from "./facility-performance";
 import { requestScoringOrganizationInfo, ScoringOrganizationInfoRequestError } from "./scoring-organization-info";
-import { countOverviewRisk, overviewRiskNutritionTargets } from "./overview-risk";
+import { countOverviewNutrition, countOverviewRisk, countOverviewRiskCategories, overviewRiskNutritionTargets } from "./overview-risk";
 import { loadOverviewSummary } from "./overview-summary";
 import { loadAssessmentRiskCategories } from "./assessment-risk-categories";
 import { myAssessmentAction } from "./my-assessment-action";
@@ -786,7 +786,7 @@ export class PostgresApplicationService implements ApplicationService {
       this.db.select({ projection: assessmentFaceScans.projection }).from(assessmentFaceScans)
         .innerJoin(assessments, and(eq(assessments.organizationId, assessmentFaceScans.organizationId), eq(assessments.id, assessmentFaceScans.assessmentId)))
         .where(and(eq(assessmentFaceScans.organizationId, organizationId), eq(assessments.facilityId, facilityId), eq(assessmentFaceScans.state, "COMPLETED"))),
-      this.db.select({ id: assessments.id, patientId: assessments.patientId, completedAt: assessments.completedAt, clinicalReview: assessments.clinicalReview }).from(assessments)
+      this.db.select({ id: assessments.id, patientId: assessments.patientId, completedAt: assessments.completedAt, clinicalReview: assessments.clinicalReview, finalRiskCategory: assessments.finalRiskCategory }).from(assessments)
         .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
         .where(and(eq(assessments.organizationId, organizationId), eq(assessments.facilityId, facilityId), eq(assessments.status, "COMPLETED"), eq(patients.isArchived, false), facilityAccessCondition(actor, organizationId, patients.homeFacilityId))),
     ]);
@@ -994,6 +994,7 @@ export class PostgresApplicationService implements ApplicationService {
       currentOwnerMembershipId: assessments.currentOwnerMembershipId,
       createdByMembershipId: assessments.createdByMembershipId,
       clinicalReview: assessments.clinicalReview,
+      finalRiskCategory: assessments.finalRiskCategory,
     }).from(assessments).where(and(
       eq(assessments.organizationId, organizationId),
       eq(assessments.patientId, patient.id),
@@ -1039,6 +1040,7 @@ export class PostgresApplicationService implements ApplicationService {
       createdByMembershipId: assessments.createdByMembershipId,
       currentOwnerMembershipId: assessments.currentOwnerMembershipId,
       clinicalReview: assessments.clinicalReview,
+      finalRiskCategory: assessments.finalRiskCategory,
       createdAt: assessments.createdAt,
       updatedAt: assessments.updatedAt,
       completedAt: assessments.completedAt,
@@ -1127,7 +1129,32 @@ export class PostgresApplicationService implements ApplicationService {
       id: assessments.id,
       patientId: assessments.patientId,
       completedAt: assessments.completedAt,
+      finalRiskCategory: assessments.finalRiskCategory,
+      // Legacy rows without a saved category still use their sealed final review.
+      clinicalReview: sql<unknown>`case when ${assessments.finalRiskCategory} is null then ${assessments.clinicalReview} else null end`,
+    }).from(assessments)
+      .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
+      .where(and(
+        eq(assessments.organizationId, organizationId), eq(assessments.status, "COMPLETED"),
+        eq(patients.isArchived, false),
+        facilityAccessCondition(actor, organizationId, patients.homeFacilityId),
+        facilityAccessCondition(actor, organizationId, assessments.facilityId),
+      ));
+    const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
+    return countOverviewRiskCategories(rows, value => {
+      const encrypted = (value as { encrypted?: string })?.encrypted;
+      if (!encrypted) throw new ServiceError("CONFLICT", "Assessment review data could not be read.");
+      return JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key));
+    });
+  }
+  async getOverviewNutrition(actor: Principal, organizationId: string) {
+    this.ensureOrganizationAccess(actor, organizationId, "assessments.read");
+    const rows = await this.db.select({
+      id: assessments.id,
+      patientId: assessments.patientId,
+      completedAt: assessments.completedAt,
       clinicalReview: assessments.clinicalReview,
+      finalRiskCategory: assessments.finalRiskCategory,
       currentSubmissionId: assessments.currentSubmissionId,
     }).from(assessments)
       .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
@@ -1163,7 +1190,7 @@ export class PostgresApplicationService implements ApplicationService {
       inArray(assessmentSubmissions.id, submissionIds),
     )) : [];
     const bySubmissionId = new Map(submissions.map(submission => [submission.id, submission]));
-    return countOverviewRisk(rows.map(row => ({
+    return countOverviewNutrition(rows.map(row => ({
       ...row,
       submissionResult: row.currentSubmissionId ? bySubmissionId.get(row.currentSubmissionId)?.result : null,
       submissionSnapshot: row.currentSubmissionId ? bySubmissionId.get(row.currentSubmissionId)?.snapshot : null,

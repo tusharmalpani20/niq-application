@@ -12,6 +12,7 @@ import { reviewState, canAdjustClinicalScore, appendAssessmentHistory } from "./
 import { AssessmentScoreReviewService } from "./assessment-score-reviews";
 import { loadAssessmentRiskCategories, type AssessmentRiskCategory } from "./assessment-risk-categories";
 import { publishWorkspaceChange, type NotificationRecipient } from "./workspace-notifications";
+import { finalResultFromSnapshot } from "./overview-risk";
 const clinicalRoles:MembershipRole[]=["DOCTOR","NUTRITIONIST","OTHER_MEDICAL"];
 export class ClinicalReviewService {
  constructor(private service:AssessmentWorkflowService){}
@@ -144,7 +145,10 @@ export class ClinicalReviewService {
    }
    s.revision++;s.history.push({id:createEntityId(),action:input.action,revision:s.revision,cycle,actor:{membershipId:actor.membershipId,displayName:actor.displayName,role:actor.role as MembershipRole},assignee:s.correctionPerson??s.assignee,createdAt:now.toISOString(),...("reason"in input?{reason:input.reason}:{}),...("remark"in input?{remark:input.remark}:{})});
    await appendAssessmentHistory(this.service,tx,row,actor,input.action,{command:input,from,to:{status,assignee:s.assignee,correctionPerson:s.correctionPerson,currentOwnerMembershipId},workflow:this.service.unseal(row.workflow),score,scans},input.requestKey);
-   const [updated]=await tx.update(assessments).set({status,cycle,currentSubmissionId,workflow,clinicalReview:this.service.seal(s),assignedToMembershipId:s.assignee?.membershipId??null,currentOwnerMembershipId,revision:row.revision+1,completedAt,updatedAt:now}).where(and(eq(assessments.id,id),eq(assessments.organizationId,org))).returning();
+   const finalResult = input.action === "COMPLETE" ? finalResultFromSnapshot({ score }) : null;
+   const finalScore = finalResult ? finalResult.finalScore : status === "COMPLETED" ? row.finalScore : null;
+   const finalRiskCategory = finalResult ? finalResult.finalRiskCategory : status === "COMPLETED" ? row.finalRiskCategory : null;
+   const [updated]=await tx.update(assessments).set({status,cycle,currentSubmissionId,workflow,clinicalReview:this.service.seal(s),assignedToMembershipId:s.assignee?.membershipId??null,currentOwnerMembershipId,revision:row.revision+1,completedAt,finalScore,finalRiskCategory,updatedAt:now}).where(and(eq(assessments.id,id),eq(assessments.organizationId,org))).returning();
    await this.service.audit(tx,actor,context,id,`CLINICAL_REVIEW_${input.action}`,{cycle,revision:s.revision,assigneeId:s.assignee?.membershipId??null,correctionPersonId:s.correctionPerson?.membershipId??null,currentOwnerMembershipId});
    const reference=formatAssessmentReference(row.serialNumber);
    const notify=(membershipId:string,kind:NotificationRecipient["kind"]):NotificationRecipient=>({membershipId,kind,reference});

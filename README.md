@@ -20,6 +20,9 @@ Prerequisites: Bun 1.4 and PostgreSQL 16 or later. The application does not star
 cp .env.example .env
 bun install
 bun run db:migrate
+
+# After this release's migration, populate approved results from encrypted reviews.
+bun --env-file=.env run db:backfill-final-results
 bun run dev
 ```
 

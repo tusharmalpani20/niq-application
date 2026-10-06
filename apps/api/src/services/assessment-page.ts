@@ -127,7 +127,7 @@ export async function listAssessmentPage(db: Database, actor: Principal, organiz
 }
 
 async function categoriesForRows(db: Database, organizationId: string, rows: Candidate[], key: Buffer) {
-  const details = await db.select({ id: assessments.id, status: assessments.status, currentSubmissionId: assessments.currentSubmissionId, clinicalReview: assessments.clinicalReview })
+  const details = await db.select({ id: assessments.id, status: assessments.status, currentSubmissionId: assessments.currentSubmissionId, clinicalReview: assessments.clinicalReview, finalRiskCategory: assessments.finalRiskCategory })
     .from(assessments).where(and(eq(assessments.organizationId, organizationId), inArray(assessments.id, rows.map(row => row.id))));
   return loadAssessmentRiskCategories(db, organizationId, details, <T>(value: unknown) => unseal<T>(value, key));
 }

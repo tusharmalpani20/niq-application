@@ -1,6 +1,7 @@
 import type {
   MembershipRole,
   OverviewRisk,
+  OverviewNutrition,
   OverviewSummary,
   AssessmentPageQuery,
   AssessmentPageResponse,
@@ -108,6 +109,7 @@ export interface ApplicationService {
   setAssessmentPriority(actor: Principal, organizationId: string, assessmentId: string, isPriority: boolean): Promise<{ assessmentId: string; isPriority: boolean }>;
   getAssessmentPriority(actor: Principal, organizationId: string, assessmentId: string): Promise<boolean>;
   getOverviewRisk(actor: Principal, organizationId: string): Promise<OverviewRisk>;
+  getOverviewNutrition(actor: Principal, organizationId: string): Promise<OverviewNutrition>;
   getOverviewSummary(actor: Principal, organizationId: string, priorityPage: number, recentPage: number): Promise<OverviewSummary>;
   getOverviewActivity(actor: Principal, organizationId: string, from: Date, to: Date, timeZone: string): Promise<{ days: { day: string; assessmentCount: number; milestoneCount: number; actions: ("ASSESSMENT_CREATED" | "ASSESSMENT_SUBMITTED" | "CLINICAL_REVIEW_COMPLETE")[] }[] }>;
   getOverviewActivityDay(actor: Principal, organizationId: string, from: Date, to: Date, page: number): Promise<{ assessmentCount: number; milestoneCount: number; pageCount: number; assessments: { assessmentId: string; reference: string; patientDisplayName: string; milestones: { action: "ASSESSMENT_CREATED" | "ASSESSMENT_SUBMITTED" | "CLINICAL_REVIEW_COMPLETE"; occurredAt: Date }[] }[] }>;

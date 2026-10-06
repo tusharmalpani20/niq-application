@@ -8,6 +8,7 @@
     "check": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:backfill-final-results": "bun src/backfill-assessment-final-results.ts",
     "dev": "bun --watch src/index.ts",
     "start": "bun dist/index.js",
     "test": "bun test"

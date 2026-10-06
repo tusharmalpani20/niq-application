@@ -7,14 +7,16 @@ import { hasQuestionnaireOverrides } from "./assessment-reviewed-risk";
 import { riskCategoryFromFinalSnapshot } from "./overview-risk";
 
 export type AssessmentRiskCategory = "low" | "moderate" | "high";
-type Candidate = { id: string; status: string; currentSubmissionId: string | null; clinicalReview?: unknown };
+type Candidate = { id: string; status: string; currentSubmissionId: string | null; clinicalReview?: unknown; finalRiskCategory?: AssessmentRiskCategory | null };
 type Unseal = <T>(value: unknown) => T;
 
 /** Resolve current scoring risk in bulk, before a list or review queue is paginated. */
 export async function loadAssessmentRiskCategories(db: Database, organizationId: string, rows: Candidate[], unseal: Unseal) {
   const categories = new Map<string, AssessmentRiskCategory | null>();
   for (const row of rows) {
-    if (row.status === "COMPLETED" && row.clinicalReview) {
+    if (row.status === "COMPLETED" && row.finalRiskCategory) {
+      categories.set(row.id, row.finalRiskCategory);
+    } else if (row.status === "COMPLETED" && row.clinicalReview) {
       const review = unseal<{ finalSnapshot?: unknown }>(row.clinicalReview);
       categories.set(row.id, riskCategoryFromFinalSnapshot(review.finalSnapshot));
     }

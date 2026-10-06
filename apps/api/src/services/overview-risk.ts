@@ -1,8 +1,11 @@
+import type { OverviewNutrition, OverviewRisk } from "@niq/application-contracts";
+
 type CompletedAssessment = {
   id: string;
   patientId: string;
   completedAt: Date | null;
   clinicalReview: unknown;
+  finalRiskCategory?: "low" | "moderate" | "high" | null;
   submissionResult?: unknown;
   submissionSnapshot?: unknown;
 };
@@ -47,7 +50,17 @@ export function riskCategoryFromFinalSnapshot(snapshot: unknown): "low" | "moder
   return null;
 }
 
+export function finalResultFromSnapshot(snapshot: unknown) {
+  const score = (snapshot as { score?: { overall?: { reviewedPoints?: number | null } } } | null)?.score?.overall?.reviewedPoints ?? null;
+  if (score !== null && (!Number.isFinite(score) || score < 0 || score > Number.MAX_SAFE_INTEGER)) {
+    throw new Error("Invalid final assessment score");
+  }
+  return { finalScore: score, finalRiskCategory: riskCategoryFromFinalSnapshot(snapshot) };
+}
+
 function category(row: CompletedAssessment, unseal: (value: unknown) => StoredData): "low" | "moderate" | "high" | null {
+  // Rows created before the summary backfill still use the sealed final snapshot.
+  if (row.finalRiskCategory) return row.finalRiskCategory;
   return row.clinicalReview ? riskCategoryFromFinalSnapshot(unseal(row.clinicalReview).finalSnapshot) : null;
 }
 
@@ -64,7 +77,7 @@ export function overviewRiskNutritionTargets(rows: CompletedAssessment[], unseal
 }
 
 /** The newest completed assessment decides each patient's current category, even if its category is unavailable. */
-export function countOverviewRisk(
+export function countOverviewRiskCategories(
   rows: CompletedAssessment[],
   unseal: (value: unknown) => StoredData,
   now: Date = new Date(),
@@ -74,9 +87,6 @@ export function countOverviewRisk(
   const latest30DaysAgo = latestAssessments(rows, cutoff);
   const categories = { low: 0, moderate: 0, high: 0 };
   const highRiskAssessments: { patientId: string; assessmentId: string }[] = [];
-  const protein = { assessed: 0, inadequate: 0 };
-  let eatingBarrierAssessed = 0;
-  const barrierCounts = new Map<string, { id: string; label: string; count: number }>();
   let assessedPatients = 0;
   for (const row of latest.values()) {
     const riskCategory = category(row, unseal);
@@ -84,6 +94,22 @@ export function countOverviewRisk(
     assessedPatients++;
     categories[riskCategory]++;
     if (riskCategory === "high") highRiskAssessments.push({ patientId: row.patientId, assessmentId: row.id });
+  }
+  const categories30DaysAgo = { low: 0, moderate: 0, high: 0 };
+  for (const row of latest30DaysAgo.values()) {
+    const riskCategory = category(row, unseal);
+    if (riskCategory) categories30DaysAgo[riskCategory]++;
+  }
+  return { highRiskPatients: categories.high, assessedPatients, highRiskPatients30DaysAgo: categories30DaysAgo.high, categories, categories30DaysAgo, highRiskAssessments };
+}
+
+export function countOverviewNutrition(rows: CompletedAssessment[], unseal: (value: unknown) => StoredData): OverviewNutrition {
+  const protein = { assessed: 0, inadequate: 0 };
+  let eatingBarrierAssessed = 0;
+  const barrierCounts = new Map<string, { id: string; label: string; count: number }>();
+  for (const row of latestAssessments(rows).values()) {
+    const riskCategory = category(row, unseal);
+    if (riskCategory === null) continue;
     if (row.submissionResult) {
       const adequacy = unseal(row.submissionResult).derived?.proteinAdequacy;
       if (adequacy === "adequate" || adequacy === "inadequate") {
@@ -106,13 +132,10 @@ export function countOverviewRisk(
       }
     }
   }
-  const categories30DaysAgo = { low: 0, moderate: 0, high: 0 };
-  for (const row of latest30DaysAgo.values()) {
-    const riskCategory = category(row, unseal);
-    if (riskCategory) categories30DaysAgo[riskCategory]++;
-  }
   const top = [...barrierCounts.values()].sort((a, b) => b.count - a.count || a.id.localeCompare(b.id))[0] ?? null;
-  return { highRiskPatients: categories.high, assessedPatients, highRiskPatients30DaysAgo: categories30DaysAgo.high, categories, categories30DaysAgo, highRiskAssessments,
-    nutrition: { protein, eatingBarrier: { assessed: eatingBarrierAssessed, top } } };
+  return { protein, eatingBarrier: { assessed: eatingBarrierAssessed, top } };
 }
-import type { OverviewRisk } from "@niq/application-contracts";
+
+export function countOverviewRisk(rows: CompletedAssessment[], unseal: (value: unknown) => StoredData, now: Date = new Date()): OverviewRisk & { nutrition: OverviewNutrition } {
+  return { ...countOverviewRiskCategories(rows, unseal, now), nutrition: countOverviewNutrition(rows, unseal) };
+}
