@@ -73,6 +73,9 @@ test("existing patient can continue without measurements and add them later", as
     if (init?.method === "PATCH") { writes.push({ url, body: JSON.parse(String(init.body)) }); return Response.json({}); }
     return Response.json({ id, revision: 1, answers: { patient_name: patient.displayName, height_cm: 170 } });
   }, async router => {
+    const genderField = [...document.querySelectorAll("p")].find(item => item.textContent === "Gender")?.parentElement;
+    expect(genderField?.textContent).toBe("GenderFemale");
+    expect(genderField?.querySelector("svg")).not.toBeNull();
     expect([...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Continue")?.disabled).toBe(false);
     expect(document.querySelector("#assessment-field-height_cm")?.getAttribute("aria-required")).toBe("false");
     expect(document.querySelector("#assessment-field-current_weight_kg")?.getAttribute("aria-required")).toBe("false");
