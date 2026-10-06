@@ -46,6 +46,7 @@ test("availability never reports success when authorization or scoring fails", a
 });
 test("snapshot derives real patient demographics and saved measurements",()=>{
  expect(frozenFaceScanContext({dateOfBirth:"1990-05-01",gender:"FEMALE"},{height_cm:170,current_weight_kg:65},"deployment:operator")).toEqual({dob:"1990-05-01",gender:"female",heightCm:170,weightKg:65,posture:"resting",employeeId:"deployment:operator"});
+ expect(()=>frozenFaceScanContext({dateOfBirth:new Date().toISOString().slice(0,10),gender:"FEMALE"},{height_cm:170,current_weight_kg:65},"operator")).toThrow("Face scans are not available for patients under 1 year old.");
  for(const patient of [{dateOfBirth:null,gender:"FEMALE"},{dateOfBirth:"1990-05-01",gender:"OTHER"}])expect(()=>frozenFaceScanContext(patient,{height_cm:170,current_weight_kg:65},"operator")).toThrow();
  expect(()=>frozenFaceScanContext({dateOfBirth:"1990-05-01",gender:"MALE"},{height_cm:170},"operator")).toThrow();
 });

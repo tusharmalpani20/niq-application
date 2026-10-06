@@ -1,5 +1,12 @@
 import { z } from "zod";
 export const FACE_SCAN_MAX_BYTES = 2 * 1024 * 1024;
+/** CarePlix rejected a scan when the submitted birth date was less than one year ago. */
+export function isUnderOneYearOldForFaceScan(dateOfBirth: string | null | undefined, asOf = new Date()): boolean {
+  if (!dateOfBirth || !z.iso.date().safeParse(dateOfBirth).success) return false;
+  const cutoff = new Date(asOf);
+  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 1);
+  return dateOfBirth > cutoff.toISOString().slice(0, 10);
+}
 export const faceScanStateSchema = z.enum(["REQUESTED", "UPLOAD_ACCEPTED", "PROCESSING", "COMPLETED", "RECONCILIATION_REQUIRED", "FAILED", "EXPIRED", "CANCELLED", "PAUSED"]);
 export const faceScanContextSchema = z.object({
   dob: z.iso.date().refine(value => value <= new Date().toISOString().slice(0, 10)),

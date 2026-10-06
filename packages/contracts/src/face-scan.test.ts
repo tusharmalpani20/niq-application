@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
-import { hasUsableFaceScan, type FaceScanSession } from "./face-scan";
+import { hasUsableFaceScan, isUnderOneYearOldForFaceScan, type FaceScanSession } from "./face-scan";
+
+test("face scan age boundary uses the saved birth date", () => {
+  const today = new Date("2026-10-06T12:00:00Z");
+  expect(isUnderOneYearOldForFaceScan("2026-05-05", today)).toBe(true);
+  expect(isUnderOneYearOldForFaceScan("2025-10-07", today)).toBe(true);
+  expect(isUnderOneYearOldForFaceScan("2025-10-06", today)).toBe(false);
+  expect(isUnderOneYearOldForFaceScan(null, today)).toBe(false);
+});
 
 test("only completed scans with a usable scoring result satisfy required scanning", () => {
   const session = {

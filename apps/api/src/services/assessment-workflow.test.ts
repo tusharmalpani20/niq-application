@@ -173,6 +173,22 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   const firstAttestation=record.attestations[0]!;
   await expect(service.save(actor,org,id,{revision:record.revision,answers:{}},context)).rejects.toMatchObject({code:"CONFLICT"});await expect(service.retrySubmission(actor,org,id,context)).rejects.toMatchObject({code:"CONFLICT"});await db.update(tables.assessmentSubmissions).set({nextAttemptAt:new Date(0)}).where(eq(tables.assessmentSubmissions.assessmentId,id));record=await service.retrySubmission(actor,org,id,context);expect(keys).toHaveLength(2);expect(new Set(keys).size).toBe(1);expect(record.attestations).toEqual([firstAttestation]);
  });
+ test("an under-one patient can submit an assessment without a face scan",async()=>{
+  await db.update(tables.patients).set({dateOfBirth:new Date().toISOString().slice(0,10)}).where(eq(tables.patients.id,patient));
+  try {
+   const prepared=await service.initialize(actor,org,{patientId:patient,requestKey:`infant-assessment-${createEntityId()}`},context);
+   const infantId=prepared.assessmentId!;
+   const record=await service.read(actor,org,infantId);
+   const enabledWorkflow=new AssessmentWorkflowService({db,applicationService:service.applicationService,config:{...service.config,FACE_SCAN_ENABLED:true},fetcher:async()=>{throw new Error("Scoring transport unavailable");}});
+   const sections=[...record.manifest.sections.map(section=>section.id),"face-scan","attachments"];
+   const submitted=await enabledWorkflow.submit(actor,org,infantId,{revision:record.revision,reviewToken:record.reviewToken,attestation:{statementVersion:1,reviewedSectionIds:sections,confirmed:true}},context);
+   expect(submitted.status).toBe("SCORING_UNAVAILABLE");
+   const [saved]=await db.select().from(tables.assessmentSubmissions).where(eq(tables.assessmentSubmissions.assessmentId,infantId));
+   expect(enabledWorkflow.unseal<{faceScanSessionId?:string|null}>(saved!.snapshot).faceScanSessionId).toBeNull();
+  } finally {
+   await db.update(tables.patients).set({dateOfBirth:"1990-01-01"}).where(eq(tables.patients.id,patient));
+  }
+ });
  test("connection change preserves frozen answers and requires reconciliation",async()=>{
  const [original]=await db.select().from(tables.scoringConnections).where(eq(tables.scoringConnections.organizationId,org));
  await db.update(tables.scoringConnections).set({deploymentId:createEntityId()}).where(eq(tables.scoringConnections.organizationId,org));

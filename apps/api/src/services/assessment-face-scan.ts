@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { AssessmentPatient } from "../../../../packages/contracts/src/assessment-workflow";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
-import { faceScanContextSchema, faceScanSessionSchema, type FaceScanContext, type FaceScanSession, type FaceScanSignal } from "../../../../packages/contracts/src/face-scan";
+import { faceScanContextSchema, faceScanSessionSchema, isUnderOneYearOldForFaceScan, type FaceScanContext, type FaceScanSession, type FaceScanSignal } from "../../../../packages/contracts/src/face-scan";
 import { assessmentFaceScans, assessments, scoringConnections } from "../db/schema";
 import { decryptCredential } from "../security/credential-encryption";
 import { ServiceError, type Principal, type RequestContext } from "./application";
@@ -43,6 +43,8 @@ export function frozenFaceScanContext(patient: {
   dateOfBirth: string | null;
   gender: string;
 }, answers: Record<string, unknown>, employeeId: string, posture: FaceScanContext["posture"] = "resting"): FaceScanContext {
+  if (isUnderOneYearOldForFaceScan(patient.dateOfBirth))
+    throw new ServiceError("VALIDATION_ERROR", "Face scans are not available for patients under 1 year old.");
   const value = faceScanContextSchema.safeParse({
     dob: patient.dateOfBirth,
     gender: patient.gender === "MALE" ? "male" : patient.gender === "FEMALE" ? "female" : null,
@@ -154,6 +156,9 @@ export class AssessmentFaceScanService {
         return replay;
       }
       this.workflow.editable(assessmentRow, input.revision, actor);
+      const patient = await this.workflow.applicationService.getPatient(actor, org, assessmentRow.patientId) as AssessmentPatient;
+      if (isUnderOneYearOldForFaceScan(patient.dateOfBirth))
+        throw new ServiceError("VALIDATION_ERROR", "Face scans are not available for patients under 1 year old.");
       const consent = await new FaceScanConsentService(this.workflow).current(actor, org, assessment, tx, context);
       if (!consent || consent.status !== "APPROVED" ||
           (consent.provenance === "SIMULATED" && this.workflow.config.NODE_ENV === "production"))
@@ -164,7 +169,6 @@ export class AssessmentFaceScanService {
       if (!this.workflow.config.FACE_SCAN_ENABLED)
         throw new ServiceError("SCORING_UNAVAILABLE", "Face scan is not enabled.");
       const connection = await this.transport(org, undefined, tx);
-      const patient = await this.workflow.applicationService.getPatient(actor, org, assessmentRow.patientId) as AssessmentPatient;
       const state = this.workflow.unseal<StoredWorkflow>(assessmentRow.workflow);
       const employeeId = this.workflow.config.FACE_SCAN_EMPLOYEE_ID_OVERRIDE ?? `${connection.identity.deploymentId}:${actor.membershipId}`;
       const snapshot = frozenFaceScanContext(patient, state.answers, employeeId, input.posture);

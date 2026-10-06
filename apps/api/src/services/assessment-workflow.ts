@@ -1,7 +1,7 @@
 import { appendAssessmentHistory, assertCorrectionOwner, reviewState } from "./clinical-review-state";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { ApplicationConfig } from "@niq/application-config";
-import { hasPermission, hasUsableFaceScan, type Permission, formatAssessmentReference, clearInactiveAssessmentAnswers, buildAssessmentForm, upgradeDraftAssessmentForm, getAssessmentCompletion, getScoringAssessmentAnswers, validateAssessmentAnswers, type FormAnswers, type AssessmentFormManifest, type FaceScanSession } from "@niq/application-contracts";
+import { hasPermission, hasUsableFaceScan, isUnderOneYearOldForFaceScan, type Permission, formatAssessmentReference, clearInactiveAssessmentAnswers, buildAssessmentForm, upgradeDraftAssessmentForm, getAssessmentCompletion, getScoringAssessmentAnswers, validateAssessmentAnswers, type FormAnswers, type AssessmentFormManifest, type FaceScanSession } from "@niq/application-contracts";
 import type { AssessmentWorkflow, AssessmentPatient, AssessmentInitialization, AssessmentReport, AssessmentSubmitInput, AssessmentSubmissionAttestation, AssessmentScoreResult } from "../../../../packages/contracts/src/assessment-workflow";
 import { createEntityId, selectAssessmentHeight } from "@niq/application-domain";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
@@ -209,7 +209,8 @@ export class AssessmentWorkflowService {
   async submit(actor:Principal,organizationId:string,id:string,input:AssessmentSubmitInput,context:RequestContext) {
     this.clinicalActor(actor,organizationId,"assessments.submit");
     const submissionRow=await this.authorize(actor,organizationId,id);
-    const scanRequired=submissionRow.status==="DRAFT" && await this.faceScanEnabled(organizationId,context);
+    const submissionPatient=await this.applicationService.getPatient(actor,organizationId,submissionRow.patientId) as AssessmentPatient;
+    const scanRequired=submissionRow.status==="DRAFT" && !isUnderOneYearOldForFaceScan(submissionPatient.dateOfBirth) && await this.faceScanEnabled(organizationId,context);
     // A scan that has not finished is not part of the score. Cancel it before freezing the scoring request.
     // Provider I/O stays outside the assessment transaction; the original review token is checked again below.
     let scanBeforeCancellation: Awaited<ReturnType<AssessmentWorkflowService["reviewScan"]>> = null;
@@ -246,6 +247,7 @@ export class AssessmentWorkflowService {
       const state=this.unseal<StoredWorkflow>(row.workflow);
       const form=upgradeDraftAssessmentForm(state.manifest);
       const patient=await this.applicationService.getPatient(actor,organizationId,row.patientId) as AssessmentPatient;
+      if(patient.dateOfBirth!==submissionPatient.dateOfBirth) throw new ServiceError("CONFLICT","The patient's date of birth changed. Refresh the assessment before submitting.");
       const answers=clearInactiveAssessmentAnswers(form,{...state.answers,...patientAnswers(patient,row.createdAt)});
       const expectedSections=[...form.sections.map(section=>section.id),"face-scan","attachments"];
       const reviewed=new Set(input.attestation.reviewedSectionIds);
