@@ -10,7 +10,7 @@ import { GreetingIllustration } from "../components/GreetingIllustration";
 import { PriorityEmptyIllustration, RecentPatientsEmptyIllustration } from "../components/DashboardEmptyIllustrations";
 import { listClinicalReviews } from "../features/assessments/clinical-review-api";
 import { useWorkspaceRevision } from "../features/notifications/useWorkspaceRevision";
-import { getOrganization, getOverviewRisk, getOverviewSummary, listOrganizationUsers } from "../lib/api";
+import { getOrganization, getOverviewNutrition, getOverviewRisk, getOverviewSummary, listOrganizationUsers } from "../lib/api";
 import { OverviewStatCard } from "./OverviewStatCard";
 import { AssessmentActivityCalendar, RiskOverviewCards } from "./OverviewClinicalCards";
 import { OverviewBottomCards } from "./OverviewBottomCards";
@@ -19,6 +19,7 @@ import { OverviewActionsSkeleton, OverviewInsightsSkeleton, OverviewPrioritySkel
 
 type Overview = { summary: OverviewSummary; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
 type Risk = Awaited<ReturnType<typeof getOverviewRisk>>;
+type Nutrition = Awaited<ReturnType<typeof getOverviewNutrition>>;
 
 export function greetingForHour(hour: number): "Good morning" | "Good afternoon" | "Good evening" {
   if (hour >= 6 && hour < 12) return "Good morning";
@@ -104,6 +105,7 @@ export function DashboardPage() {
   const [localTime, setLocalTime] = useState(() => new Date());
   const [data, setData] = useState<Overview | null>(null);
   const [riskState, setRiskState] = useState<{ risk: Risk | null; loaded: boolean }>({ risk: null, loaded: false });
+  const [nutritionState, setNutritionState] = useState<{ nutrition: Nutrition | null; loaded: boolean }>({ nutrition: null, loaded: false });
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -114,6 +116,7 @@ export function DashboardPage() {
     let active = true;
     setError(false);
     setRiskState({ risk: null, loaded: false });
+    setNutritionState({ nutrition: null, loaded: false });
     const org = user.organizationId;
     const reviews = (params: Record<string, string>) => listClinicalReviews(org, new URLSearchParams({ page: "1", pageSize: "3", ...params }));
     let supplemental: Partial<Overview> = {};
@@ -132,7 +135,12 @@ export function DashboardPage() {
         // The risk calculation and summary compete for the same database. Starting
         // risk after summary lets both finish sooner than running them together.
         getOverviewRisk(org).then(risk => { if (active) setRiskState({ risk, loaded: true }); })
-          .catch(() => { if (active) setRiskState({ risk: null, loaded: true }); });
+          .catch(() => { if (active) setRiskState({ risk: null, loaded: true }); })
+          .finally(() => {
+            if (!active) return;
+            getOverviewNutrition(org).then(nutrition => { if (active) setNutritionState({ nutrition, loaded: true }); })
+              .catch(() => { if (active) setNutritionState({ nutrition: null, loaded: true }); });
+          });
       }
     }).catch(() => { if (active) setError(true); });
     if (isAdmin || isClinician) {
@@ -192,7 +200,7 @@ export function DashboardPage() {
       {data.enabledUsers !== null && <UserSeats enabled={data.enabledUsers} reserved={data.seats + data.pendingInvitations} pending={data.pendingInvitations} limit={data.userLimit} />}
       <OverviewUsage organizationId={user.organizationId} />
     </>}
-    {!error && (isClinician || isAdmin) && (data ? <OverviewBottomCards organizationId={user.organizationId} initial={data.summary.recent} risk={riskState.risk} riskLoaded={riskState.loaded} /> : <section className="mt-7 grid gap-4 min-[720px]:grid-cols-2" aria-label="Recent patients and NIQ insights"><OverviewRecentSkeleton />{riskState.loaded ? <NutritionInsights risk={riskState.risk} /> : <OverviewInsightsSkeleton />}</section>)}
+    {!error && (isClinician || isAdmin) && (data ? <OverviewBottomCards organizationId={user.organizationId} initial={data.summary.recent} risk={riskState.risk} nutrition={nutritionState.nutrition} nutritionLoaded={nutritionState.loaded} /> : <section className="mt-7 grid gap-4 min-[720px]:grid-cols-2" aria-label="Recent patients and NIQ insights"><OverviewRecentSkeleton />{nutritionState.loaded ? <NutritionInsights risk={riskState.risk} nutrition={nutritionState.nutrition} /> : <OverviewInsightsSkeleton />}</section>)}
     {data && !isAdmin && !isClinician && <section className="mt-7" aria-label="Patient registration"><h2 className="text-lg font-semibold">Patient registration</h2><p className="text-sm text-muted-foreground">Register patients and keep their details current.</p><RecentPatients recent={data.summary.recent.items} /></section>}
     {!data && !error && !isAdmin && !isClinician && <div className="mt-7"><OverviewRecentSkeleton /></div>}
   </>;

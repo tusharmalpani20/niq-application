@@ -1,9 +1,10 @@
 import type { ComponentType } from "react";
 import { HeartPulse, Lightbulb, MessageCircle, Utensils } from "lucide-react";
-import { getOverviewRisk } from "../lib/api";
+import { getOverviewNutrition, getOverviewRisk } from "../lib/api";
 import { NutritionEmptyIllustration } from "../components/DashboardEmptyIllustrations";
 
 type Risk = Awaited<ReturnType<typeof getOverviewRisk>>;
+type Nutrition = Awaited<ReturnType<typeof getOverviewNutrition>>;
 type Insight = {
   title: string;
   detail: string;
@@ -15,15 +16,15 @@ function countLabel(count: number, singular: string, plural: string) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function insightsFor(risk: Risk): Insight[] {
+function insightsFor(risk: Risk, nutrition: Nutrition): Insight[] {
   const { categories, categories30DaysAgo: previous } = risk;
   const previousTotal = previous.low + previous.moderate + previous.high;
   const atRisk = categories.moderate + categories.high;
   const previousAtRisk = previous.moderate + previous.high;
   const atRiskPercent = risk.assessedPatients ? Math.round(atRisk / risk.assessedPatients * 100) : 0;
   const previousAtRiskPercent = previousTotal ? Math.round(previousAtRisk / previousTotal * 100) : null;
-  const protein = risk.nutrition.protein;
-  const barrier = risk.nutrition.eatingBarrier;
+  const protein = nutrition.protein;
+  const barrier = nutrition.eatingBarrier;
 
   return [
     {
@@ -52,9 +53,9 @@ function insightsFor(risk: Risk): Insight[] {
   ];
 }
 
-export function NutritionInsights({ risk }: { risk: Risk | null }) {
+export function NutritionInsights({ risk, nutrition }: { risk: Risk | null; nutrition: Nutrition | null }) {
   const hasCurrentScores = (risk?.assessedPatients ?? 0) > 0;
-  const insights = risk && hasCurrentScores ? insightsFor(risk) : [];
+  const insights = risk && nutrition && hasCurrentScores ? insightsFor(risk, nutrition) : [];
 
   return <div className="surface flex min-w-0 flex-col p-5" aria-label="Key nutrition insights">
     <div>
@@ -63,7 +64,7 @@ export function NutritionInsights({ risk }: { risk: Risk | null }) {
         <p className="mt-1 text-xs text-muted-foreground">Latest completed result per patient</p>
       </div>
     </div>
-    {!risk ? <p className="mt-5 text-sm text-muted-foreground">Nutrition insights are unavailable right now.</p>
+    {!risk || !nutrition ? <p className="mt-5 text-sm text-muted-foreground">Nutrition insights are unavailable right now.</p>
       : insights.length ? <div className="mt-4 rounded-2xl border border-border px-4">
         <ul className="divide-y divide-border">{insights.map(({ title, detail, icon: Icon, color }) => <li key={title} className="flex items-start gap-3 py-4">
           <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${color}`}><Icon className="size-5" aria-hidden={true} /></span>

@@ -16,6 +16,7 @@ import {
   organizationDetailsResponseSchema,
   organizationSchema,
   overviewRiskSchema,
+  overviewNutritionSchema,
   overviewSummarySchema,
   overviewActivitySchema,
   overviewActivityDaySchema,
@@ -299,6 +300,11 @@ export async function setAssessmentPriority(organizationId: string, assessmentId
 export async function getOverviewRisk(organizationId: string) {
   const response = await fetch(`/api/v1/organizations/${organizationId}/overview-risk`, { credentials: "include" });
   return overviewRiskSchema.parse(await responseBody(response));
+}
+
+export async function getOverviewNutrition(organizationId: string) {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/overview-nutrition`, { credentials: "include" });
+  return overviewNutritionSchema.parse(await responseBody(response));
 }
 
 export async function getOverviewSummary(organizationId: string, priorityPage = 1, recentPage = 1) {
