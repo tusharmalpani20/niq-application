@@ -11,7 +11,9 @@ test("extended scan metrics survive application validation and render missing va
   expect(html).not.toContain("beta");
   expect(html).not.toContain("Unavailable results");
   expect(html).toContain("1/11 available");
-  expect(html).toContain("1/9 available");
+  expect(html).toContain("1/7 available");
+  expect(html).not.toContain("Fat calorie value");
+  expect(html).not.toContain("Carbohydrate calorie value");
   expect(html).toContain("3/5 available");
   expect(html).toContain('aria-label="Not available">—</dd>');
   expect(html).toContain("Normal range: 90–120/60–80 mmHg");

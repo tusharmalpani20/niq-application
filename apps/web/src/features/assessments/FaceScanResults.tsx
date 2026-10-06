@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { FaceScanSession } from "@niq/application-contracts";
-import { Activity, BicepsFlexed, Brain, CalendarDays, ChartNoAxesCombined, ChevronRight, Droplet, Droplets, Flame, Gauge, Heart, HeartPulse, Percent, PersonStanding, Ruler, ScanFace, Shield, Target, TrendingUp, UserRound, Weight, Wind, Zap, type LucideIcon } from "lucide-react";
+import { Activity, BicepsFlexed, Brain, CalendarDays, ChartNoAxesCombined, ChevronRight, Droplet, Droplets, Gauge, Heart, HeartPulse, Percent, PersonStanding, Ruler, ScanFace, Shield, Target, TrendingUp, UserRound, Weight, Wind, Zap, type LucideIcon } from "lucide-react";
 import { scanPostureLabels } from "./face-scan-posture";
 import { assessFaceScanRange } from "./face-scan-reference-ranges";
 
@@ -13,7 +13,6 @@ const detailIcons: Record<string, LucideIcon> = {
   stressIndex: Brain, prq: Wind,
   bmi: Weight, vo2max: Wind, intensity: Zap, bodyFat: Percent,
   totalBodyWater: Droplets, bodyWaterPercent: Droplet, bloodVolume: Droplets,
-  caloriesFat: Flame, caloriesCarbohydrate: Flame,
   heartHealthScore: HeartPulse, hba1c: Droplet, diabetesControlScore: Gauge,
 };
 
@@ -63,7 +62,7 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
     { title: "Body & fitness", icon: BicepsFlexed, metrics: [
       metric("bmi", "Scan BMI", "kg/m²"), metric("vo2max", "VO₂ max", "mL/kg/min"), metric("intensity", "Activity intensity"),
       metric("bodyFat", "Body fat", "%"), metric("totalBodyWater", "Total body water"), metric("bodyWaterPercent", "Body water", "%"),
-      metric("bloodVolume", "Blood volume"), metric("caloriesFat", "Fat calorie value"), metric("caloriesCarbohydrate", "Carbohydrate calorie value"),
+      metric("bloodVolume", "Blood volume"),
     ] },
     { title: "Other scores", icon: ChartNoAxesCombined, metrics: [
       metric("heartHealthScore", "Heart health score", "/ 100"),
