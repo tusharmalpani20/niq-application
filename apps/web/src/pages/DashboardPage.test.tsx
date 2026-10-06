@@ -126,16 +126,17 @@ test("overview statistics load while risk calculation is still running", async (
   }, { riskGate });
 });
 
-test("overview shows section skeletons and starts independent requests before the summary finishes", async () => {
+test("overview starts activity immediately and waits to calculate risk until the summary finishes", async () => {
   let finishSummary!: () => void;
   const summaryGate = new Promise<void>(resolve => { finishSummary = resolve; });
   await renderOverview("DOCTOR", async (body, requests) => {
-    expect(body.querySelectorAll('[aria-label="Loading overview statistic"]')).toHaveLength(3);
+    expect(body.querySelectorAll('[aria-label="Loading overview statistic"]')).toHaveLength(4);
     expect(body.querySelector('[aria-label="Loading priority assessments"]')).not.toBeNull();
     expect(requests.some(url => url.includes("/overview-activity?"))).toBe(true);
-    expect(body.querySelector('[aria-label="Assessment risk overview"]')).not.toBeNull();
-    expect(body.querySelector('[aria-label="Key nutrition insights"]')).not.toBeNull();
+    expect(requests.some(url => url.endsWith("/overview-risk"))).toBe(false);
+    expect(body.querySelector('[aria-label="Loading risk overview"]')).not.toBeNull();
     await act(async () => { finishSummary(); await summaryGate; });
+    expect(requests.some(url => url.endsWith("/overview-risk"))).toBe(true);
     expect(body.querySelector('[aria-label="Priority assessments"]')).not.toBeNull();
     expect(body.querySelector('[aria-label="Recent patients and NIQ insights"] h2')?.textContent).toContain("Recent patients");
   }, { summaryGate });

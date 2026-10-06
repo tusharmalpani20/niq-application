@@ -128,10 +128,14 @@ export function DashboardPage() {
         queuedReviews: null, myReviews: null, seats: 0, userLimit: null, enabledUsers: null, pendingInvitations: 0,
         ...supplemental,
       });
+      if (isAdmin || isClinician) {
+        // The risk calculation and summary compete for the same database. Starting
+        // risk after summary lets both finish sooner than running them together.
+        getOverviewRisk(org).then(risk => { if (active) setRiskState({ risk, loaded: true }); })
+          .catch(() => { if (active) setRiskState({ risk: null, loaded: true }); });
+      }
     }).catch(() => { if (active) setError(true); });
     if (isAdmin || isClinician) {
-      getOverviewRisk(org).then(risk => { if (active) setRiskState({ risk, loaded: true }); })
-        .catch(() => { if (active) setRiskState({ risk: null, loaded: true }); });
       reviews({ state: "QUEUED" }).then(queuedReviews => update({ queuedReviews })).catch(() => {});
     }
     if (isClinician) reviews({ state: "IN_REVIEW", mine: "true" }).then(myReviews => update({ myReviews })).catch(() => {});
