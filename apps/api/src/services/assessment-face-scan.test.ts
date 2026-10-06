@@ -4,6 +4,46 @@ import { AssessmentFaceScanService, frozenFaceScanContext, canProjectScan } from
 import { assessmentFaceScans, faceScanConsents } from "../db/schema";
 import { faceScanSignalSchema, startFaceScanSchema, faceScanResultSchema } from "../../../../packages/contracts/src/face-scan";
 test("new capture is unavailable by default",()=>expect(loadApplicationConfig({DATABASE_URL:"postgres://test",SESSION_SECRET:"test-secret-that-is-at-least-32-characters"}).FACE_SCAN_ENABLED).toBe(false));
+test("availability checks the current scoring limit without creating a scan", async () => {
+ const actor = { membershipId: "member" } as any;
+ const requests: Request[] = [];
+ const workflow = {
+  authorize: async (principal: unknown, org: string, assessment: string) => {
+   expect([principal, org, assessment]).toEqual([actor, "org", "assessment"]);
+  },
+  config: { FACE_SCAN_ENABLED: true, SCORING_TIMEOUT_MS: 1000 }
+ } as any;
+ const scans = new AssessmentFaceScanService(workflow, async (input, init) => {
+  requests.push(new Request(input, init));
+  return Response.json({ available: true, reason: null });
+ });
+ scans.transport = async () => ({ identity: { origin: "https://scoring.invalid" }, credential: "test-credential" }) as any;
+ expect(await scans.availability(actor, "org", "assessment")).toEqual({ available: true, reason: null });
+ expect(requests).toHaveLength(1);
+ expect(requests[0]!.url).toBe("https://scoring.invalid/v1/face-scans/availability");
+ expect(requests[0]!.method).toBe("GET");
+ expect(requests[0]!.headers.get("authorization")).toBe("Bearer test-credential");
+ expect(requests[0]!.body).toBeNull();
+});
+test("availability never reports success when authorization or scoring fails", async () => {
+ let calls = 0;
+ const workflow = {
+  authorize: async () => { throw new Error("not authorized"); },
+  config: { FACE_SCAN_ENABLED: true, SCORING_TIMEOUT_MS: 1000 }
+ } as any;
+ const scans = new AssessmentFaceScanService(workflow, async () => { calls++; return Response.json({ available: true, reason: null }); });
+ scans.transport = async () => ({ identity: { origin: "https://scoring.invalid" }, credential: "test-credential" }) as any;
+ await expect(scans.availability({} as any, "org", "assessment")).rejects.toThrow("not authorized");
+ expect(calls).toBe(0);
+ workflow.authorize = async () => {};
+ for (const response of [Response.json({ error: "MONTHLY_LIMIT_REACHED" }, { status: 503 }), Response.json({ available: "yes", reason: null })]) {
+  const invalid = new AssessmentFaceScanService(workflow, async () => response.clone());
+  invalid.transport = scans.transport;
+  await expect(invalid.availability({} as any, "org", "assessment")).rejects.toMatchObject({ code: "SCORING_UNAVAILABLE" });
+ }
+ workflow.config.FACE_SCAN_ENABLED = false;
+ expect(await scans.availability({} as any, "org", "assessment")).toEqual({ available: false, reason: "FACE_SCAN_DISABLED" });
+});
 test("snapshot derives real patient demographics and saved measurements",()=>{
  expect(frozenFaceScanContext({dateOfBirth:"1990-05-01",gender:"FEMALE"},{height_cm:170,current_weight_kg:65},"deployment:operator")).toEqual({dob:"1990-05-01",gender:"female",heightCm:170,weightKg:65,posture:"resting",employeeId:"deployment:operator"});
  for(const patient of [{dateOfBirth:null,gender:"FEMALE"},{dateOfBirth:"1990-05-01",gender:"OTHER"}])expect(()=>frozenFaceScanContext(patient,{height_cm:170,current_weight_kg:65},"operator")).toThrow();

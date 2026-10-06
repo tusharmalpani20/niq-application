@@ -44,6 +44,23 @@ test("face scan endpoints enforce session, origin and bounded upload before serv
  expect((await send(`${scans}/01J00000000000000000000005/signal`,"http://localhost:5173",JSON.stringify({extra:"x".repeat(300000)}))).status).toBe(400);
 });
 
+test("face scan availability is authenticated, read-only and never cached", async () => {
+ const service = { authenticate: async (token: string) => token === "valid" ? actor : null } as ApplicationService;
+ let authorizations = 0;
+ const workflow = {
+  authorize: async () => { authorizations++; },
+  config: { FACE_SCAN_ENABLED: false }
+ } as unknown as AssessmentWorkflowService;
+ const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service, assessmentWorkflow: workflow });
+ const route = `${path}/face-scans/availability`;
+ expect((await app.request(route)).status).toBe(401);
+ const response = await app.request(route, { headers: { cookie: "niq_session=valid" } });
+ expect(response.status).toBe(200);
+ expect(response.headers.get("cache-control")).toBe("private, no-store");
+ expect(await response.json()).toEqual({ available: false, reason: "FACE_SCAN_DISABLED" });
+ expect(authorizations).toBe(1);
+});
+
 test("consent endpoints require a session and reject cross-origin writes", async () => {
   const { app } = harness();
   const consent = `${path}/face-scan-consent`;

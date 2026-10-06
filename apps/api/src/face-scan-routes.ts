@@ -29,6 +29,7 @@ export function mountFaceScanRoutes(app: Hono<any>, service: AssessmentFaceScanS
     await next();
   });
   app.get(base, async (c) => c.json(await service.list(...parts(c), { requestId: c.get("requestId") })));
+  app.get(`${base}/availability`, async (c) => c.json(await service.availability(...parts(c))));
   app.post(base, async (c) => c.json(await service.start(...parts(c), parse(startFaceScanSchema, await json(c)), {
     requestId: c.get("requestId")
   }), 201));

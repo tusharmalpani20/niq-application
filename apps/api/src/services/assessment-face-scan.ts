@@ -38,6 +38,7 @@ const remoteSchema = z.object({
   }),
   providerConfigured: z.boolean()
 });
+const availabilitySchema = z.object({ available: z.boolean(), reason: z.string().nullable() });
 export function frozenFaceScanContext(patient: {
   dateOfBirth: string | null;
   gender: string;
@@ -117,6 +118,26 @@ export class AssessmentFaceScanService {
       sessions: rows.map(row => this.dto(row)),
       currentSessionId: rows.find(row => row.isCurrent)?.id ?? null
     };
+  }
+  async availability(actor: Principal, org: string, assessment: string) {
+    await this.workflow.authorize(actor, org, assessment);
+    if (!this.workflow.config.FACE_SCAN_ENABLED)
+      return { available: false, reason: "FACE_SCAN_DISABLED" };
+    const transport = await this.transport(org);
+    try {
+      const response = await this.fetcher(new URL("/v1/face-scans/availability", transport.identity.origin), {
+        method: "GET",
+        redirect: "error",
+        headers: { authorization: `Bearer ${transport.credential}` },
+        signal: AbortSignal.timeout(this.workflow.config.SCORING_TIMEOUT_MS)
+      });
+      if (!response.ok)
+        throw new Error("Scoring availability request failed");
+      return availabilitySchema.parse(JSON.parse(await boundedResponse(response, 16 * 1024)));
+    } catch {
+      // An uncertain upstream response must not be presented as permission to start a scan.
+      throw new ServiceError("SCORING_UNAVAILABLE", "Face scan availability could not be checked. Please try again.");
+    }
   }
   async start(actor: Principal, org: string, assessment: string, input: {
     revision: number;
