@@ -99,6 +99,7 @@ export interface ApplicationService {
   listPatients(actor: Principal, organizationId: string): Promise<unknown[]>;
   listPatientPage(actor: Principal, organizationId: string, options: PatientPageQuery): Promise<PatientPageResponse>;
   getPatient(actor: Principal, organizationId: string, patientLocator: string): Promise<unknown>;
+  listPatientAssessments(actor: Principal, organizationId: string, patientLocator: string): Promise<unknown[]>;
   listAssessments(actor: Principal, organizationId: string): Promise<unknown[]>;
   listAssessmentPage(actor: Principal, organizationId: string, options: AssessmentPageQuery): Promise<AssessmentPageResponse>;
   setAssessmentPriority(actor: Principal, organizationId: string, assessmentId: string, isPriority: boolean): Promise<{ assessmentId: string; isPriority: boolean }>;

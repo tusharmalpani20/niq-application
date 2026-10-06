@@ -979,7 +979,14 @@ export class PostgresApplicationService implements ApplicationService {
     if (!row) throw new ServiceError("NOT_FOUND", "Patient not found.");
     return this.presentPatient(row);
   }
+  async listPatientAssessments(actor: Principal, organizationId: string, patientLocator: string) {
+    const patient = await this.getPatient(actor, organizationId, patientLocator) as { id: string };
+    return this.listAssessmentsForPatient(actor, organizationId, patient.id);
+  }
   async listAssessments(actor: Principal, organizationId: string) {
+    return this.listAssessmentsForPatient(actor, organizationId);
+  }
+  private async listAssessmentsForPatient(actor: Principal, organizationId: string, patientId?: string) {
     this.ensureOrganizationAccess(actor, organizationId, "assessments.list");
     const rows = await this.db.select({
       id: assessments.id,
@@ -1006,7 +1013,7 @@ export class PostgresApplicationService implements ApplicationService {
       .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
       .leftJoin(facilities, and(eq(facilities.organizationId, assessments.organizationId), eq(facilities.id, assessments.facilityId)))
       .leftJoin(assessmentPriorities, and(eq(assessmentPriorities.organizationId, assessments.organizationId), eq(assessmentPriorities.assessmentId, assessments.id), eq(assessmentPriorities.membershipId, actor.membershipId)))
-      .where(and(eq(assessments.organizationId, organizationId), facilityAccessCondition(actor, organizationId, assessments.facilityId), assessmentVisibilityCondition(actor)))
+      .where(and(eq(assessments.organizationId, organizationId), patientId ? eq(assessments.patientId, patientId) : undefined, facilityAccessCondition(actor, organizationId, assessments.facilityId), assessmentVisibilityCondition(actor)))
       .orderBy(desc(assessments.createdAt));
     const key = patientDataKey(this.config.PATIENT_DATA_ENCRYPTION_KEY, this.config.SESSION_SECRET);
     const visibleRows = rows.filter(row => {
