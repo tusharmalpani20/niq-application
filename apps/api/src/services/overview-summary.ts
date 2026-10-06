@@ -31,24 +31,33 @@ export async function loadOverviewSummary(db: Database, config: ApplicationConfi
     const review = JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key)) as { correctionPerson?: { membershipId?: string } };
     return canSeeAssessment(row, actor, review.correctionPerson?.membershipId);
   };
-  const [patientCounts] = await db.select({ total: sql<number>`count(*)::int`, added: sql<number>`count(*) filter (where ${patients.createdAt} between ${thirtyDaysAgoSql} and ${nowSql})::int` }).from(patients).where(patientScope);
+  const patientCountsPromise = Promise.resolve(db.select({ total: sql<number>`count(*)::int`, added: sql<number>`count(*) filter (where ${patients.createdAt} between ${thirtyDaysAgoSql} and ${nowSql})::int` }).from(patients).where(patientScope));
 
   let completedCount = 0, completedAdded30Days = 0, scoringIssues = 0;
   let myAssessmentActions = 0, readyToSend = 0, correctionsToMake = 0;
   let priority: OverviewSummary["priority"] = { total: 0, page: priorityPage, pageSize: 3, items: [] };
   if (canReadAssessments) {
-    const [counts] = await db.select({
+    const countsPromise = db.select({
       completed: sql<number>`count(*) filter (where ${assessments.status} = 'COMPLETED')::int`,
       added: sql<number>`count(*) filter (where ${assessments.status} = 'COMPLETED' and ${assessments.completedAt} between ${thirtyDaysAgoSql} and ${nowSql})::int`,
       issues: sql<number>`count(*) filter (where ${assessments.status} = 'SCORING_UNAVAILABLE' and ${actor.role === "ORGANIZATION_ADMIN" ? sql`true` : sql`${assessments.currentOwnerMembershipId} = ${actor.membershipId}`})::int`,
     }).from(assessments).where(assessmentScope);
+    const actionRowsPromise = actor.platformRole === "USER"
+      ? db.select({ status: assessments.status, createdByMembershipId: assessments.createdByMembershipId, currentOwnerMembershipId: assessments.currentOwnerMembershipId, review: assessments.clinicalReview })
+        .from(assessments).innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
+        .where(and(assessmentScope, eq(patients.isArchived, false), facilityAccessCondition(actor, organizationId, patients.homeFacilityId), inArray(assessments.status, ["DRAFT", "SCORED"])))
+      : Promise.resolve([]);
+    const priorityScope = and(eq(assessmentPriorities.organizationId, organizationId), eq(assessmentPriorities.membershipId, actor.membershipId), assessmentScope);
+    const priorityRowsPromise = db.select({ id: assessments.id, serialNumber: assessments.serialNumber, patientId: patients.id, patientPrefix: patients.referencePrefix,
+      patientSerial: patients.serialNumber, profile: patients.encryptedProfile, status: assessments.status, currentOwnerMembershipId: assessments.currentOwnerMembershipId, createdByMembershipId: assessments.createdByMembershipId, review: assessments.clinicalReview, createdAt: assessments.createdAt, completedAt: assessments.completedAt })
+      .from(assessmentPriorities).innerJoin(assessments, and(eq(assessments.organizationId, assessmentPriorities.organizationId), eq(assessments.id, assessmentPriorities.assessmentId)))
+      .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
+      .where(priorityScope).orderBy(desc(assessments.createdAt), desc(assessments.id));
+    const [[counts], actionRows, priorityRows] = await Promise.all([countsPromise, actionRowsPromise, priorityRowsPromise]);
     completedCount = counts?.completed ?? 0;
     completedAdded30Days = counts?.added ?? 0;
     scoringIssues = counts?.issues ?? 0;
     if (actor.platformRole === "USER") {
-      const actionRows = await db.select({ status: assessments.status, createdByMembershipId: assessments.createdByMembershipId, currentOwnerMembershipId: assessments.currentOwnerMembershipId, review: assessments.clinicalReview })
-        .from(assessments).innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
-        .where(and(assessmentScope, eq(patients.isArchived, false), facilityAccessCondition(actor, organizationId, patients.homeFacilityId), inArray(assessments.status, ["DRAFT", "SCORED"])));
       for (const row of actionRows) {
         let correctionPerson: string | null = null;
         if (row.review) {
@@ -64,12 +73,6 @@ export async function loadOverviewSummary(db: Database, config: ApplicationConfi
         if (action === "SEND_FOR_REVIEW") readyToSend++;
       }
     }
-    const priorityScope = and(eq(assessmentPriorities.organizationId, organizationId), eq(assessmentPriorities.membershipId, actor.membershipId), assessmentScope);
-    const priorityRows = await db.select({ id: assessments.id, serialNumber: assessments.serialNumber, patientId: patients.id, patientPrefix: patients.referencePrefix,
-      patientSerial: patients.serialNumber, profile: patients.encryptedProfile, status: assessments.status, currentOwnerMembershipId: assessments.currentOwnerMembershipId, createdByMembershipId: assessments.createdByMembershipId, review: assessments.clinicalReview, createdAt: assessments.createdAt, completedAt: assessments.completedAt })
-      .from(assessmentPriorities).innerJoin(assessments, and(eq(assessments.organizationId, assessmentPriorities.organizationId), eq(assessments.id, assessmentPriorities.assessmentId)))
-      .innerJoin(patients, and(eq(patients.organizationId, assessments.organizationId), eq(patients.id, assessments.patientId)))
-      .where(priorityScope).orderBy(desc(assessments.createdAt), desc(assessments.id));
     const visiblePriorities = priorityRows.filter(visible);
     priority = { total: visiblePriorities.length, page: priorityPage, pageSize: 3, items: visiblePriorities.slice((priorityPage - 1) * 3, priorityPage * 3).map(row => ({ id: row.id, reference: formatAssessmentReference(row.serialNumber),
       patient: { id: row.patientId, reference: `${row.patientPrefix}-${row.patientSerial}`, displayName: displayName(row.profile) },
@@ -80,11 +83,12 @@ export async function loadOverviewSummary(db: Database, config: ApplicationConfi
   const recentVisibility = actor.role === "ORGANIZATION_ADMIN" ? sql`true` : hasPermission(actor.role, "assessments.read") ? sql`(${latest.currentOwnerMembershipId} = ${actor.membershipId} or ${latest.status} in ('UNDER_REVIEW','COMPLETED'))` : sql`false`;
   const activity = canReadAssessments ? sql<Date>`greatest(${patients.createdAt}, coalesce((select max(${latest.createdAt}) from ${assessments} as ${latest} where ${latest.organizationId} = ${organizationId} and ${latest.patientId} = ${patients.id} and ${facilityAccessCondition(actor, organizationId, latest.facilityId)} and ${recentVisibility}), ${patients.createdAt}))` : sql<Date>`${patients.createdAt}`;
   const recentScope = and(patientScope, ...(canReadAssessments ? [gte(activity, threeDaysAgoSql), lte(activity, nowSql)] : []));
-  const [recentCount] = await db.select({ total: sql<number>`count(*)::int` }).from(patients).where(recentScope);
-  const recentRows = await db.select({ id: patients.id, prefix: patients.referencePrefix, serial: patients.serialNumber, profile: patients.encryptedProfile,
+  const recentCountPromise = db.select({ total: sql<number>`count(*)::int` }).from(patients).where(recentScope);
+  const recentRowsPromise = db.select({ id: patients.id, prefix: patients.referencePrefix, serial: patients.serialNumber, profile: patients.encryptedProfile,
     createdAt: patients.createdAt, facilityId: facilities.id, facilityName: facilities.name })
     .from(patients).leftJoin(facilities, and(eq(facilities.organizationId, patients.organizationId), eq(facilities.id, patients.homeFacilityId)))
     .where(recentScope).orderBy(desc(activity), desc(patients.id)).limit(4).offset((recentPage - 1) * 4);
+  const [[recentCount], recentRows] = await Promise.all([recentCountPromise, recentRowsPromise]);
   const latestByPatient = new Map<string, OverviewSummary["priority"]["items"][number]>();
   if (canReadAssessments && recentRows.length) {
     const assessmentRows = await db.selectDistinctOn([assessments.patientId], { id: assessments.id, serialNumber: assessments.serialNumber, patientId: patients.id, patientPrefix: patients.referencePrefix,
@@ -96,6 +100,7 @@ export async function loadOverviewSummary(db: Database, config: ApplicationConfi
       patient: { id: row.patientId, reference: `${row.patientPrefix}-${row.patientSerial}`, displayName: displayName(row.profile) },
       status: row.status, createdAt: row.createdAt, completedAt: row.completedAt });
   }
+  const [patientCounts] = await patientCountsPromise;
   return { patientCount: patientCounts?.total ?? 0, patientsAdded30Days: patientCounts?.added ?? 0, completedCount, completedAdded30Days,
     myAssessmentActions, readyToSend, correctionsToMake, scoringIssues, priority,
     recent: { total: recentCount?.total ?? 0, page: recentPage, pageSize: 4, items: recentRows.map(row => ({
