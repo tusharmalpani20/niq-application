@@ -18,7 +18,7 @@ const scoredDetail = (score: number) => ({
     version: "V1", checksum: "a".repeat(64), resultReference: `result-${score}`, calculatedAt: "2026-09-23T00:00:00Z", clinicalUsePermitted: true },
 });
 
-async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) => Promise<void> | void, entry = "/patients/PAT-2", options: { summaries?: unknown[]; details?: Record<string, unknown>; reviews?: Record<string, unknown>; clinicalReviews?: Record<string, unknown>; onClaim?: (command: any) => unknown } = {}) {
+async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) => Promise<void> | void, entry = "/patients/PAT-2", options: { summaries?: unknown[]; details?: Record<string, unknown>; reviews?: Record<string, unknown>; clinicalReviews?: Record<string, unknown>; onClaim?: (command: any) => unknown; pageTwoGate?: Promise<void> } = {}) {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "http://localhost/" });
   const keys = ["window", "document", "navigator", "HTMLElement", "HTMLButtonElement", "HTMLInputElement", "HTMLTextAreaElement", "HTMLSelectElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -27,7 +27,13 @@ async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) =>
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith("/patients/PAT-2")) return Response.json(patient);
-    if (url.endsWith("/patients/PAT-2/assessments")) return Response.json({ items: options.summaries ?? [assessment] });
+    if (url.includes("/patients/PAT-2/assessments/page?")) {
+      const summaries = options.summaries ?? [assessment];
+      const params = new URL(url, "http://localhost").searchParams;
+      const page = Number(params.get("page") ?? "1"), pageSize = Number(params.get("pageSize") ?? "10");
+      if (page === 2) await options.pageTwoGate;
+      return Response.json({ items: summaries.slice((page - 1) * pageSize, page * pageSize), overviewItems: summaries, total: summaries.length, page, pageSize });
+    }
     const reviewedId = url.match(/\/assessments\/([^/]+)\/score-reviews$/)?.[1];
     if (reviewedId && options.reviews?.[reviewedId]) return Response.json(options.reviews[reviewedId]);
     const clinicalId = url.match(/\/assessments\/([^/]+)\/clinical-review$/)?.[1];
@@ -151,6 +157,28 @@ test("patient assessment history uses contextual actions without a patient colum
     expect(body.querySelector('a[aria-label="View result ASM-000003"]')).not.toBeNull();
     expect(body.querySelector('button[aria-label="Remove priority from ASM-000002"]')).not.toBeNull();
   }, "/patients/PAT-2", { summaries: [assessment, scored, completed] });
+});
+
+test("patient assessment pages use the list skeleton and pagination", async () => {
+  let releasePageTwo!: () => void;
+  const pageTwoGate = new Promise<void>(resolve => { releasePageTwo = resolve; });
+  const summaries = Array.from({ length: 12 }, (_, index) => ({ ...assessment, id: `${id.slice(0, -2)}${String(index + 1).padStart(2, "0")}`, reference: `ASM-${String(index + 1).padStart(6, "0")}`, serialNumber: index + 1 }));
+  await renderDetail("DOCTOR", async body => {
+    const tab = [...body.querySelectorAll<HTMLElement>('[role="tab"]')].find(item => item.textContent?.includes("Assessments"))!;
+    expect(tab.textContent).toContain("12");
+    await act(async () => { tab.click(); });
+    expect(body.querySelectorAll('table[aria-label="Patient assessments"] tbody tr')).toHaveLength(10);
+    const pagination = body.querySelector('[aria-label="Assessments pagination"]')!;
+    expect(pagination.textContent).toContain("Page 1 of 2");
+    await act(async () => { [...pagination.querySelectorAll("button")].at(-1)!.click(); });
+    const loading = body.querySelector('[role="status"][aria-label="Loading assessments"]')!;
+    expect(loading.querySelectorAll(".mobile-card-list article")).toHaveLength(4);
+    expect(loading.querySelectorAll(".desktop-table tbody tr")).toHaveLength(6);
+    expect(body.querySelector('[aria-label="Assessments pagination"]')).toBeNull();
+    await act(async () => { releasePageTwo(); await pageTwoGate; await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(body.querySelectorAll('table[aria-label="Patient assessments"] tbody tr')).toHaveLength(2);
+    expect(body.querySelector('[aria-label="Assessments pagination"]')?.textContent).toContain("Page 2 of 2");
+  }, "/patients/PAT-2", { summaries, pageTwoGate });
 });
 
 test("completed assessments show the reviewed score and trend", async () => {

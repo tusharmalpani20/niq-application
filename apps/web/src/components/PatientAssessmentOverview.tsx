@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Check, ClipboardList, UserRoundCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { assessmentResultView } from "../features/assessments/AssessmentResult";
 import { changeClinicalReview, getClinicalReview } from "../features/assessments/clinical-review-api";
 import { AssessmentRequestError, assessmentRequest, getAssessment } from "../features/assessments/workflow-api";
@@ -221,6 +222,13 @@ export function PatientAssessmentOverview({ history, state, organizationId, memb
       setClaimError(cause instanceof Error ? cause.message : "Could not claim this review. Please try again.");
     } finally { setClaiming(false); }
   }
+  if (state === "loading") return <div className={`mb-5 grid min-w-0 items-stretch gap-5 ${canRead ? "lg:grid-cols-2" : ""}`} role="status" aria-label="Loading assessment overview">
+    <section className="surface min-w-0 overflow-hidden" aria-label="Latest assessment">
+      <div className="flex items-start gap-4 bg-primary/5 p-5 sm:p-6"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><ClipboardList className="size-5" aria-hidden="true" /></span><div className="grid min-w-0 flex-1 gap-3"><h2 className="font-semibold">Latest assessment</h2><Skeleton className="h-4 w-36 max-w-full motion-reduce:animate-none" /><Skeleton className="h-3 w-56 max-w-full motion-reduce:animate-none" /></div></div>
+      <div className="grid gap-3 p-5 sm:p-6"><Skeleton className="h-5 w-44 max-w-full motion-reduce:animate-none" /><Skeleton className="h-4 w-full motion-reduce:animate-none" /><Skeleton className="h-4 w-3/4 motion-reduce:animate-none" /></div>
+    </section>
+    {canRead && <section className="surface min-w-0 p-5 sm:p-6" aria-label="NIQ score trend"><h2 className="font-semibold">NIQ score trend</h2><Skeleton className="mt-6 h-40 w-full motion-reduce:animate-none" /><Skeleton className="mt-5 h-4 w-48 max-w-full motion-reduce:animate-none" /></section>}
+  </div>;
   const latestScore = details.scores.find(point => point.reference === latest?.reference);
   const approvedScores = details.scores.filter(point => point.status === "COMPLETED");
   const draft = latest?.status === "DRAFT" || latest?.status === "READY_FOR_SCORING";
@@ -235,8 +243,7 @@ export function PatientAssessmentOverview({ history, state, organizationId, memb
       <div className="flex flex-wrap items-start justify-between gap-4 bg-primary/5 p-5 sm:p-6">
         <div className="flex min-w-0 items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><ClipboardList className="size-5" /></span><div className="min-w-0">
           <h2 className="font-semibold">Latest assessment</h2>
-          {state === "loading" ? <p className="mt-2 text-sm text-muted-foreground">Loading assessment history…</p>
-            : state === "error" ? <p className="mt-2 text-sm text-muted-foreground">Assessment history is unavailable.</p>
+          {state === "error" ? <p className="mt-2 text-sm text-muted-foreground">Assessment history is unavailable.</p>
             : !latest ? <p className="mt-2 text-sm text-muted-foreground">No assessments yet.</p>
             : <><div className="mt-2 flex flex-wrap items-center gap-2"><span className="font-medium">{latest.reference}</span><StatusBadge status={assessmentStatusLabels[latest.status]} /></div><p className="mt-2 text-sm text-muted-foreground">{latest.facility?.name ?? "No facility"} · Started <DateDisplay value={latest.createdAt} /></p></>}
         </div></div>
@@ -272,6 +279,6 @@ export function PatientAssessmentOverview({ history, state, organizationId, memb
       {latest && canRead && latestScore && <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t px-5 py-4 sm:px-6"><span className="text-sm text-muted-foreground">NIQ score</span><strong className="text-2xl tabular-nums" style={latestScore.risk ? { color: riskColor(latestScore.color) } : undefined}>{latestScore.score} <span className="text-sm font-normal">points</span></strong>{latestScore.risk && <span data-testid="patient-risk-label" className="rounded-full border px-2.5 py-1 text-sm font-semibold" style={riskBadgeStyle(latestScore.color)}>{latestScore.risk}</span>}</div>}
       {latest && canRead && details.loading && <p className="border-t px-5 py-3 text-sm text-muted-foreground">Loading assessment details…</p>}
     </section>
-    {showTrend && (approvedScores.length >= 2 ? <ScoreTrend points={approvedScores} /> : <ScoreTrendPlaceholder first={approvedScores[0]} loading={state === "loading" || details.loading} />)}
+    {showTrend && (approvedScores.length >= 2 ? <ScoreTrend points={approvedScores} /> : <ScoreTrendPlaceholder first={approvedScores[0]} loading={details.loading} />)}
   </div>;
 }

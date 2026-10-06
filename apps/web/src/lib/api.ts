@@ -29,6 +29,7 @@ import {
   onboardOrganizationSchema,
   patientListResponseSchema,
   patientPageResponseSchema,
+  patientAssessmentPageResponseSchema,
   patientSchema,
   registerPatientSchema,
   resendMfaRequestSchema,
@@ -277,9 +278,10 @@ export async function listAssessments(organizationId: string): Promise<Assessmen
   return assessmentListResponseSchema.parse(await responseBody(response)).items;
 }
 
-export async function listPatientAssessments(organizationId: string, patientLocator: string): Promise<AssessmentSummary[]> {
-  const response = await fetch(`/api/v1/organizations/${organizationId}/patients/${encodeURIComponent(patientLocator)}/assessments`, { credentials: "include" });
-  return assessmentListResponseSchema.parse(await responseBody(response)).items;
+export async function listPatientAssessmentPage(organizationId: string, patientLocator: string, page: number, signal?: AbortSignal) {
+  const query = new URLSearchParams({ page: String(page), pageSize: "10" });
+  const response = await fetch(`/api/v1/organizations/${organizationId}/patients/${encodeURIComponent(patientLocator)}/assessments/page?${query}`, { credentials: "include", signal });
+  return patientAssessmentPageResponseSchema.parse(await responseBody(response));
 }
 
 export async function listAssessmentPage(organizationId: string, params: URLSearchParams, signal?: AbortSignal) {

@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
+import { AssessmentListSkeleton } from "../components/AssessmentListSkeleton";
 import { PatientForm, PatientFormDialog } from "../components/PatientForm";
 import { CorrectPatientMrnDialog } from "../components/CorrectPatientMrnDialog";
 import { CorrectPatientDobDialog } from "../components/CorrectPatientDobDialog";
@@ -23,7 +24,7 @@ import { PatientAssessmentOverview } from "../components/PatientAssessmentOvervi
 import { PatientEmptyIllustration } from "../components/PatientEmptyIllustration";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
-import { getPatient, listFacilities, listPatientAssessments, listPatientPage, setAssessmentPriority } from "../lib/api";
+import { getPatient, listFacilities, listPatientAssessmentPage, listPatientPage, setAssessmentPriority } from "../lib/api";
 import { Icon } from "../lib/icons";
 
 import { DateDisplay } from "../components/DateDisplay";
@@ -217,6 +218,10 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
   const [history, setHistory] = useState<AssessmentSummary[]>([]);
   const [patientTab, setPatientTab] = useState("details");
   const [historyState, setHistoryState] = useState<"loading" | "ready" | "error">("loading");
+  const [assessmentPage, setAssessmentPage] = useState(1);
+  const [assessmentItems, setAssessmentItems] = useState<AssessmentSummary[]>([]);
+  const [assessmentTotal, setAssessmentTotal] = useState(0);
+  const [assessmentPageState, setAssessmentPageState] = useState<"loading" | "ready" | "error">("loading");
   const [priorityBusy, setPriorityBusy] = useState<string | null>(null);
   const [priorityError, setPriorityError] = useState("");
   const [editing, setEditing] = useState(false);
@@ -246,18 +251,32 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
     let active = true;
     setPatient(null);
     setFailed(false);
-    setHistory([]);
-    setHistoryState("loading");
     getPatient(user.organizationId, patientLocator).then((value) => {
       if (!active) return;
       setPatient(value);
       if (patientLocator !== value.reference) navigate(`/patients/${value.reference}${requestedEdit ? `?edit=${requestedEdit}` : ""}`, { replace: true });
     }).catch(() => { if (active) setFailed(true); });
-    listPatientAssessments(user.organizationId, patientLocator).then(items => {
-      if (active) { setHistory(items.sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime())); setHistoryState("ready"); }
-    }).catch(() => { if (active) setHistoryState("error"); });
     return () => { active = false; };
   }, [navigate, patientLocator, user.organizationId, reload, requestedEdit, workspaceRevision]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setAssessmentPageState("loading");
+    listPatientAssessmentPage(user.organizationId, patientLocator, assessmentPage, controller.signal).then(result => {
+      if (controller.signal.aborted) return;
+      const pageCount = Math.max(1, Math.ceil(result.total / result.pageSize));
+      if (assessmentPage > pageCount) { setAssessmentPage(pageCount); return; }
+      setAssessmentItems(result.items);
+      setAssessmentTotal(result.total);
+      setHistory(result.overviewItems);
+      setHistoryState("ready");
+      setAssessmentPageState("ready");
+    }).catch(() => {
+      if (controller.signal.aborted) return;
+      setAssessmentPageState("error");
+      setHistoryState(current => current === "ready" ? current : "error");
+    });
+    return () => controller.abort();
+  }, [assessmentPage, patientLocator, user.organizationId, reload, workspaceRevision]);
   if (failed) return <Alert variant="destructive"><AlertDescription>This patient could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button> <Link to="/patients">Back to patients</Link></AlertDescription></Alert>;
   if (!patient) return <PatientDetailSkeleton />;
   const canEditPatient = hasPermission(user.role, "patients.edit");
@@ -277,6 +296,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
     try {
       await setAssessmentPriority(user.organizationId, record.id, !record.isPriority);
       setHistory(items => items.map(item => item.id === record.id ? { ...item, isPriority: !record.isPriority } : item));
+      setAssessmentItems(items => items.map(item => item.id === record.id ? { ...item, isPriority: !record.isPriority } : item));
     } catch (cause) {
       setPriorityError(cause instanceof Error ? cause.message : "Could not update priority. Please try again.");
     } finally {
@@ -304,7 +324,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
     <Tabs selectedKey={patientTab} onSelectionChange={(key) => setPatientTab(String(key))} className="organization-detail-tabs gap-5">
       <TabsList variant="line" aria-label="Patient record" className="w-full justify-start gap-5 border-b p-0">
         <TabsTrigger id="details" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Details</TabsTrigger>
-        <TabsTrigger id="assessments" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Assessments {historyState === "ready" && <span className="ml-2 text-xs">{history.length}</span>}</TabsTrigger>
+        <TabsTrigger id="assessments" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Assessments {historyState === "ready" ? <span className="ml-2 text-xs">{assessmentTotal}</span> : historyState === "loading" ? <Skeleton className="ml-2 inline-block h-3 w-6 motion-reduce:animate-none" aria-label="Loading assessment count" /> : null}</TabsTrigger>
       </TabsList>
       <TabsContent id="details">
         <PatientAssessmentOverview history={history} state={historyState} organizationId={user.organizationId} membershipId={user.membershipId} canRead={canReadAssessment} canEdit={canEditAssessment} />
@@ -332,16 +352,17 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
       </TabsContent>
       <TabsContent id="assessments">
         {priorityError && <p role="alert" className="mb-3 text-sm text-destructive">{priorityError}</p>}
-        <section className="surface table-surface" aria-label="Patient assessments">
-          {historyState === "loading" ? <p className="p-5">Loading assessments…</p> : historyState === "error" ? <div className="grid gap-3 p-5"><p>Assessment history could not be loaded.</p><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></div> : <>
-            <div className="mobile-card-list">{history.length ? history.map(record => <article className="mobile-data-card list-mobile-card assessment-mobile-card" key={record.id}>
+        {assessmentPageState === "loading" ? <AssessmentListSkeleton showActions={canReadAssessment} showPatient={false} /> : <section className="surface table-surface" aria-label="Patient assessments">
+          {assessmentPageState === "error" ? <div className="grid gap-3 p-5"><p>Assessment history could not be loaded.</p><Button variant="outline" onPress={() => setReload(value => value + 1)}>Retry</Button></div> : <>
+            <div className="mobile-card-list">{assessmentItems.length ? assessmentItems.map(record => <article className="mobile-data-card list-mobile-card assessment-mobile-card" key={record.id}>
               <div className="mobile-card-heading"><div className="mobile-card-primary">{canReadAssessment ? <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${record.reference}`}>{record.reference}</Link> : <span>{record.reference}</span>}</div>{canReadAssessment && <div className="mobile-card-actions">{priorityButton(record)}</div>}</div>
               <div className="mobile-card-meta"><StatusBadge status={assessmentStatusLabels[record.status]} /><span>{record.facility?.name ?? "No facility"} · {formatPatientDate(record.createdAt)}</span></div>
               {canReadAssessment && <div className="assessment-card-footer">{openAssessmentButton(record)}<div className="assessment-card-secondary">{downloadButton(record)}</div></div>}
             </article>) : historyEmptyContent}</div>
-            <div className="desktop-table p-5"><DataTable label="Patient assessments" data={history} columns={historyColumns} emptyContent={historyEmptyContent} /></div>
+            <div className="desktop-table p-5"><DataTable label="Patient assessments" data={assessmentItems} columns={historyColumns} emptyContent={historyEmptyContent} /></div>
           </>}
-        </section>
+        </section>}
+        {assessmentPageState === "ready" && assessmentTotal > 0 && <Pagination className="mt-4" aria-label="Assessments pagination"><PaginationContent><PaginationItem><Button variant="outline" size="sm" isDisabled={assessmentPage === 1} onPress={() => setAssessmentPage(assessmentPage - 1)}>Previous</Button></PaginationItem><PaginationItem><span className="px-2 text-sm text-muted-foreground" role="status">Page {assessmentPage} of {Math.ceil(assessmentTotal / pageSize)}</span></PaginationItem><PaginationItem><Button variant="outline" size="sm" isDisabled={assessmentPage * pageSize >= assessmentTotal} onPress={() => setAssessmentPage(assessmentPage + 1)}>Next</Button></PaginationItem></PaginationContent></Pagination>}
       </TabsContent>
     </Tabs>
     {editing && <PatientFormDialog organizationId={user.organizationId} facilities={facilityOptions} patient={patient} canCorrectIdentity={user.role === "ORGANIZATION_ADMIN"} focusField={focusEditField} onClose={() => setEditing(false)} onSaved={updated => { setPatient(updated); setEditing(false); }} />}

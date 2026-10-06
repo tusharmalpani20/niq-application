@@ -18,7 +18,7 @@ test("patient details and patient-only assessment history load independently", a
   globalThis.fetch = (async input => {
     const url = String(input);
     requests.push(url);
-    if (url.endsWith("/patients/PAT-2/assessments")) return Response.json({ items: [] });
+    if (url.includes("/patients/PAT-2/assessments/page?")) return Response.json({ items: [], overviewItems: [], total: 0, page: 1, pageSize: 10 });
     if (url.endsWith("/patients/PAT-2")) {
       await patientGate;
       return Response.json({ id, organizationId: id, reference: "PAT-2", displayName: "Test Patient", homeFacility: null, dateOfBirth: "1990-01-01", gender: "FEMALE", createdAt: "2026-10-05T00:00:00Z", updatedAt: "2026-10-05T00:00:00Z" });
@@ -31,7 +31,7 @@ test("patient details and patient-only assessment history load independently", a
   try {
     await act(async () => { root.render(<RouterProvider router={router} />); await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(document.querySelector('[aria-label="Loading patient"] .animate-pulse')).not.toBeNull();
-    expect(requests.some(url => url.endsWith("/patients/PAT-2/assessments"))).toBe(true);
+    expect(requests.some(url => url.includes("/patients/PAT-2/assessments/page?page=1&pageSize=10"))).toBe(true);
     expect(requests.some(url => /\/assessments$/.test(url) && !url.includes("/patients/"))).toBe(false);
     await act(async () => { releasePatient(); await patientGate; await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(document.querySelector('[aria-label="Loading patient"]')).toBeNull();

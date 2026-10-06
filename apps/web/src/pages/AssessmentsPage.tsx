@@ -11,6 +11,7 @@ import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination";
+import { AssessmentListSkeleton } from "../components/AssessmentListSkeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type DataTableColumn } from "../components/DataTable";
@@ -89,25 +90,6 @@ const assessmentActionIcon = (record: AssessmentSummary) => {
     default: return Eye;
   }
 };
-
-function AssessmentListSkeleton({ showActions }: { showActions: boolean }) {
-  return <section className="surface table-surface" role="status" aria-label="Loading assessments">
-    <span className="sr-only">Loading assessments…</span>
-    <div className="mobile-card-list" aria-hidden="true">{Array.from({ length: 4 }, (_, index) => <article className="mobile-data-card list-mobile-card assessment-mobile-card" key={index}>
-      <div className="mobile-card-heading"><div className="mobile-card-primary flex-1"><Skeleton className="h-4 w-28 motion-reduce:animate-none" /><Skeleton className="h-4 w-36 max-w-full motion-reduce:animate-none" /><Skeleton className="h-3 w-16 motion-reduce:animate-none" /></div>{showActions && <div className="mobile-card-actions"><Skeleton className="size-8 motion-reduce:animate-none" /></div>}</div>
-      <div className="mobile-card-meta"><Skeleton className="h-6 w-24 rounded-full motion-reduce:animate-none" /><Skeleton className="h-3 w-32 motion-reduce:animate-none" /></div>
-      {showActions && <div className="assessment-card-footer"><Skeleton className="h-9 w-36 motion-reduce:animate-none" /></div>}
-    </article>)}</div>
-    <div className="desktop-table p-5" aria-hidden="true"><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th>Assessment</th><th>Patient</th><th>Facility</th><th>Started</th><th>Status</th>{showActions && <th className="text-right">Actions</th>}</tr></thead><tbody>{Array.from({ length: 6 }, (_, index) => <tr key={index}>
-      <td><Skeleton className="h-4 w-28 motion-reduce:animate-none" /></td>
-      <td><div className="grid gap-2"><Skeleton className="h-4 w-32 motion-reduce:animate-none" /><Skeleton className="h-3 w-16 motion-reduce:animate-none" /></div></td>
-      <td><Skeleton className="h-4 w-28 motion-reduce:animate-none" /></td>
-      <td><Skeleton className="h-4 w-20 motion-reduce:animate-none" /></td>
-      <td><Skeleton className="h-6 w-24 rounded-full motion-reduce:animate-none" /></td>
-      {showActions && <td><div className="flex justify-end gap-2"><Skeleton className="h-8 w-28 motion-reduce:animate-none" /><Skeleton className="size-8 motion-reduce:animate-none" /></div></td>}
-    </tr>)}</tbody></table></div></div>
-  </section>;
-}
 
 export function AssessmentsPage() {
   const workspaceRevision = useWorkspaceRevision(["assessment", "patient", "facility"]);
