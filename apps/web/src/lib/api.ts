@@ -277,6 +277,11 @@ export async function listAssessments(organizationId: string): Promise<Assessmen
   return assessmentListResponseSchema.parse(await responseBody(response)).items;
 }
 
+export async function listPatientAssessments(organizationId: string, patientLocator: string): Promise<AssessmentSummary[]> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}/patients/${encodeURIComponent(patientLocator)}/assessments`, { credentials: "include" });
+  return assessmentListResponseSchema.parse(await responseBody(response)).items;
+}
+
 export async function listAssessmentPage(organizationId: string, params: URLSearchParams, signal?: AbortSignal) {
   const response = await fetch(`/api/v1/organizations/${organizationId}/assessments/page?${params}`, { credentials: "include", signal });
   return assessmentPageResponseSchema.parse(await responseBody(response));

@@ -23,7 +23,7 @@ import { PatientAssessmentOverview } from "../components/PatientAssessmentOvervi
 import { PatientEmptyIllustration } from "../components/PatientEmptyIllustration";
 import { PageHeader } from "../components/Page";
 import { RouterButtonLink } from "../components/RouterButtonLink";
-import { getPatient, listAssessments, listFacilities, listPatientPage, setAssessmentPriority } from "../lib/api";
+import { getPatient, listFacilities, listPatientAssessments, listPatientPage, setAssessmentPriority } from "../lib/api";
 import { Icon } from "../lib/icons";
 
 import { DateDisplay } from "../components/DateDisplay";
@@ -48,6 +48,27 @@ function PatientsSkeleton({ showActions }: { showActions: boolean }) {
       <td><div className="flex justify-end gap-2">{showActions && <Skeleton className="size-8 motion-reduce:animate-none" />}<Skeleton className="size-8 motion-reduce:animate-none" /></div></td>
     </tr>)}</tbody></table></div></div>
   </section>;
+}
+
+function PatientDetailSkeleton() {
+  return <div role="status" aria-label="Loading patient" className="space-y-5">
+    <span className="sr-only">Loading patient…</span>
+    <div aria-hidden="true" className="space-y-3 border-b border-border pb-5">
+      <Skeleton className="h-4 w-32 motion-reduce:animate-none" />
+      <Skeleton className="h-9 w-56 max-w-full motion-reduce:animate-none" />
+      <Skeleton className="h-4 w-64 max-w-full motion-reduce:animate-none" />
+    </div>
+    <div aria-hidden="true" className="flex gap-5 border-b border-border pb-3"><Skeleton className="h-5 w-16 motion-reduce:animate-none" /><Skeleton className="h-5 w-28 motion-reduce:animate-none" /></div>
+    <div aria-hidden="true" className="grid gap-5 lg:grid-cols-2">{Array.from({ length: 2 }, (_, index) => <div key={index} className="surface space-y-4 p-5">
+      <Skeleton className="h-5 w-40 motion-reduce:animate-none" />
+      <Skeleton className="h-4 w-52 max-w-full motion-reduce:animate-none" />
+      <Skeleton className="h-4 w-36 motion-reduce:animate-none" />
+    </div>)}</div>
+    <div aria-hidden="true" className="grid gap-4 lg:grid-cols-2">{Array.from({ length: 2 }, (_, index) => <div key={index} className="surface space-y-4 p-5">
+      <Skeleton className="h-5 w-36 motion-reduce:animate-none" />
+      <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 3 }, (_, field) => <Skeleton key={field} className="h-16 w-full motion-reduce:animate-none" />)}</div>
+    </div>)}</div>
+  </div>;
 }
 
 const genderLabel = (gender: Patient["gender"]) => gender[0] + gender.slice(1).toLowerCase();
@@ -225,17 +246,20 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
     let active = true;
     setPatient(null);
     setFailed(false);
+    setHistory([]);
+    setHistoryState("loading");
     getPatient(user.organizationId, patientLocator).then((value) => {
       if (!active) return;
       setPatient(value);
-      setHistoryState("loading");
-      listAssessments(user.organizationId).then(items => { if (active) { setHistory(items.filter(item => item.patient.id === value.id).sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime())); setHistoryState("ready"); } }).catch(() => { if (active) setHistoryState("error"); });
       if (patientLocator !== value.reference) navigate(`/patients/${value.reference}${requestedEdit ? `?edit=${requestedEdit}` : ""}`, { replace: true });
     }).catch(() => { if (active) setFailed(true); });
+    listPatientAssessments(user.organizationId, patientLocator).then(items => {
+      if (active) { setHistory(items.sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime())); setHistoryState("ready"); }
+    }).catch(() => { if (active) setHistoryState("error"); });
     return () => { active = false; };
   }, [navigate, patientLocator, user.organizationId, reload, requestedEdit, workspaceRevision]);
   if (failed) return <Alert variant="destructive"><AlertDescription>This patient could not be loaded. <Button variant="link" onPress={() => setReload(value => value + 1)}>Retry</Button> <Link to="/patients">Back to patients</Link></AlertDescription></Alert>;
-  if (!patient) return <p className="muted">Loading patient…</p>;
+  if (!patient) return <PatientDetailSkeleton />;
   const canEditPatient = hasPermission(user.role, "patients.edit");
   const canCreateAssessment = hasPermission(user.role, "assessments.create");
   const canEditAssessment = hasPermission(user.role, "assessments.edit");

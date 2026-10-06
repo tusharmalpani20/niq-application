@@ -27,7 +27,7 @@ async function renderDetail(role: MembershipRole, verify: (body: HTMLElement) =>
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith("/patients/PAT-2")) return Response.json(patient);
-    if (url.endsWith("/assessments")) return Response.json({ items: options.summaries ?? [assessment] });
+    if (url.endsWith("/patients/PAT-2/assessments")) return Response.json({ items: options.summaries ?? [assessment] });
     const reviewedId = url.match(/\/assessments\/([^/]+)\/score-reviews$/)?.[1];
     if (reviewedId && options.reviews?.[reviewedId]) return Response.json(options.reviews[reviewedId]);
     const clinicalId = url.match(/\/assessments\/([^/]+)\/clinical-review$/)?.[1];
