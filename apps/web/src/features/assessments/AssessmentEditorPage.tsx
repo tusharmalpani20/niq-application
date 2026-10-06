@@ -1,5 +1,5 @@
 import { hasPermission, type MembershipRole } from "@niq/application-contracts";
-import { assessmentFieldError, clearInactiveAssessmentAnswers, getAssessmentCompletion, getAssessmentAnswerCoverage, getReportSubmissionIssues, hasUsableFaceScan, isAssessmentFieldApplicable, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FaceScanSession, type FormAnswer, type FormAnswers } from "@niq/application-contracts";
+import { assessmentFieldError, clearInactiveAssessmentAnswers, getAssessmentCompletion, getAssessmentAnswerCoverage, getReportSubmissionIssues, hasUsableFaceScan, isUnderOneYearOldForFaceScan, isAssessmentFieldApplicable, validateAssessmentAnswers, type AssessmentWorkflow, type AuthenticatedUser, type FaceScanSession, type FormAnswer, type FormAnswers } from "@niq/application-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Link, useLocation, useOutletContext, useParams } from "react-router-dom";
 import { PatientHeader } from "@/components/PatientHeader";
@@ -206,8 +206,8 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     const invalid = validateAssessmentAnswers(record.manifest, answers, { requireComplete: true });
     setErrors(invalid);
     if (Object.keys(invalid).length) { setError("Complete required fields before requesting a score."); return; }
-    if (scanAccess === null) { setError("Face scan access could not be checked. Refresh the scan status before submitting."); return; }
-    if (scanAccess && !hasUsableFaceScan(scanSession)) {
+    if (scanAccess === null && !isUnderOneYearOldForFaceScan(record.patient.dateOfBirth)) { setError("Face scan access could not be checked. Refresh the scan status before submitting."); return; }
+    if (scanAccess && !isUnderOneYearOldForFaceScan(record.patient.dateOfBirth) && !hasUsableFaceScan(scanSession)) {
       setSectionId("face_scan");
       setError("A usable face scan result is required before submitting this assessment. If the scan has finished without a result, try again.");
       requestAnimationFrame(() => document.getElementById("assessment-section-heading")?.focus());
@@ -313,7 +313,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     }
     if (showSubmissionIssues || sectionId === "review") {
       if (record.reports.some(report => getReportSubmissionIssues(report).length > 0)) issueSections.add("reports");
-      if ((scanAccess && !hasUsableFaceScan(scanSession)) || (record.submission?.status === "REJECTED" && record.submission.failureCode === "FACE_SCAN_UNAVAILABLE")) issueSections.add("face_scan");
+      if ((!isUnderOneYearOldForFaceScan(record.patient.dateOfBirth) && scanAccess && !hasUsableFaceScan(scanSession)) || (record.submission?.status === "REJECTED" && record.submission.failureCode === "FACE_SCAN_UNAVAILABLE")) issueSections.add("face_scan");
     }
   }
   const attachmentCounts = { reports: record.reports.length, files: record.reports.reduce((total, report) => total + report.files.filter(file => file.status === "READY").length, 0) };
@@ -347,7 +347,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
         {(record.result === null || showScoredAnswers) && <AssessmentFaceScan organizationId={organizationId} record={{ ...record, answers }} active={sectionId === "face_scan"} disabled={!hasPermission(role, "scans.perform") || !editable || busy || reportBusy || reviewBusy || conflict} beforeStart={persist} onMissingInputs={showMissingScanInputs} onBusyChange={setScanBusy} onStatusChange={setScanStatus} onSessionChange={setScanSession} onAccessChange={setScanAccess}/>}
         {section && <section><AssessmentFields heightSourceDate={record.heightSource?.recordedAt} section={section} answers={answers} errors={visibleErrors} readOnly={!editable || locked} measurementUnits={measurementUnits} onMeasurementUnitsChange={changeMeasurementUnits} patientReference={record.patient.reference} canEditPatient={hasPermission(role, "patients.edit")} canCorrectDob={role === "ORGANIZATION_ADMIN"} onEditContact={editable ? () => { setPhone(typeof answers.contact === "string" ? answers.contact : ""); setContactOpen(true); } : undefined} onChange={changeAnswer} /></section>}
         <div hidden={sectionId !== "reports"}>{(record.result === null || showScoredAnswers) && <AssessmentReports organizationId={organizationId} assessmentId={internalId} revision={record.revision} reports={record.reports} limits={record.reportLimits} readOnly={!hasPermission(role, "reports.manage") || !editable || busy || conflict} onChanged={refreshReports} onBusyChange={setReportBusy} onDirtyChange={setReportDirty} />}</div>
-        {sectionId === "review" && <AssessmentReview record={record} answers={answers} scanStatus={scanStepStatus} scanSession={scanSession} scanRequired={scanAccess === true} organizationId={organizationId} assessmentId={internalId} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}
+        {sectionId === "review" && <AssessmentReview record={record} answers={answers} scanStatus={scanStepStatus} scanSession={scanSession} scanRequired={scanAccess === true && !isUnderOneYearOldForFaceScan(record.patient.dateOfBirth)} organizationId={organizationId} assessmentId={internalId} onSection={(id, fieldId) => { void selectSection(id, false, fieldId); }} />}
       </div>
     </div>
     <footer className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border border-border bg-card px-4 py-3 sm:px-5">

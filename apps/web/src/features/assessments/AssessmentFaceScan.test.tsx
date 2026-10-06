@@ -8,7 +8,7 @@ import { createCaptureController, type CaptureSDK } from "./careplix-capture";
 
 const session: FaceScanSession = { id: "session", state: "REQUESTED", context: { dob: "1990-01-01", gender: "female", heightCm: 170, weightKg: 70, posture: "resting", employeeId: "employee" }, createdAt: "2026-09-20T12:00:00.000Z", updatedAt: "2026-09-20T12:00:00.000Z", completedAt: null, failureCode: null, result: null, score: null };
 const usableSession: FaceScanSession = { ...session, state: "COMPLETED", completedAt: "2026-09-20T12:01:00.000Z", result: { schemaVersion: 1, providerScanId: "scan", wellnessScore: 70, healthRiskScore: null, vitals: { heartRate: 70, oxygenSaturation: null, respiratoryRate: null, systolic: null, diastolic: null }, physiologicalScore: null, mentalWellbeingScore: null }, score: { status: "SCORED", points: 1 } };
-async function harness(run: (ctx: { click: (text: string) => Promise<void>; startScan: (label?: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; cameraChecks: () => number; cameraStops: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void>; setAvailability: (available: boolean) => void }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null; status?: AssessmentWorkflow["status"]; cameras?: number; availability?: boolean } = {}) {
+async function harness(run: (ctx: { click: (text: string) => Promise<void>; startScan: (label?: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; cameraChecks: () => number; cameraStops: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void>; setAvailability: (available: boolean) => void }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null; dob?: string; status?: AssessmentWorkflow["status"]; cameras?: number; availability?: boolean } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "https://niq.test", pretendToBeVisual: true });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -45,7 +45,7 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; star
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable: true });
   Object.assign(dom.window.HTMLElement.prototype, { attachEvent() {}, detachEvent() {} });
   const root = createRoot(document.getElementById("root")!);
-  const record = { id: "assessment", revision: 3, status: options.status ?? "DRAFT", patient: { dateOfBirth: "1990-01-01", gender: "FEMALE" }, answers: { height_cm: 170, current_weight_kg: options.weight === undefined ? 70 : options.weight } } as AssessmentWorkflow;
+  const record = { id: "assessment", revision: 3, status: options.status ?? "DRAFT", patient: { dateOfBirth: options.dob ?? "1990-01-01", gender: "FEMALE" }, answers: { height_cm: 170, current_weight_kg: options.weight === undefined ? 70 : options.weight } } as AssessmentWorkflow;
   const flush = () => new Promise(resolve => setTimeout(resolve, 0));
   async function click(text: string) {
     const button = [...document.querySelectorAll("button")].find(b => b.textContent?.trim() === text);
@@ -282,6 +282,27 @@ test("confirmed device rejection offers explicit retry without automatic capture
   expect(starts()).toBe(1);
   expect(requests.filter(r => r.body?.requestKey).length).toBe(1);
 }, {existing: {...session, state:"FAILED", failureCode:"DEVICE_NOT_SUPPORTED"}}));
+
+test("under-one patient can open Face scan and see why capture is unavailable", async () => harness(async ({starts, requests}) => {
+  expect(document.body.textContent).toContain("Face scans aren't available for children under 1");
+  expect([...document.querySelectorAll("button")].some(button => /Start face scan|Start another scan/.test(button.textContent ?? ""))).toBe(false);
+  expect(starts()).toBe(0);
+  expect(requests.every(request => request.body === null)).toBe(true);
+}, {dob:"2026-05-05"}));
+
+test("previous age rejection remains in history while new capture is blocked", async () => harness(async ({starts}) => {
+  expect(document.body.textContent).toContain("Face scans aren't available for children under 1");
+  expect([...document.querySelectorAll("button")].some(button => button.textContent?.trim() === "Start another scan")).toBe(false);
+  expect(starts()).toBe(0);
+}, {existing: {...session, state:"FAILED", failureCode:"PATIENT_AGE_UNSUPPORTED"}, dob:"2026-05-05"}));
+
+test("corrected DOB allows a new scan after a confirmed provider age rejection", async () => harness(async ({consent, startScan, starts, requests}) => {
+  const retry = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Start another scan")!;
+  expect(retry.disabled).toBe(true); // Posture still needs to be selected.
+  await consent(); await startScan("Start another scan");
+  expect(starts()).toBe(1);
+  expect(requests.filter(request => request.body?.requestKey)).toHaveLength(1);
+}, {existing: {...session, state:"FAILED", failureCode:"PATIENT_AGE_UNSUPPORTED", context:{...session.context,dob:"2026-05-05"}}, dob:"1990-01-01"}));
 
 
 test("completed scan keeps rescan setup closed until explicitly requested", async () => harness(async ({ click, starts, requests }) => {

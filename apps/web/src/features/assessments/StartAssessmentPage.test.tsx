@@ -65,6 +65,17 @@ test("new assessment opens personal details, with other sections locked and no w
   });
 });
 
+test("under-one patient can create an assessment and sees scan guidance in personal details", async () => {
+  const infant = {...patient, dateOfBirth: "2026-05-05"};
+  await harness(`/assessments/new?patient=${id}`, async url => {
+    if (url.includes("/patients/")) return Response.json(infant);
+    return Response.json({});
+  }, async () => {
+    expect(document.body.textContent).toContain("Face scans aren't available for children under 1");
+    expect([...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Continue")?.disabled).toBe(false);
+  });
+});
+
 test("existing patient can continue without measurements and add them later", async () => {
   const writes: Array<{ url: string; body: any }> = [];
   await harness(`/assessments/new?patient=${id}`, async (url, init) => {

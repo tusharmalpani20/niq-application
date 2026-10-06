@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { faceScanContextSchema, hasUsableFaceScan, type AssessmentWorkflow, type FaceScanList, type FaceScanSession, type FaceScanSignal } from "@niq/application-contracts";
+import { faceScanContextSchema, hasUsableFaceScan, isUnderOneYearOldForFaceScan, type AssessmentWorkflow, type FaceScanList, type FaceScanSession, type FaceScanSignal } from "@niq/application-contracts";
 import { Armchair, History, Info, LoaderCircle, PersonStanding, ScanFace } from "lucide-react";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ function failedScanMessage(code: string | null): string {
     case "FACE_SCAN_MAPPING_UNAVAILABLE": return "The face-scan scoring rule is unavailable. Ask your administrator to check the scoring setup before trying again.";
     case "UNAUTHORIZED": case "CLIENT_NOT_ALLOWED": return "The scan service rejected this connection. Ask your administrator to check its credentials and access before trying again.";
     case "DEVICE_NOT_SUPPORTED": return "This device is not supported by the scan service. Try a supported device before starting another scan.";
+    case "PATIENT_AGE_UNSUPPORTED": return "The scan provider rejected this attempt because the saved birth date showed the patient was under 1. If the date has been corrected, you can start another scan.";
     case "SCAN_NOT_SUBMITTED": return "The previous scan was not submitted. Check camera access and keep this page open while trying again.";
     default: return code ? `The scan could not start or finish (${code}). Contact support if it happens again.` : "The scan didn’t finish. Please try again.";
   }
@@ -98,7 +99,8 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const quotaFailure = session?.state === "FAILED" && session.failureCode === "MONTHLY_LIMIT_REACHED";
   const quotaRestored = quotaFailure && availability?.available === true;
   const quotaUnavailable = quotaFailure && !quotaRestored;
-  const statusLabel = phase === "capturing" ? "Capturing scan" : phase === "preparing" ? "Preparing scan" : phase === "uploading" ? "Uploading scan" : quotaRestored ? "Face scan ready" : quotaUnavailable ? "Face scan unavailable" : session ? rejected ? "Scan failed" : session.state === "COMPLETED" && !hasUsableFaceScan(session) ? "Scan result unavailable" : session.state === "REQUESTED" && record.status !== "DRAFT" ? "Scan not completed" : labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable";
+  const ageIneligible = isUnderOneYearOldForFaceScan(record.patient.dateOfBirth);
+  const statusLabel = phase === "capturing" ? "Capturing scan" : phase === "preparing" ? "Preparing scan" : phase === "uploading" ? "Uploading scan" : ageIneligible ? "Face scan unavailable" : quotaRestored ? "Face scan ready" : quotaUnavailable ? "Face scan unavailable" : session ? rejected ? "Scan failed" : session.state === "COMPLETED" && !hasUsableFaceScan(session) ? "Scan result unavailable" : session.state === "REQUESTED" && record.status !== "DRAFT" ? "Scan not completed" : labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable";
   const selectedPosture = session?.state === "REQUESTED" ? session.context.posture : posture;
   const consentReady = consentApproval?.assessmentId === record.id && consentApproval.approved;
   const handleConsentApproval = useCallback((approved: boolean) => setConsentApproval({ assessmentId: record.id, approved }), [record.id]);
@@ -284,6 +286,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     }
   }
   function openConsent() {
+    if (ageIneligible) return;
     const missing = missingScanInputs(record);
     if (missing.length) { onMissingInputs?.(missing); return; }
     cameraCheckVersion.current++; setCameraCount(null); setCamera("front"); setCameraCheckError("");
@@ -304,24 +307,26 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const noRecordedScan = !!data && record.status !== "DRAFT" && !session && data.sessions.length === 0;
   const startButtonLabel = session?.state === "REQUESTED" ? "Resume capture"
     : quotaRestored ? "Start face scan"
+    : session?.failureCode === "PATIENT_AGE_UNSUPPORTED" ? "Start another scan"
     : session?.state === "FAILED" ? quotaUnavailable ? "Try again later" : "Try again"
     : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start face scan";
   return <div hidden={!active} className="space-y-5">
     {!data && !stale && <p role="status">Loading face scan…</p>}
+    {data && ageIneligible && <div role="status" className="rounded-xl border border-primary/20 bg-primary/5 p-4"><p className="font-semibold">Face scan unavailable</p><p className="mt-1 text-sm text-muted-foreground">Face scans aren't available for children under 1. Continue the assessment without a scan. If the birth date is wrong, ask your clinic administrator to correct it.</p></div>}
     {stale && <div role="alert" className="space-y-2"><p>Scan status could not be refreshed. Any accepted scan continues processing.</p><Button variant="outline" onPress={() => { void refresh().catch(() => setStale(true)); }}>Refresh scan status</Button></div>}
-    {data && !data.enabled && !noRecordedScan && <div className="py-6 text-center"><ScanFace className="mx-auto mb-3 size-8 text-brand-ink" aria-hidden="true"/><h3 className="font-semibold">Face scan is not available yet</h3><p className="mt-2 text-sm text-muted-foreground">You can continue with the questionnaire. Face scanning does not affect its completion.</p></div>}
+    {data && !data.enabled && !ageIneligible && !noRecordedScan && <div className="py-6 text-center"><ScanFace className="mx-auto mb-3 size-8 text-brand-ink" aria-hidden="true"/><h3 className="font-semibold">Face scan is not available yet</h3><p className="mt-2 text-sm text-muted-foreground">You can continue with the questionnaire. Face scanning does not affect its completion.</p></div>}
     {noRecordedScan && <p className="py-4 text-sm text-muted-foreground">No face scan was done for this assessment.</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {session && (session.state === "UPLOAD_ACCEPTED" || session.state === "PROCESSING") && <div role="status" aria-label="Scan analysis status" className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
       <LoaderCircle className="mt-0.5 size-5 shrink-0 animate-spin text-primary motion-reduce:animate-none" aria-hidden="true" />
       <div><p className="font-semibold">{statusLabel}{stale ? " · Last known status" : ""}</p><p className="mt-1 text-sm text-muted-foreground">You can continue the questionnaire. Results will appear here when ready.</p></div>
     </div>}
-    {session && session.state !== "UPLOAD_ACCEPTED" && session.state !== "PROCESSING" && !(session.state === "COMPLETED" && session.result) && <p role="status" className="font-medium">{statusLabel}{stale ? " · Last known status" : ""}</p>}
+    {session && !ageIneligible && session.state !== "UPLOAD_ACCEPTED" && session.state !== "PROCESSING" && !(session.state === "COMPLETED" && session.result) && <p role="status" className="font-medium">{statusLabel}{stale ? " · Last known status" : ""}</p>}
     {session?.state === "RECONCILIATION_REQUIRED" && <p className="text-sm text-muted-foreground">{rejected ? "The scan could not be processed. Please contact support before trying again. You can continue filling in the form." : "Your scan result is not available. You can continue filling in the form. Please contact support before trying another scan."}</p>}
     {session?.state === "PAUSED" && <p className="text-sm text-muted-foreground">The service has paused this scan. Its saved status will update when processing can continue.</p>}
     {quotaRestored && <p role="status" className="text-sm text-muted-foreground">Face scans are available again. You can start a new scan. Earlier failed attempts remain in the scan history.</p>}
-    {session?.state === "FAILED" && !quotaRestored && <p className="text-sm text-muted-foreground">{failedScanMessage(session.failureCode)}</p>}
-    {quotaUnavailable && record.status === "DRAFT" && <div className="space-y-2"><Button variant="outline" isDisabled={checkingAvailability} onPress={() => { void checkAvailability(); }}>{checkingAvailability ? "Checking availability…" : "Check again"}</Button>{availabilityError && <p role="alert" className="text-sm text-destructive">We couldn’t check face scan availability. Please try again.</p>}</div>}
+    {session?.state === "FAILED" && !quotaRestored && !ageIneligible && <p className="text-sm text-muted-foreground">{failedScanMessage(session.failureCode)}</p>}
+    {quotaUnavailable && !ageIneligible && record.status === "DRAFT" && <div className="space-y-2"><Button variant="outline" isDisabled={checkingAvailability} onPress={() => { void checkAvailability(); }}>{checkingAvailability ? "Checking availability…" : "Check again"}</Button>{availabilityError && <p role="alert" className="text-sm text-destructive">We couldn’t check face scan availability. Please try again.</p>}</div>}
     {session?.state === "EXPIRED" && <p className="text-sm text-muted-foreground">The attempt started on {new Date(session.createdAt).toLocaleString()} ended before analysis, so there is no measurement from that attempt. This record remains in the scan history. A new scan would measure the patient at a new time.</p>}
     {session?.state === "COMPLETED" && record.status === "DRAFT" && <p className="text-sm text-muted-foreground">{hasUsableFaceScan(session) ? "The saved face scan is retained. Scan again only if a new measurement is needed." : "This scan did not produce a usable result. Scan again before submitting the assessment."}</p>}
     {changedScanInputs.length > 0 && <p role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm">The saved scan used different {changedScanInputs.join(", ")}. Its results still reflect the original scan details shown below; changing questionnaire answers does not update those results.</p>}
@@ -346,8 +351,8 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     </div>, document.body)}
     {phase === "uploading" && <p role="status">Uploading scan. Keep this page open until the upload is confirmed.</p>}
     {phase === "upload_failed" && <div className="flex flex-wrap gap-3"><Button onPress={() => { const pending = pendingSignal.current; if (pending) void upload(pending.sessionId, pending.signal); }}>Retry upload</Button><Button variant="outline" onPress={() => { void cancel(); }}>Discard local capture</Button></div>}
-    {data?.enabled && session?.state === "COMPLETED" && !rescanRequested && phase === "idle" && record.status === "DRAFT" && <Button variant="outline" isDisabled={disabled || stale} onPress={() => { setPosture(""); setRescanRequested(true); }}>Scan again</Button>}
-    {data?.enabled && canStart && !quotaUnavailable && (session?.state !== "COMPLETED" || rescanRequested) && phase === "idle" && record.status === "DRAFT" && <div className="space-y-4 border-t border-border pt-4">
+    {data?.enabled && !ageIneligible && session?.state === "COMPLETED" && !rescanRequested && phase === "idle" && record.status === "DRAFT" && <Button variant="outline" isDisabled={disabled || stale} onPress={() => { setPosture(""); setRescanRequested(true); }}>Scan again</Button>}
+    {data?.enabled && !ageIneligible && canStart && !quotaUnavailable && (session?.state !== "COMPLETED" || rescanRequested) && phase === "idle" && record.status === "DRAFT" && <div className="space-y-4 border-t border-border pt-4">
       {session?.state === "COMPLETED" && <p className="text-sm text-muted-foreground">A new scan will replace the current result. Previous results stay saved in the assessment history.</p>}
       <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
         <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground" aria-hidden="true"><Info className="size-6" strokeWidth={2.5} /></span>

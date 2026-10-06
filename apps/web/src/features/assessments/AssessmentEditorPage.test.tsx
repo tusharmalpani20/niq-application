@@ -79,6 +79,15 @@ test("new assessment opens directly on face scan after personal details", async 
   expect(document.querySelector('nav[aria-label="Assessment sections"] button[aria-current="step"]')?.textContent).toContain("Face scan");
 }, {}, "assessment-a", undefined, "OTHER_MEDICAL", false, true));
 
+test("under-one patient can open Face scan without a required-scan review error", async () => harness(async ({ click }) => {
+  await click("Face scan");
+  expect(document.body.textContent).toContain("Face scans aren't available for children under 1");
+  await click("Review & score");
+  expect(document.body.textContent).not.toContain("Complete the required face scan");
+  await click("Submit and request score");
+  expect(document.querySelector('[aria-label="Verify assessment before scoring"]')).not.toBeNull();
+}, {patient: {...recordFixture().patient, dateOfBirth: "2026-05-05"}}, "assessment-a", undefined, "OTHER_MEDICAL", true));
+
 test("live refresh keeps the newest assessment when requests finish out of order", async () => harness(async ({ deferReads, remoteAnswers }) => {
   const pending = deferReads();
   await act(async () => { window.dispatchEvent(new window.CustomEvent("niq:workspace-change", { detail: { scope: "assessment", assessmentId: "assessment-a" } })); await new Promise(resolve => setTimeout(resolve, 0)); });

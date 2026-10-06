@@ -1,4 +1,4 @@
-import { hasPermission, registerPatientSchema, type AssessmentInitialization, type AuthenticatedUser, type Facility, type FormAnswer, type Patient } from "@niq/application-contracts";
+import { hasPermission, isUnderOneYearOldForFaceScan, registerPatientSchema, type AssessmentInitialization, type AuthenticatedUser, type Facility, type FormAnswer, type Patient } from "@niq/application-contracts";
 import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
@@ -177,6 +177,7 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
 
   const patient = creating ? null : selected;
   const age = patient ? patientAgeLabel(patient.dateOfBirth) : newPatient.dateOfBirth ? patientAgeLabel(newPatient.dateOfBirth) : "—";
+  const faceScanAgeIneligible = isUnderOneYearOldForFaceScan(patient?.dateOfBirth ?? (creating ? newPatient.dateOfBirth : null));
   const bmiAnswers = { ...measurements, age: Number.parseInt(age, 10) || null };
   const committed = !!initialization || lockedPatient;
   return <div className="assessment-workflow @container">
@@ -206,6 +207,7 @@ function ScopedStartAssessmentPage({ user }: { user: AuthenticatedUser }) {
               <Field data-invalid={!!fieldErrors.email || undefined}><FieldLabel htmlFor="patient-email">Email address (optional)</FieldLabel><Input id="patient-email" type="email" value={newPatient.email} onChange={event => updateNewPatient("email", event.target.value)} maxLength={320} disabled={busy}/>{fieldErrors.email && <FieldError>{fieldErrors.email}</FieldError>}</Field>
             </div>}
             {creating && newPatient.dateOfBirth && <div><p className="text-sm text-muted-foreground">Age</p><p className="mt-1 font-medium">{age}</p></div>}
+            {faceScanAgeIneligible && <p role="status" className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">Face scans aren't available for children under 1. You can continue the assessment without a scan.</p>}
             {creating && !activeFacilities.length && <p role="alert" className="text-sm text-destructive">An active facility is required before registering a patient.</p>}
             {patient && <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2"><div><p className="text-sm text-muted-foreground">Age</p><p className="mt-1 font-medium">{age}</p></div><div><p className="text-sm text-muted-foreground">Gender</p><p className="mt-1 font-medium">{patient.gender ? <span className="inline-flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary"><PatientGenderIcon gender={patient.gender} /></span>{formatGenderAnswer(patient.gender)}</span> : "Not provided"}</p></div><div><p className="text-sm text-muted-foreground">Contact number</p><p className="mt-1 font-medium">{patient.phone ?? "Not provided"}</p></div><div><p className="text-sm text-muted-foreground">Facility</p><p className="mt-1 font-medium">{patient.homeFacility?.name ?? "No facility"}</p></div></div>}
             <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
