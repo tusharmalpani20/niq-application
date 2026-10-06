@@ -23,7 +23,7 @@ const terminal = new Set(["COMPLETED", "FAILED", "EXPIRED", "CANCELLED"]);
 const cancellable = new Set(["REQUESTED", "UPLOAD_ACCEPTED", "PAUSED"]);
 function failedScanMessage(code: string | null): string {
   switch (code) {
-    case "MONTHLY_LIMIT_REACHED": return "Your organization has used all its face scans for this month. Ask an administrator for more scans, or try again next month.";
+    case "MONTHLY_LIMIT_REACHED": return "Face scanning isn't available right now. You can complete the other sections and return to the scan later. Please contact your clinic administrator if you need help.";
     case "CAPABILITY_DISABLED": case "FACE_SCAN_DISABLED": return "Face scanning is not enabled for this scoring connection. Ask your administrator to check access before trying again.";
     case "FACE_SCAN_MAPPING_UNAVAILABLE": return "The face-scan scoring rule is unavailable. Ask your administrator to check the scoring setup before trying again.";
     case "UNAUTHORIZED": case "CLIENT_NOT_ALLOWED": return "The scan service rejected this connection. Ask your administrator to check its credentials and access before trying again.";
@@ -91,7 +91,8 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   ].filter(Boolean) : [];
   const blocked = phase !== "idle";
   const rejected = session?.state === "RECONCILIATION_REQUIRED" && session.failureCode === "PROVIDER_REJECTED";
-  const statusLabel = phase === "capturing" ? "Capturing scan" : phase === "preparing" ? "Preparing scan" : phase === "uploading" ? "Uploading scan" : session ? rejected ? "Scan failed" : session.state === "COMPLETED" && !hasUsableFaceScan(session) ? "Scan result unavailable" : session.state === "REQUESTED" && record.status !== "DRAFT" ? "Scan not completed" : labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable";
+  const quotaUnavailable = session?.state === "FAILED" && session.failureCode === "MONTHLY_LIMIT_REACHED";
+  const statusLabel = phase === "capturing" ? "Capturing scan" : phase === "preparing" ? "Preparing scan" : phase === "uploading" ? "Uploading scan" : quotaUnavailable ? "Face scan unavailable" : session ? rejected ? "Scan failed" : session.state === "COMPLETED" && !hasUsableFaceScan(session) ? "Scan result unavailable" : session.state === "REQUESTED" && record.status !== "DRAFT" ? "Scan not completed" : labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable";
   const selectedPosture = session?.state === "REQUESTED" ? session.context.posture : posture;
   const consentReady = consentApproval?.assessmentId === record.id && consentApproval.approved;
   const handleConsentApproval = useCallback((approved: boolean) => setConsentApproval({ assessmentId: record.id, approved }), [record.id]);
@@ -279,7 +280,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const canStart = !session || terminal.has(session.state) || session.state === "REQUESTED";
   const noRecordedScan = !!data && record.status !== "DRAFT" && !session && data.sessions.length === 0;
   const startButtonLabel = session?.state === "REQUESTED" ? "Resume capture"
-    : session?.state === "FAILED" ? session.failureCode === "MONTHLY_LIMIT_REACHED" ? "Retry after limit resets" : "Try again"
+    : session?.state === "FAILED" ? quotaUnavailable ? "Try again later" : "Try again"
     : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start face scan";
   return <div hidden={!active} className="space-y-5">
     {!data && !stale && <p role="status">Loading face scan…</p>}

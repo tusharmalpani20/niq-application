@@ -234,10 +234,10 @@ test("failed pre-submission attempt offers explicit retry without automatic capt
   expect(requests.filter(r => r.body?.requestKey).length).toBe(1);
 }, {existing: {...session, state:"FAILED", failureCode:"SCAN_NOT_SUBMITTED"}}));
 
-test("monthly limit rejection explains why the camera did not start", async () => harness(async ({starts, requests}) => {
-  expect(document.body.textContent).toContain("used all its face scans for this month");
-  expect(document.body.textContent).toContain("Ask an administrator for more scans, or try again next month");
-  expect([...document.querySelectorAll("button")].some(button => button.textContent === "Retry after limit resets")).toBe(true);
+test("monthly limit rejection gives clinicians a helpful next step", async () => harness(async ({starts, requests}) => {
+  expect(document.body.textContent).toContain("Face scan unavailable");
+  expect(document.body.textContent).toContain("You can complete the other sections and return to the scan later");
+  expect([...document.querySelectorAll("button")].some(button => button.textContent === "Try again later")).toBe(true);
   expect(starts()).toBe(0);
   expect(requests.every(request => request.body === null)).toBe(true);
 }, {existing: {...session, state:"FAILED", failureCode:"MONTHLY_LIMIT_REACHED"}}));
