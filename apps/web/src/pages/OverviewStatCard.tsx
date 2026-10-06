@@ -26,6 +26,6 @@ export function OverviewStatCard({ label, value, icon: Icon, detail, to, tone = 
       <span className="mt-1 block text-xs text-muted-foreground">{detail}</span>
     </span>
   </>;
-  const className = "surface flex min-h-28 min-w-0 items-center gap-2 p-3 no-underline transition-colors focus-visible:outline-2 focus-visible:outline-primary sm:gap-4 sm:p-4";
-  return to ? <Link to={to} className={`${className} hover:bg-primary/5`}>{content}</Link> : <div className={className}>{content}</div>;
+  const className = "surface flex min-h-28 min-w-0 items-center gap-2 p-3 no-underline transition-colors sm:gap-4 sm:p-4";
+  return to ? <Link to={to} className={`${className} hover:bg-primary/5 hover:outline hover:outline-2 hover:outline-primary/30 focus-visible:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary`}>{content}</Link> : <div className={className}>{content}</div>;
 }
