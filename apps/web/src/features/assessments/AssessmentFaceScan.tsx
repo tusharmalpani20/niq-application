@@ -6,7 +6,7 @@ import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { createCaptureController, type ScanCamera } from "./careplix-capture";
-import { cancelFaceScan, listFaceScans, startFaceScan, uploadFaceScan } from "./face-scan-api";
+import { cancelFaceScan, getFaceScanAvailability, listFaceScans, startFaceScan, uploadFaceScan } from "./face-scan-api";
 import { ChoiceGroup } from "@/components/ui/choice-group";
 import { scanPostureLabels, scanPostureOptions, type ScanPosture } from "./face-scan-posture";
 import { FaceScanResults } from "./FaceScanResults";
@@ -56,6 +56,9 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState("");
   const [stale, setStale] = useState(false);
+  const [availability, setAvailability] = useState<{ available: boolean; reason: string | null } | null>(null);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState(false);
   const [guidance, setGuidance] = useState("Keep your face in view and remain still.");
   const [progress, setProgress] = useState(0);
   const [lowPerformance, setLowPerformance] = useState(false);
@@ -78,6 +81,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const startKey = useRef<string | null>(null);
   const captureId = useRef<string | null>(null);
   const statusVersion = useRef(0);
+  const availabilityVersion = useRef(0);
   const session = data?.sessions.find(item => item.id === data.currentSessionId) ?? null;
   const previousSessions = data?.sessions.filter(item => item.id !== data.currentSessionId) ?? [];
   useEffect(() => { onSessionChange?.(session); }, [session, onSessionChange]);
@@ -91,8 +95,10 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   ].filter(Boolean) : [];
   const blocked = phase !== "idle";
   const rejected = session?.state === "RECONCILIATION_REQUIRED" && session.failureCode === "PROVIDER_REJECTED";
-  const quotaUnavailable = session?.state === "FAILED" && session.failureCode === "MONTHLY_LIMIT_REACHED";
-  const statusLabel = phase === "capturing" ? "Capturing scan" : phase === "preparing" ? "Preparing scan" : phase === "uploading" ? "Uploading scan" : quotaUnavailable ? "Face scan unavailable" : session ? rejected ? "Scan failed" : session.state === "COMPLETED" && !hasUsableFaceScan(session) ? "Scan result unavailable" : session.state === "REQUESTED" && record.status !== "DRAFT" ? "Scan not completed" : labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable";
+  const quotaFailure = session?.state === "FAILED" && session.failureCode === "MONTHLY_LIMIT_REACHED";
+  const quotaRestored = quotaFailure && availability?.available === true;
+  const quotaUnavailable = quotaFailure && !quotaRestored;
+  const statusLabel = phase === "capturing" ? "Capturing scan" : phase === "preparing" ? "Preparing scan" : phase === "uploading" ? "Uploading scan" : quotaRestored ? "Face scan ready" : quotaUnavailable ? "Face scan unavailable" : session ? rejected ? "Scan failed" : session.state === "COMPLETED" && !hasUsableFaceScan(session) ? "Scan result unavailable" : session.state === "REQUESTED" && record.status !== "DRAFT" ? "Scan not completed" : labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable";
   const selectedPosture = session?.state === "REQUESTED" ? session.context.posture : posture;
   const consentReady = consentApproval?.assessmentId === record.id && consentApproval.approved;
   const handleConsentApproval = useCallback((approved: boolean) => setConsentApproval({ assessmentId: record.id, approved }), [record.id]);
@@ -128,10 +134,26 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
       throw error;
     }
   }, [organizationId, record.id]);
+  const checkAvailability = useCallback(async () => {
+    const version = ++availabilityVersion.current;
+    setCheckingAvailability(true);
+    setAvailabilityError(false);
+    try {
+      const value = await getFaceScanAvailability(organizationId, record.id);
+      if (alive.current && version === availabilityVersion.current) setAvailability(value);
+    } catch {
+      if (alive.current && version === availabilityVersion.current) setAvailabilityError(true);
+    } finally {
+      if (alive.current && version === availabilityVersion.current) setCheckingAvailability(false);
+    }
+  }, [organizationId, record.id]);
   useEffect(() => {
     alive.current = true;
-    return () => { alive.current = false; statusVersion.current++; controller.current.cancel(); pendingSignal.current = null; };
+    return () => { alive.current = false; statusVersion.current++; availabilityVersion.current++; controller.current.cancel(); pendingSignal.current = null; };
   }, []);
+  useEffect(() => {
+    if (active && record.status === "DRAFT") void checkAvailability();
+  }, [active, record.status, checkAvailability]);
   useEffect(() => {
     let stopped = false, failures = 0;
     let timer: ReturnType<typeof setTimeout>;
@@ -209,6 +231,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
       startKey.current ??= crypto.randomUUID();
       const value = session?.state === "REQUESTED" ? session : await startFaceScan(organizationId, record.id, saved.revision, startKey.current, selectedPosture);
       if (!alive.current) return;
+      if (value.state === "FAILED" && value.failureCode === "MONTHLY_LIMIT_REACHED") setAvailability({ available: false, reason: "MONTHLY_LIMIT_REACHED" });
       updateSession(value);
       if (value.state !== "REQUESTED") { setPhase("idle"); return; }
       if (document.visibilityState === "hidden") throw new Error("Keep this page visible before starting the camera.");
@@ -280,6 +303,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const canStart = !session || terminal.has(session.state) || session.state === "REQUESTED";
   const noRecordedScan = !!data && record.status !== "DRAFT" && !session && data.sessions.length === 0;
   const startButtonLabel = session?.state === "REQUESTED" ? "Resume capture"
+    : quotaRestored ? "Start face scan"
     : session?.state === "FAILED" ? quotaUnavailable ? "Try again later" : "Try again"
     : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start face scan";
   return <div hidden={!active} className="space-y-5">
@@ -295,14 +319,16 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {session && session.state !== "UPLOAD_ACCEPTED" && session.state !== "PROCESSING" && !(session.state === "COMPLETED" && session.result) && <p role="status" className="font-medium">{statusLabel}{stale ? " · Last known status" : ""}</p>}
     {session?.state === "RECONCILIATION_REQUIRED" && <p className="text-sm text-muted-foreground">{rejected ? "The scan could not be processed. Please contact support before trying again. You can continue filling in the form." : "Your scan result is not available. You can continue filling in the form. Please contact support before trying another scan."}</p>}
     {session?.state === "PAUSED" && <p className="text-sm text-muted-foreground">The service has paused this scan. Its saved status will update when processing can continue.</p>}
-    {session?.state === "FAILED" && <p className="text-sm text-muted-foreground">{failedScanMessage(session.failureCode)}</p>}
+    {quotaRestored && <p role="status" className="text-sm text-muted-foreground">Face scans are available again. You can start a new scan. Earlier failed attempts remain in the scan history.</p>}
+    {session?.state === "FAILED" && !quotaRestored && <p className="text-sm text-muted-foreground">{failedScanMessage(session.failureCode)}</p>}
+    {quotaUnavailable && record.status === "DRAFT" && <div className="space-y-2"><Button variant="outline" isDisabled={checkingAvailability} onPress={() => { void checkAvailability(); }}>{checkingAvailability ? "Checking availability…" : "Check again"}</Button>{availabilityError && <p role="alert" className="text-sm text-destructive">We couldn’t check face scan availability. Please try again.</p>}</div>}
     {session?.state === "EXPIRED" && <p className="text-sm text-muted-foreground">The attempt started on {new Date(session.createdAt).toLocaleString()} ended before analysis, so there is no measurement from that attempt. This record remains in the scan history. A new scan would measure the patient at a new time.</p>}
     {session?.state === "COMPLETED" && record.status === "DRAFT" && <p className="text-sm text-muted-foreground">{hasUsableFaceScan(session) ? "The saved face scan is retained. Scan again only if a new measurement is needed." : "This scan did not produce a usable result. Scan again before submitting the assessment."}</p>}
     {changedScanInputs.length > 0 && <p role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm">The saved scan used different {changedScanInputs.join(", ")}. Its results still reflect the original scan details shown below; changing questionnaire answers does not update those results.</p>}
     {session && <FaceScanResults session={session}/>}
-    {previousSessions.length > 0 && <section aria-label="Scan history" className="space-y-2">
+    {(quotaRestored || previousSessions.length > 0) && <section aria-label="Scan history" className="space-y-2">
       <h3 className="flex items-center gap-2 text-sm font-semibold"><History className="size-4 text-primary" aria-hidden="true" />Scan history</h3>
-      {previousSessions.map(previous => <details key={previous.id} className="rounded-xl border border-border bg-card p-3">
+      {(quotaRestored ? [session!, ...previousSessions] : previousSessions).map(previous => <details key={previous.id} className="rounded-xl border border-border bg-card p-3">
         <summary className="cursor-pointer text-sm font-medium">{previous.state === "COMPLETED" ? "Completed scan" : labels[previous.state]} · {new Date(previous.completedAt ?? previous.createdAt).toLocaleString()}</summary>
         <div className="pt-3">{previous.state === "COMPLETED" && previous.result
           ? <FaceScanResults session={previous}/>
@@ -321,7 +347,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {phase === "uploading" && <p role="status">Uploading scan. Keep this page open until the upload is confirmed.</p>}
     {phase === "upload_failed" && <div className="flex flex-wrap gap-3"><Button onPress={() => { const pending = pendingSignal.current; if (pending) void upload(pending.sessionId, pending.signal); }}>Retry upload</Button><Button variant="outline" onPress={() => { void cancel(); }}>Discard local capture</Button></div>}
     {data?.enabled && session?.state === "COMPLETED" && !rescanRequested && phase === "idle" && record.status === "DRAFT" && <Button variant="outline" isDisabled={disabled || stale} onPress={() => { setPosture(""); setRescanRequested(true); }}>Scan again</Button>}
-    {data?.enabled && canStart && (session?.state !== "COMPLETED" || rescanRequested) && phase === "idle" && record.status === "DRAFT" && <div className="space-y-4 border-t border-border pt-4">
+    {data?.enabled && canStart && !quotaUnavailable && (session?.state !== "COMPLETED" || rescanRequested) && phase === "idle" && record.status === "DRAFT" && <div className="space-y-4 border-t border-border pt-4">
       {session?.state === "COMPLETED" && <p className="text-sm text-muted-foreground">A new scan will replace the current result. Previous results stay saved in the assessment history.</p>}
       <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
         <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground" aria-hidden="true"><Info className="size-6" strokeWidth={2.5} /></span>

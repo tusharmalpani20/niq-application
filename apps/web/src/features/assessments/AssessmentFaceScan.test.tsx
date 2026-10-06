@@ -8,7 +8,7 @@ import { createCaptureController, type CaptureSDK } from "./careplix-capture";
 
 const session: FaceScanSession = { id: "session", state: "REQUESTED", context: { dob: "1990-01-01", gender: "female", heightCm: 170, weightKg: 70, posture: "resting", employeeId: "employee" }, createdAt: "2026-09-20T12:00:00.000Z", updatedAt: "2026-09-20T12:00:00.000Z", completedAt: null, failureCode: null, result: null, score: null };
 const usableSession: FaceScanSession = { ...session, state: "COMPLETED", completedAt: "2026-09-20T12:01:00.000Z", result: { schemaVersion: 1, providerScanId: "scan", wellnessScore: 70, healthRiskScore: null, vitals: { heartRate: 70, oxygenSaturation: null, respiratoryRate: null, systolic: null, diastolic: null }, physiologicalScore: null, mentalWellbeingScore: null }, score: { status: "SCORED", points: 1 } };
-async function harness(run: (ctx: { click: (text: string) => Promise<void>; startScan: (label?: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; cameraChecks: () => number; cameraStops: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void> }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null; status?: AssessmentWorkflow["status"]; cameras?: number } = {}) {
+async function harness(run: (ctx: { click: (text: string) => Promise<void>; startScan: (label?: string) => Promise<void>; consent: () => Promise<void>; finish: () => Promise<void>; frame: (message: string) => Promise<void>; requests: Array<{ path: string; body: any }>; starts: () => number; cameraChecks: () => number; cameraStops: () => number; saved: () => number; busy: () => boolean; missing: () => MissingScanInput[]; releaseStatus: () => Promise<void>; setCurrent: (value: FaceScanSession) => Promise<void>; setAvailability: (available: boolean) => void }) => Promise<void>, options: { enabled?: boolean; existing?: FaceScanSession; history?: FaceScanSession[]; lostUpload?: boolean; delayedStatus?: boolean; hiddenDuringSave?: boolean; lostStart?: boolean; weight?: number | null; status?: AssessmentWorkflow["status"]; cameras?: number; availability?: boolean } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "https://niq.test", pretendToBeVisual: true });
   const keys = ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "DocumentFragment", "HTMLButtonElement", "HTMLInputElement", "MutationObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -20,6 +20,7 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; star
   } });
   const requests: Array<{ path: string; body: any }> = [];
   let current = options.existing ?? null, starts = 0, saves = 0, busy = false, reads = 0, missing: MissingScanInput[] = [];
+  let availability = options.availability ?? true;
   let consentRecord: { id: string; method: "LINK"; provenance: "SIMULATED"; status: "APPROVED"; requestedAt: string; respondedAt: string; createdAt: string; fileName: null; mediaType: null; size: null } | null = null;
   let releaseStatus: () => void = () => {};
   let finish: Parameters<CaptureSDK["facescan"]["onScanFinish"]>[0] = () => {};
@@ -28,6 +29,7 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; star
   values.fetch = async (input: string, init?: RequestInit) => {
     const path = String(input), body = init?.body ? JSON.parse(String(init.body)) : null;
     requests.push({ path, body });
+    if (path.endsWith("/face-scans/availability")) return Response.json({ available: availability, reason: availability ? null : "MONTHLY_LIMIT_REACHED" });
     if (path.includes("/face-scan-consent")) {
       if (path.endsWith("/request")) consentRecord = { id: "consent", method: "LINK", provenance: "SIMULATED", status: "APPROVED", requestedAt: new Date().toISOString(), respondedAt: new Date().toISOString(), createdAt: new Date().toISOString(), fileName: null, mediaType: null, size: null };
       if (init?.method === "DELETE") consentRecord = null;
@@ -60,6 +62,7 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; star
     await run({ releaseStatus: async () => { await act(async () => { releaseStatus(); await flush(); }); },
       setCurrent: async value => { current = value; await act(async () => { document.dispatchEvent(new dom.window.Event("visibilitychange")); await flush(); }); },
       requests, starts: () => starts, cameraChecks: () => cameraChecks, cameraStops: () => cameraStops, saved: () => saves, busy: () => busy, missing: () => missing,
+      setAvailability: value => { availability = value; },
       click, startScan,
       consent: async () => { await act(async () => { document.querySelector<HTMLInputElement>('input[type="radio"][value="standing"]:not(:disabled)')?.click(); }); },
       finish: async () => { await act(async () => { finish({ raw_intensity: [{ r: 1, g: 2, b: 3 }, { r: 2, g: 3, b: 4 }], ppg_time: [0, 33], average_fps: 30 }); await flush(); }); },
@@ -234,13 +237,34 @@ test("failed pre-submission attempt offers explicit retry without automatic capt
   expect(requests.filter(r => r.body?.requestKey).length).toBe(1);
 }, {existing: {...session, state:"FAILED", failureCode:"SCAN_NOT_SUBMITTED"}}));
 
-test("monthly limit rejection gives clinicians a helpful next step", async () => harness(async ({starts, requests}) => {
+test("monthly limit rejection gives clinicians a check without starting another scan", async () => harness(async ({starts, requests}) => {
   expect(document.body.textContent).toContain("Face scan unavailable");
   expect(document.body.textContent).toContain("You can complete the other sections and return to the scan later");
-  expect([...document.querySelectorAll("button")].some(button => button.textContent === "Try again later")).toBe(true);
+  expect([...document.querySelectorAll("button")].some(button => button.textContent === "Check again")).toBe(true);
+  expect([...document.querySelectorAll("button")].some(button => button.textContent === "Try again later")).toBe(false);
   expect(starts()).toBe(0);
+  expect(requests.some(request => request.path.endsWith("/face-scans/availability"))).toBe(true);
   expect(requests.every(request => request.body === null)).toBe(true);
-}, {existing: {...session, state:"FAILED", failureCode:"MONTHLY_LIMIT_REACHED"}}));
+}, {existing: {...session, state:"FAILED", failureCode:"MONTHLY_LIMIT_REACHED"}, availability: false}));
+
+test("a refreshed limit restores scanning while keeping the failed attempt in history", async () => harness(async ({click, setAvailability, starts, requests}) => {
+  expect(document.body.textContent).toContain("Face scan unavailable");
+  setAvailability(true);
+  await click("Check again");
+  expect(document.body.textContent).toContain("Face scans are available again");
+  expect(document.body.textContent).toContain("Face scan ready");
+  expect(document.querySelector('section[aria-label="Scan history"]')?.textContent).toContain("Scan failed");
+  expect([...document.querySelectorAll("button")].some(button => button.textContent === "Start face scan")).toBe(true);
+  expect(starts()).toBe(0);
+  expect(requests.filter(request => request.path.endsWith("/face-scans/availability"))).toHaveLength(2);
+  expect(requests.every(request => request.body === null)).toBe(true);
+}, {existing: {...session, state:"FAILED", failureCode:"MONTHLY_LIMIT_REACHED"}, availability: false}));
+
+test("a fresh page shows restored quota without manual retry", async () => harness(async ({starts}) => {
+  expect(document.body.textContent).toContain("Face scans are available again");
+  expect(document.body.textContent).toContain("Start face scan");
+  expect(starts()).toBe(0);
+}, {existing: {...session, state:"FAILED", failureCode:"MONTHLY_LIMIT_REACHED"}, availability: true}));
 
 test("explicit service rejection shows failed status without permitting another submission", async () => harness(async ({starts}) => {
   expect(document.body.textContent).toContain("Scan failed");
