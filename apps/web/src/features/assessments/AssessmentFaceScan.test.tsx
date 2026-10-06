@@ -235,8 +235,8 @@ test("failed pre-submission attempt offers explicit retry without automatic capt
 }, {existing: {...session, state:"FAILED", failureCode:"SCAN_NOT_SUBMITTED"}}));
 
 test("monthly limit rejection explains why the camera did not start", async () => harness(async ({starts, requests}) => {
-  expect(document.body.textContent).toContain("monthly face-scan limit has been reached");
-  expect(document.body.textContent).toContain("camera cannot start");
+  expect(document.body.textContent).toContain("used all its face scans for this month");
+  expect(document.body.textContent).toContain("Ask an administrator for more scans, or try again next month");
   expect([...document.querySelectorAll("button")].some(button => button.textContent === "Retry after limit resets")).toBe(true);
   expect(starts()).toBe(0);
   expect(requests.every(request => request.body === null)).toBe(true);

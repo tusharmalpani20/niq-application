@@ -23,7 +23,7 @@ const terminal = new Set(["COMPLETED", "FAILED", "EXPIRED", "CANCELLED"]);
 const cancellable = new Set(["REQUESTED", "UPLOAD_ACCEPTED", "PAUSED"]);
 function failedScanMessage(code: string | null): string {
   switch (code) {
-    case "MONTHLY_LIMIT_REACHED": return "The monthly face-scan limit has been reached. The camera cannot start until the limit resets or an administrator increases it. You can continue the questionnaire.";
+    case "MONTHLY_LIMIT_REACHED": return "Your organization has used all its face scans for this month. Ask an administrator for more scans, or try again next month.";
     case "CAPABILITY_DISABLED": case "FACE_SCAN_DISABLED": return "Face scanning is not enabled for this scoring connection. Ask your administrator to check access before trying again.";
     case "FACE_SCAN_MAPPING_UNAVAILABLE": return "The face-scan scoring rule is unavailable. Ask your administrator to check the scoring setup before trying again.";
     case "UNAUTHORIZED": case "CLIENT_NOT_ALLOWED": return "The scan service rejected this connection. Ask your administrator to check its credentials and access before trying again.";
