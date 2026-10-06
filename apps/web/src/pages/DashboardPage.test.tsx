@@ -11,7 +11,7 @@ const date = "2026-09-20T00:00:00Z";
 const patient = { id, organizationId: id, reference: "PAT-1", displayName: "Example Patient", homeFacility: null, dateOfBirth: null, gender: "UNKNOWN", createdAt: date, updatedAt: date };
 const assessment = { id, reference: "ASM-000001", serialNumber: 1, organizationId: id, patient: { id, reference: patient.reference, displayName: patient.displayName }, facility: null, status: "SCORING_UNAVAILABLE", isPriority: false, createdAt: date, completedAt: null };
 
-type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; patients?: typeof patient[]; assessments?: Array<typeof assessment & { myAction?: string | null; updatedAt?: string }>; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number; riskDelayMs?: number; riskGate?: Promise<void>; risk?: { assessedPatients: number; categories: { low: number; moderate: number; high: number }; categories30DaysAgo: { low: number; moderate: number; high: number } }; nutrition?: { protein: { assessed: number; inadequate: number }; eatingBarrier: { assessed: number; top: { id: string; label: string; count: number } | null } }; activity?: { id: string; assessmentId: string; action: string; occurredAt: string }[]; highRiskAssessments?: { patientId: string; assessmentId: string }[] };
+type Scenario = { reviewTotal?: number; assessmentStatus?: string; assessmentCreatedAt?: string; completedAt?: string | null; patients?: typeof patient[]; assessments?: Array<typeof assessment & { myAction?: string | null; updatedAt?: string }>; userLimit?: number | null; highRiskPatients?: number; highRiskPatients30DaysAgo?: number; summaryGate?: Promise<void>; riskDelayMs?: number; riskGate?: Promise<void>; risk?: { assessedPatients: number; categories: { low: number; moderate: number; high: number }; categories30DaysAgo: { low: number; moderate: number; high: number } }; nutrition?: { protein: { assessed: number; inadequate: number }; eatingBarrier: { assessed: number; top: { id: string; label: string; count: number } | null } }; activity?: { id: string; assessmentId: string; action: string; occurredAt: string }[]; highRiskAssessments?: { patientId: string; assessmentId: string }[] };
 
 test("overview greeting follows the local hour", () => {
   expect(greetingForHour(0)).toBe("Good evening");
@@ -35,6 +35,7 @@ async function renderOverview(role: MembershipRole, verify: (body: HTMLElement, 
     if (url.endsWith("/facilities")) return Response.json({ items: [] });
     if (url.endsWith("/assessments")) return Response.json({ items: scenario.assessments ?? [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status, myAction: scenario.assessmentStatus === "DRAFT" ? "EDIT_DRAFT" : null, createdAt: scenario.assessmentCreatedAt ?? date, completedAt: scenario.completedAt ?? null }] });
     if (url.includes("/overview-summary?")) {
+      if (scenario.summaryGate) await scenario.summaryGate;
       const query = new URL(url, "http://localhost").searchParams;
       const patients = scenario.patients ?? [patient];
       const assessments = scenario.assessments ?? [{ ...assessment, status: scenario.assessmentStatus ?? assessment.status, myAction: scenario.assessmentStatus === "DRAFT" ? "EDIT_DRAFT" : null, createdAt: scenario.assessmentCreatedAt ?? date, completedAt: scenario.completedAt ?? null }];
@@ -123,6 +124,21 @@ test("overview statistics load while risk calculation is still running", async (
     await act(async () => { finishRisk(); await riskGate; });
     expect(body.querySelector('[aria-label="Assessment risk overview"]')).not.toBeNull();
   }, { riskGate });
+});
+
+test("overview shows section skeletons and starts independent requests before the summary finishes", async () => {
+  let finishSummary!: () => void;
+  const summaryGate = new Promise<void>(resolve => { finishSummary = resolve; });
+  await renderOverview("DOCTOR", async (body, requests) => {
+    expect(body.querySelectorAll('[aria-label="Loading overview statistic"]')).toHaveLength(3);
+    expect(body.querySelector('[aria-label="Loading priority assessments"]')).not.toBeNull();
+    expect(requests.some(url => url.includes("/overview-activity?"))).toBe(true);
+    expect(body.querySelector('[aria-label="Assessment risk overview"]')).not.toBeNull();
+    expect(body.querySelector('[aria-label="Key nutrition insights"]')).not.toBeNull();
+    await act(async () => { finishSummary(); await summaryGate; });
+    expect(body.querySelector('[aria-label="Priority assessments"]')).not.toBeNull();
+    expect(body.querySelector('[aria-label="Recent patients and NIQ insights"] h2')?.textContent).toContain("Recent patients");
+  }, { summaryGate });
 });
 
 test("clinician overview shows review work without administrator operations", async () => {
@@ -419,9 +435,10 @@ test("changing month selects its latest active day instead of an empty first day
   const previousMonthActivity = new Date(now.getFullYear(), now.getMonth() - 1, 12, 10);
   await renderOverview("DOCTOR", async body => {
     const calendar = body.querySelector('[aria-label="My assessment activity"]')!;
-    await act(async () => { (calendar.querySelector('[aria-label="Previous month"]') as HTMLButtonElement).click(); });
-    expect(calendar.querySelector('h3')?.textContent).toBe(previousMonthActivity.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }));
-    expect(calendar.querySelector('a[href="/assessments/ASM-000001"]')).not.toBeNull();
+    await act(async () => { (calendar.querySelector('[aria-label="Previous month"]') as HTMLButtonElement).click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    const updatedCalendar = body.querySelector('[aria-label="My assessment activity"]')!;
+    expect(updatedCalendar.querySelector('h3')?.textContent).toBe(previousMonthActivity.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }));
+    expect(updatedCalendar.querySelector('a[href="/assessments/ASM-000001"]')).not.toBeNull();
   }, { activity: [{ id, assessmentId: id, action: "ASSESSMENT_CREATED", occurredAt: previousMonthActivity.toISOString() }] });
 });
 

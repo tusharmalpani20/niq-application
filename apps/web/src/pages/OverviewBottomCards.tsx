@@ -6,10 +6,11 @@ import { getOverviewRisk, getOverviewSummary } from "../lib/api";
 import { assessmentStatusLabels } from "../lib/patient-display";
 import { NutritionInsights } from "./NutritionInsights";
 import { RecentPatientsEmptyIllustration } from "../components/DashboardEmptyIllustrations";
+import { OverviewInsightsSkeleton } from "./OverviewSkeleton";
 
 type Risk = Awaited<ReturnType<typeof getOverviewRisk>>;
 
-export function OverviewBottomCards({ organizationId, initial, risk }: { organizationId: string; initial: OverviewSummary["recent"]; risk: Risk | null }) {
+export function OverviewBottomCards({ organizationId, initial, risk, riskLoaded }: { organizationId: string; initial: OverviewSummary["recent"]; risk: Risk | null; riskLoaded: boolean }) {
   const [recent, setRecent] = useState(initial);
   const [loading, setLoading] = useState(false);
   const [pageError, setPageError] = useState(false);
@@ -24,6 +25,6 @@ export function OverviewBottomCards({ organizationId, initial, risk }: { organiz
       {recent.total ? <><ul className="mt-4 divide-y">{recent.items.map(({ patient, assessment }) => <li key={patient.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-3 text-sm"><div className="min-w-0"><Link className="font-medium text-primary hover:underline focus-visible:underline" to={`/patients/${patient.reference}`}>{patient.displayName}</Link><p className="text-xs text-muted-foreground">{patient.reference} · {patient.homeFacility?.name ?? "No home facility"}</p></div><div className="text-left text-xs text-muted-foreground min-[420px]:text-right">{assessment ? <><Link className="font-medium text-foreground hover:text-primary hover:underline" to={`/assessments/${assessment.reference}`}>{assessment.reference}</Link><p>{assessmentStatusLabels[assessment.status]} · {assessment.completedAt?.toLocaleDateString("en-GB") ?? assessment.createdAt.toLocaleDateString("en-GB")}</p></> : "No assessment yet"}</div></li>)}</ul>{pageCount > 1 && <nav aria-label="Recent patient pages" className="mt-3 flex justify-center border-t pt-3 text-sm"><div className="flex items-center gap-2"><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={recent.page === 1 || loading} onClick={() => changePage(recent.page - 1)}>Previous</button><span>Page {recent.page} of {pageCount}</span><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={recent.page === pageCount || loading} onClick={() => changePage(recent.page + 1)}>Next</button></div></nav>}</> : <div className="mt-3 flex min-h-40 flex-col items-center justify-center text-center"><RecentPatientsEmptyIllustration /><p className="mt-1 text-sm text-muted-foreground">No patient registrations or new assessments in the last 3 days.</p></div>}
       {pageError && <p role="alert" className="mt-2 text-xs text-destructive">That page could not be loaded. Please try again.</p>}
     </div>
-    <NutritionInsights risk={risk} />
+    {riskLoaded ? <NutritionInsights risk={risk} /> : <OverviewInsightsSkeleton />}
   </section>;
 }

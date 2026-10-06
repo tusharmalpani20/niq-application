@@ -4,6 +4,8 @@ import { ChevronLeft, ChevronRight, CalendarDays, ShieldCheck } from "lucide-rea
 import { getOverviewActivity, getOverviewActivityDay, getOverviewRisk } from "../lib/api";
 import { ActivityEmptyIllustration } from "../components/DashboardEmptyIllustrations";
 import { RiskDonut } from "./RiskDonut";
+import { OverviewActivitySkeleton } from "./OverviewSkeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Risk = Awaited<ReturnType<typeof getOverviewRisk>>;
 type ActivityDay = Awaited<ReturnType<typeof getOverviewActivity>>["days"][number];
@@ -56,6 +58,7 @@ export function AssessmentActivityCalendar({ organizationId }: { organizationId:
     const next = new Date(month.getFullYear(), month.getMonth() + offset, 1);
     setMonth(next); setSelected(null); setPage(1);
   };
+  if (loading && days.length === 0) return <OverviewActivitySkeleton />;
   return <section className="surface mt-7 p-5" aria-label="My assessment activity">
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="flex items-center gap-2 text-lg font-semibold"><CalendarDays className="size-5 text-primary" aria-hidden="true" />My assessment activity</h2><p className="mt-1 text-sm text-muted-foreground">Assessments you created, submitted or reviewed, grouped by day.</p></div>
@@ -77,7 +80,7 @@ export function AssessmentActivityCalendar({ organizationId }: { organizationId:
         <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">{actionSequence.map(action => <span key={action} className="flex items-center gap-1"><i aria-hidden="true" className={`size-2 rounded-full ${actions[action].color}`} />{actions[action].label}</span>)}</div>
       </div>
       <div className="flex min-w-0 flex-col"><div className="mb-3"><h3 className="font-semibold">{selected ? selected.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h3><p className="text-sm text-muted-foreground">{loading ? "Loading activity…" : `${selectedDay?.assessmentCount ?? 0} ${(selectedDay?.assessmentCount ?? 0) === 1 ? "assessment" : "assessments"}${selectedDay?.milestoneCount ? ` · ${selectedDay.milestoneCount} ${selectedDay.milestoneCount === 1 ? "milestone" : "milestones"}` : ""}`}</p></div>
-        {loading || (selectedDay && !detail && !error) ? <p className="text-sm text-muted-foreground">Loading activity…</p> : error ? <p role="alert" className="text-sm text-muted-foreground">Activity could not be loaded for this month.</p> : detail?.assessments.length ? <>
+        {loading || (selectedDay && !detail && !error) ? <div role="status" aria-label="Loading activity for selected day" className="grid gap-3">{Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-14 w-full motion-reduce:animate-none" />)}</div> : error ? <p role="alert" className="text-sm text-muted-foreground">Activity could not be loaded for this month.</p> : detail?.assessments.length ? <>
           <ul className="divide-y">{detail.assessments.map(group => <li key={group.assessmentId}><Link to={`/assessments/${group.reference}`} className="block rounded-lg px-2 py-3 text-sm hover:bg-muted/50"><span className="flex flex-wrap items-baseline gap-x-2"><strong className="text-foreground">{group.patientDisplayName}</strong><span className="text-xs text-muted-foreground">{group.reference}</span></span><span className="mt-1.5 flex flex-wrap gap-2">{group.milestones.map(item => <span key={item.action} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/30 px-2.5 py-1 text-xs text-foreground"><i aria-hidden="true" className={`size-2 shrink-0 rounded-full ${actions[item.action].color}`} />{actions[item.action].label}<time className="ml-1 text-muted-foreground">{item.occurredAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</time></span>)}</span></Link></li>)}</ul>
           {detail.pageCount > 1 && <nav aria-label="Activity pages" className="mt-4 flex justify-center border-t pt-4 text-sm"><div className="flex items-center gap-2"><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={page === 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page} of {detail.pageCount}</span><button type="button" className="rounded-lg border px-3 py-1.5 disabled:opacity-40" disabled={page === detail.pageCount} onClick={() => setPage(value => value + 1)}>Next</button></div></nav>}
         </> : <div className="flex min-h-60 flex-1 flex-col items-center justify-center rounded-xl border border-primary/10 bg-primary/[.025] p-5 text-center"><ActivityEmptyIllustration /><p className="mt-2 text-sm text-muted-foreground">{selected ? "No assessment milestones on this day." : "No assessment milestones in this month."}</p></div>}

@@ -14,8 +14,11 @@ import { getOrganization, getOverviewRisk, getOverviewSummary, listOrganizationU
 import { OverviewStatCard } from "./OverviewStatCard";
 import { AssessmentActivityCalendar, RiskOverviewCards } from "./OverviewClinicalCards";
 import { OverviewBottomCards } from "./OverviewBottomCards";
+import { NutritionInsights } from "./NutritionInsights";
+import { OverviewActionsSkeleton, OverviewInsightsSkeleton, OverviewPrioritySkeleton, OverviewRecentSkeleton, OverviewRiskSkeleton, OverviewStatSkeleton } from "./OverviewSkeleton";
 
-type Overview = { summary: OverviewSummary; risk: Awaited<ReturnType<typeof getOverviewRisk>> | null; riskLoaded: boolean; highRiskPatients: number | null; highRiskPatients30DaysAgo: number | null; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
+type Overview = { summary: OverviewSummary; enabledUsers: number | null; pendingInvitations: number; seats: number; userLimit: number | null; queuedReviews: ClinicalReviewQueue | null; myReviews: ClinicalReviewQueue | null };
+type Risk = Awaited<ReturnType<typeof getOverviewRisk>>;
 
 export function greetingForHour(hour: number): "Good morning" | "Good afternoon" | "Good evening" {
   if (hour >= 6 && hour < 12) return "Good morning";
@@ -100,6 +103,7 @@ export function DashboardPage() {
   const canCreateAssessment = hasPermission(user.role, "assessments.create");
   const [localTime, setLocalTime] = useState(() => new Date());
   const [data, setData] = useState<Overview | null>(null);
+  const [riskState, setRiskState] = useState<{ risk: Risk | null; loaded: boolean }>({ risk: null, loaded: false });
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -109,6 +113,7 @@ export function DashboardPage() {
   useEffect(() => {
     let active = true;
     setError(false);
+    setRiskState({ risk: null, loaded: false });
     const org = user.organizationId;
     const reviews = (params: Record<string, string>) => listClinicalReviews(org, new URLSearchParams({ page: "1", pageSize: "3", ...params }));
     let supplemental: Partial<Overview> = {};
@@ -119,14 +124,14 @@ export function DashboardPage() {
     getOverviewSummary(org).then(summary => {
       if (!active) return;
       setData({
-        summary, risk: null, riskLoaded: !isAdmin && !isClinician, highRiskPatients: null, highRiskPatients30DaysAgo: null,
+        summary,
         queuedReviews: null, myReviews: null, seats: 0, userLimit: null, enabledUsers: null, pendingInvitations: 0,
         ...supplemental,
       });
     }).catch(() => { if (active) setError(true); });
     if (isAdmin || isClinician) {
-      getOverviewRisk(org).then(risk => update({ risk, riskLoaded: true, highRiskPatients: risk.highRiskPatients, highRiskPatients30DaysAgo: risk.highRiskPatients30DaysAgo }))
-        .catch(() => update({ riskLoaded: true }));
+      getOverviewRisk(org).then(risk => { if (active) setRiskState({ risk, loaded: true }); })
+        .catch(() => { if (active) setRiskState({ risk: null, loaded: true }); });
       reviews({ state: "QUEUED" }).then(queuedReviews => update({ queuedReviews })).catch(() => {});
     }
     if (isClinician) reviews({ state: "IN_REVIEW", mine: "true" }).then(myReviews => update({ myReviews })).catch(() => {});
@@ -142,8 +147,8 @@ export function DashboardPage() {
   const growth = (total: number, added: number) => ({ total, added, percent: total > added ? Math.round(added / (total - added) * 100) : null });
   const patientGrowth = data ? growth(data.summary.patientCount, data.summary.patientsAdded30Days) : null;
   const completedGrowth = data ? growth(data.summary.completedCount, data.summary.completedAdded30Days) : null;
-  const highRiskTrend = data?.highRiskPatients != null && data.highRiskPatients30DaysAgo != null && data.highRiskPatients !== data.highRiskPatients30DaysAgo
-    ? { change: data.highRiskPatients - data.highRiskPatients30DaysAgo, percent: null, increaseIsGood: false }
+  const highRiskTrend = riskState.risk && riskState.risk.highRiskPatients !== riskState.risk.highRiskPatients30DaysAgo
+    ? { change: riskState.risk.highRiskPatients - riskState.risk.highRiskPatients30DaysAgo, percent: null, increaseIsGood: false }
     : undefined;
   const myAssessmentActions = data?.summary.myAssessmentActions ?? 0;
   const readyToSend = data?.summary.readyToSend ?? 0;
@@ -155,21 +160,21 @@ export function DashboardPage() {
     </header>
     {error ? <Card className="surface p-6"><p role="alert">Overview could not be loaded.</p><Button className="w-fit" variant="outline" onPress={() => setAttempt((value) => value + 1)}>Retry</Button></Card> : <>
       <section aria-label="Overview statistics" aria-busy={!data} className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <OverviewStatCard label="Total patients" value={patientGrowth?.total ?? null} icon={UsersRound} trend={patientGrowth ? { change: patientGrowth.added, percent: patientGrowth.percent, increaseIsGood: true } : undefined} detail="vs 30 days ago" to="/patients" />
+        {data ? <OverviewStatCard label="Total patients" value={patientGrowth?.total ?? null} icon={UsersRound} trend={patientGrowth ? { change: patientGrowth.added, percent: patientGrowth.percent, increaseIsGood: true } : undefined} detail="vs 30 days ago" to="/patients" /> : <OverviewStatSkeleton />}
         {(isClinician || isAdmin) && <>
-          <OverviewStatCard label="Assessments completed" value={completedGrowth?.total ?? null} icon={ClipboardCheck} trend={completedGrowth ? { change: completedGrowth.added, percent: completedGrowth.percent, increaseIsGood: true } : undefined} detail="vs 30 days ago" to="/assessments?status=COMPLETED" />
-          <OverviewStatCard label="High risk patients" value={data?.highRiskPatients ?? null} icon={TriangleAlert} tone="alert" trend={highRiskTrend} detail="vs 30 days ago" to="/assessments?tab=completed&risk=high" />
+          {data ? <OverviewStatCard label="Assessments completed" value={completedGrowth?.total ?? null} icon={ClipboardCheck} trend={completedGrowth ? { change: completedGrowth.added, percent: completedGrowth.percent, increaseIsGood: true } : undefined} detail="vs 30 days ago" to="/assessments?status=COMPLETED" /> : <OverviewStatSkeleton />}
+          {riskState.loaded ? <OverviewStatCard label="High risk patients" value={riskState.risk?.highRiskPatients ?? null} icon={TriangleAlert} tone="alert" trend={highRiskTrend} detail="vs 30 days ago" to="/assessments?tab=completed&risk=high" /> : <OverviewStatSkeleton />}
           {isAdmin
-            ? <OverviewStatCard label="Reviews awaiting assignment" value={data?.queuedReviews?.total ?? null} icon={ClipboardList} detail="Unclaimed clinical reviews" to="/assessments?tab=clinical-reviews&review=QUEUED" />
-            : <OverviewStatCard label="My assessment actions" value={data ? myAssessmentActions : null} icon={ClipboardList} detail="Drafts, corrections, ready to send" to="/assessments?status=MY_ACTIONS" />}
+            ? data ? <OverviewStatCard label="Reviews awaiting assignment" value={data.queuedReviews?.total ?? null} icon={ClipboardList} detail="Unclaimed clinical reviews" to="/assessments?tab=clinical-reviews&review=QUEUED" /> : <OverviewStatSkeleton />
+            : data ? <OverviewStatCard label="My assessment actions" value={myAssessmentActions} icon={ClipboardList} detail="Drafts, corrections, ready to send" to="/assessments?status=MY_ACTIONS" /> : <OverviewStatSkeleton />}
         </>}
       </section>
     </>}
-    {data && (isClinician || isAdmin) && <>
+    {!error && (isClinician || isAdmin) && <>
       {isAdmin
-        ? <div className="mt-7"><QuickActions isAdmin canCreateAssessment={false} queuedReviews={data.queuedReviews} myReviews={null} readyToSend={0} correctionsToMake={0} /></div>
-        : <><div className="mt-7 grid items-stretch gap-4 min-[860px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><PriorityAssessments organizationId={user.organizationId} initial={data.summary.priority} /><QuickActions isAdmin={false} canCreateAssessment={canCreateAssessment} queuedReviews={data.queuedReviews} myReviews={data.myReviews} readyToSend={readyToSend} correctionsToMake={correctionsToMake} /></div><AssessmentActivityCalendar organizationId={user.organizationId} /></>}
-      {data.riskLoaded && <RiskOverviewCards risk={data.risk} />}
+        ? <div className="mt-7">{data ? <QuickActions isAdmin canCreateAssessment={false} queuedReviews={data.queuedReviews} myReviews={null} readyToSend={0} correctionsToMake={0} /> : <OverviewActionsSkeleton />}</div>
+        : <><div className="mt-7 grid items-stretch gap-4 min-[860px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">{data ? <PriorityAssessments organizationId={user.organizationId} initial={data.summary.priority} /> : <OverviewPrioritySkeleton />}{data ? <QuickActions isAdmin={false} canCreateAssessment={canCreateAssessment} queuedReviews={data.queuedReviews} myReviews={data.myReviews} readyToSend={readyToSend} correctionsToMake={correctionsToMake} /> : <OverviewActionsSkeleton />}</div><AssessmentActivityCalendar organizationId={user.organizationId} /></>}
+      {riskState.loaded ? <RiskOverviewCards risk={riskState.risk} /> : <OverviewRiskSkeleton />}
     </>}
     {data && isAdmin && <>
       {(data.queuedReviews?.total !== 0 || scoringIssues > 0 || data.pendingInvitations > 0) && <section className="mt-7" aria-label="Organization operations">
@@ -183,7 +188,8 @@ export function DashboardPage() {
       {data.enabledUsers !== null && <UserSeats enabled={data.enabledUsers} reserved={data.seats + data.pendingInvitations} pending={data.pendingInvitations} limit={data.userLimit} />}
       <OverviewUsage organizationId={user.organizationId} />
     </>}
-    {data && (isClinician || isAdmin) && data.riskLoaded && <OverviewBottomCards organizationId={user.organizationId} initial={data.summary.recent} risk={data.risk} />}
+    {!error && (isClinician || isAdmin) && (data ? <OverviewBottomCards organizationId={user.organizationId} initial={data.summary.recent} risk={riskState.risk} riskLoaded={riskState.loaded} /> : <section className="mt-7 grid gap-4 min-[720px]:grid-cols-2" aria-label="Recent patients and NIQ insights"><OverviewRecentSkeleton />{riskState.loaded ? <NutritionInsights risk={riskState.risk} /> : <OverviewInsightsSkeleton />}</section>)}
     {data && !isAdmin && !isClinician && <section className="mt-7" aria-label="Patient registration"><h2 className="text-lg font-semibold">Patient registration</h2><p className="text-sm text-muted-foreground">Register patients and keep their details current.</p><RecentPatients recent={data.summary.recent.items} /></section>}
+    {!data && !error && !isAdmin && !isClinician && <div className="mt-7"><OverviewRecentSkeleton /></div>}
   </>;
 }
