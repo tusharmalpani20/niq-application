@@ -2,7 +2,7 @@ import { correctPatientDob as correctDob, correctPatientMrn as correctMrn, editP
 import { faceScanSessionSchema } from "../../../../packages/contracts/src/face-scan";
 import { formatAssessmentReference, hasPermission, type Permission } from "@niq/application-contracts";
 import type { ApplicationConfig } from "@niq/application-config";
-import type { AcceptInvitation, ActivateScoring, AssessmentPageQuery, BootstrapAdmin, CorrectPatientDob, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, OrganizationPageQuery, OrganizationUserPageQuery, PatientAssessmentPageQuery, PatientPageQuery, PlatformAdministratorPageQuery, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
+import type { AcceptInvitation, ActivateScoring, AssessmentPageQuery, BootstrapAdmin, CorrectPatientDob, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, OrganizationInvitationPageQuery, OrganizationPageQuery, OrganizationUserPageQuery, PatientAssessmentPageQuery, PatientPageQuery, PlatformAdministratorPageQuery, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
 import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNull, lt, max, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -1452,12 +1452,17 @@ export class PostgresApplicationService implements ApplicationService {
   }
   async listOrganizationUserPage(actor: Principal, organizationId: string, options: OrganizationUserPageQuery) {
     this.ensureOrganizationAccess(actor, organizationId, "users.manage");
+    const baseFilter = eq(organizationMemberships.organizationId, organizationId);
     const filter = and(
-      eq(organizationMemberships.organizationId, organizationId),
+      baseFilter,
       options.search ? or(ilike(users.displayName, containsText(options.search)), ilike(users.email, containsText(options.search))) : undefined,
+      options.role !== "all" ? eq(organizationMemberships.role, options.role) : undefined,
+      options.status === "active" ? and(eq(organizationMemberships.isActive, true), eq(users.status, "ACTIVE")) : undefined,
+      options.status === "disabled" ? or(eq(organizationMemberships.isActive, false), ne(users.status, "ACTIVE")) : undefined,
     );
-    const [totalRows, records] = await Promise.all([
+    const [totalRows, unfilteredRows, records] = await Promise.all([
       this.db.select({ value: count() }).from(organizationMemberships).innerJoin(users, eq(users.id, organizationMemberships.userId)).where(filter),
+      this.db.select({ value: count() }).from(organizationMemberships).where(baseFilter),
       this.db.select({ membershipId: organizationMemberships.id, userId: users.id, email: users.email, displayName: users.displayName, status: users.status, role: organizationMemberships.role, active: organizationMemberships.isActive, createdAt: organizationMemberships.createdAt })
         .from(organizationMemberships).innerJoin(users, eq(users.id, organizationMemberships.userId)).where(filter)
         .orderBy(asc(users.displayName), asc(organizationMemberships.id)).limit(options.pageSize).offset((options.page - 1) * options.pageSize),
@@ -1468,7 +1473,31 @@ export class PostgresApplicationService implements ApplicationService {
         .from(facilityMemberships).innerJoin(facilities, and(eq(facilities.id, facilityMemberships.facilityId), eq(facilities.organizationId, facilityMemberships.organizationId)))
         .where(and(eq(facilityMemberships.organizationId, organizationId), inArray(facilityMemberships.organizationMembershipId, membershipIds)))
       : [];
-    return { items: records.map(record => ({ ...record, facilities: assignments.filter(item => item.membershipId === record.membershipId).map(({ id, name }) => ({ id, name })) })), total: Number(totalRows[0]?.value ?? 0), page: options.page, pageSize: options.pageSize };
+    return { items: records.map(record => ({ ...record, facilities: assignments.filter(item => item.membershipId === record.membershipId).map(({ id, name }) => ({ id, name })) })), total: Number(totalRows[0]?.value ?? 0), unfilteredTotal: Number(unfilteredRows[0]?.value ?? 0), page: options.page, pageSize: options.pageSize };
+  }
+  async listOrganizationInvitationPage(actor: Principal, organizationId: string, options: OrganizationInvitationPageQuery) {
+    this.ensureOrganizationAccess(actor, organizationId, "users.manage");
+    const baseFilter = and(eq(invitations.organizationId, organizationId), eq(invitations.platformRole, "USER"), inArray(invitations.status, ["PENDING", "EXPIRED"]));
+    const filter = and(
+      baseFilter,
+      options.search ? ilike(invitations.email, containsText(options.search)) : undefined,
+      options.role !== "all" ? eq(invitations.role, options.role) : undefined,
+    );
+    const [totalRows, unfilteredRows, records] = await Promise.all([
+      this.db.select({ value: count() }).from(invitations).where(filter),
+      this.db.select({ value: count() }).from(invitations).where(baseFilter),
+      this.db.select({ id: invitations.id, email: invitations.email, role: invitations.role, status: invitations.status, expiresAt: invitations.expiresAt })
+        .from(invitations).where(filter).orderBy(desc(invitations.createdAt), desc(invitations.id))
+        .limit(options.pageSize).offset((options.page - 1) * options.pageSize),
+    ]);
+    const now = Date.now();
+    return {
+      items: records.map(record => ({ ...record, status: record.status === "PENDING" && record.expiresAt.getTime() <= now ? "EXPIRED" as const : record.status })),
+      total: Number(totalRows[0]?.value ?? 0),
+      unfilteredTotal: Number(unfilteredRows[0]?.value ?? 0),
+      page: options.page,
+      pageSize: options.pageSize,
+    };
   }
   async setUserActive(actor: Principal, organizationId: string, membershipId: string, active: boolean, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, "users.manage");

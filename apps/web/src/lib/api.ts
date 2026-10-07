@@ -17,6 +17,8 @@ import {
   organizationPageResponseSchema,
   organizationUserPageQuerySchema,
   organizationUserPageResponseSchema,
+  organizationInvitationPageQuerySchema,
+  organizationInvitationPageResponseSchema,
   organizationDetailsResponseSchema,
   organizationAdminStatsSchema,
   organizationSchema,
@@ -60,6 +62,7 @@ import {
   type OrganizationUser,
   type OrganizationPageQuery,
   type OrganizationUserPageQuery,
+  type OrganizationInvitationPageQuery,
   type PlatformAdministratorPageQuery,
   type PlatformAdministrator,
   type ScoringOrganizationInfo,
@@ -241,6 +244,12 @@ export async function listOrganizationUsersPage(organizationId: string, options:
   const query = organizationUserPageQuerySchema.parse(options);
   const response = await fetch(`/api/v1/organizations/${encodeURIComponent(organizationId)}/users/page?${new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]))}`, { credentials: "include" });
   return organizationUserPageResponseSchema.parse(await responseBody(response));
+}
+
+export async function listOrganizationInvitationsPage(organizationId: string, options: Partial<OrganizationInvitationPageQuery> = {}) {
+  const query = organizationInvitationPageQuerySchema.parse(options);
+  const response = await fetch(`/api/v1/organizations/${encodeURIComponent(organizationId)}/invitations/page?${new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]))}`, { credentials: "include" });
+  return organizationInvitationPageResponseSchema.parse(await responseBody(response));
 }
 
 export async function setOrganizationStatus(organizationId: string, status: "ACTIVE" | "SUSPENDED"): Promise<Organization> {

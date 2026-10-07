@@ -308,9 +308,20 @@ export const organizationUserSchema = z.object({
 });
 
 export const organizationUsersResponseSchema = z.object({ items: z.array(organizationUserSchema) });
-export const organizationUserPageQuerySchema = z.object(adminPageFields);
-export const organizationUserPageResponseSchema = z.object({ items: z.array(organizationUserSchema), total: z.number().int().nonnegative(), page: z.number().int().positive(), pageSize: z.number().int().positive() });
+export const organizationUserPageQuerySchema = z.object({ ...adminPageFields, role: z.union([membershipRoleSchema, z.literal("all")]).default("all"), status: z.enum(["all", "active", "disabled"]).default("all") });
+export const organizationUserPageResponseSchema = z.object({ items: z.array(organizationUserSchema), total: z.number().int().nonnegative(), unfilteredTotal: z.number().int().nonnegative(), page: z.number().int().positive(), pageSize: z.number().int().positive() });
 export type OrganizationUserPageQuery = z.infer<typeof organizationUserPageQuerySchema>;
+
+export const organizationInvitationPageQuerySchema = z.object({ ...adminPageFields, role: z.union([membershipRoleSchema, z.literal("all")]).default("all") });
+export const organizationInvitationPageResponseSchema = z.object({
+  items: z.array(z.object({ id: idSchema, email: z.email(), role: membershipRoleSchema, status: z.enum(["PENDING", "EXPIRED"]), expiresAt: z.coerce.date() })),
+  total: z.number().int().nonnegative(),
+  unfilteredTotal: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type OrganizationInvitationPageQuery = z.infer<typeof organizationInvitationPageQuerySchema>;
+export type OrganizationInvitation = z.infer<typeof organizationInvitationPageResponseSchema>["items"][number];
 
 export const createPlatformAdministratorInvitationSchema = z.object({
   email: z.email().max(320),

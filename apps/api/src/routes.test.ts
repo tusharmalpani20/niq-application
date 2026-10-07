@@ -32,7 +32,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listPatientAssessments: async () => [], listPatientAssessmentPage: async (_actor, _org, _patient, options) => ({ items: [], overviewItems: [], total: 0, page: options.page, pageSize: options.pageSize }), listAssessments: async () => [], listAssessmentPage: async (_actor, _org, options) => ({ items: [], total: 0, allCount: 0, myWorkCount: 0, completedCount: 0, page: options.page, pageSize: options.pageSize }), getAssessmentPriority: async () => false, setAssessmentPriority: async (_actor, _organizationId, assessmentId, isPriority) => ({ assessmentId, isPriority }), getOverviewRisk: async () => ({ highRiskPatients: 0, highRiskPatients30DaysAgo: 0, assessedPatients: 0, categories: { low: 0, moderate: 0, high: 0 }, categories30DaysAgo: { low: 0, moderate: 0, high: 0 }, highRiskAssessments: [] }), getOverviewSummary: async (_actor, _org, priorityPage, recentPage) => ({ patientCount: 0, patientsAdded30Days: 0, completedCount: 0, completedAdded30Days: 0, myAssessmentActions: 0, readyToSend: 0, correctionsToMake: 0, scoringIssues: 0, priority: { total: 0, page: priorityPage, pageSize: 3, items: [] }, recent: { total: 0, page: recentPage, pageSize: 4, items: [] } }), getOverviewActivity: async () => ({ days: [] }), getOverviewActivityDay: async () => ({ assessmentCount: 0, milestoneCount: 0, pageCount: 0, assessments: [] }),
     getOverviewNutrition: async () => ({ protein: { assessed: 0, inadequate: 0 }, eatingBarrier: { assessed: 0, top: null } }),
     invitationAccess: async () => ({ allFacilities: true }), manageUserInvitation: async () => ({ invitation: {}, token: "replacement-token" }),
-    inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], listOrganizationUserPage: async (_actor, _org, options) => ({ items: [], total: 0, page: options.page, pageSize: options.pageSize }), setUserActive: async () => ({}),
+    inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], listOrganizationUserPage: async (_actor, _org, options) => ({ items: [], total: 0, unfilteredTotal: 0, page: options.page, pageSize: options.pageSize }), listOrganizationInvitationPage: async (_actor, _org, options) => ({ items: [], total: 0, unfilteredTotal: 0, page: options.page, pageSize: options.pageSize }), setUserActive: async () => ({}),
     ...overrides,
   };
 }
@@ -807,15 +807,22 @@ describe("local authentication routes", () => {
     const service = fakeService({
       listOrganizationPage: async (_actor, options) => { calls.push(`organizations:${options.page}:${options.pageSize}:${options.search}:${options.status}`); return { items: [], total: 3, page: options.page, pageSize: options.pageSize }; },
       listPlatformAdministratorPage: async (_actor, options) => { calls.push(`administrators:${options.kind}:${options.page}:${options.pageSize}`); return { items: [], total: 2, userCount: 1, invitationCount: 2, page: options.page, pageSize: options.pageSize }; },
-      listOrganizationUserPage: async (_actor, _org, options) => { calls.push(`users:${options.page}:${options.pageSize}:${options.search}`); return { items: [], total: 4, page: options.page, pageSize: options.pageSize }; },
+      listOrganizationUserPage: async (_actor, _org, options) => { calls.push(`users:${options.page}:${options.pageSize}:${options.search}:${options.role}:${options.status}`); return { items: [], total: 4, unfilteredTotal: 7, page: options.page, pageSize: options.pageSize }; },
+      listOrganizationInvitationPage: async (_actor, _org, options) => { calls.push(`invitations:${options.page}:${options.pageSize}:${options.search}:${options.role}`); return { items: [], total: 2, unfilteredTotal: 5, page: options.page, pageSize: options.pageSize }; },
     });
     const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service });
     const headers = { cookie: "niq_session=valid-session" };
     expect((await app.request("/v1/organizations/page?page=2&pageSize=5&search=demo&status=active", { headers })).status).toBe(200);
     expect((await app.request("/v1/platform/administrators/page?kind=INVITATION&page=2&pageSize=10", { headers })).status).toBe(200);
-    expect((await app.request(`/v1/organizations/${principal.organizationId}/users/page?page=3&pageSize=5&search=do`, { headers })).status).toBe(200);
-    expect(calls).toEqual(["organizations:2:5:demo:active", "administrators:INVITATION:2:10", "users:3:5:do"]);
+    const usersResponse = await app.request(`/v1/organizations/${principal.organizationId}/users/page?page=3&pageSize=5&search=do&role=DOCTOR&status=active`, { headers });
+    expect(usersResponse.status).toBe(200);
+    expect((await usersResponse.json()).unfilteredTotal).toBe(7);
+    const invitationResponse = await app.request(`/v1/organizations/${principal.organizationId}/invitations/page?page=2&pageSize=5&search=do&role=DOCTOR`, { headers });
+    expect(invitationResponse.status).toBe(200);
+    expect((await invitationResponse.json()).total).toBe(2);
+    expect(calls).toEqual(["organizations:2:5:demo:active", "administrators:INVITATION:2:10", "users:3:5:do:DOCTOR:active", "invitations:2:5:do:DOCTOR"]);
     expect((await app.request("/v1/organizations/page?pageSize=101", { headers })).status).toBe(400);
+    expect((await app.request(`/v1/organizations/${principal.organizationId}/invitations/page?pageSize=101`, { headers })).status).toBe(400);
   });
 
   test("loads invitations by default but can omit them from organization detail", async () => {

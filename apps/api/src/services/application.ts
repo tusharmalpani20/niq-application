@@ -7,6 +7,7 @@ import type {
   OrganizationPageQuery,
   OrganizationAdminStats,
   OrganizationUserPageQuery,
+  OrganizationInvitationPageQuery,
   PlatformAdministratorPageQuery,
   AssessmentPageResponse,
   PatientPageQuery,
@@ -124,6 +125,7 @@ export interface ApplicationService {
   manageUserInvitation(actor: Principal, organizationId: string, invitationId: string, action: "revoke" | "regenerate", context: RequestContext): Promise<{ invitation: unknown; token?: string }>;
   inviteUser(actor: Principal, organizationId: string, input: CreateInvitation, context: RequestContext): Promise<{ invitation: unknown; token: string }>;
   listUsers(actor: Principal, organizationId: string): Promise<unknown[]>;
-  listOrganizationUserPage(actor: Principal, organizationId: string, options: OrganizationUserPageQuery): Promise<{ items: unknown[]; total: number; page: number; pageSize: number }>;
+  listOrganizationUserPage(actor: Principal, organizationId: string, options: OrganizationUserPageQuery): Promise<{ items: unknown[]; total: number; unfilteredTotal: number; page: number; pageSize: number }>;
+  listOrganizationInvitationPage(actor: Principal, organizationId: string, options: OrganizationInvitationPageQuery): Promise<{ items: unknown[]; total: number; unfilteredTotal: number; page: number; pageSize: number }>;
   setUserActive(actor: Principal, organizationId: string, membershipId: string, active: boolean, context: RequestContext): Promise<unknown>;
 }
