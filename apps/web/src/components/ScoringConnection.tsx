@@ -8,6 +8,7 @@ import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
+import { Skeleton } from "@/components/ui/skeleton";
 import { activateScoring, ApiRequestError, disconnectScoring, getScoringOrganizationInfo } from "../lib/api";
 
 type ScoringConnection = OrganizationDetails["scoringConnection"];
@@ -115,7 +116,7 @@ export function ScoringConnectionPanel({ organizationId, connection, onActivated
     {showHeading && <div className="section-heading"><div><h2>Scoring connection</h2></div></div>}
     {connection && !reconnectRequired ? <>
       <div className="connection-summary"><span className="connection-summary-icon"><Activity aria-hidden="true" /></span><div><strong>{informationState === "error" ? "NIQ Scoring connection needs attention" : "NIQ Scoring connected"}</strong><small>Connected <DateDisplay value={connection.activatedAt} /></small></div><TooltipTrigger><Button className="ml-auto shrink-0" variant="destructive-outline" size="icon" aria-label="Disconnect NIQ Scoring" onPress={() => setConfirmingDisconnect(true)}><Unplug aria-hidden="true" /></Button><Tooltip>Disconnect NIQ Scoring</Tooltip></TooltipTrigger></div>
-      {informationState === "loading" && <p className="muted scoring-information-message" role="status">Updating scoring information…</p>}
+      {informationState === "loading" && !information && <div className="mt-4 grid gap-4" role="status" aria-label="Loading scoring information"><span className="sr-only">Loading scoring information…</span><section className="rounded-xl border bg-card p-5"><Skeleton className="h-5 w-32" /><div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <div className="grid gap-2" key={index}><Skeleton className="h-3 w-20" /><Skeleton className="h-4 w-28 max-w-full" /></div>)}</div></section><div className="grid gap-4 sm:grid-cols-2">{Array.from({ length: 2 }, (_, index) => <section className="rounded-xl border bg-card p-5" key={index}><Skeleton className="h-5 w-32" /><Skeleton className="mt-6 h-8 w-20" /><Skeleton className="mt-4 h-2 w-full rounded-full" /><Skeleton className="mt-3 h-4 w-28" /></section>)}</div></div>}
       {informationState === "error" && errorNotice && <Alert variant="destructive" className="scoring-information-message"><AlertCircle aria-hidden="true" /><AlertTitle>{errorNotice.title}</AlertTitle><AlertDescription>{errorNotice.description}</AlertDescription><Button variant="outline" size="sm" aria-label="Retry NIQ Scoring information" onPress={loadInformation}><RefreshCw aria-hidden="true" />Retry</Button></Alert>}
       {information && <div className="mt-4 space-y-4" aria-busy={informationState === "loading"}>
         {informationState === "error" && <p className="text-sm text-warning">Showing the last loaded information. It may be out of date.</p>}
@@ -131,10 +132,12 @@ export function ScoringConnectionPanel({ organizationId, connection, onActivated
 
     </> : <>
       {reconnectRequired && <Alert><AlertTitle>Reconnect required</AlertTitle><AlertDescription>This connection is no longer valid. Enter a new activation token from NIQ Scoring to reconnect.</AlertDescription></Alert>}
+      <div className="surface rounded-xl border bg-card p-5 sm:p-6"><div className="mb-5 flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><Activity className="size-5" aria-hidden="true" /></span><div><h2 className="font-semibold">Connect NIQ Scoring</h2><p className="mt-1 text-sm text-muted-foreground">Enter the activation token from NIQ Scoring to enable scoring and face scans for this organization.</p></div></div>
       <form className="activation-form" onSubmit={submit}>
         <Field><FieldLabel htmlFor="activationToken">Activation token</FieldLabel><div className="activation-token-controls"><InputGroup className="h-11 overflow-hidden"><InputGroupInput id="activationToken" name="activationToken" type={showToken ? "text" : "password"} minLength={48} maxLength={256} autoComplete="off" required /><InputGroupAddon align="inline-end" className="mr-0! self-stretch border-l bg-accent p-0"><InputGroupButton className="m-0! h-full w-11 rounded-none border-0 bg-clip-border text-primary hover:bg-primary/15" aria-label={showToken ? "Hide activation token" : "Show activation token"} aria-controls="activationToken" aria-pressed={showToken} onPress={() => setShowToken((visible) => !visible)} size="icon-sm">{showToken ? <EyeOff /> : <Eye />}</InputGroupButton></InputGroupAddon></InputGroup><Button type="submit" className="h-11" isDisabled={activating}>{activating ? "Connecting…" : "Connect"}</Button></div></Field>
         {errorNotice && <Alert variant="destructive"><AlertCircle aria-hidden="true" /><AlertTitle>{errorNotice.title}</AlertTitle><AlertDescription>{errorNotice.description}</AlertDescription></Alert>}
       </form>
+      </div>
     </>}
     <AlertDialog ariaLabel="Disconnect NIQ Scoring" isOpen={confirmingDisconnect} onOpenChange={(open) => { if (!disconnecting) setConfirmingDisconnect(open); }} isDismissable={!disconnecting}>
       <AlertDialogHeader><AlertDialogMedia><Unplug /></AlertDialogMedia><AlertDialogTitle>Disconnect NIQ Scoring?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to disconnect NIQ Scoring? You will need a new activation token to connect again.</AlertDialogDescription></AlertDialogHeader>
