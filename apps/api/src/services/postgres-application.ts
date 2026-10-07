@@ -2,9 +2,9 @@ import { correctPatientDob as correctDob, correctPatientMrn as correctMrn, editP
 import { faceScanSessionSchema } from "../../../../packages/contracts/src/face-scan";
 import { formatAssessmentReference, hasPermission, type Permission } from "@niq/application-contracts";
 import type { ApplicationConfig } from "@niq/application-config";
-import type { AcceptInvitation, ActivateScoring, AssessmentPageQuery, BootstrapAdmin, CorrectPatientDob, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, PatientAssessmentPageQuery, PatientPageQuery, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
+import type { AcceptInvitation, ActivateScoring, AssessmentPageQuery, BootstrapAdmin, CorrectPatientDob, CorrectPatientMrn, CreateFacility, CreateInvitation, CreateOrganization, CreatePlatformAdministratorInvitation, OnboardOrganization, OrganizationPageQuery, OrganizationUserPageQuery, PatientAssessmentPageQuery, PatientPageQuery, PlatformAdministratorPageQuery, RegisterPatient, ResendMfaRequest, SignInRequest, UpdateFacility, UpdateOrganization, UpdatePatient, UpdateOrganizationUser, VerifyMfaRequest } from "@niq/application-contracts";
 import { createEntityId, normalizeEmail, requiresMfa } from "@niq/application-domain";
-import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, max, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, ilike, inArray, isNull, lt, max, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "../db/client";
 import {
@@ -50,6 +50,8 @@ import type { ClinicalReviewStored } from "./clinical-review-state";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Executor = Database | Transaction;
+// Escape LIKE wildcards so a search term is treated as text, not a query pattern.
+function containsText(value: string): string { return `%${value.replace(/[\\%_]/g, "\\$&")}%`; }
 const scoringActivationResponseSchema = z.object({
   deploymentId: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
   clientId: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
@@ -411,6 +413,41 @@ export class PostgresApplicationService implements ApplicationService {
     ];
   }
 
+  async listPlatformAdministratorPage(actor: Principal, options: PlatformAdministratorPageQuery) {
+    if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");
+    const search = options.search ? containsText(options.search) : null;
+    const userBaseFilter = and(
+      eq(organizationMemberships.organizationId, actor.organizationId),
+      eq(users.platformRole, "NIQ_ADMIN"),
+    );
+    const userFilter = and(userBaseFilter, search ? or(ilike(users.displayName, search), ilike(users.email, search)) : undefined);
+    const invitationBaseFilter = and(
+      eq(invitations.organizationId, actor.organizationId),
+      eq(invitations.platformRole, "NIQ_ADMIN"),
+      eq(invitations.status, "PENDING"),
+      gt(invitations.expiresAt, new Date()),
+    );
+    const invitationFilter = and(invitationBaseFilter, search ? ilike(invitations.email, search) : undefined);
+    const [userCountRow, invitationCountRow, filteredCountRow, records] = await Promise.all([
+      this.db.select({ value: count() }).from(users).innerJoin(organizationMemberships, eq(organizationMemberships.userId, users.id)).where(userBaseFilter),
+      this.db.select({ value: count() }).from(invitations).where(invitationBaseFilter),
+      search ? (options.kind === "USER"
+        ? this.db.select({ value: count() }).from(users).innerJoin(organizationMemberships, eq(organizationMemberships.userId, users.id)).where(userFilter)
+        : this.db.select({ value: count() }).from(invitations).where(invitationFilter)) : Promise.resolve(null),
+      options.kind === "USER"
+        ? this.db.select({ userId: users.id, membershipId: organizationMemberships.id, email: users.email, displayName: users.displayName, status: users.status, active: organizationMemberships.isActive, createdAt: users.createdAt })
+          .from(users).innerJoin(organizationMemberships, eq(organizationMemberships.userId, users.id)).where(userFilter)
+          .orderBy(asc(users.displayName), asc(users.id)).limit(options.pageSize).offset((options.page - 1) * options.pageSize)
+          .then(rows => rows.map(row => ({ kind: "USER" as const, ...row })))
+        : this.db.select({ invitationId: invitations.id, email: invitations.email, status: invitations.status, expiresAt: invitations.expiresAt, createdAt: invitations.createdAt })
+          .from(invitations).where(invitationFilter).orderBy(desc(invitations.createdAt), desc(invitations.id))
+          .limit(options.pageSize).offset((options.page - 1) * options.pageSize)
+          .then(rows => rows.map(row => ({ kind: "INVITATION" as const, ...row, status: "PENDING" as const }))),
+    ]);
+    const userCount = Number(userCountRow[0]?.value ?? 0), invitationCount = Number(invitationCountRow[0]?.value ?? 0);
+    return { items: records, total: filteredCountRow ? Number(filteredCountRow[0]?.value ?? 0) : options.kind === "USER" ? userCount : invitationCount, userCount, invitationCount, page: options.page, pageSize: options.pageSize };
+  }
+
   async invitePlatformAdministrator(actor: Principal, input: CreatePlatformAdministratorInvitation, context: RequestContext) {
     if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");
     const token = randomToken();
@@ -598,7 +635,21 @@ export class PostgresApplicationService implements ApplicationService {
     if (actor.platformRole === "NIQ_ADMIN") return this.db.select().from(organizations).where(ne(organizations.id, actor.organizationId)).orderBy(organizations.displayName);
     return this.db.select().from(organizations).where(eq(organizations.id, actor.organizationId));
   }
-  async getOrganization(actor: Principal, organizationId: string) {
+  async listOrganizationPage(actor: Principal, options: OrganizationPageQuery) {
+    if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");
+    const filter = and(
+      ne(organizations.id, actor.organizationId),
+      options.status !== "all" ? eq(organizations.status, options.status.toUpperCase() as "ACTIVE" | "SUSPENDED" | "CLOSED") : undefined,
+      options.search ? or(ilike(organizations.displayName, containsText(options.search)), ilike(organizations.legalName, containsText(options.search)), ilike(organizations.slug, containsText(options.search))) : undefined,
+    );
+    const [totalRows, items] = await Promise.all([
+      this.db.select({ value: count() }).from(organizations).where(filter),
+      this.db.select().from(organizations).where(filter).orderBy(asc(organizations.displayName), asc(organizations.id))
+        .limit(options.pageSize).offset((options.page - 1) * options.pageSize),
+    ]);
+    return { items, total: Number(totalRows[0]?.value ?? 0), page: options.page, pageSize: options.pageSize };
+  }
+  async getOrganization(actor: Principal, organizationId: string, includeInvitations = true) {
     this.ensureOrganizationAccess(actor, organizationId);
     const [organization] = await this.db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1);
     if (!organization) throw new ServiceError("NOT_FOUND", "Organization not found.");
@@ -613,7 +664,7 @@ export class PostgresApplicationService implements ApplicationService {
         sql`${organizationEntitlements.effectiveFrom} <= now()`,
         sql`(${organizationEntitlements.effectiveUntil} IS NULL OR ${organizationEntitlements.effectiveUntil} > now())`,
       )).orderBy(desc(organizationEntitlements.effectiveFrom), desc(organizationEntitlements.createdAt)).limit(1),
-      canReadInvitations
+      canReadInvitations && includeInvitations
         ? this.db.select({ id: invitations.id, email: invitations.email, role: invitations.role, status: invitations.status, expiresAt: invitations.expiresAt })
           .from(invitations).where(eq(invitations.organizationId, organizationId)).orderBy(desc(invitations.createdAt))
         : Promise.resolve([]),
@@ -630,17 +681,40 @@ export class PostgresApplicationService implements ApplicationService {
     };
   }
 
-  async getOrganizationBySlug(actor: Principal, organizationSlug: string) {
+  async getOrganizationBySlug(actor: Principal, organizationSlug: string, includeInvitations = true) {
     if (actor.platformRole !== "NIQ_ADMIN") {
       const [actorOrganization] = await this.db.select({ id: organizations.id, slug: organizations.slug }).from(organizations).where(eq(organizations.id, actor.organizationId)).limit(1);
       if (!actorOrganization || actorOrganization.slug !== organizationSlug) {
         throw new ServiceError("FORBIDDEN", "You do not have access to this organization.");
       }
-      return this.getOrganization(actor, actorOrganization.id);
+      return this.getOrganization(actor, actorOrganization.id, includeInvitations);
     }
     const [organization] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.slug, organizationSlug)).limit(1);
     if (!organization) throw new ServiceError("NOT_FOUND", "Organization not found.");
-    return this.getOrganization(actor, organization.id);
+    return this.getOrganization(actor, organization.id, includeInvitations);
+  }
+
+  async getOrganizationAdminStats(actor: Principal, organizationId: string) {
+    if (actor.platformRole !== "NIQ_ADMIN") throw new ServiceError("FORBIDDEN", "NIQ administrator access is required.");
+    const [organization] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
+    if (!organization) throw new ServiceError("NOT_FOUND", "Organization not found.");
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [activeUsers, facilityRows, patientRows, completedRows] = await Promise.all([
+      this.db.select({ value: count() }).from(organizationMemberships).innerJoin(users, eq(users.id, organizationMemberships.userId)).where(and(
+        eq(organizationMemberships.organizationId, organizationId), eq(organizationMemberships.isActive, true), eq(users.status, "ACTIVE"),
+      )),
+      this.db.select({ value: count() }).from(facilities).where(eq(facilities.organizationId, organizationId)),
+      this.db.select({ value: count() }).from(patients).where(and(eq(patients.organizationId, organizationId), eq(patients.isArchived, false))),
+      this.db.select({ value: count() }).from(assessments).where(and(
+        eq(assessments.organizationId, organizationId), eq(assessments.status, "COMPLETED"), gte(assessments.completedAt, thirtyDaysAgo),
+      )),
+    ]);
+    return {
+      activeUsers: Number(activeUsers[0]?.value ?? 0),
+      facilities: Number(facilityRows[0]?.value ?? 0),
+      patients: Number(patientRows[0]?.value ?? 0),
+      completedAssessments30Days: Number(completedRows[0]?.value ?? 0),
+    };
   }
 
   async getOrganizationLogo(actor: Principal, organizationId: string) {
@@ -1375,6 +1449,26 @@ export class PostgresApplicationService implements ApplicationService {
       .from(organizationMemberships).innerJoin(users, eq(users.id, organizationMemberships.userId)).where(eq(organizationMemberships.organizationId, organizationId)).orderBy(users.displayName);
     const assignments = await this.db.select({ membershipId: facilityMemberships.organizationMembershipId, id: facilities.id, name: facilities.name }).from(facilityMemberships).innerJoin(facilities, and(eq(facilities.id, facilityMemberships.facilityId), eq(facilities.organizationId, facilityMemberships.organizationId))).where(eq(facilityMemberships.organizationId, organizationId));
     return records.map((record) => ({ ...record, facilities: assignments.filter((item) => item.membershipId === record.membershipId).map(({ id, name }) => ({ id, name })) }));
+  }
+  async listOrganizationUserPage(actor: Principal, organizationId: string, options: OrganizationUserPageQuery) {
+    this.ensureOrganizationAccess(actor, organizationId, "users.manage");
+    const filter = and(
+      eq(organizationMemberships.organizationId, organizationId),
+      options.search ? or(ilike(users.displayName, containsText(options.search)), ilike(users.email, containsText(options.search))) : undefined,
+    );
+    const [totalRows, records] = await Promise.all([
+      this.db.select({ value: count() }).from(organizationMemberships).innerJoin(users, eq(users.id, organizationMemberships.userId)).where(filter),
+      this.db.select({ membershipId: organizationMemberships.id, userId: users.id, email: users.email, displayName: users.displayName, status: users.status, role: organizationMemberships.role, active: organizationMemberships.isActive, createdAt: organizationMemberships.createdAt })
+        .from(organizationMemberships).innerJoin(users, eq(users.id, organizationMemberships.userId)).where(filter)
+        .orderBy(asc(users.displayName), asc(organizationMemberships.id)).limit(options.pageSize).offset((options.page - 1) * options.pageSize),
+    ]);
+    const membershipIds = records.map(record => record.membershipId);
+    const assignments = membershipIds.length
+      ? await this.db.select({ membershipId: facilityMemberships.organizationMembershipId, id: facilities.id, name: facilities.name })
+        .from(facilityMemberships).innerJoin(facilities, and(eq(facilities.id, facilityMemberships.facilityId), eq(facilities.organizationId, facilityMemberships.organizationId)))
+        .where(and(eq(facilityMemberships.organizationId, organizationId), inArray(facilityMemberships.organizationMembershipId, membershipIds)))
+      : [];
+    return { items: records.map(record => ({ ...record, facilities: assignments.filter(item => item.membershipId === record.membershipId).map(({ id, name }) => ({ id, name })) })), total: Number(totalRows[0]?.value ?? 0), page: options.page, pageSize: options.pageSize };
   }
   async setUserActive(actor: Principal, organizationId: string, membershipId: string, active: boolean, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, "users.manage");

@@ -13,7 +13,12 @@ import {
   createPlatformAdministratorInvitationSchema,
   createFacilitySchema,
   organizationListResponseSchema,
+  organizationPageQuerySchema,
+  organizationPageResponseSchema,
+  organizationUserPageQuerySchema,
+  organizationUserPageResponseSchema,
   organizationDetailsResponseSchema,
+  organizationAdminStatsSchema,
   organizationSchema,
   overviewRiskSchema,
   overviewNutritionSchema,
@@ -26,6 +31,8 @@ import {
   platformAdministratorInvitationResponseSchema,
   platformAdministratorSchema,
   platformAdministratorsResponseSchema,
+  platformAdministratorPageQuerySchema,
+  platformAdministratorPageResponseSchema,
   onboardOrganizationResponseSchema,
   onboardOrganizationSchema,
   patientListResponseSchema,
@@ -49,7 +56,11 @@ import {
   type FacilityPerformance,
   type Organization,
   type OrganizationDetails,
+  type OrganizationAdminStats,
   type OrganizationUser,
+  type OrganizationPageQuery,
+  type OrganizationUserPageQuery,
+  type PlatformAdministratorPageQuery,
   type PlatformAdministrator,
   type ScoringOrganizationInfo,
   type OnboardOrganization,
@@ -145,10 +156,20 @@ export async function listOrganizations(): Promise<Organization[]> {
   const response = await fetch("/api/v1/organizations", { credentials: "include" });
   return organizationListResponseSchema.parse(await responseBody(response)).items;
 }
+export async function listOrganizationsPage(options: Partial<OrganizationPageQuery> = {}) {
+  const query = organizationPageQuerySchema.parse(options);
+  const response = await fetch(`/api/v1/organizations/page?${new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]))}`, { credentials: "include" });
+  return organizationPageResponseSchema.parse(await responseBody(response));
+}
 
 export async function listPlatformAdministrators(): Promise<PlatformAdministrator[]> {
   const response = await fetch("/api/v1/platform/administrators", { credentials: "include" });
   return platformAdministratorsResponseSchema.parse(await responseBody(response)).items;
+}
+export async function listPlatformAdministratorsPage(options: Partial<PlatformAdministratorPageQuery> = {}) {
+  const query = platformAdministratorPageQuerySchema.parse(options);
+  const response = await fetch(`/api/v1/platform/administrators/page?${new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]))}`, { credentials: "include" });
+  return platformAdministratorPageResponseSchema.parse(await responseBody(response));
 }
 
 export async function invitePlatformAdministrator(input: CreatePlatformAdministratorInvitation) {
@@ -197,19 +218,29 @@ export async function onboardOrganization(input: OnboardOrganization): Promise<O
   return onboardOrganizationResponseSchema.parse(await responseBody(response));
 }
 
-export async function getOrganization(organizationId: string): Promise<OrganizationDetails> {
-  const response = await fetch(`/api/v1/organizations/${organizationId}`, { credentials: "include" });
+export async function getOrganization(organizationId: string, options: { includeInvitations?: boolean } = {}): Promise<OrganizationDetails> {
+  const response = await fetch(`/api/v1/organizations/${organizationId}${options.includeInvitations === false ? "?includeInvitations=false" : ""}`, { credentials: "include" });
   return organizationDetailsResponseSchema.parse(await responseBody(response));
 }
 
-export async function getOrganizationBySlug(organizationSlug: string): Promise<OrganizationDetails> {
-  const response = await fetch(`/api/v1/organizations/by-slug/${encodeURIComponent(organizationSlug)}`, { credentials: "include" });
+export async function getOrganizationBySlug(organizationSlug: string, options: { includeInvitations?: boolean } = {}): Promise<OrganizationDetails> {
+  const response = await fetch(`/api/v1/organizations/by-slug/${encodeURIComponent(organizationSlug)}${options.includeInvitations === false ? "?includeInvitations=false" : ""}`, { credentials: "include" });
   return organizationDetailsResponseSchema.parse(await responseBody(response));
+}
+
+export async function getOrganizationAdminStats(organizationId: string): Promise<OrganizationAdminStats> {
+  const response = await fetch(`/api/v1/organizations/${encodeURIComponent(organizationId)}/admin-stats`, { credentials: "include" });
+  return organizationAdminStatsSchema.parse(await responseBody(response));
 }
 
 export async function listOrganizationUsers(organizationId: string): Promise<OrganizationUser[]> {
   const response = await fetch(`/api/v1/organizations/${organizationId}/users`, { credentials: "include" });
   return organizationUsersResponseSchema.parse(await responseBody(response)).items;
+}
+export async function listOrganizationUsersPage(organizationId: string, options: Partial<OrganizationUserPageQuery> = {}) {
+  const query = organizationUserPageQuerySchema.parse(options);
+  const response = await fetch(`/api/v1/organizations/${encodeURIComponent(organizationId)}/users/page?${new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]))}`, { credentials: "include" });
+  return organizationUserPageResponseSchema.parse(await responseBody(response));
 }
 
 export async function setOrganizationStatus(organizationId: string, status: "ACTIVE" | "SUSPENDED"): Promise<Organization> {

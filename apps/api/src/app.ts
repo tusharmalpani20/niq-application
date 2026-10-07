@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { acceptInvitationSchema, activateScoringSchema, assessmentPageQuerySchema, bootstrapAdminSchema, correctPatientDobSchema, correctPatientMrnSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, createPlatformAdministratorInvitationSchema, idSchema, onboardOrganizationSchema, organizationSlugSchema, patientAssessmentPageQuerySchema, patientPageQuerySchema, patientReferenceSchema, registerPatientSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, updatePatientSchema, updateOrganizationUserSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
+import { acceptInvitationSchema, activateScoringSchema, assessmentPageQuerySchema, bootstrapAdminSchema, correctPatientDobSchema, correctPatientMrnSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, createPlatformAdministratorInvitationSchema, idSchema, onboardOrganizationSchema, organizationDetailQuerySchema, organizationPageQuerySchema, organizationSlugSchema, organizationUserPageQuerySchema, patientAssessmentPageQuerySchema, patientPageQuerySchema, patientReferenceSchema, platformAdministratorPageQuerySchema, registerPatientSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, updatePatientSchema, updateOrganizationUserSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
@@ -170,7 +170,9 @@ export function createApp(dependencies: AppDependencies) {
     deleteCookie(context, cookieName, { path: "/", secure: dependencies.secureCookies ?? false }); return context.body(null, 204);
   });
   app.get("/v1/organizations", async (context) => context.json({ items: await dependencies.service!.listOrganizations(context.get("principal")) }));
+  app.get("/v1/organizations/page", zValidator("query", organizationPageQuerySchema, validationFailure), async (context) => context.json(await dependencies.service!.listOrganizationPage(context.get("principal"), context.req.valid("query"))));
   app.get("/v1/platform/administrators", async (context) => context.json({ items: await dependencies.service!.listPlatformAdministrators(context.get("principal")) }));
+  app.get("/v1/platform/administrators/page", zValidator("query", platformAdministratorPageQuerySchema, validationFailure), async (context) => context.json(await dependencies.service!.listPlatformAdministratorPage(context.get("principal"), context.req.valid("query"))));
   app.post("/v1/platform/administrators/invitations", zValidator("json", createPlatformAdministratorInvitationSchema, validationFailure), async (context) => {
     const result = await dependencies.service!.invitePlatformAdministrator(context.get("principal"), context.req.valid("json"), requestContext(context));
     return context.json({ invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens ? { activationToken: result.token } : {}) }, 201);
@@ -189,13 +191,17 @@ export function createApp(dependencies: AppDependencies) {
     return context.json({ organization: result.organization, invitation: result.invitation, ...(dependencies.exposeDevelopmentTokens ? { activationToken: result.token } : {}) }, 201);
   });
   app.post("/v1/organizations", zValidator("json", createOrganizationSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.createOrganization(context.get("principal"), context.req.valid("json"), requestContext(context))), 201));
-  app.get("/v1/organizations/by-slug/:organizationSlug", zValidator("param", organizationSlugParamsSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.getOrganizationBySlug(context.get("principal"), context.req.valid("param").organizationSlug))));
+  app.get("/v1/organizations/by-slug/:organizationSlug", zValidator("param", organizationSlugParamsSchema, validationFailure), zValidator("query", organizationDetailQuerySchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.getOrganizationBySlug(context.get("principal"), context.req.valid("param").organizationSlug, context.req.valid("query").includeInvitations !== "false"))));
   app.get("/v1/organizations/:organizationId/logo", zValidator("param", idParamsSchema, validationFailure), async (context) => {
     const asset = await dependencies.service!.getOrganizationLogo(context.get("principal"), context.req.valid("param").organizationId);
     const body = asset.data.buffer.slice(asset.data.byteOffset, asset.data.byteOffset + asset.data.byteLength) as ArrayBuffer;
     return new Response(body, { headers: { "content-type": asset.mimeType, "cache-control": "private, max-age=300", etag: `\"${asset.etag}\"`, "x-content-type-options": "nosniff" } });
   });
-  app.get("/v1/organizations/:organizationId", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.getOrganization(context.get("principal"), context.req.valid("param").organizationId))));
+  app.get("/v1/organizations/:organizationId", zValidator("param", idParamsSchema, validationFailure), zValidator("query", organizationDetailQuerySchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.getOrganization(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("query").includeInvitations !== "false"))));
+  app.get("/v1/organizations/:organizationId/admin-stats", zValidator("param", idParamsSchema, validationFailure), async (context) => {
+    context.header("Cache-Control", "private, no-store");
+    return context.json(await dependencies.service!.getOrganizationAdminStats(context.get("principal"), context.req.valid("param").organizationId));
+  });
   app.patch("/v1/organizations/:organizationId", zValidator("param", idParamsSchema, validationFailure), zValidator("json", updateOrganizationSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.updateOrganization(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("json"), requestContext(context)))));
   app.post("/v1/organizations/:organizationId/scoring/activate", zValidator("param", idParamsSchema, validationFailure), zValidator("json", activateScoringSchema, validationFailure), async (context) => context.json(jsonValue(await dependencies.service!.activateScoring(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("json"), requestContext(context))), 201));
   app.delete("/v1/organizations/:organizationId/scoring/connection", zValidator("param", idParamsSchema, validationFailure), async (context) => {
@@ -261,6 +267,7 @@ export function createApp(dependencies: AppDependencies) {
     return context.json(await dependencies.service!.getOverviewActivityDay(context.get("principal"), context.req.valid("param").organizationId, start, end, page));
   });
   app.get("/v1/organizations/:organizationId/users", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json({ items: await dependencies.service!.listUsers(context.get("principal"), context.req.valid("param").organizationId) }));
+  app.get("/v1/organizations/:organizationId/users/page", zValidator("param", idParamsSchema, validationFailure), zValidator("query", organizationUserPageQuerySchema, validationFailure), async (context) => context.json(await dependencies.service!.listOrganizationUserPage(context.get("principal"), context.req.valid("param").organizationId, context.req.valid("query"))));
   app.get("/v1/organizations/:organizationId/invitation-access", zValidator("param", idParamsSchema, validationFailure), async (context) => context.json(await dependencies.service!.invitationAccess(context.get("principal"), context.req.valid("param").organizationId)));
   for (const action of ["revoke", "regenerate"] as const) {
     app.post(`/v1/organizations/:organizationId/invitations/:invitationId/${action}`, zValidator("param", z.object({ organizationId: idSchema, invitationId: idSchema }), validationFailure), async (context) => {

@@ -19,9 +19,9 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     verifyMfa: async () => ({ token: "valid-session", expiresAt: new Date(Date.now() + 60_000), principal }),
     resendMfa: async () => ({ challengeToken: "y".repeat(43), expiresAt: new Date(Date.now() + 60_000), resendAvailableAt: new Date(Date.now() + 30_000), attemptsRemaining: 5, resendsRemaining: 2 }),
     signOut: async () => {}, acceptInvitation: async () => principal, bootstrap: async () => principal,
-    listPlatformAdministrators: async () => [], invitePlatformAdministrator: async () => ({ invitation: {}, token: "invite-token" }), setPlatformAdministratorActive: async () => ({}),
+    listPlatformAdministrators: async () => [], listPlatformAdministratorPage: async (_actor, options) => ({ items: [], total: 0, userCount: 0, invitationCount: 0, page: options.page, pageSize: options.pageSize }), invitePlatformAdministrator: async () => ({ invitation: {}, token: "invite-token" }), setPlatformAdministratorActive: async () => ({}),
     revokePlatformAdministratorInvitation: async () => {}, regeneratePlatformAdministratorInvitation: async () => ({ invitation: {}, token: "new-token" }),
-    createOrganization: async () => ({}), listOrganizations: async () => [], getOrganization: async () => ({}), getOrganizationBySlug: async () => ({}), getOrganizationLogo: async () => ({ data: new Uint8Array([1, 2, 3]), mimeType: "image/png", etag: "abc" }), updateOrganization: async () => ({}),
+    createOrganization: async () => ({}), listOrganizations: async () => [], listOrganizationPage: async (_actor, options) => ({ items: [], total: 0, page: options.page, pageSize: options.pageSize }), getOrganization: async () => ({}), getOrganizationBySlug: async () => ({}), getOrganizationAdminStats: async () => ({ activeUsers: 0, facilities: 0, patients: 0, completedAssessments30Days: 0 }), getOrganizationLogo: async () => ({ data: new Uint8Array([1, 2, 3]), mimeType: "image/png", etag: "abc" }), updateOrganization: async () => ({}),
     onboardOrganization: async () => ({ organization: {}, invitation: {}, token: "invite-token" }),
     activateScoring: async () => ({ connection: {} }),
     disconnectScoring: async () => {},
@@ -32,7 +32,7 @@ function fakeService(overrides: Partial<ApplicationService> = {}): ApplicationSe
     createPatient: async () => ({}), listPatients: async () => [], getPatient: async () => ({}), listPatientAssessments: async () => [], listPatientAssessmentPage: async (_actor, _org, _patient, options) => ({ items: [], overviewItems: [], total: 0, page: options.page, pageSize: options.pageSize }), listAssessments: async () => [], listAssessmentPage: async (_actor, _org, options) => ({ items: [], total: 0, allCount: 0, myWorkCount: 0, completedCount: 0, page: options.page, pageSize: options.pageSize }), getAssessmentPriority: async () => false, setAssessmentPriority: async (_actor, _organizationId, assessmentId, isPriority) => ({ assessmentId, isPriority }), getOverviewRisk: async () => ({ highRiskPatients: 0, highRiskPatients30DaysAgo: 0, assessedPatients: 0, categories: { low: 0, moderate: 0, high: 0 }, categories30DaysAgo: { low: 0, moderate: 0, high: 0 }, highRiskAssessments: [] }), getOverviewSummary: async (_actor, _org, priorityPage, recentPage) => ({ patientCount: 0, patientsAdded30Days: 0, completedCount: 0, completedAdded30Days: 0, myAssessmentActions: 0, readyToSend: 0, correctionsToMake: 0, scoringIssues: 0, priority: { total: 0, page: priorityPage, pageSize: 3, items: [] }, recent: { total: 0, page: recentPage, pageSize: 4, items: [] } }), getOverviewActivity: async () => ({ days: [] }), getOverviewActivityDay: async () => ({ assessmentCount: 0, milestoneCount: 0, pageCount: 0, assessments: [] }),
     getOverviewNutrition: async () => ({ protein: { assessed: 0, inadequate: 0 }, eatingBarrier: { assessed: 0, top: null } }),
     invitationAccess: async () => ({ allFacilities: true }), manageUserInvitation: async () => ({ invitation: {}, token: "replacement-token" }),
-    inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], setUserActive: async () => ({}),
+    inviteUser: async () => ({ invitation: {}, token: "invite-token" }), listUsers: async () => [], listOrganizationUserPage: async (_actor, _org, options) => ({ items: [], total: 0, page: options.page, pageSize: options.pageSize }), setUserActive: async () => ({}),
     ...overrides,
   };
 }
@@ -800,5 +800,46 @@ describe("local authentication routes", () => {
     const response = await app.request(`/v1/organizations/${principal.organizationId}/scoring/organization-info`, { headers: { cookie: "niq_session=valid-session" } });
     expect(response.status).toBe(401);
     expect((await response.json()).error.code).toBe("INVALID_OR_EXPIRED_TOKEN");
+  });
+
+  test("validates and forwards bounded admin list queries", async () => {
+    const calls: string[] = [];
+    const service = fakeService({
+      listOrganizationPage: async (_actor, options) => { calls.push(`organizations:${options.page}:${options.pageSize}:${options.search}:${options.status}`); return { items: [], total: 3, page: options.page, pageSize: options.pageSize }; },
+      listPlatformAdministratorPage: async (_actor, options) => { calls.push(`administrators:${options.kind}:${options.page}:${options.pageSize}`); return { items: [], total: 2, userCount: 1, invitationCount: 2, page: options.page, pageSize: options.pageSize }; },
+      listOrganizationUserPage: async (_actor, _org, options) => { calls.push(`users:${options.page}:${options.pageSize}:${options.search}`); return { items: [], total: 4, page: options.page, pageSize: options.pageSize }; },
+    });
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true, service });
+    const headers = { cookie: "niq_session=valid-session" };
+    expect((await app.request("/v1/organizations/page?page=2&pageSize=5&search=demo&status=active", { headers })).status).toBe(200);
+    expect((await app.request("/v1/platform/administrators/page?kind=INVITATION&page=2&pageSize=10", { headers })).status).toBe(200);
+    expect((await app.request(`/v1/organizations/${principal.organizationId}/users/page?page=3&pageSize=5&search=do`, { headers })).status).toBe(200);
+    expect(calls).toEqual(["organizations:2:5:demo:active", "administrators:INVITATION:2:10", "users:3:5:do"]);
+    expect((await app.request("/v1/organizations/page?pageSize=101", { headers })).status).toBe(400);
+  });
+
+  test("loads invitations by default but can omit them from organization detail", async () => {
+    const flags: boolean[] = [];
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({ getOrganization: async (_actor, _org, includeInvitations) => { flags.push(includeInvitations ?? false); return {}; } }),
+    });
+    const headers = { cookie: "niq_session=valid-session" };
+    expect((await app.request(`/v1/organizations/${principal.organizationId}`, { headers })).status).toBe(200);
+    expect((await app.request(`/v1/organizations/${principal.organizationId}?includeInvitations=false`, { headers })).status).toBe(200);
+    expect(flags).toEqual([true, false]);
+  });
+
+  test("returns organization admin statistics without exposing patient records", async () => {
+    const values = { activeUsers: 3, facilities: 2, patients: 24, completedAssessments30Days: 7 };
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({ getOrganizationAdminStats: async (_actor, organizationId) => {
+        expect(organizationId).toBe(principal.organizationId);
+        return values;
+      } }),
+    });
+    const response = await app.request(`/v1/organizations/${principal.organizationId}/admin-stats`, { headers: { cookie: "niq_session=valid-session" } });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(await response.json()).toEqual(values);
   });
 });

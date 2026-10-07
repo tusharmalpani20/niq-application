@@ -158,6 +158,14 @@ export const organizationSchema = z.object({
 });
 
 export const organizationListResponseSchema = z.object({ items: z.array(organizationSchema) });
+const adminPageFields = {
+  page: z.coerce.number().int().min(1).max(100000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(10),
+  search: z.string().trim().max(200).default(""),
+};
+export const organizationPageQuerySchema = z.object({ ...adminPageFields, status: z.enum(["all", "active", "suspended", "closed"]).default("all") });
+export const organizationPageResponseSchema = z.object({ items: z.array(organizationSchema), total: z.number().int().nonnegative(), page: z.number().int().positive(), pageSize: z.number().int().positive() });
+export type OrganizationPageQuery = z.infer<typeof organizationPageQuerySchema>;
 
 export const createOrganizationSchema = z.object({
   legalName: z.string().trim().min(2).max(200),
@@ -214,7 +222,14 @@ export const organizationDetailsResponseSchema = z.object({
   })),
   scoringConnection: scoringConnectionSchema.nullable(),
 });
-
+export const organizationDetailQuerySchema = z.object({ includeInvitations: z.enum(["true", "false"]).default("true") });
+export const organizationAdminStatsSchema = z.object({
+  activeUsers: z.number().int().nonnegative(),
+  facilities: z.number().int().nonnegative(),
+  patients: z.number().int().nonnegative(),
+  completedAssessments30Days: z.number().int().nonnegative(),
+});
+export type OrganizationAdminStats = z.infer<typeof organizationAdminStatsSchema>;
 export const createFacilitySchema = z.object({
   name: z.string().trim().min(2).max(160),
   code: z.string().trim().min(1).max(40),
@@ -293,6 +308,9 @@ export const organizationUserSchema = z.object({
 });
 
 export const organizationUsersResponseSchema = z.object({ items: z.array(organizationUserSchema) });
+export const organizationUserPageQuerySchema = z.object(adminPageFields);
+export const organizationUserPageResponseSchema = z.object({ items: z.array(organizationUserSchema), total: z.number().int().nonnegative(), page: z.number().int().positive(), pageSize: z.number().int().positive() });
+export type OrganizationUserPageQuery = z.infer<typeof organizationUserPageQuerySchema>;
 
 export const createPlatformAdministratorInvitationSchema = z.object({
   email: z.email().max(320),
@@ -320,6 +338,9 @@ export const platformAdministratorSchema = z.discriminatedUnion("kind", [
 ]);
 
 export const platformAdministratorsResponseSchema = z.object({ items: z.array(platformAdministratorSchema) });
+export const platformAdministratorPageQuerySchema = z.object({ ...adminPageFields, kind: z.enum(["USER", "INVITATION"]).default("USER") });
+export const platformAdministratorPageResponseSchema = z.object({ items: z.array(platformAdministratorSchema), total: z.number().int().nonnegative(), userCount: z.number().int().nonnegative(), invitationCount: z.number().int().nonnegative(), page: z.number().int().positive(), pageSize: z.number().int().positive() });
+export type PlatformAdministratorPageQuery = z.infer<typeof platformAdministratorPageQuerySchema>;
 export const platformAdministratorInvitationResponseSchema = z.object({
   invitation: z.object({ invitationId: idSchema, email: z.email(), expiresAt: z.coerce.date() }),
   activationToken: z.string().optional(),

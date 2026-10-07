@@ -4,6 +4,10 @@ import type {
   OverviewNutrition,
   OverviewSummary,
   AssessmentPageQuery,
+  OrganizationPageQuery,
+  OrganizationAdminStats,
+  OrganizationUserPageQuery,
+  PlatformAdministratorPageQuery,
   AssessmentPageResponse,
   PatientPageQuery,
   PatientPageResponse,
@@ -76,6 +80,7 @@ export interface ApplicationService {
   acceptInvitation(input: AcceptInvitation, context: RequestContext): Promise<Principal>;
   bootstrap(input: BootstrapAdmin, context: RequestContext): Promise<Principal>;
   listPlatformAdministrators(actor: Principal): Promise<unknown[]>;
+  listPlatformAdministratorPage(actor: Principal, options: PlatformAdministratorPageQuery): Promise<{ items: unknown[]; total: number; userCount: number; invitationCount: number; page: number; pageSize: number }>;
   invitePlatformAdministrator(actor: Principal, input: CreatePlatformAdministratorInvitation, context: RequestContext): Promise<{ invitation: unknown; token: string }>;
   revokePlatformAdministratorInvitation(actor: Principal, invitationId: string, context: RequestContext): Promise<void>;
   regeneratePlatformAdministratorInvitation(actor: Principal, invitationId: string, context: RequestContext): Promise<{ invitation: unknown; token: string }>;
@@ -85,8 +90,10 @@ export interface ApplicationService {
   activateScoring(actor: Principal, organizationId: string, input: ActivateScoring, context: RequestContext): Promise<unknown>;
   disconnectScoring(actor: Principal, organizationId: string, context: RequestContext): Promise<void>;
   listOrganizations(actor: Principal): Promise<unknown[]>;
-  getOrganization(actor: Principal, organizationId: string): Promise<unknown>;
-  getOrganizationBySlug(actor: Principal, organizationSlug: string): Promise<unknown>;
+  listOrganizationPage(actor: Principal, options: OrganizationPageQuery): Promise<{ items: unknown[]; total: number; page: number; pageSize: number }>;
+  getOrganization(actor: Principal, organizationId: string, includeInvitations?: boolean): Promise<unknown>;
+  getOrganizationBySlug(actor: Principal, organizationSlug: string, includeInvitations?: boolean): Promise<unknown>;
+  getOrganizationAdminStats(actor: Principal, organizationId: string): Promise<OrganizationAdminStats>;
   getScoringOrganizationInfo(actor: Principal, organizationId: string, context: RequestContext): Promise<unknown>;
   getOrganizationLogo(actor: Principal, organizationId: string): Promise<{ data: Uint8Array; mimeType: string; etag: string }>;
   updateOrganization(actor: Principal, organizationId: string, input: UpdateOrganization, context: RequestContext): Promise<unknown>;
@@ -117,5 +124,6 @@ export interface ApplicationService {
   manageUserInvitation(actor: Principal, organizationId: string, invitationId: string, action: "revoke" | "regenerate", context: RequestContext): Promise<{ invitation: unknown; token?: string }>;
   inviteUser(actor: Principal, organizationId: string, input: CreateInvitation, context: RequestContext): Promise<{ invitation: unknown; token: string }>;
   listUsers(actor: Principal, organizationId: string): Promise<unknown[]>;
+  listOrganizationUserPage(actor: Principal, organizationId: string, options: OrganizationUserPageQuery): Promise<{ items: unknown[]; total: number; page: number; pageSize: number }>;
   setUserActive(actor: Principal, organizationId: string, membershipId: string, active: boolean, context: RequestContext): Promise<unknown>;
 }
