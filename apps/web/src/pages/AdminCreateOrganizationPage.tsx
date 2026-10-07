@@ -26,7 +26,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
   const [step, setStep] = useState<Step>(0);
   const [furthestStep, setFurthestStep] = useState<Step>(0);
   const [displayName, setDisplayName] = useState("");
-  const [slug, setSlug] = useState("");
+  const slug = organizationUrlName(displayName);
   const [userLimit, setUserLimit] = useState("");
   const [unlimitedUsers, setUnlimitedUsers] = useState(true);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -122,7 +122,7 @@ export function OrganizationOnboardingForm({ onCancel, onCreated, onDirtyChange 
     })}</TabsList>
 
     <TabsContent id={0} className="onboarding-panel" data-onboarding-step="0">
-      <FieldGroup className="field-grid"><Field><FieldLabel className="min-h-5" htmlFor="displayName">Name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" aria-invalid={errorField === "name"} onChange={(event) => { const value = event.target.value; setDisplayName(value); setSlug(organizationUrlName(value)); }} />{errorField === "name" && message && <FieldError>{message}</FieldError>}</Field><Field><FieldLabel className="min-h-5" htmlFor="slug">URL name</FieldLabel><Input id="slug" name="slug" required readOnly value={slug} placeholder="example-health" /><FieldDescription>Generated automatically from the organization name.</FieldDescription></Field><Field><FieldLabel className="min-h-5" htmlFor="patientReferencePrefix">Patient prefix</FieldLabel><Input id="patientReferencePrefix" name="patientReferencePrefix" required minLength={2} maxLength={12} pattern="[A-Za-z][A-Za-z0-9]{1,11}" value={patientReferencePrefix} onChange={(event) => setPatientReferencePrefix(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12))} /><FieldDescription>Example: {patientReferencePrefix || "PREFIX"}-1</FieldDescription></Field><Field>
+      <FieldGroup className="field-grid"><Field className="sm:col-span-2"><FieldLabel className="min-h-5" htmlFor="displayName">Name</FieldLabel><Input id="displayName" name="displayName" required minLength={2} value={displayName} placeholder="Example Health Network" aria-invalid={errorField === "name"} onChange={(event) => setDisplayName(event.target.value)} />{errorField === "name" && message && <FieldError>{message}</FieldError>}</Field><Field><FieldLabel className="min-h-5" htmlFor="patientReferencePrefix">Patient prefix</FieldLabel><Input id="patientReferencePrefix" name="patientReferencePrefix" required minLength={2} maxLength={12} pattern="[A-Za-z][A-Za-z0-9]{1,11}" value={patientReferencePrefix} onChange={(event) => setPatientReferencePrefix(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12))} /><FieldDescription>Example: {patientReferencePrefix || "PREFIX"}-1</FieldDescription></Field><Field>
         <div className="flex min-h-5 items-center justify-between gap-4">
           <FieldLabel className="min-h-5" htmlFor="userLimit">User limit</FieldLabel>
           <div className="flex items-center gap-2 text-sm text-muted-foreground"><span>Unlimited</span><Switch aria-label="Unlimited users" isSelected={unlimitedUsers} onChange={(value) => { setUnlimitedUsers(value); markDirty(); }} /></div>
