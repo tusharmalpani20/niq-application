@@ -13,8 +13,8 @@ import { FacilityAccessPicker } from "./FacilityAccessPicker";
 
 export const userRoleLabels = membershipRoleLabels;
 
-export function UserInvitationDialog({ user, facilities, allFacilities, onClose, onCreated }: { user: AuthenticatedUser; facilities: Facility[]; allFacilities: boolean; onClose: () => void; onCreated: () => void }) {
-  const [role, setRole] = useState<CreateInvitation["role"] | null>(null);
+export function UserInvitationDialog({ user, facilities, allFacilities, initialRole = null, onClose, onCreated }: { user: AuthenticatedUser; facilities: Facility[]; allFacilities: boolean; initialRole?: CreateInvitation["role"] | null; onClose: () => void; onCreated: () => void }) {
+  const [role, setRole] = useState<CreateInvitation["role"] | null>(initialRole);
   const [ids, setIds] = useState<string[]>([]);
   const [unrestricted, setUnrestricted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -28,7 +28,7 @@ export function UserInvitationDialog({ user, facilities, allFacilities, onClose,
   const [link, setLink] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
   const { requestClose, confirmation } = useUnsavedFormClose({ subject: "user", onClose, isBusy: () => submitting.current,
-    isDirty: () => !done && (hasChangedInputs(formRef.current) || role !== null || unrestricted || ids.length > 0) });
+    isDirty: () => !done && (hasChangedInputs(formRef.current) || role !== initialRole || unrestricted || ids.length > 0) });
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current) return;

@@ -341,6 +341,9 @@
 .client-workspace [data-slot="tabs-trigger"][data-selected] { color: var(--primary); }
 .client-workspace [data-slot="tabs-trigger"]::after { background: var(--primary); }
 .client-workspace [data-slot="tabs-trigger"] [data-slot="badge"] { background: var(--muted); color: var(--foreground); }
+.client-workspace .user-list-tabs { height: auto; }
+.client-workspace .user-list-tabs [data-slot="tabs-trigger"] { flex: none; height: auto; gap: .55rem; padding: .35rem .2rem .75rem; font-size: 1rem; font-weight: 650; }
+.client-workspace .user-list-tabs [data-slot="tabs-trigger"] span { color: var(--muted-foreground); font-weight: 500; }
 .client-workspace .assessment-list-tabs { height: auto; padding-block: 0; }
 .client-workspace .assessment-list-tabs [data-slot="tabs-trigger"] { height: auto; align-self: stretch; }
 [data-slot="tabs-list"][data-variant="line"] [data-slot="tabs-trigger"]:not([data-selected]):not([data-disabled]):is(:hover, :focus-visible) { color: var(--primary); }
