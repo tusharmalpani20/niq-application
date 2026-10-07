@@ -90,7 +90,7 @@ export function AdminOrganizationDetailPage() {
     <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(String(key))} className="organization-detail-tabs gap-5">
       <TabsList variant="line" aria-label="Organization management" className="w-full justify-start gap-5 border-b p-0">
         <TabsTrigger id="details" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Details</TabsTrigger>
-        <TabsTrigger id="users" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Users {usersCountLoading ? <Skeleton className="ml-1 inline-block h-3 w-4 motion-reduce:animate-none" /> : usersTotal === null ? null : <span className="ml-1 text-xs tabular-nums">{usersTotal}</span>}</TabsTrigger>
+        <TabsTrigger id="users" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Users {usersCountLoading ? <Skeleton className="ml-1 inline-block h-3 w-4 motion-reduce:animate-none" /> : usersTotal === null ? null : <span className="tab-count ml-1 text-xs tabular-nums">{usersTotal}</span>}</TabsTrigger>
         <TabsTrigger id="scoring" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">NIQ Scoring</TabsTrigger>
       </TabsList>
       <TabsContent id="details">

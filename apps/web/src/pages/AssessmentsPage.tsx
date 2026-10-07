@@ -202,8 +202,8 @@ export function AssessmentsPage() {
   }, [canOpen, user.organizationId, facility, risk, searchQuery, tab, reviewState, reload, workspaceRevision]);
   const countPending = query.trim() !== searchQuery;
   const countBadge = (count: number | null, failed = false) => !countPending && count !== null
-    ? <span className="ml-2 text-xs">{count}</span>
-    : !countPending && failed ? <span className="ml-2 text-xs">—</span>
+    ? <span className="tab-count ml-2 text-xs">{count}</span>
+    : !countPending && failed ? <span className="tab-count ml-2 text-xs">—</span>
     : <Skeleton className="ml-2 inline-block h-3 w-6 motion-reduce:animate-none" />;
   const pageCount = Math.max(1, Math.ceil(total / assessmentPageSize));
   const currentPage = Math.min(page, pageCount);

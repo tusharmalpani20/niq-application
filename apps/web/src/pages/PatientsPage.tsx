@@ -324,7 +324,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
     <Tabs selectedKey={patientTab} onSelectionChange={(key) => setPatientTab(String(key))} className="organization-detail-tabs gap-5">
       <TabsList variant="line" aria-label="Patient record" className="w-full justify-start gap-5 border-b p-0">
         <TabsTrigger id="details" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Details</TabsTrigger>
-        <TabsTrigger id="assessments" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Assessments {historyState === "ready" ? <span className="ml-2 text-xs">{assessmentTotal}</span> : historyState === "loading" ? <Skeleton className="ml-2 inline-block h-3 w-6 motion-reduce:animate-none" aria-label="Loading assessment count" /> : null}</TabsTrigger>
+        <TabsTrigger id="assessments" className="flex-none rounded-none border-0 px-1 pb-3 text-foreground/80 shadow-none data-selected:text-primary after:bg-primary">Assessments {historyState === "ready" ? <span className="tab-count ml-2 text-xs">{assessmentTotal}</span> : historyState === "loading" ? <Skeleton className="ml-2 inline-block h-3 w-6 motion-reduce:animate-none" aria-label="Loading assessment count" /> : null}</TabsTrigger>
       </TabsList>
       <TabsContent id="details">
         <PatientAssessmentOverview history={history} state={historyState} organizationId={user.organizationId} membershipId={user.membershipId} canRead={canReadAssessment} canEdit={canEditAssessment} />

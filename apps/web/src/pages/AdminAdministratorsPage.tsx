@@ -120,8 +120,8 @@ export function AdminAdministratorsPage() {
       <Tabs selectedKey={selectedTab} onSelectionChange={(key) => setSelectedTab(key as "users" | "invitations")} className="gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b">
           <TabsList variant="line" aria-label="Administrator management" className="gap-5 p-0">
-            <TabsTrigger id="users" className="rounded-none border-0 px-1 pb-3 text-foreground/75 shadow-none after:bg-primary data-selected:text-primary">Users <span className="ml-1 text-xs tabular-nums">{userCount}</span></TabsTrigger>
-            <TabsTrigger id="invitations" className="rounded-none border-0 px-1 pb-3 text-foreground/75 shadow-none after:bg-primary data-selected:text-primary">Pending invitations <span className="ml-1 text-xs tabular-nums">{invitationCount}</span></TabsTrigger>
+            <TabsTrigger id="users" className="rounded-none border-0 px-1 pb-3 text-foreground/75 shadow-none after:bg-primary data-selected:text-primary">Users <span className="tab-count ml-1 text-xs tabular-nums">{userCount}</span></TabsTrigger>
+            <TabsTrigger id="invitations" className="rounded-none border-0 px-1 pb-3 text-foreground/75 shadow-none after:bg-primary data-selected:text-primary">Pending invitations <span className="tab-count ml-1 text-xs tabular-nums">{invitationCount}</span></TabsTrigger>
           </TabsList>
           <div className="mb-2 flex flex-1 items-center justify-end gap-2">
             <InputGroup className="h-10 max-w-72"><InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon><InputGroupInput value={search} onChange={(event) => { setSearch(event.target.value); setUserPage(1); setInvitationPage(1); }} placeholder={selectedTab === "users" ? "Search administrators..." : "Search invitations..."} aria-label={selectedTab === "users" ? "Search administrators" : "Search invitations"} /></InputGroup>

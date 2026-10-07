@@ -141,10 +141,10 @@ export function AdminOrganizationsPage() {
     <PageHeader title="Organizations" />
     <div className="grid gap-4">
       {statusMessage && <Alert variant="destructive"><AlertDescription>{statusMessage}</AlertDescription></Alert>}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Tabs selectedKey="organizations">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:border-b">
+        <Tabs selectedKey="organizations" className="border-b sm:border-0">
           <TabsList variant="line" aria-label="Organization management" className="gap-2 p-0">
-            <TabsTrigger id="organizations" className="rounded-none border-0 px-1 pb-2 text-primary shadow-none after:bg-primary">Organizations <span className="ml-1 text-xs tabular-nums">{total}</span></TabsTrigger>
+            <TabsTrigger id="organizations" className="rounded-none border-0 px-1 pb-2 text-primary shadow-none after:bg-primary">Organizations <span className="tab-count ml-1 text-xs tabular-nums">{total}</span></TabsTrigger>
           </TabsList>
         </Tabs>
         <div className="flex min-w-0 items-center gap-2 sm:w-auto">
