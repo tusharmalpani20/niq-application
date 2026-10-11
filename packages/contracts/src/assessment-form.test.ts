@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { isAssessmentFieldApplicable, getEffectiveAssessmentAnswers, validateAssessmentAnswers } from "./assessment-form-validation";
-import { buildAssessmentForm, upgradeDraftAssessmentForm } from "./assessment-form";
+import { OTHER_DRUG_CLASS_ID, buildAssessmentForm, upgradeDraftAssessmentForm } from "./assessment-form";
 function fixture() {
   const field = (id: string, type: string) => ({ id, type, label: id, options: type === "calculated" || type === "derived" ? [] : [{ id: `${id}_yes`, label: "Yes" }], dependencies: [] as string[] });
   const q = { formatVersion: 2, profile: "NIQ_FINAL_ASSESSMENT", sections: [
@@ -71,7 +71,11 @@ test("published drug class configuration becomes an optional, versioned app fiel
   };
   const form = buildAssessmentForm(questionnaire);
   const drugClasses = form.sections.find(section => section.id === "treatment")!.fields.find(field => field.id === "drug_classes");
-  expect(drugClasses).toMatchObject({ owner: "application", kind: "multi_select", required: false, options: questionnaire.drugClassConfig.classes });
+  expect(drugClasses).toMatchObject({ owner: "application", kind: "multi_select", required: false });
+  expect(drugClasses?.options).toEqual([...questionnaire.drugClassConfig.classes, { id: OTHER_DRUG_CLASS_ID, label: "Other" }]);
+  const withOther = { ...questionnaire, drugClassConfig: { ...questionnaire.drugClassConfig, classes: [...questionnaire.drugClassConfig.classes, { id: OTHER_DRUG_CLASS_ID, label: "Other" }] } };
+  expect(buildAssessmentForm(withOther).sections.find(section => section.id === "treatment")?.fields.find(field => field.id === "drug_classes")?.options)
+    .toEqual(withOther.drugClassConfig.classes);
   expect(form.drugClassSuggestions).toEqual(questionnaire.drugClassConfig.suggestions);
   expect(() => buildAssessmentForm({ ...questionnaire, drugClassConfig: { ...questionnaire.drugClassConfig, suggestions: [{ ...questionnaire.drugClassConfig.suggestions[0]!, classId: "unknown" }] } })).toThrow("Invalid drug class configuration");
 });

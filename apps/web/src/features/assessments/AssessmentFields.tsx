@@ -1,5 +1,5 @@
 import { AssessmentDateInput } from "./AssessmentDateInput";
-import { ASSESSMENT_ANSWER_TEXT_LIMIT, calculateAssessmentWeightChange, isAssessmentFieldApplicable, suggestedDrugClassIds, type AssessmentFormManifest, type FormAnswer, type FormAnswers, type FormField } from "@niq/application-contracts";
+import { ASSESSMENT_ANSWER_TEXT_LIMIT, OTHER_DRUG_CLASS_ID, calculateAssessmentWeightChange, isAssessmentFieldApplicable, suggestedDrugClassIds, type AssessmentFormManifest, type FormAnswer, type FormAnswers, type FormField } from "@niq/application-contracts";
 import { AssessmentWeightComparison } from "./AssessmentWeightComparison";
 import { AssessmentBmiCard } from "./AssessmentBmiCard";
 import { Tooltip, TooltipTrigger } from "../../components/ui/tooltip";
@@ -53,8 +53,9 @@ const healthHistoryChoiceFields = new Set(["previous_surgeries", "family_history
 const clinicalGutChoiceFields = new Set(["appetite_status", "bowel_pattern", "stool_frequency"]);
 const dietaryChoiceFields = new Set(["dietary_intake"]);
 const dietaryStatusFields = new Set(["functional_capacity", "stress_level", "fluid_intake"]);
-export function addAssessmentMultiChoice(selected: string[], choice: string): string[] {
-  return [...selected, choice];
+export function addAssessmentMultiChoice(selected: string[], choice: string, exclusiveChoice?: string): string[] {
+  if (exclusiveChoice && choice === exclusiveChoice) return [choice];
+  return [...selected.filter(item => item !== exclusiveChoice), choice];
 }
 const otherFields: Record<string, { option: string; detail: string }> = {
   cancer_type: { option: "cancer_other", detail: "cancer_type_other" },
@@ -102,8 +103,8 @@ export function AssessmentFields({ section, answers, manifest, onChange, errors,
           <span className="break-words">{assessmentOptionLabel(field, item)}</span>
           <Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove ${assessmentOptionLabel(field, item)}`} onPress={() => onChange(field.id, selected.length === 1 ? null : selected.filter(choice => choice !== item))}><X className="size-3.5" /></Button>
         </span>) : explicitNoneFields.has(field.id) ? <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 pl-3 text-base">{decoratedLongChoices && <span className="mr-2 text-primary" aria-hidden="true">{longChoiceIcon("__none__")}</span>}None<Button variant="ghost" size="icon" className="ml-1 size-9 rounded-full" isDisabled={readOnly} aria-label={`Remove None from ${field.label}`} onPress={() => onChange(field.id, null)}><X className="size-3.5" /></Button></span> : <span className="text-base text-muted-foreground">No selections</span>}</div>}
-        {!readOnly && <div className="max-w-md"><SearchCombobox large key={JSON.stringify(value)} label={`Add ${field.label.toLowerCase()}`} placeholder={field.id === "drug_classes" ? "Search any drug class…" : `Add ${field.label.toLowerCase()}…`} options={options} value={null} onChange={choice => onChange(field.id, choice === "__none__" ? [] : addAssessmentMultiChoice(selected, choice))} invalid={Boolean(error)} describedBy={error ? errorId : undefined} renderIcon={field.id === "drug_classes" ? () => <Pill className="size-5" aria-hidden="true" /> : decoratedLongChoices ? longChoiceIcon : undefined} primaryHighlight={decoratedLongChoices} suggestedOptionIds={field.id === "drug_classes" && manifest ? suggestedDrugClassIds(manifest, answers) : undefined} /></div>}
-        {field.id === "drug_classes" && <p className="text-sm text-muted-foreground">Suggested for the selected cancer and treatment. Search to choose any configured drug class.</p>}
+        {!readOnly && <div className="max-w-md"><SearchCombobox large key={JSON.stringify(value)} label={`Add ${field.label.toLowerCase()}`} placeholder={field.id === "drug_classes" ? "Search any drug class…" : `Add ${field.label.toLowerCase()}…`} options={options} value={null} onChange={choice => onChange(field.id, choice === "__none__" ? [] : addAssessmentMultiChoice(selected, choice, field.id === "drug_classes" ? OTHER_DRUG_CLASS_ID : undefined))} invalid={Boolean(error)} describedBy={error ? errorId : undefined} renderIcon={field.id === "drug_classes" ? () => <Pill className="size-5" aria-hidden="true" /> : decoratedLongChoices ? longChoiceIcon : undefined} primaryHighlight={decoratedLongChoices} suggestedOptionIds={field.id === "drug_classes" && manifest ? suggestedDrugClassIds(manifest, answers) : undefined} /></div>}
+        {field.id === "drug_classes" && <p className="text-sm text-muted-foreground">Suggested for the selected cancer and treatment. Search to choose any configured drug class. Selecting Other replaces named classes.</p>}
         {errorMarkup}
       </fieldset>;
     }

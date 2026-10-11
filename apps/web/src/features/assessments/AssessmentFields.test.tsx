@@ -20,6 +20,11 @@ test("No problem while eating can be selected alongside other symptoms", () => {
   expect(addAssessmentMultiChoice(["dietary_symptoms_no_problem"], "dietary_symptoms_nausea")).toEqual(["dietary_symptoms_no_problem", "dietary_symptoms_nausea"]);
   expect(addAssessmentMultiChoice(["nausea"], "vomiting")).toEqual(["nausea", "vomiting"]);
 });
+test("Other drug class replaces named classes and a named class replaces Other", () => {
+  expect(addAssessmentMultiChoice(["taxanes", "platinum"], "other", "other")).toEqual(["other"]);
+  expect(addAssessmentMultiChoice(["other"], "taxanes", "other")).toEqual(["taxanes"]);
+  expect(addAssessmentMultiChoice(["taxanes"], "platinum", "other")).toEqual(["taxanes", "platinum"]);
+});
 test("a saved mixed symptom answer stays editable without a local error", () => {
   const symptoms = { ...field, id: "dietary_symptoms", options: [
     { id: "dietary_symptoms_no_problem", label: "No problem while eating" },

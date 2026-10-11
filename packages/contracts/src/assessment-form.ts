@@ -3,6 +3,7 @@ import { cancerTypeOptions } from "./assessment-form-options";
 
 export const ASSESSMENT_ANSWER_TEXT_LIMIT = 2000;
 export const ASSESSMENT_FORM_VERSION = "niq-final-overlay-v2";
+export const OTHER_DRUG_CLASS_ID = "other";
 export type FormAnswer = string | number | string[] | null;
 export type FormAnswers = Record<string, FormAnswer>;
 export type FormField = {
@@ -13,6 +14,8 @@ export type FormField = {
 };
 export type DrugClassSuggestion = { cancerTypeId: string | null; treatmentTypeId: string; classId: string };
 export type AssessmentFormManifest = { version: string; sections: Array<{ id: string; title: string; fields: FormField[] }>; drugClassSuggestions?: DrugClassSuggestion[] };
+const withOtherDrugClass = (options: Array<{ id: string; label: string }>) =>
+  options.some(option => option.id === OTHER_DRUG_CLASS_ID) ? options : [...options, { id: OTHER_DRUG_CLASS_ID, label: "Other" }];
 /** Suggestions narrow the initial menu; a clinician can still search every configured class. */
 export function suggestedDrugClassIds(manifest: AssessmentFormManifest, answers: FormAnswers): string[] | undefined {
   const cancer = answers.cancer_type;
@@ -99,7 +102,7 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
     const classIds = new Set(classes.map(item => item.id));
     if (classIds.size !== classes.length || suggestions.some(item => !classIds.has(item.classId) || !treatments.some(option => option.id === item.treatmentTypeId) || (item.cancerTypeId !== null && !cancerTypeOptions.some(option => option.id === item.cancerTypeId)))) throw new Error("Invalid drug class configuration");
     add("treatment", app("drug_classes", "Drug classes", "multi_select", "RULE_DRUG_CLASSES", {
-      options: classes, visibleWhen: [{ fieldId: "cancer_type", nonEmpty: true }, { fieldId: "current_cancer_treatment", nonEmpty: true }],
+      options: withOtherDrugClass(classes), visibleWhen: [{ fieldId: "cancer_type", nonEmpty: true }, { fieldId: "current_cancer_treatment", nonEmpty: true }],
     }));
   }
   add("health_history", app("family_relationship", "Family relationship", "text", "H99", { required: true, visibleWhen: [when("family_history_cancer", "family_history_cancer_yes")] }));
@@ -139,12 +142,19 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
 
 /** Apply the new conditional requirement to open drafts without changing submitted snapshots. */
 export function upgradeDraftAssessmentForm(manifest: AssessmentFormManifest): AssessmentFormManifest {
-  if (manifest.version !== "niq-final-overlay-v1") return manifest;
+  const hasLegacyVersion = manifest.version === "niq-final-overlay-v1";
+  const drugClass = manifest.sections.flatMap(section => section.fields).find(field => field.id === "drug_classes");
+  if (!hasLegacyVersion && (!drugClass || drugClass.options?.some(option => option.id === OTHER_DRUG_CLASS_ID))) return manifest;
   return {
-    version: ASSESSMENT_FORM_VERSION,
+    ...manifest,
+    version: hasLegacyVersion ? ASSESSMENT_FORM_VERSION : manifest.version,
     sections: manifest.sections.map(section => ({
       ...section,
-      fields: section.fields.map(field => field.id === "metastasis_site" ? { ...field, required: true } : field),
+      fields: section.fields.map(field => {
+        if (field.id === "drug_classes") return { ...field, options: withOtherDrugClass(field.options ?? []) };
+        if (hasLegacyVersion && field.id === "metastasis_site") return { ...field, required: true };
+        return field;
+      }),
     })),
   };
 }

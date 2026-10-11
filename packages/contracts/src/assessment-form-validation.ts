@@ -1,5 +1,5 @@
 import { assessmentAnswerSchema } from "./assessment-workflow";
-import { ASSESSMENT_ANSWER_TEXT_LIMIT, type AssessmentFormManifest, type FormAnswers, type FormField } from "./assessment-form";
+import { ASSESSMENT_ANSWER_TEXT_LIMIT, OTHER_DRUG_CLASS_ID, type AssessmentFormManifest, type FormAnswers, type FormField } from "./assessment-form";
 
 export function isAssessmentFieldApplicable(field: FormField, answers: FormAnswers): boolean {
   return (field.visibleWhen ?? []).every(test => {
@@ -38,6 +38,7 @@ export function assessmentFieldError(field: FormField, value: unknown): string |
   }
   if (field.kind === "multi_select") {
     if (!Array.isArray(value) || value.length > 200 || new Set(value).size !== value.length || !value.every(v => typeof v === "string" && field.options?.some(o => o.id === v))) return "Choose valid options";
+    if (field.id === "drug_classes" && value.includes(OTHER_DRUG_CLASS_ID) && value.length > 1) return "Other cannot be selected with named drug classes";
     return null;
   }
   if (typeof value !== "string" || value.length > ASSESSMENT_ANSWER_TEXT_LIMIT) return "Enter valid text";

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { suggestedDrugClassIds, type AssessmentFormManifest } from "./assessment-form";
+import { OTHER_DRUG_CLASS_ID, suggestedDrugClassIds, upgradeDraftAssessmentForm, type AssessmentFormManifest } from "./assessment-form";
 import { getScoringAssessmentAnswers, isAssessmentFieldApplicable, validateAssessmentAnswers } from "./assessment-form-validation";
 
 const manifest: AssessmentFormManifest = {
@@ -36,4 +36,18 @@ test("drug classes are optional, conditional, and absent from scoring input", ()
   expect(isAssessmentFieldApplicable(field, { cancer_type: "cancer_lung", current_cancer_treatment: ["chemotherapy"] })).toBe(true);
   const answers = { cancer_type: "cancer_lung", current_cancer_treatment: ["chemotherapy"], drug_classes: ["tki"] };
   expect(getScoringAssessmentAnswers(manifest, answers)).toEqual({ current_cancer_treatment: ["chemotherapy"] });
+});
+
+test("older pinned class catalogues gain Other in draft forms without changing scoring input", () => {
+  const upgraded = upgradeDraftAssessmentForm(manifest);
+  expect(upgraded.drugClassSuggestions).toEqual(manifest.drugClassSuggestions);
+  const options = upgraded.sections[1]!.fields[1]!.options;
+  expect(options?.at(-1)).toEqual({ id: OTHER_DRUG_CLASS_ID, label: "Other" });
+  expect(upgradeDraftAssessmentForm(upgraded)).toBe(upgraded);
+  const answers = { cancer_type: "cancer_lung", current_cancer_treatment: ["chemotherapy"], drug_classes: [OTHER_DRUG_CLASS_ID] };
+  expect(validateAssessmentAnswers(upgraded, answers)).toEqual({});
+  expect(getScoringAssessmentAnswers(upgraded, answers)).toEqual({ current_cancer_treatment: ["chemotherapy"] });
+  expect(validateAssessmentAnswers(upgraded, { ...answers, drug_classes: ["platinum", OTHER_DRUG_CLASS_ID] }).drug_classes)
+    .toBe("Other cannot be selected with named drug classes");
+  expect(validateAssessmentAnswers(manifest, answers).drug_classes).toBe("Choose valid options");
 });
