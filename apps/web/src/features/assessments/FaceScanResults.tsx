@@ -89,6 +89,7 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
     <dl className="grid gap-4 rounded-xl border border-border bg-card py-4 @min-[30rem]:grid-cols-3">
       {scores.map(item => <div key={item.label} className="min-w-0 px-4"><dt className="flex items-center gap-2 text-sm text-muted-foreground"><item.icon className="size-4 shrink-0 text-primary" aria-hidden="true" />{item.label}</dt><dd className="mt-1 text-2xl font-semibold tabular-nums">{item.value ?? "—"}{item.value != null && item.unit && <span className="ml-1 text-base font-normal text-muted-foreground">{item.unit}</span>}</dd></div>)}
     </dl>
+    {session.score?.status === "SCORED" && session.score.stressPoints != null && <p className="text-sm text-muted-foreground">Vital IQ points: Overall Health Score {session.score.wellnessPoints ?? "—"} + stress ({session.score.stressBand ?? "unknown"}) {session.score.stressPoints}.</p>}
     <dl className="grid grid-cols-2 gap-3 @min-[44rem]:grid-cols-4">{vitals.map(item => {
       const assessment = item.key ? assessFaceScanRange(item.key, item.value, session.context) : null;
       return <div key={item.label} className="min-w-0 rounded-xl border border-border bg-card p-3">

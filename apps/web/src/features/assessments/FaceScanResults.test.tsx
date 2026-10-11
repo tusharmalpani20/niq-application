@@ -22,6 +22,8 @@ test("extended scan metrics survive application validation and render missing va
   expect(html).toContain("Normal range: ≥42.5 mL/kg/min (male)");
   expect(html).not.toContain("95–100%");
   expect(html.match(/1 outside range/g)).toHaveLength(2);
+  session.score = { status: "SCORED", points: 4, wellnessPoints: 2, stressIndex: 9, stressBand: "poor", stressPoints: 2 };
+  expect(renderToStaticMarkup(<FaceScanResults session={session}/>)).toContain("Overall Health Score 2 + stress (poor) 2");
   delete session.result!.additionalMetrics;
   expect(()=>renderToStaticMarkup(<FaceScanResults session={session}/>)).not.toThrow();
 });

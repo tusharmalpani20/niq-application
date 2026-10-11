@@ -71,6 +71,10 @@ export const faceScanSessionSchema = z.object({
     points: metric.optional(),
     ruleVersionId: z.string().nullable().optional(),
     wellnessScore: metric.optional(),
+    wellnessPoints: metric.optional(),
+    stressIndex: metric.optional(),
+    stressBand: z.string().nullable().optional(),
+    stressPoints: metric.optional(),
     scoringVersion: z.string().nullable().optional()
   }).nullable()
 });
