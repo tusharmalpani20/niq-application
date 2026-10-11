@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AssessmentFields, assessmentNumericInput, assessmentFieldGroups, addAssessmentMultiChoice } from "./AssessmentFields";
 import { MedicationSupplementIcon } from "./MedicationSupplementIcon";
 import { HealthHistoryChoiceIcon } from "./HealthHistoryChoiceIcon";
+import { DietaryPreferenceIcon } from "./DietaryPreferenceIcon";
 import type { FormAnswers, FormField } from "@niq/application-contracts";
 const field: FormField = { id: "choices", label: "Symptoms", kind: "multi_select", owner: "scoring", required: false, source: "F104", options: [{ id: "nausea", label: "Nausea" }, ...Array.from({ length: 6 }, (_, i) => ({ id: `item${i}`, label: `Item ${i}` }))] };
 function render(fields: FormField[], answers: FormAnswers = {}) {
@@ -73,6 +74,14 @@ test("dietary intake choices have matching icon tiles", () => {
   const html = render([{ ...field, id: "dietary_intake", label: "Dietary intake change", kind: "select", options }]);
   for (const option of options) expect(html).toContain(`data-dietary-intake-icon="${option.id}"`);
   expect(html).toContain("bg-primary/10 text-primary/70");
+});
+
+test("diet preference uses a searchable dropdown with an icon for every choice", () => {
+  const options = ["vegetarian", "non_vegetarian", "eggetarian", "jain"].map(id => ({ id, label: id }));
+  const html = render([{ ...field, id: "diet_preference", label: "Diet preference", kind: "select", options }]);
+  expect(html).toContain('role="combobox"');
+  expect(html).not.toContain('role="radiogroup"');
+  for (const option of options) expect(renderToStaticMarkup(<DietaryPreferenceIcon type={option.id} />)).toContain(`data-dietary-preference-icon="${option.id}"`);
 });
 
 test("activity, stress and fluid choices use matching icon tiles", () => {

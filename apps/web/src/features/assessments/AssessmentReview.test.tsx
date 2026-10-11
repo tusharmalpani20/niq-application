@@ -8,7 +8,7 @@ test("review distinguishes questionnaire coverage from required readiness", () =
   const record = { manifest: buildAssessmentForm(assessmentQuestionnaireFixture()), reports: [], attestations: [], status: "DRAFT" } as unknown as AssessmentWorkflow;
   const html = renderToStaticMarkup(<AssessmentReview record={record} answers={{ patient_name: "Patient", age: 25, gender: "FEMALE", contact: "1234567890", height_cm: 165, current_weight_kg: 60 }} scanStatus="Done" scanSession={null} organizationId="org" assessmentId="assessment" onSection={() => {}}/>);
   expect(html).toContain("Required answers are complete.");
-  expect(html).toContain("0/6 answered");
+  expect(html).toContain("0/7 answered");
   expect(html).not.toContain("No required questions");
   expect(html).toContain("Edit answers");
   expect(html).toContain('aria-controls="review-section-face_scan"');

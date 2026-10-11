@@ -19,6 +19,7 @@ export type SearchComboboxProps = {
   inputValue?: string; onInputValueChange?: (text: string) => void;
   createWhenNoMatches?: boolean; createOptionLabel?: (text: string) => string;
   renderIcon?: (optionId: string) => ReactNode; primaryHighlight?: boolean; virtualized?: boolean;
+  suggestedOptionIds?: string[];
 };
 
 function useMobileChoices() {
@@ -53,7 +54,7 @@ function useVisibleViewport(open: boolean) {
   return viewport;
 }
 
-function MobileChoices({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder, customValue, onCreate, inputValue, onInputValueChange, createWhenNoMatches, createOptionLabel, large, renderIcon, primaryHighlight, virtualized }: SearchComboboxProps) {
+function MobileChoices({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder, customValue, onCreate, inputValue, onInputValueChange, createWhenNoMatches, createOptionLabel, large, renderIcon, primaryHighlight, virtualized, suggestedOptionIds }: SearchComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [scrollTop, setScrollTop] = useState(0);
@@ -61,7 +62,7 @@ function MobileChoices({ id, label, options, value, onChange, disabled, required
   const viewport = useVisibleViewport(open);
   const selectedLabel = options.find(option => option.id === value)?.label ?? "";
   const query = search.trim();
-  const matches = options.filter(option => matchesComboboxSearch(option.label, query));
+  const matches = options.filter(option => (!suggestedOptionIds || query || suggestedOptionIds.includes(option.id)) && matchesComboboxSearch(option.label, query));
   const canCreate = Boolean(onCreate && query && (!createWhenNoMatches || matches.length === 0) && !options.some(option => option.label.toLocaleLowerCase() === query.toLocaleLowerCase()) && query !== customValue);
   const show = () => { setSearch(inputValue ?? ""); setScrollTop(0); setOpen(true); };
   const choose = (id: string) => {
@@ -111,7 +112,7 @@ function MobileChoices({ id, label, options, value, onChange, disabled, required
   </>;
 }
 /** One themed, keyboard-operable search menu; custom values require an explicit Use action. */
-export function SearchCombobox({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder = "Search or select…", customValue, onCreate, inputValue, onInputValueChange, createWhenNoMatches = false, createOptionLabel, large = false, renderIcon, primaryHighlight = false, virtualized = false }: SearchComboboxProps) {
+export function SearchCombobox({ id, label, options, value, onChange, disabled, required, invalid, describedBy, placeholder = "Search or select…", customValue, onCreate, inputValue, onInputValueChange, createWhenNoMatches = false, createOptionLabel, large = false, renderIcon, primaryHighlight = false, virtualized = false, suggestedOptionIds }: SearchComboboxProps) {
   const mobile = useMobileChoices();
   const selectedLabel = options.find(option => option.id === value)?.label || "";
   const [internalSearch, setInternalSearch] = useState(selectedLabel);
@@ -119,9 +120,9 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
   const setSearch = (next: string) => { if (inputValue === undefined) setInternalSearch(next); else onInputValueChange?.(next); };
   useEffect(() => setInternalSearch(selectedLabel), [selectedLabel, value]);
   const query = search.trim();
-  const matches = options.filter(option => matchesComboboxSearch(option.label, query));
+  const matches = options.filter(option => (!suggestedOptionIds || query || suggestedOptionIds.includes(option.id)) && matchesComboboxSearch(option.label, query));
   const canCreate = Boolean(onCreate && query && (!createWhenNoMatches || matches.length === 0) && !options.some(option => option.label.toLocaleLowerCase() === query.toLocaleLowerCase()) && query !== customValue);
-  const items = [...(search === selectedLabel ? options : matches), ...(canCreate ? [{ id: "__custom__", label: createOptionLabel?.(query) ?? `Use “${query}” as Other` }] : [])];
+  const items = [...(search === selectedLabel ? options.filter(option => !suggestedOptionIds || suggestedOptionIds.includes(option.id)) : matches), ...(canCreate ? [{ id: "__custom__", label: createOptionLabel?.(query) ?? `Use “${query}” as Other` }] : [])];
   const selectedIcon = renderIcon && value && search === selectedLabel ? renderIcon(value) : null;
   const renderOption = (option: ComboboxOption) => {
     const icon = renderIcon?.(option.id);
@@ -129,7 +130,7 @@ export function SearchCombobox({ id, label, options, value, onChange, disabled, 
       {({ isSelected, isFocused, isHovered }) => <><span className="flex min-w-0 items-center gap-3">{option.id === "__custom__" && createOptionLabel && <Plus className="size-4 shrink-0" aria-hidden="true"/>}{icon && <span className={`flex size-11 shrink-0 items-center justify-center rounded-xl transition-colors ${primaryHighlight ? isSelected || isFocused || isHovered ? "bg-primary text-primary-foreground shadow-sm" : "bg-primary/10 text-primary/70" : "bg-primary/10 text-brand-ink"}`} aria-hidden="true">{icon}</span>}<span className="break-words">{option.label}</span></span>{isSelected && !primaryHighlight && <Check className="size-4 shrink-0" />}</>}
     </ListBoxItem>;
   };
-  if (mobile) return <MobileChoices id={id} label={label} options={options} value={value} onChange={onChange} disabled={disabled} required={required} invalid={invalid} describedBy={describedBy} placeholder={placeholder} customValue={customValue} onCreate={onCreate} inputValue={inputValue} onInputValueChange={onInputValueChange} createWhenNoMatches={createWhenNoMatches} createOptionLabel={createOptionLabel} large={large} renderIcon={renderIcon} primaryHighlight={primaryHighlight} virtualized={virtualized} />;
+  if (mobile) return <MobileChoices id={id} label={label} options={options} value={value} onChange={onChange} disabled={disabled} required={required} invalid={invalid} describedBy={describedBy} placeholder={placeholder} customValue={customValue} onCreate={onCreate} inputValue={inputValue} onInputValueChange={onInputValueChange} createWhenNoMatches={createWhenNoMatches} createOptionLabel={createOptionLabel} large={large} renderIcon={renderIcon} primaryHighlight={primaryHighlight} virtualized={virtualized} suggestedOptionIds={suggestedOptionIds} />;
   return <ComboBox data-slot="search-combobox" aria-label={label} isDisabled={disabled} isRequired={required} isInvalid={invalid} allowsCustomValue allowsEmptyCollection menuTrigger="manual"
     selectedKey={value} inputValue={search} onInputChange={setSearch} items={items}
     onSelectionChange={key => { if (key === null) return; if (key === "__custom__") { onCreate?.(query); if (inputValue === undefined) setSearch(selectedLabel); } else { onChange(String(key)); setSearch(options.find(option => option.id === key)?.label || ""); } }}
