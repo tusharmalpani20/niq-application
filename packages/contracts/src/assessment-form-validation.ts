@@ -2,7 +2,11 @@ import { assessmentAnswerSchema } from "./assessment-workflow";
 import { ASSESSMENT_ANSWER_TEXT_LIMIT, type AssessmentFormManifest, type FormAnswers, type FormField } from "./assessment-form";
 
 export function isAssessmentFieldApplicable(field: FormField, answers: FormAnswers): boolean {
-  return (field.visibleWhen ?? []).every(test => answers[test.fieldId] === test.equals);
+  return (field.visibleWhen ?? []).every(test => {
+    const value = answers[test.fieldId];
+    if (test.nonEmpty) return typeof value === "string" ? value.trim().length > 0 : Array.isArray(value) ? value.length > 0 : false;
+    return value === test.equals;
+  });
 }
 /** Clear hidden draft values, including descendants whose parent is itself cleared.
  * Unknown keys remain present so normal validation can reject them.

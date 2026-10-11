@@ -8,13 +8,30 @@ export type FormAnswers = Record<string, FormAnswer>;
 export type FormField = {
   id: string; label: string; kind: "text" | "number" | "date" | "select" | "multi_select" | "calculated";
   required: boolean; owner: "application" | "scoring" | "supporting" | "context"; source: string;
-  options?: Array<{ id: string; label: string }>; visibleWhen?: Array<{ fieldId: string; equals: string }>;
+  options?: Array<{ id: string; label: string }>; visibleWhen?: Array<{ fieldId: string; equals?: string; nonEmpty?: true }>;
   min?: number; exclusiveMin?: boolean; integer?: boolean; readOnly?: boolean; unit?: string;
 };
-export type AssessmentFormManifest = { version: string; sections: Array<{ id: string; title: string; fields: FormField[] }> };
+export type DrugClassSuggestion = { cancerTypeId: string | null; treatmentTypeId: string; classId: string };
+export type AssessmentFormManifest = { version: string; sections: Array<{ id: string; title: string; fields: FormField[] }>; drugClassSuggestions?: DrugClassSuggestion[] };
+/** Suggestions narrow the initial menu; a clinician can still search every configured class. */
+export function suggestedDrugClassIds(manifest: AssessmentFormManifest, answers: FormAnswers): string[] | undefined {
+  const cancer = answers.cancer_type;
+  const treatments = answers.current_cancer_treatment;
+  if (cancer === "cancer_other" || !Array.isArray(treatments) || typeof cancer !== "string" || treatments.includes("current_cancer_treatment_other")) return undefined;
+  const suggestions = manifest.drugClassSuggestions ?? [];
+  const matched = [...new Set(treatments.flatMap(treatment => {
+    const specific = suggestions.filter(item => item.treatmentTypeId === treatment && item.cancerTypeId === cancer);
+    return (specific.length ? specific : suggestions.filter(item => item.treatmentTypeId === treatment && item.cancerTypeId === null)).map(item => item.classId);
+  }))];
+  return matched.length ? matched : undefined;
+}
 const option = z.object({ id: z.string().min(1), label: z.string().min(1) });
 export const publicAssessmentQuestionnaireSchema = z.object({
   formatVersion: z.literal(2), profile: z.literal("NIQ_FINAL_ASSESSMENT"),
+  drugClassConfig: z.object({
+    classes: z.array(option).max(200),
+    suggestions: z.array(z.object({ cancerTypeId: z.string().min(1).nullable(), treatmentTypeId: z.string().min(1), classId: z.string().min(1) })).max(2000),
+  }).optional(),
   sections: z.array(z.object({ id: z.string(), title: z.string(), fields: z.array(z.object({
     id: z.string(), label: z.string(), type: z.string(), unit: z.string().optional(),
     options: z.array(option), dependencies: z.array(z.string()),
@@ -51,7 +68,8 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
       if (!calculated && !field.options.length) throw new Error("Questionnaire options missing");
       return { id: field.id, label: field.label, kind: calculated ? "calculated" : field.type === "multi_select" ? "multi_select" : "select", required: false, owner: "scoring", source: spec[field.id]![1], options: field.options, readOnly: calculated, unit: field.unit } as FormField;
     });
-    if (fields.length !== Object.keys(spec).length) throw new Error("Questionnaire fields missing");
+    const optionalLegacyStress = section.id === "dietary_details" && !fields.some(field => field.id === "stress_level") ? 1 : 0;
+    if (fields.length !== Object.keys(spec).length - optionalLegacyStress) throw new Error("Questionnaire fields missing");
     return { id: section.id, title: section.title, fields };
   });
   if (sections.length !== 5) throw new Error("Questionnaire sections missing");
@@ -75,8 +93,18 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
     app("surgery_date", "Surgery date", "date", "H54", { required: true, visibleWhen: [when("cancer_surgical_status", "cancer_surgical_status_done")] }),
     app("planned_surgery_date", "Planned surgery date", "date", "H54", { required: true, visibleWhen: [when("cancer_surgical_status", "cancer_surgical_status_planned")] }),
     app("treatment_cycle_number", "Cycle number", "text", "B64:F64"), app("treatment_cycle_frequency", "Cycle frequency", "text", "F65"));
+  if (remote.drugClassConfig) {
+    const { classes, suggestions } = remote.drugClassConfig;
+    const treatments = section("treatment").fields.find(field => field.id === "current_cancer_treatment")?.options ?? [];
+    const classIds = new Set(classes.map(item => item.id));
+    if (classIds.size !== classes.length || suggestions.some(item => !classIds.has(item.classId) || !treatments.some(option => option.id === item.treatmentTypeId) || (item.cancerTypeId !== null && !cancerTypeOptions.some(option => option.id === item.cancerTypeId)))) throw new Error("Invalid drug class configuration");
+    add("treatment", app("drug_classes", "Drug classes", "multi_select", "RULE_DRUG_CLASSES", {
+      options: classes, visibleWhen: [{ fieldId: "cancer_type", nonEmpty: true }, { fieldId: "current_cancer_treatment", nonEmpty: true }],
+    }));
+  }
   add("health_history", app("family_relationship", "Family relationship", "text", "H99", { required: true, visibleWhen: [when("family_history_cancer", "family_history_cancer_yes")] }));
   add("clinical_gut_health", app("bowel_pattern", "Bowel pattern", "select", "F113:F116", { options: choices(["Normal", "Constipation", "Diarrhoea", "Alternating"]) }), app("stool_frequency", "Stool frequency", "select", "F117:F119", { options: [{ id: "daily", label: "Daily" }, { id: "below_3_week", label: "< 3 times/week" }, { id: "above_3_week", label: "> 3 times/week" }] }));
+  add("dietary_details", app("diet_preference", "Diet preference", "select", "APP_DIET_PREFERENCE", { options: choices(["Vegetarian", "Non-Vegetarian", "Eggetarian", "Jain"]) }));
   const support: Record<string, { section: string; kind: string; source: string; extra?: Partial<FormField> }> = {
     current_weight_kg: { section: "personal_details", kind: "number", source: "B9:C9", extra: { required: true, min: 0, exclusiveMin: true } },
     previous_weight_kg: { section: "dietary_details", kind: "number", source: "F120", extra: { min: 0, exclusiveMin: true } },
@@ -96,13 +124,17 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
   // Conditions depend on stable IDs, so an incompatible configured option cannot silently hide required detail.
   for (const field of sections.flatMap(s => s.fields)) for (const condition of field.visibleWhen ?? []) {
     const parent = sections.flatMap(s => s.fields).find(f => f.id === condition.fieldId);
-    if (!parent?.options?.some(o => o.id === condition.equals)) throw new Error("Unsupported conditional option");
+    if (!parent || (condition.equals !== undefined && !parent.options?.some(o => o.id === condition.equals))) throw new Error("Unsupported conditional option");
   }
   // Preserve workbook reading order even when a configured projection reorders its sections.
   const order = ["personal_details", ...Object.keys(expected)];
   sections.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-  for (const section of sections) section.fields.sort((a, b) => Number(a.source.match(/\d+/)?.[0]) - Number(b.source.match(/\d+/)?.[0]));
-  return { version: ASSESSMENT_FORM_VERSION, sections };
+  for (const section of sections) section.fields.sort((a, b) => {
+    // App-only fields use semantic placement after their controlling question.
+    const position = (field: FormField) => field.id === "drug_classes" ? 63.5 : field.id === "diet_preference" ? 131.5 : Number(field.source.match(/\d+/)?.[0]);
+    return position(a) - position(b);
+  });
+  return { version: ASSESSMENT_FORM_VERSION, sections, ...(remote.drugClassConfig ? { drugClassSuggestions: remote.drugClassConfig.suggestions } : {}) };
 }
 
 /** Apply the new conditional requirement to open drafts without changing submitted snapshots. */

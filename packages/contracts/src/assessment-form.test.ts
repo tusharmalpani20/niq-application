@@ -27,7 +27,16 @@ test("overlay preserves remote labels and IDs, counts current weight only once, 
   expect(form.sections[0]!.fields.map(f => f.id)).toEqual(["patient_name", "age", "gender", "contact", "height_cm", "current_weight_kg", "bmi"]);
   expect(form.sections[1]!.fields.map(f => f.id)).toEqual(["tumour_type", "cancer_type", "cancer_type_other", "stage", "metastasis_site", "metastasis_other", "relapse_status"]);
   expect(fields.filter(f => f.id === "current_weight_kg")).toHaveLength(1);
-  expect(fields.find(f => f.id === "cancer_type")!.options).toHaveLength(24);
+  const cancerOptions = fields.find(f => f.id === "cancer_type")!.options!;
+  expect(cancerOptions).toHaveLength(37);
+  expect(cancerOptions.find(option => option.id === "cancer_15")?.label).toBe("Kidney/Renal Cancer");
+  expect(cancerOptions.filter(option => option.label === "Kidney/Renal Cancer")).toHaveLength(1);
+  expect(cancerOptions.map(option => option.label)).toEqual(expect.arrayContaining([
+    "Chronic Myeloid Leukemia (CML)", "Triple Negative Breast Cancer", "HER2-Positive Breast Cancer",
+    "ER-Positive Breast Cancer", "Biliary Cancer", "Acute Lymphoblastic Leukemia (ALL)",
+    "Small Cell Lung Cancer", "Gastrointestinal Stromal Tumour (GIST)", "Mesothelioma",
+    "Non-Small Cell Lung Cancer", "Sarcoma", "Kaposi Sarcoma", "B-Cell Lymphomas",
+  ]));
   expect(fields.find(f => f.id === "contact")).toMatchObject({ required: true, owner: "context", readOnly: true });
   expect(fields.find(f => f.id === "tumour_type")!.required).toBe(false);
   expect(fields.some(f => f.id === "haemoglobin")).toBe(false);
@@ -40,6 +49,31 @@ test("unknown versions, missing fields, conditional option changes and wrong dep
   expect(() => buildAssessmentForm(changed)).toThrow();
   const deps = fixture(); deps.sections[4]!.fields[0]!.dependencies = ["unknown"];
   expect(() => buildAssessmentForm(deps)).toThrow();
+});
+
+test("the revised 18-question payload omits dietary stress and adds app-owned diet preference", () => {
+  const revised = fixture();
+  revised.sections.find(section => section.id === "dietary_details")!.fields = revised.sections.find(section => section.id === "dietary_details")!.fields.filter(field => field.id !== "stress_level");
+  const form = buildAssessmentForm(revised);
+  const dietary = form.sections.find(section => section.id === "dietary_details")!.fields;
+  expect(dietary.some(field => field.id === "stress_level")).toBe(false);
+  expect(dietary.find(field => field.id === "diet_preference")).toMatchObject({ owner: "application", kind: "select", required: false });
+  expect(dietary.find(field => field.id === "diet_preference")?.options?.map(option => option.label)).toEqual(["Vegetarian", "Non-Vegetarian", "Eggetarian", "Jain"]);
+});
+
+test("published drug class configuration becomes an optional, versioned app field", () => {
+  const questionnaire = {
+    ...fixture(),
+    drugClassConfig: {
+      classes: [{ id: "platinum_agents", label: "Platinum agents" }],
+      suggestions: [{ cancerTypeId: "cancer_2", treatmentTypeId: "current_cancer_treatment_yes", classId: "platinum_agents" }],
+    },
+  };
+  const form = buildAssessmentForm(questionnaire);
+  const drugClasses = form.sections.find(section => section.id === "treatment")!.fields.find(field => field.id === "drug_classes");
+  expect(drugClasses).toMatchObject({ owner: "application", kind: "multi_select", required: false, options: questionnaire.drugClassConfig.classes });
+  expect(form.drugClassSuggestions).toEqual(questionnaire.drugClassConfig.suggestions);
+  expect(() => buildAssessmentForm({ ...questionnaire, drugClassConfig: { ...questionnaire.drugClassConfig, suggestions: [{ ...questionnaire.drugClassConfig.suggestions[0]!, classId: "unknown" }] } })).toThrow("Invalid drug class configuration");
 });
 
 test("every workbook conditional detail is required only while its parent path is active", () => {

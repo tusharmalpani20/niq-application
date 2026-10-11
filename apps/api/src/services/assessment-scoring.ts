@@ -5,6 +5,10 @@ const id = z.string().min(1).max(200);
 const option = z.object({ id, label: z.string(), help: z.string() }).strict();
 export const assessmentScoringQuestionnaireSchema = z.object({
   formatVersion: z.literal(2), profile: z.literal("NIQ_FINAL_ASSESSMENT"),
+  drugClassConfig: z.object({
+    classes: z.array(z.object({ id, label: z.string().min(1) }).strict()).max(200),
+    suggestions: z.array(z.object({ cancerTypeId: id.nullable(), treatmentTypeId: id, classId: id }).strict()).max(2000),
+  }).strict().optional(),
   sections: z.array(z.object({ id, title: z.string(), description: z.string(), fields: z.array(z.object({
     id, label: z.string(), type: z.enum(["select", "multi_select", "yes_no", "conditional", "count", "calculated", "derived"]),
     help: z.string(), unit: z.string(), options: z.array(option), dependencies: z.array(id),
@@ -33,7 +37,7 @@ const evaluationSchema = evidenceSchema.extend({
   riskCategories: z.array(assessmentRiskCategorySchema).optional(),
   questionnaireScore: z.number().finite().nonnegative().nullable().optional(),
   faceScan: z.object({ sessionId: id, points: z.number().finite().nonnegative() }).strict().nullable().optional(),
-  components: z.array(component), answerCoverage: z.object({ totalEntries: z.literal(19), answeredEntries: z.number().int().nonnegative(), unansweredEntries: z.number().int().nonnegative(), pendingEntries: z.number().int().nonnegative(), allUnanswered: z.boolean() }).strict(),
+  components: z.array(component), answerCoverage: z.object({ totalEntries: z.number().int().nonnegative(), answeredEntries: z.number().int().nonnegative(), unansweredEntries: z.number().int().nonnegative(), pendingEntries: z.number().int().nonnegative(), allUnanswered: z.boolean() }).strict(),
   derived: z.object({ weightLossPercent: z.number().finite().nullable(), proteinAdequacy: z.enum(["adequate", "inadequate"]).nullable() }).strict(),
   riskStatus: z.enum(["DEVELOPMENT_PLACEHOLDER", "CLIENT_CONFIRMED"]), clinicalUsePermitted: z.boolean(),
   interventions: z.object({ status: z.literal("NOT_APPLICABLE") }).strict(), issues: z.array(issue).max(128), calculatedAt: z.iso.datetime(),

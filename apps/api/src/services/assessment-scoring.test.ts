@@ -39,6 +39,13 @@ describe("assessment scoring transport", () => {
   test("accepts complete upstream totals with unanswered optional components", async () => {
     expect((await calculate(success())).result.score).toBe(2);
   });
+  test("accepts the revised 18-question version while retaining historical 19-question versions", async () => {
+    const revisedBinding = { ...binding, questionnaire: { ...binding.questionnaire, sections: [{ ...binding.questionnaire.sections[0]!, fields: binding.questionnaire.sections[0]!.fields.slice(0, 18) }] } };
+    const revisedResult = { ...result(), components: result().components.slice(0, 18), answerCoverage: { totalEntries: 18, answeredEntries: 1, unansweredEntries: 17, pendingEntries: 0, allUnanswered: false } };
+    const response = { result: { ...revisedResult, resultReference: "revised-usage" }, idempotencyKey: "request-key" };
+    const received = await requestAssessmentScoringCalculate({ ...transport, binding: revisedBinding, idempotencyKey: "request-key", answers: { field_0: "yes" }, fetcher: async () => Response.json(response) });
+    expect(received.result.answerCoverage.totalEntries).toBe(18);
+  });
   test("keeps preset and custom category colors in the scoring result", async () => {
     const colored = { ...success(), result: { ...success().result, classification: { id: "low", label: "Low", interpretation: "", color: "green" } } };
     expect((await calculate(colored)).result.classification?.color).toBe("green");

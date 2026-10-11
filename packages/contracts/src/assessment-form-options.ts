@@ -1,4 +1,4 @@
-// Application-owned options transcribed from the final workbook, Sheet1 F15:F38.
+// Application-owned options from the final workbook, Sheet1 F15:F38, plus the October 2026 client email.
 export const cancerTypeOptions = [
   {
     "id": "cancer_1",
@@ -58,7 +58,7 @@ export const cancerTypeOptions = [
   },
   {
     "id": "cancer_15",
-    "label": "Kidney cancer"
+    "label": "Kidney/Renal Cancer"
   },
   {
     "id": "cancer_16",
@@ -87,6 +87,58 @@ export const cancerTypeOptions = [
   {
     "id": "cancer_22",
     "label": "Skin cancer"
+  },
+  {
+    "id": "cancer_cml",
+    "label": "Chronic Myeloid Leukemia (CML)"
+  },
+  {
+    "id": "cancer_triple_negative_breast",
+    "label": "Triple Negative Breast Cancer"
+  },
+  {
+    "id": "cancer_her2_positive_breast",
+    "label": "HER2-Positive Breast Cancer"
+  },
+  {
+    "id": "cancer_er_positive_breast",
+    "label": "ER-Positive Breast Cancer"
+  },
+  {
+    "id": "cancer_biliary",
+    "label": "Biliary Cancer"
+  },
+  {
+    "id": "cancer_all",
+    "label": "Acute Lymphoblastic Leukemia (ALL)"
+  },
+  {
+    "id": "cancer_small_cell_lung",
+    "label": "Small Cell Lung Cancer"
+  },
+  {
+    "id": "cancer_gist",
+    "label": "Gastrointestinal Stromal Tumour (GIST)"
+  },
+  {
+    "id": "cancer_mesothelioma",
+    "label": "Mesothelioma"
+  },
+  {
+    "id": "cancer_non_small_cell_lung",
+    "label": "Non-Small Cell Lung Cancer"
+  },
+  {
+    "id": "cancer_sarcoma",
+    "label": "Sarcoma"
+  },
+  {
+    "id": "cancer_kaposi_sarcoma",
+    "label": "Kaposi Sarcoma"
+  },
+  {
+    "id": "cancer_b_cell_lymphomas",
+    "label": "B-Cell Lymphomas"
   },
   {
     "id": "cancer_other",
