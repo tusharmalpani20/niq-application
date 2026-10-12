@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun --sourcemap=external",
+    "build": "bun build src/index.ts --outdir dist --target bun --sourcemap=external --external @react-pdf/renderer --external sharp",
     "check": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -18,14 +18,19 @@
     "@niq/application-config": "workspace:*",
     "@niq/application-contracts": "workspace:*",
     "@niq/application-domain": "workspace:*",
+    "@niq/application-report-pdf": "workspace:*",
+    "@react-pdf/renderer": "4.9.0",
     "drizzle-orm": "0.44.5",
     "hono": "4.9.6",
     "postgres": "3.4.7",
+    "react": "19.1.1",
+    "sharp": "0.34.5",
     "web-push": "3.6.7",
     "zod": "4.1.5"
   },
   "devDependencies": {
     "@types/bun": "1.2.21",
+    "@types/react": "19.1.12",
     "@types/web-push": "3.6.4",
     "drizzle-kit": "0.31.4",
     "typescript": "5.9.2"

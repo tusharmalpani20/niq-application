@@ -1,0 +1,24 @@
+{
+  "name": "@niq/application-report-pdf",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./format": "./src/generated-report-format.ts",
+    "./chart": "./src/generated-report-chart.ts"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target browser",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@niq/application-contracts": "workspace:*",
+    "@react-pdf/renderer": "4.9.0",
+    "react": "19.1.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.12",
+    "typescript": "5.9.2"
+  }
+}
