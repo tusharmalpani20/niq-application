@@ -1,6 +1,14 @@
 import type { ClinicalReview, ClinicalReviewAction, ClinicalReviewQueue, ClinicalReviewer } from "@niq/application-contracts";
 import { assessmentRequest } from "./workflow-api";
-import type { ReportToxicityOption } from "./generated-report-api";
+
+export type ReportToxicityOption = {
+  id: string;
+  classId: string;
+  treatmentTypeId: string;
+  expectedToxicity: string;
+  classLabel?: string;
+  treatmentTypeLabel?: string;
+};
 
 const path = (id: string) => `/assessments/${encodeURIComponent(id)}/clinical-review`;
 export const getClinicalReview = (org: string, id: string, signal?: AbortSignal) => assessmentRequest<ClinicalReview>(org, path(id), "GET", undefined, signal);

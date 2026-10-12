@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useUnsavedFormClose } from "@/components/useUnsavedFormClose";
 import { changeClinicalReview, clinicalActionLabels, clinicalReviewLabels, getClinicalReviewers, getClinicalReviewToxicityOptions } from "./clinical-review-api";
 import { ReportToxicityPicker } from "./ReportToxicityPicker";
-import type { ReportToxicityOption } from "./generated-report-api";
+import type { ReportToxicityOption } from "./clinical-review-api";
 import "./generated-report.css";
 import { AssessmentRequestError } from "./workflow-api";
 import { ArrowRightLeft, CircleCheck, ClipboardPen, RotateCcw, Send, UserRoundCheck, UserRoundMinus, type LucideIcon } from "lucide-react";

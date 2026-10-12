@@ -1,5 +1,5 @@
 import { useId } from "react";
-import type { ReportToxicityOption } from "./generated-report-api";
+import type { ReportToxicityOption } from "./clinical-review-api";
 
 type Props = {
   options: ReportToxicityOption[];
