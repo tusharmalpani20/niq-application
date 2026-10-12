@@ -1,0 +1,50 @@
+import { z } from "zod";
+
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value);
+export const generateReportInputSchema = z.object({
+  requestKey: z.string().min(16).max(128),
+  productStageChoice: z.enum(["surgical","treatment_stage"]).optional(),
+  plannedTreatmentStartDate: date.optional(),
+}).strict();
+export const editGeneratedNarrativeSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  narrative: z.object({
+    overview: z.string().trim().max(1800).optional(),
+    keyFindings: z.string().trim().max(1800).optional(),
+    actionSummary: z.string().trim().max(1800).optional(),
+    monitoringSummary: z.string().trim().max(1800).optional(),
+  }).strict(),
+  issueResolution: z.object({explanation:z.string().trim().min(10).max(1000)}).strict().optional(),
+}).strict().refine(value=>Object.keys(value.narrative).length>0 || Boolean(value.issueResolution),"Edit wording or resolve an issue");
+export const approveGeneratedReportSchema = z.object({ revision: z.number().int().nonnegative() }).strict();
+
+export type GeneratedNarrative = { overview: string; keyFindings: string; actionSummary: string; monitoringSummary: string };
+export type GeneratedReportSection = {
+  id: string;
+  kind: "nutrition" | "radiotherapy" | "product" | "comorbidity" | "toxicity" | "treatment";
+  title: string;
+  text: string;
+  drugClass?: string;
+  certainty?: "possible" | "confirmed";
+};
+export type GeneratedReport = {
+  id: string;
+  revision: number;
+  status: "DRAFT" | "APPROVED" | "STALE";
+  runId: string;
+  model: string;
+  promptVersion: string;
+  generatedAt: string;
+  approvedAt: string | null;
+  patient: { displayName: string; reference: string; dateOfBirth: string; gender: string };
+  assessment: { id: string; reference: string; completedAt: string; submissionId: string; scoreRevision: number; ruleVersionId: string; checksum: string };
+  classification: { id: string; label: string; score: number };
+  metrics: Array<{ id: string; label: string; value: string; unit?: string; measuredAt?: string; source: "assessment" | "face_scan" }>;
+  weightHistory: Array<{ date: string | null; kg: number; label?: string }>;
+  decision: { productStageChoice: "surgical" | "treatment_stage" | null; plannedTreatmentStartDate: string | null };
+  narrative: GeneratedNarrative;
+  guidance: { sections: GeneratedReportSection[] };
+  issues: string[];
+  issueResolution: { originalIssues: string[]; explanation: string; clinicianName: string; resolvedAt: string } | null;
+  artifact: { sha256: string; size: number; uploadedAt: string } | null;
+};

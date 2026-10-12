@@ -591,3 +591,4 @@ export * from "./face-scan-consent";
 export * from "./assessment-score-reviews";
 
 export * from "./clinical-review";
+export * from "./generated-report";
