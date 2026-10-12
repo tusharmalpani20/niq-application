@@ -5,10 +5,22 @@ export type { GeneratedReport, GeneratedNarrative };
 
 const reportPath = (id: string) => `/assessments/${encodeURIComponent(id)}/generated-report`;
 
+export type ReportToxicityOption = {
+  id: string;
+  classId: string;
+  treatmentTypeId: string;
+  expectedToxicity: string;
+  classLabel?: string;
+  treatmentTypeLabel?: string;
+};
+
+export const getReportToxicityOptions = (organizationId: string, assessmentId: string, signal?: AbortSignal) =>
+  assessmentRequest<{ options: ReportToxicityOption[] }>(organizationId, `${reportPath(assessmentId)}/toxicity-options`, "GET", undefined, signal);
+
 export const getGeneratedReport = (organizationId: string, assessmentId: string, signal?: AbortSignal) =>
   assessmentRequest<{ report: GeneratedReport | null }>(organizationId, reportPath(assessmentId), "GET", undefined, signal);
 
-export type ReportGenerationOptions = { productStageChoice?: "surgical" | "treatment_stage"; plannedTreatmentStartDate?: string };
+export type ReportGenerationOptions = { productStageChoice?: "surgical" | "treatment_stage"; confirmedToxicityIds?: string[] };
 export const generateReport = (organizationId: string, assessmentId: string, requestKey: string, options: ReportGenerationOptions = {}) =>
   assessmentRequest<{ report: GeneratedReport }>(organizationId, `${reportPath(assessmentId)}/generate`, "POST", { requestKey, ...options });
 

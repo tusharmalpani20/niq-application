@@ -4,7 +4,7 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => !Number.isN
 export const generateReportInputSchema = z.object({
   requestKey: z.string().min(16).max(128),
   productStageChoice: z.enum(["surgical","treatment_stage"]).optional(),
-  plannedTreatmentStartDate: date.optional(),
+  confirmedToxicityIds: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,79}$/)).max(200).refine(ids => new Set(ids).size === ids.length, "Choose each effect once").optional(),
 }).strict();
 export const editGeneratedNarrativeSchema = z.object({
   revision: z.number().int().nonnegative(),
@@ -26,6 +26,8 @@ export type GeneratedReportSection = {
   text: string;
   drugClass?: string;
   certainty?: "possible" | "confirmed";
+  matchSource?: "assessment_answer" | "weight_change" | "clinician_confirmation" | "unknown";
+  matchedAnswerLabels?: string[];
 };
 export type GeneratedReport = {
   id: string;
@@ -41,7 +43,7 @@ export type GeneratedReport = {
   classification: { id: string; label: string; score: number };
   metrics: Array<{ id: string; label: string; value: string; unit?: string; measuredAt?: string; source: "assessment" | "face_scan" }>;
   weightHistory: Array<{ date: string | null; kg: number; label?: string }>;
-  decision: { productStageChoice: "surgical" | "treatment_stage" | null; plannedTreatmentStartDate: string | null };
+  decision: { productStageChoice: "surgical" | "treatment_stage" | null; plannedTreatmentStartDate: string | null; confirmedToxicityIds?: string[] };
   narrative: GeneratedNarrative;
   guidance: { sections: GeneratedReportSection[] };
   issues: string[];

@@ -98,6 +98,17 @@
 .cr-generation-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .7rem; width: min(100%, 650px); margin: .55rem 0; text-align: left; }
 .cr-generation-options label { display: grid; gap: .35rem; color: #395766; font-size: .78rem; font-weight: 650; }
 .cr-generation-options select, .cr-generation-options input, .cr-issue-resolution textarea { width: 100%; min-height: 39px; padding: .5rem .6rem; border: 1px solid #c7dadd; border-radius: .55rem; color: #173447; background: #fff; font: inherit; }
+.cr-toxicity-picker { width: min(100%, 700px); margin: .5rem 0 .8rem; padding: .85rem 1rem; border: 1px solid #c7dadd; border-radius: .7rem; background: #fff; color: #264756; text-align: left; }
+.cr-toxicity-picker h3 { margin: 0 0 .35rem; font-size: .9rem; }
+.cr-toxicity-picker p, .cr-empty .cr-toxicity-picker p { max-width: none; margin: 0 0 .7rem; color: #58717c; font-size: .78rem; line-height: 1.5; }
+.cr-toxicity-picker-list { display: grid; gap: .7rem; max-height: 280px; overflow-y: auto; }
+.cr-toxicity-picker fieldset { display: grid; gap: .35rem; margin: 0; padding: .55rem .7rem .7rem; border: 1px solid #e0eaec; border-radius: .5rem; }
+.cr-toxicity-picker legend { padding: 0 .3rem; color: #365968; font-size: .75rem; font-weight: 700; }
+.cr-toxicity-picker label { display: flex; align-items: flex-start; gap: .55rem; font-size: .8rem; line-height: 1.45; cursor: pointer; }
+.cr-toxicity-picker label input { flex: none; margin: .15rem 0 0; accent-color: var(--brand-primary, #239ca3); }
+.cr-toxicity-picker .cr-toxicity-picker-warning { padding: .55rem .65rem; border-radius: .45rem; color: #775417; background: #fff7e6; }
+.cr-toxicity-picker-error { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; color: #932f35; font-size: .78rem; }
+.cr-toxicity-picker-error button { min-height: 34px; padding: .35rem .65rem; border: 1px solid #cc969a; border-radius: .45rem; color: #932f35; background: #fff; cursor: pointer; }
 .cr-issue-resolution { display: grid; justify-items: start; gap: .5rem; margin-top: .3rem; }
 .cr-issue-resolution label { font-weight: 700; }
 .cr-issue-resolution textarea { min-height: 86px; resize: vertical; }
@@ -109,7 +120,10 @@
 @keyframes cr-spin { to { transform: rotate(360deg); } }
 .cr-report-meta { display: flex; flex-wrap: wrap; gap: .55rem; color: #58717c; font-size: .75rem; }
 .cr-report-meta span { padding: .38rem .6rem; border: 1px solid #dce7ea; border-radius: 99px; background: #fff; }
-.cr-review-editor, .cr-approval-bar, .cr-approved-bar { padding: 1.25rem; border: 1px solid #dbe7e9; border-radius: 1rem; background: #fff; box-shadow: 0 8px 30px #1734470a; }
+.cr-regenerate, .cr-review-editor, .cr-approval-bar, .cr-approved-bar { padding: 1.25rem; border: 1px solid #dbe7e9; border-radius: 1rem; background: #fff; box-shadow: 0 8px 30px #1734470a; }
+.cr-regenerate { display: grid; justify-items: start; gap: .35rem; }
+.cr-regenerate h2 { margin: 0; color: #173447; font-size: 1.05rem; }
+.cr-regenerate > p { max-width: 720px; margin: 0; color: #627b87; font-size: .83rem; line-height: 1.5; }
 .cr-review-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .cr-review-heading h2, .cr-approval-bar h2, .cr-preview-heading h2 { margin: 0; color: #173447; font-size: 1.15rem; }
 .cr-review-heading p, .cr-approval-bar p, .cr-preview-heading p { margin: .3rem 0 0; color: #627b87; font-size: .83rem; line-height: 1.5; }

@@ -82,6 +82,15 @@ function GuidancePdf({ report, kinds, color }: { report: GeneratedReport; kinds:
   </View>)}</View>;
 }
 
+function toxicitySource(item: GeneratedReport["guidance"]["sections"][number]) {
+  if (item.matchSource === "assessment_answer") return item.matchedAnswerLabels?.length
+    ? `Patient-reported in assessment: ${item.matchedAnswerLabels.join(", ")}` : "Patient-reported in assessment";
+  if (item.matchSource === "weight_change") return item.matchedAnswerLabels?.length
+    ? `Recorded weight change: ${item.matchedAnswerLabels.join(", ")}` : "Recorded weight change";
+  if (item.matchSource === "clinician_confirmation") return "Clinician-confirmed for this patient";
+  return "Possible effect from an earlier report";
+}
+
 export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport; brand: PdfBrand }) {
   const color = /^#[0-9a-f]{6}$/i.test(brand.primaryColor) ? brand.primaryColor : "#239ca3";
   const faceMetrics = report.metrics.filter(metric => metric.source === "face_scan");
@@ -91,6 +100,8 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
   const change = weightChange(report);
   const age = reportAge(report.patient.dateOfBirth, report.assessment.completedAt);
   const toxicities = reportGuidance(report, "toxicity");
+  const hasLegacyToxicities = toxicities.some(item => !item.matchSource || item.matchSource === "unknown");
+  const hasMatchedToxicities = toxicities.some(item => item.matchSource && item.matchSource !== "unknown");
   const nutritionKinds = ["nutrition", "radiotherapy", "product", "comorbidity", "treatment"] as const;
   const hasNutrition = nutritionKinds.some(kind => reportGuidance(report, kind).length > 0);
   return <Document title={`Clinical nutrition report - ${report.assessment.reference}`} author={brand.name} subject="Clinical nutrition assessment">
@@ -130,9 +141,10 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
       <Text style={styles.intro}>Guidance matched to this assessment and its saved rule version. The treating clinician should individualise the plan.</Text>
       <GuidancePdf report={report} kinds={[...nutritionKinds]} color={color}/>
     </PdfSection>}
-    {toxicities.length > 0 && <PdfSection report={report} brand={brand} title="Possible treatment effects">
-      <View style={styles.caution}><Text>These are possible effects associated with selected drug classes. They are not a record of symptoms confirmed for this patient.</Text></View>
-      {toxicities.map(item => <View key={item.id} style={styles.toxicityRow} wrap={item.text.length > 1200}><View style={styles.toxicityLabel}><Text style={[styles.label, { color }]}>{item.drugClass || "Selected drug class"}</Text><Text style={styles.subhead}>{item.title}</Text><Text style={styles.small}>Possible treatment effect</Text></View><Text style={styles.toxicityText}>{item.text}</Text></View>)}
+    {toxicities.length > 0 && <PdfSection report={report} brand={brand} title={hasMatchedToxicities ? "Matched treatment effects and nutrition guidance" : "Possible treatment effects - earlier report"}>
+      {hasMatchedToxicities && <Text style={styles.intro}>This nutrition guidance follows assessment answers, recorded weight change, or clinician confirmation. It does not establish that treatment caused an effect.</Text>}
+      {hasLegacyToxicities && <View style={styles.caution}><Text>Some guidance in this earlier report lists possible drug-class effects. Those entries are not confirmed symptoms for this patient.</Text></View>}
+      {toxicities.map(item => <View key={item.id} style={styles.toxicityRow} wrap={item.text.length > 1200}><View style={styles.toxicityLabel}><Text style={[styles.label, { color }]}>{item.drugClass || "Selected drug class"}</Text><Text style={styles.subhead}>{item.title}</Text><Text style={styles.small}>{toxicitySource(item)}</Text></View><Text style={styles.toxicityText}>{item.text}</Text></View>)}
     </PdfSection>}
     {(report.narrative.actionSummary || report.narrative.monitoringSummary) && <PdfSection report={report} brand={brand} title="Action plan and monitoring">
       {report.narrative.actionSummary && <View style={styles.card}><Text style={[styles.label, { color }]}>Action plan</Text><Text style={styles.body}>{report.narrative.actionSummary}</Text></View>}

@@ -23,7 +23,10 @@ const carePlan = z.object({
 });
 const selectedGuidance = z.object({
   nutritionInterventions: z.array(z.object({ id: z.string(), label: z.string(), coreStrategy: bounded, clinicalActions: bounded })).max(30),
-  toxicityInterventions: z.array(z.object({ id: z.string(), classId: z.string(), treatmentTypeId: z.string(), expectedToxicity: bounded, nutritionalInterventions: bounded })).max(100),
+  toxicityInterventions: z.array(z.object({ id: z.string(), classId: z.string(), treatmentTypeId: z.string(), expectedToxicity: bounded, nutritionalInterventions: bounded,
+    matchSource: z.enum(["assessment_answer","weight_change","clinician_confirmation","unknown"]).optional(),
+    matchedAnswerLabels: z.array(bounded).max(50).optional(),
+  })).max(100),
   possibleToxicities: z.array(z.object({ id: z.string(), classId: z.string(), treatmentTypeId: z.string(), expectedToxicity: bounded, nutritionalInterventions: guidanceText })).max(100).optional(),
   classGuidance: z.array(z.object({ id: z.string(), label: z.string(), guidance: bounded })).max(30).optional(),
   carePlan,
@@ -41,10 +44,14 @@ export type ScoringReportContent = z.infer<typeof scoringReportContentSchema>;
 
 export type ReportFacts = {
   treatmentTypeIds: string[]; drugClassIds: string[]; confirmedToxicityIds: string[];
+  assessmentAnswers?: {
+    gastrointestinal_symptoms?: string[]; dietary_symptoms?: string[]; appetite_status?: string;
+    previous_weight_kg?: number; current_weight_kg?: number;
+  };
   coMorbidityIds?: string[]; cancerTypeId?: string; treatmentStatusId?: string;
   dietPreferenceId?: "vegetarian" | "non_vegetarian" | "eggetarian" | "jain";
   surgicalStatusId?: string; surgeryDate?: string; plannedSurgeryDate?: string;
-  plannedTreatmentStartDate?: string; productStageChoice?: "surgical" | "treatment_stage";
+  plannedTreatmentStartDate?: string; assessmentDate?: string; productStageChoice?: "surgical" | "treatment_stage";
   reviewedScore: number; reviewedRiskCategoryId?: string;
   observations: Array<{ id: string; label: string; value: string; unit?: string; measuredAt?: string }>;
 };
@@ -53,6 +60,39 @@ export class ScoringReportContentError extends Error {
   constructor(readonly kind: "blocked" | "unavailable" | "invalid", readonly code: string) {
     super(`NIQ Scoring report content ${kind}: ${code}`);
   }
+}
+
+export const scoringToxicityOptionsSchema = z.object({
+  assessmentReference: z.string(), resultReference: z.string(), ruleVersionId: z.string(), checksum: z.string().regex(/^[a-f0-9]{64}$/),
+  options: z.array(z.object({
+    id: z.string().min(1).max(200), classId: z.string().min(1).max(200), classLabel: bounded.optional(),
+    treatmentTypeId: z.string().min(1).max(200), treatmentTypeLabel: bounded.optional(), expectedToxicity: bounded,
+  })).max(200),
+});
+export type ScoringToxicityOptions = z.infer<typeof scoringToxicityOptionsSchema>;
+
+export async function requestScoringToxicityOptions(input: AssessmentScoringTransport & {
+  assessmentReference: string; resultReference: string; treatmentTypeIds: string[]; drugClassIds: string[];
+}): Promise<ScoringToxicityOptions> {
+  let response: Response;
+  try {
+    response = await (input.fetcher ?? fetch)(new URL("/v1/assessments/report-toxicity-options", input.baseUrl), {
+      method: "POST", redirect: "error", headers: { authorization: `Bearer ${input.credential}`, "content-type": "application/json", "x-request-id": input.requestId },
+      body: JSON.stringify({ assessmentReference: input.assessmentReference, resultReference: input.resultReference,
+        treatmentTypeIds: input.treatmentTypeIds, drugClassIds: input.drugClassIds }),
+      signal: AbortSignal.timeout(input.timeoutMs),
+    });
+  } catch { throw new ScoringReportContentError("unavailable", "TRANSPORT_FAILURE"); }
+  let body: unknown;
+  try { body = await response.json(); } catch { throw new ScoringReportContentError("unavailable", "INVALID_RESPONSE"); }
+  if (!response.ok) {
+    const code = z.object({ error: z.string().max(100) }).safeParse(body);
+    throw new ScoringReportContentError(response.status === 503 || response.status >= 500 ? "unavailable" : "blocked", code.success ? code.data.error : "UPSTREAM_FAILURE");
+  }
+  const parsed = scoringToxicityOptionsSchema.safeParse(body);
+  if (!parsed.success || parsed.data.assessmentReference !== input.assessmentReference || parsed.data.resultReference !== input.resultReference)
+    throw new ScoringReportContentError("invalid", "INVALID_RESPONSE");
+  return parsed.data;
 }
 
 export async function requestScoringReportContent(input: AssessmentScoringTransport & {

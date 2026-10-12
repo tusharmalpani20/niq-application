@@ -40,11 +40,22 @@ function WeightTrend({ report }: { report: GeneratedReport }) {
   </section>;
 }
 
+function toxicitySource(item: GeneratedReport["guidance"]["sections"][number]) {
+  if (item.matchSource === "assessment_answer") return item.matchedAnswerLabels?.length
+    ? `Patient-reported in assessment: ${item.matchedAnswerLabels.join(", ")}` : "Patient-reported in assessment";
+  if (item.matchSource === "weight_change") return item.matchedAnswerLabels?.length
+    ? `Recorded weight change: ${item.matchedAnswerLabels.join(", ")}` : "Recorded weight change";
+  if (item.matchSource === "clinician_confirmation") return "Clinician-confirmed for this patient";
+  return "Possible effect from an earlier report";
+}
+
 export function GeneratedReportPreview({ report }: { report: GeneratedReport }) {
   const { branding } = useBranding();
   const faceMetrics = report.metrics.filter(metric => metric.source === "face_scan");
   const assessmentMetrics = report.metrics.filter(metric => metric.source === "assessment");
   const toxicities = reportGuidance(report, "toxicity");
+  const hasLegacyToxicities = toxicities.some(item => !item.matchSource || item.matchSource === "unknown");
+  const hasMatchedToxicities = toxicities.some(item => item.matchSource && item.matchSource !== "unknown");
   const nutritionRules = ["nutrition", "radiotherapy", "product", "comorbidity", "treatment"] as const;
   const hasNutritionGuidance = nutritionRules.some(kind => reportGuidance(report, kind).length > 0);
   let page = 0;
@@ -76,9 +87,10 @@ export function GeneratedReportPreview({ report }: { report: GeneratedReport }) 
       <p className="cr-section-intro">Guidance matched to this assessment and its saved rule version. A clinician should individualise the plan.</p>
       <GuidanceCards report={report} kinds={[...nutritionRules]}/>
     </ReportSheet>}
-    {toxicities.length > 0 && <ReportSheet number={nextPage() + 1} title="Possible treatment effects" icon={Droplets} report={report}>
-      <p className="cr-caution">These are possible effects associated with selected drug classes. They are not a record of symptoms confirmed for this patient.</p>
-      <div className="cr-toxicity-list">{toxicities.map(item => <div className="cr-toxicity-row" key={item.id}><div><span className="cr-guidance-type">{item.drugClass || "Selected drug class"}</span><h3>{item.title}</h3><small>Possible treatment effect</small></div><p>{item.text}</p></div>)}</div>
+    {toxicities.length > 0 && <ReportSheet number={nextPage() + 1} title={hasMatchedToxicities ? "Matched treatment effects & nutrition guidance" : "Possible treatment effects · earlier report"} icon={Droplets} report={report}>
+      {hasMatchedToxicities && <p className="cr-section-intro">This nutrition guidance follows assessment answers, recorded weight change, or clinician confirmation. It does not establish that treatment caused an effect.</p>}
+      {hasLegacyToxicities && <p className="cr-caution">Some guidance in this earlier report lists possible drug-class effects. Those entries are not confirmed symptoms for this patient.</p>}
+      <div className="cr-toxicity-list">{toxicities.map(item => <div className="cr-toxicity-row" key={item.id}><div><span className="cr-guidance-type">{item.drugClass || "Selected drug class"}</span><h3>{item.title}</h3><small>{toxicitySource(item)}</small></div><p>{item.text}</p></div>)}</div>
     </ReportSheet>}
     {(report.narrative.actionSummary || report.narrative.monitoringSummary) && <ReportSheet number={nextPage() + 1} title="Action plan & monitoring" icon={ShieldCheck} report={report}>
       <div className="cr-action-grid">{report.narrative.actionSummary && <section className="cr-panel"><div className="cr-panel-title"><h3>Action plan</h3><Utensils size={20} aria-hidden="true"/></div><p>{report.narrative.actionSummary}</p></section>}{report.narrative.monitoringSummary && <section className="cr-panel"><div className="cr-panel-title"><h3>What to monitor</h3><HeartPulse size={20} aria-hidden="true"/></div><p>{report.narrative.monitoringSummary}</p></section>}</div>

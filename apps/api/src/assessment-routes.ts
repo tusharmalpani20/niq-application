@@ -43,6 +43,7 @@ export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowSe
   app.patch(`${reports}/:reportId`,async c=>{const p=parts(c);return c.json(await service.reports.edit(p.actor,p.org,p.assessment,parse(reportInputSchema,await json(c)),p.context,parse(id,c.req.param("reportId"))));});
   const generated=base+"/assessments/:assessmentId/generated-report";
   app.get(generated,async c=>{const p=parts(c);return c.json(await generatedReports.read(p.actor,p.org,p.assessment));});
+  app.get(generated+"/toxicity-options",async c=>{const p=parts(c);return c.json(await generatedReports.toxicityOptions(p.actor,p.org,p.assessment,p.context));});
   app.post(generated+"/generate",async c=>{const p=parts(c);return c.json(await generatedReports.generate(p.actor,p.org,p.assessment,parse(generateReportInputSchema,await json(c)),p.context));});
   app.patch(generated+"/narrative",async c=>{const p=parts(c);return c.json(await generatedReports.edit(p.actor,p.org,p.assessment,parse(editGeneratedNarrativeSchema,await json(c)),p.context));});
   app.post(generated+"/pdf",async c=>{

@@ -9,7 +9,7 @@ import { decryptPatientBytes, encryptPatientBytes, patientDataKey } from "../sec
 import { reviewState } from "./clinical-review-state";
 import { ServiceError, type Principal, type RequestContext } from "./application";
 import type { AssessmentWorkflowService, StoredWorkflow, WorkflowRow } from "./assessment-workflow";
-import { requestScoringReportContent, ScoringReportContentError, type ReportFacts, type ScoringReportContent } from "./scoring-report-content";
+import { requestScoringReportContent, requestScoringToxicityOptions, ScoringReportContentError, type ReportFacts, type ScoringReportContent } from "./scoring-report-content";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 type ReportData = Omit<GeneratedReport, "id" | "revision" | "status" | "approvedAt" | "artifact">;
@@ -63,12 +63,15 @@ export function normalizeGuidance(content: ScoringReportContent, manifest: Asses
   const treatmentLabel = (id:string) => fieldLabel(manifest,"current_cancer_treatment",id) ?? "Treatment";
   for (const row of content.guidance.nutritionInterventions)
     add({ id: row.id, kind: "nutrition", title: row.label, text: [row.coreStrategy, row.clinicalActions].filter(nonempty).join("\n") });
-  // Matching a class is never evidence that an individual patient has this toxicity.
-  for (const row of content.guidance.possibleToxicities ?? [])
-    add({ id: row.id, kind: "toxicity", title: "Possible treatment effect: " + row.expectedToxicity,
-      text: "If this effect occurs:\n" + row.nutritionalInterventions, drugClass: classLabel(row.classId), certainty: "possible" });
-  for (const row of content.guidance.toxicityInterventions)
-    add({ id: row.id, kind: "toxicity", title: row.expectedToxicity, text: row.nutritionalInterventions, drugClass: classLabel(row.classId), certainty: "confirmed" });
+  // Class membership alone does not establish a patient symptom.
+  for (const row of content.guidance.toxicityInterventions) {
+    const matchedLabels = [...new Set(row.matchedAnswerLabels ?? [])];
+    add({ id: row.id, kind: "toxicity", title: matchedLabels.length ? matchedLabels.join(" / ") : row.expectedToxicity,
+      text: row.nutritionalInterventions, drugClass: classLabel(row.classId),
+      ...(row.matchSource ? {matchSource:row.matchSource} : {}),
+      ...(matchedLabels.length ? {matchedAnswerLabels:matchedLabels} : {}),
+      certainty: "confirmed" });
+  }
   for (const row of content.guidance.classGuidance ?? [])
     add({ id: row.id, kind: "treatment", title: row.label, text: row.guidance });
   const plan = content.guidance.carePlan;
@@ -88,6 +91,21 @@ export function normalizeGuidance(content: ScoringReportContent, manifest: Asses
   }
   if(products.status==="facts_required") issues.push("Confirm the facts needed for the product plan and regenerate, or document why the plan is omitted."+(products.reason?" "+products.reason:""));
   return {sections,issues};
+}
+
+export function reportToxicityAnswers(answers: FormAnswers): NonNullable<ReportFacts["assessmentAnswers"]> {
+  const gastrointestinal = list(answers.gastrointestinal_symptoms);
+  const dietary = list(answers.dietary_symptoms);
+  const appetite = value(answers.appetite_status);
+  const previous = positive(answers.previous_weight_kg);
+  const current = positive(answers.current_weight_kg);
+  return {
+    ...(gastrointestinal.length ? { gastrointestinal_symptoms: gastrointestinal } : {}),
+    ...(dietary.length ? { dietary_symptoms: dietary } : {}),
+    ...(appetite ? { appetite_status: appetite } : {}),
+    ...(previous !== null ? { previous_weight_kg: previous } : {}),
+    ...(current !== null ? { current_weight_kg: current } : {}),
+  };
 }
 
 function reportObservations(answers: FormAnswers, manifest: AssessmentFormManifest, completedAt: Date, scan: unknown) {
@@ -171,6 +189,31 @@ export class GeneratedReportService {
     const row=await this.latest(org,id);
     return {report:row?.content ? await this.dto(row,assessment):null};
   }
+  async toxicityOptions(actor: Principal, org: string, id: string, context: RequestContext) {
+    if (!hasPermission(actor.role,"reviews.complete")) throw new ServiceError("FORBIDDEN","A clinician must confirm treatment effects.");
+    const assessment = await this.clinical(actor,org,id,"reports.manage");
+    const source = this.source(assessment);
+    const [submission] = await this.service.db.select().from(assessmentSubmissions).where(and(
+      eq(assessmentSubmissions.organizationId,org),eq(assessmentSubmissions.assessmentId,id),eq(assessmentSubmissions.id,source.submissionId)));
+    if (submission?.status !== "SUCCEEDED" || !submission.result) throw new ServiceError("CONFLICT","The final scored submission is unavailable.");
+    const frozen = this.service.unseal<StoredWorkflow>(submission.snapshot);
+    const result = assessmentScoreResultSchema.parse(this.service.unseal(submission.result));
+    if (result.checksum !== frozen.binding.checksum || result.resultReference.length === 0)
+      throw new ServiceError("CONFLICT","The submitted score does not match its rule version.");
+    try {
+      const transport = await this.service.transport(org,context,frozen.connection);
+      const options = await requestScoringToxicityOptions({ ...transport,
+        assessmentReference:frozen.binding.assessmentReference,resultReference:source.resultReference,
+        treatmentTypeIds:list(frozen.answers.current_cancer_treatment),drugClassIds:list(frozen.answers.drug_classes) });
+      if (options.checksum !== frozen.binding.checksum || options.ruleVersionId !== frozen.binding.ruleVersionId)
+        throw new ScoringReportContentError("invalid","RULE_VERSION_MISMATCH");
+      return { options:options.options };
+    } catch (error) {
+      if (error instanceof ScoringReportContentError) throw new ServiceError(error.kind === "blocked" ? "CONFLICT" : "SCORING_UNAVAILABLE",
+        error.kind === "blocked" ? "NIQ Scoring could not list treatment effects for this assessment." : "Treatment effects are unavailable. Try again.");
+      throw error;
+    }
+  }
   private async weightHistory(actor:Principal, org:string, row:WorkflowRow, currentKg:number|null, previousKg:number|null):Promise<GeneratedReport["weightHistory"]> {
     const prior=await this.service.db.select({id:assessments.id,completedAt:assessments.completedAt,currentSubmissionId:assessments.currentSubmissionId})
       .from(assessments).where(and(eq(assessments.organizationId,org),eq(assessments.patientId,row.patientId),eq(assessments.status,"COMPLETED"),
@@ -189,7 +232,9 @@ export class GeneratedReportService {
     }
     return finishWeightHistory(points,currentKg && currentKg<600?{date:dateOnly(row.completedAt!),kg:currentKg}:null,previousKg);
   }
-  async generate(actor:Principal,org:string,id:string,input:{requestKey:string;productStageChoice?:"surgical"|"treatment_stage";plannedTreatmentStartDate?:string},context:RequestContext):Promise<{report:GeneratedReport}> {
+  async generate(actor:Principal,org:string,id:string,input:{requestKey:string;productStageChoice?:"surgical"|"treatment_stage";confirmedToxicityIds?:string[]},context:RequestContext):Promise<{report:GeneratedReport}> {
+    if (input.confirmedToxicityIds?.length && !hasPermission(actor.role,"reviews.complete"))
+      throw new ServiceError("FORBIDDEN","A clinician must confirm treatment effects.");
     const assessment=await this.clinical(actor,org,id,"reports.manage");
     const source=this.source(assessment);
     const [submission]=await this.service.db.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,org),eq(assessmentSubmissions.assessmentId,id),eq(assessmentSubmissions.id,source.submissionId)));
@@ -197,7 +242,8 @@ export class GeneratedReportService {
     const frozen=this.service.unseal<StoredWorkflow>(submission.snapshot);
     const result=assessmentScoreResultSchema.parse(this.service.unseal(submission.result));
     if(result.checksum!==frozen.binding.checksum || result.resultReference.length===0)throw new ServiceError("CONFLICT","The submitted score does not match its rule version.");
-    const decision={productStageChoice:input.productStageChoice??null,plannedTreatmentStartDate:input.plannedTreatmentStartDate??null};
+    const decision={productStageChoice:input.productStageChoice??null,plannedTreatmentStartDate:value(frozen.answers.planned_treatment_start_date)??null,
+      confirmedToxicityIds:[...(input.confirmedToxicityIds??[])].sort()};
     const fingerprint=this.currentFingerprint(assessment,frozen.binding.checksum,decision)!;
     // Lock the assessment while reserving the local request key. This serializes
     // concurrent clicks, review changes and retry claims without a network call in the transaction.
@@ -233,13 +279,15 @@ export class GeneratedReportService {
       const facts:ReportFacts={
         reviewedScore:source.reviewedScore,reviewedRiskCategoryId:source.risk.id,
         treatmentTypeIds:list(frozen.answers.current_cancer_treatment),drugClassIds:list(frozen.answers.drug_classes),
-        confirmedToxicityIds:[],coMorbidityIds:list(frozen.answers.co_morbidities),
+        confirmedToxicityIds:decision.confirmedToxicityIds,assessmentAnswers:reportToxicityAnswers(frozen.answers),
+        coMorbidityIds:list(frozen.answers.co_morbidities),
         ...(value(frozen.answers.cancer_type)?{cancerTypeId:value(frozen.answers.cancer_type)}:{}),
         ...(["vegetarian","non_vegetarian","eggetarian","jain"].includes(value(frozen.answers.diet_preference)??"")?{dietPreferenceId:value(frozen.answers.diet_preference) as ReportFacts["dietPreferenceId"]}:{}),
         ...(value(frozen.answers.treatment_status)?{treatmentStatusId:value(frozen.answers.treatment_status)}:{}),
         ...(value(frozen.answers.cancer_surgical_status)?{surgicalStatusId:value(frozen.answers.cancer_surgical_status)}:{}),
         ...(value(frozen.answers.surgery_date)?{surgeryDate:value(frozen.answers.surgery_date)}:{}),
         ...(value(frozen.answers.planned_surgery_date)?{plannedSurgeryDate:value(frozen.answers.planned_surgery_date)}:{}),
+        assessmentDate:dateOnly(assessment.completedAt!),
         ...(decision.productStageChoice?{productStageChoice:decision.productStageChoice}:{}),
         ...(decision.plannedTreatmentStartDate?{plannedTreatmentStartDate:decision.plannedTreatmentStartDate}:{}),
         // Only allowlisted measurements cross the Scoring boundary; names and free text stay local.

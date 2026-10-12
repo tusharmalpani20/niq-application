@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { GeneratedReportService, assertGeneratedPdf, assertReportReadyForApproval, finishWeightHistory, normalizeGuidance, prepareNarrativeEdit } from "./generated-report";
-import { requestScoringReportContent, scoringReportContentSchema } from "./scoring-report-content";
+import { GeneratedReportService, assertGeneratedPdf, assertReportReadyForApproval, finishWeightHistory, normalizeGuidance, prepareNarrativeEdit, reportToxicityAnswers } from "./generated-report";
+import { requestScoringReportContent, requestScoringToxicityOptions, scoringReportContentSchema } from "./scoring-report-content";
 
 const narrative = { overview: "Overview", keyFindings: "Findings", actionSummary: "Actions", monitoringSummary: "Monitoring" };
 const packet = {
@@ -40,6 +40,31 @@ test("report-content request binds the clinician-reviewed score and result refer
   } as any)).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
 });
 
+test("toxicity options request binds the reviewed result and only sends selected treatment IDs", async () => {
+  let sent: any;
+  const result = await requestScoringToxicityOptions({ baseUrl: "http://scoring.test", credential: "private", requestId: "r1", timeoutMs: 1000,
+    assessmentReference: packet.assessmentReference, resultReference: packet.resultReference,
+    treatmentTypeIds: ["chemotherapy"], drugClassIds: ["taxanes"],
+    fetcher: async (_url: RequestInfo | URL, init?: RequestInit) => {
+      sent = JSON.parse(String(init?.body));
+      return Response.json({ assessmentReference: packet.assessmentReference, resultReference: packet.resultReference,
+        ruleVersionId: packet.ruleVersionId, checksum: packet.checksum,
+        options: [{ id: "fatigue", classId: "taxanes", classLabel: "Taxanes", treatmentTypeId: "chemotherapy", treatmentTypeLabel: "Chemotherapy", expectedToxicity: "Fatigue" }] });
+    },
+  } as any);
+  expect(sent).toEqual({ assessmentReference: packet.assessmentReference, resultReference: packet.resultReference,
+    treatmentTypeIds: ["chemotherapy"], drugClassIds: ["taxanes"] });
+  expect(result.options[0]?.classLabel).toBe("Taxanes");
+});
+
+test("only allowlisted structured symptom answers and weights cross to Scoring", () => {
+  expect(reportToxicityAnswers({
+    gastrointestinal_symptoms: ["nausea", "vomiting"], dietary_symptoms: ["fatigue"], appetite_status: "reduced",
+    previous_weight_kg: 68, current_weight_kg: 68.1, free_text: "private patient narrative",
+  } as any)).toEqual({ gastrointestinal_symptoms: ["nausea", "vomiting"], dietary_symptoms: ["fatigue"],
+    appetite_status: "reduced", previous_weight_kg: 68, current_weight_kg: 68.1 });
+});
+
 test("Scoring guidance boundary strips unknown proprietary fields and rejects malformed care plans", () => {
   const withPrivate = structuredClone(packet) as any;
   withPrivate.guidance.carePlan.internalPrompt = "secret rule table";
@@ -60,12 +85,11 @@ test("weight chart uses an undated previous weight only when no dated history ex
   ]);
 });
 
-test("unresolved product stage is shown as a clinician action and blocks approval", () => {
+test("possible drug-class effects are excluded; unresolved product stage blocks approval", () => {
   const result = normalizeGuidance(scoringReportContentSchema.parse(packet), manifest);
   expect(result.issues).toHaveLength(1);
   expect(result.issues[0]).toContain("Choose the appropriate product stage");
-  expect(result.sections.find(row=>row.id==="nausea")).toEqual({id:"nausea",kind:"toxicity",title:"Possible treatment effect: Nausea",
-    text:"If this effect occurs:\nTry small, frequent meals.",drugClass:"Taxanes",certainty:"possible"});
+  expect(result.sections.find(row=>row.id==="nausea")).toBeUndefined();
   expect(() => assertReportReadyForApproval(result.issues, 1, 1, narrative)).toThrow("Resolve report-generation issues");
 });
 
@@ -79,9 +103,19 @@ test("matched treatment, status, co-morbidity, product, and exception guidance e
   selected.guidance.carePlan.coMorbidities = [{ id: "co-morbidity", conditionId: "liver", label: "Liver support", guidance: "Ask the clinical team." }];
   const result = normalizeGuidance(scoringReportContentSchema.parse(selected), manifest);
   expect(result.issues).toEqual([]);
-  expect(result.sections.map(row => row.id)).toEqual(["nausea", "radiation-rule", "modifier", "co-morbidity", "plan", "exception"]);
+  expect(result.sections.map(row => row.id)).toEqual(["radiation-rule", "modifier", "co-morbidity", "plan", "exception"]);
   expect(result.sections.find(row => row.id === "radiation-rule")?.title).toBe("Radiotherapy guidance");
   expect(result.sections.find(row => row.id === "exception")?.text).toBe("Use once daily.");
+});
+
+test("a compound source topic is displayed using only the symptom actually reported", () => {
+  const selected = structuredClone(packet) as any;
+  selected.guidance.possibleToxicities = [];
+  selected.guidance.toxicityInterventions = [{ id: "fatigue", classId: "taxanes", treatmentTypeId: "radiation",
+    expectedToxicity: "Fatigue / reduced appetite", nutritionalInterventions: "Try small meals.",
+    matchSource: "assessment_answer", matchedAnswerLabels: ["Fatigue"] }];
+  const section = normalizeGuidance(scoringReportContentSchema.parse(selected), manifest).sections.find(row => row.id === "fatigue");
+  expect(section).toMatchObject({ title: "Fatigue", matchSource: "assessment_answer", matchedAnswerLabels: ["Fatigue"] });
 });
 
 test("a clinician can resolve generation issues only with complete edited text, recording the original issue", () => {
