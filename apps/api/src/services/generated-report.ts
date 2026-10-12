@@ -34,7 +34,16 @@ export function cleanReportText(text: string): string {
 }
 
 export function finishWeightHistory(priorMostRecentFirst: GeneratedReport["weightHistory"], current: GeneratedReport["weightHistory"][number] | null, previousKg: number | null): GeneratedReport["weightHistory"] {
-  const points = [...priorMostRecentFirst];
+  // A recent recorded value that strongly conflicts with both the reported
+  // previous weight and the current measurement should not drive a trend chart.
+  const currentDay = current?.date ? Date.parse(current.date) : NaN;
+  const reportedCloseToCurrent = Boolean(previousKg && current && Math.abs(current.kg - previousKg) / previousKg <= 0.1);
+  const conflictingRecentRecord = reportedCloseToCurrent && priorMostRecentFirst.some(point => {
+    const elapsedDays = point.date ? (currentDay - Date.parse(point.date)) / 86_400_000 : NaN;
+    return Number.isFinite(elapsedDays) && elapsedDays >= 0 && elapsedDays <= 30
+      && Math.abs(point.kg - previousKg!) / previousKg! > 0.15;
+  });
+  const points = conflictingRecentRecord ? [] : [...priorMostRecentFirst];
   if (current) points.unshift(current);
   if (points.length < 2 && previousKg && previousKg < 600 && previousKg !== current?.kg)
     points.push({ date: null, kg: previousKg, label: "Previous weight (date not recorded)" });

@@ -138,6 +138,17 @@ test("weight chart uses an undated previous weight only when no dated history ex
   ]);
 });
 
+test("weight chart drops conflicting recent history when reported previous and current weights agree", () => {
+  expect(finishWeightHistory([
+    { date: "2026-10-12", kg: 62 },
+    { date: "2026-10-05", kg: 48 },
+    { date: "2026-06-07", kg: 48 },
+  ], { date: "2026-10-13", kg: 62 }, 64)).toEqual([
+    { date: null, kg: 64, label: "Previous weight (date not recorded)" },
+    { date: "2026-10-13", kg: 62 },
+  ]);
+});
+
 test("possible drug-class effects and an unresolved product stage are omitted", () => {
   const unresolved = structuredClone(packet) as any;
   unresolved.guidance.carePlan.products.plans = [
