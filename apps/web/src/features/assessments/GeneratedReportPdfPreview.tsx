@@ -42,7 +42,7 @@ export function GeneratedReportPdfPreview({ url }: { url: string }) {
         const page = await pdf.getPage(pageNumber);
         if (cancelled) return;
         const size = page.getViewport({ scale: 1 });
-        const viewport = page.getViewport({ scale: Math.min(2, 1200 / size.width, 1600 / size.height) });
+        const viewport = page.getViewport({ scale: Math.min(3, 1800 / size.width, 2500 / size.height) });
         const canvas = document.createElement("canvas");
         canvas.width = Math.ceil(viewport.width);
         canvas.height = Math.ceil(viewport.height);

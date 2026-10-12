@@ -70,7 +70,7 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
     {!loading && !error && generation?.status === "READY" && !ready &&
       <div className="cr-message cr-error" role="alert"><p>The report is marked ready, but its saved PDF is unavailable. Refresh the status or contact your administrator.</p><Button variant="outline" onPress={refresh}><RotateCcw size={16} aria-hidden="true"/>Refresh status</Button></div>}
     {!error && ready && report && <>
-      <div className="cr-report-meta"><span>Assessment {report.assessment.reference}</span><span>Generated {reportDate(report.generatedAt)}</span><span>Rule version {report.assessment.ruleVersionId}</span></div>
+      <div className="cr-report-meta"><span>Assessment {report.assessment.reference}</span><span>Generated {reportDate(report.generatedAt)}</span></div>
       <div className="cr-approved-bar"><div><FileCheck2 size={24} aria-hidden="true"/><div><strong>Final report ready</strong><p>The PDF was saved after final clinical approval.</p></div></div><a className="cr-download" href={pdfUrl} download={`NIQ-report-${report.assessment.reference}.pdf`}><Download size={18} aria-hidden="true"/>Download PDF</a></div>
       <div className="cr-preview-heading"><h2>Report preview</h2><p>Saved PDF</p></div>
       <GeneratedReportPdfPreview url={pdfUrl}/>
