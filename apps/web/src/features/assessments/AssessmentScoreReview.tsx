@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { getAssessmentAnswerCoverage, type AssessmentWorkflow, type AssessmentScoreReviews, type AssessmentScoreResult } from "@niq/application-contracts";
-import { ChevronDown, ChevronRight, ClipboardList } from "lucide-react";
+import { ChevronDown, ChevronRight, ClipboardList, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { RouterButtonLink } from "@/components/RouterButtonLink";
 import { assessmentResultView } from "./AssessmentResult";
 import { assessmentSectionIcons } from "./AssessmentSectionNavigation";
 import { assessmentRequest } from "./workflow-api";
@@ -119,7 +120,7 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
     </div>
   </div>;
   return <section className="my-5 min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6" aria-label="Assessment score review">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="assessment-summary-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">Assessment summary</h2><span className="text-sm text-muted-foreground">{record.progress.answered}/{record.progress.required} required answers complete</span></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="assessment-summary-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">Assessment summary</h2><div className="flex flex-wrap items-center gap-3"><span className="text-sm text-muted-foreground">{record.progress.answered}/{record.progress.required} required answers complete</span><RouterButtonLink variant="outline" size="sm" to={`/assessments/${encodeURIComponent(record.reference)}/generated-report`}><FileText className="size-4" aria-hidden="true"/>Clinical report</RouterButtonLink></div></div>
     {record.progress.answered === record.progress.required && coverage.answered < coverage.total && <p className="mt-2 text-sm text-muted-foreground">Some optional questions remain unanswered.</p>}
     <div {...scoreCard}>
       <div className="min-w-44 flex-1"><AssessmentRiskCircle score={result.score} classification={result.classification} categories={result.riskCategories} formCoverage={coverage} /></div>

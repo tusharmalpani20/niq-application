@@ -14,6 +14,7 @@ const AdminOrganizationDetailPage = lazy(() => import("./pages/AdminOrganization
 const AssessmentsPage = lazy(() => import("./pages/AssessmentsPage").then(module => ({ default: module.AssessmentsPage })));
 const StartAssessmentPage = lazy(() => import("./features/assessments/StartAssessmentPage").then(module => ({ default: module.StartAssessmentPage })));
 const AssessmentEditorPage = lazy(() => import("./features/assessments/AssessmentEditorPage").then(module => ({ default: module.AssessmentEditorPage })));
+const GeneratedReportPage = lazy(() => import("./features/assessments/GeneratedReportPage").then(module => ({ default: module.GeneratedReportPage })));
 const BrandingPage = lazy(() => import("./pages/BrandingPage").then(module => ({ default: module.BrandingPage })));
 const FacilitiesPage = lazy(() => import("./pages/FacilitiesPage").then(module => ({ default: module.FacilitiesPage })));
 const FacilityDetailPage = lazy(() => import("./pages/FacilityDetailPage").then(module => ({ default: module.FacilityDetailPage })));
@@ -48,6 +49,7 @@ export function App() {
           <Route path="/assessments" element={<AssessmentsPage />} />
           <Route path="/assessments/new" element={<StartAssessmentPage />} />
           <Route path="/assessments/:assessmentId" element={<AssessmentEditorPage />} />
+          <Route path="/assessments/:assessmentId/generated-report" element={<GeneratedReportPage />} />
           <Route path="/settings/branding" element={<BrandingPage />} />
           <Route path="/settings/scoring" element={<ScoringConnectionPage />} />
         </Route>
