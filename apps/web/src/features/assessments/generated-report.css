@@ -127,6 +127,16 @@
 .cr-single-weight { display: flex; align-items: baseline; gap: .7rem; margin: 1rem 0 0; color: #677f89; font-size: .82rem; }
 .cr-single-weight strong { color: #123b4b; font-size: 1.5rem; }
 .cr-care-stack { display: grid; gap: 1rem; }
+.cr-sheet-nutrition .cr-sheet-content { display: flex; flex-direction: column; }
+.cr-sheet-nutrition .cr-care-stack { width: 100%; margin-block: auto; }
+.cr-sheet-nutrition-dense .cr-sheet-content { padding-block: .8rem 1rem; }
+.cr-sheet-nutrition-dense .cr-care-stack { gap: .65rem; }
+.cr-sheet-nutrition-dense .cr-advice-block, .cr-sheet-nutrition-dense .cr-supplement { padding: .7rem .85rem; }
+.cr-sheet-nutrition-dense .cr-advice-points { gap: .25rem; margin-top: .5rem; }
+.cr-sheet-nutrition-dense .cr-advice-points li { padding: .3rem .45rem; font-size: .76rem; line-height: 1.3; }
+.cr-sheet-nutrition-dense .cr-supplement-items { margin-top: .65rem; }
+.cr-sheet-nutrition-dense .cr-supplement-item { padding: .65rem .8rem; }
+.cr-sheet-nutrition-dense .cr-supplement-duration { margin-top: .65rem; padding-top: .55rem; }
 .cr-nutrition-targets h3 { margin: 0 0 .7rem; color: var(--brand-ink, #177e83); font-size: .78rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
 .cr-nutrition-target-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
 .cr-nutrition-target-card { display: grid; min-width: 0; grid-template-columns: 38px minmax(0, 1fr); align-items: center; gap: .2rem .7rem; padding: .9rem 1rem; border: 1px solid #dce9eb; border-radius: .8rem; background: color-mix(in srgb, var(--brand-primary, #34b5b9) 5%, white); }
@@ -137,13 +147,18 @@
 .cr-renal-caution .cr-advice-icon { color: #94611b; background: #ffebc8; }
 .cr-renal-caution p { margin: .7rem 0 0 3.3rem; color: #5c4b32; font-size: .87rem; line-height: 1.55; white-space: pre-wrap; }
 .cr-care-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; }
-.cr-advice-block, .cr-supplement { min-width: 0; padding: 1.2rem 1.3rem; border: 1px solid #dce9eb; border-radius: .85rem; background: #fff; }
-.cr-care-grid .cr-advice-block p { margin-left: 0; }
+.cr-sheet-care .cr-sheet-content { display: flex; flex-direction: column; }
+.cr-sheet-care .cr-care-grid { width: 100%; margin-block: auto; }
+.cr-advice-block, .cr-supplement { min-width: 0; padding: 1rem 1.1rem; border: 1px solid #dce9eb; border-radius: .85rem; background: #fff; }
 .cr-advice-action { background: color-mix(in srgb, var(--brand-primary, #34b5b9) 5%, white); }
 .cr-advice-heading { display: flex; align-items: center; gap: .75rem; }
 .cr-advice-heading h3 { margin: 0; color: #173d4e; font-size: 1rem; }
 .cr-advice-icon { display: grid; width: 38px; height: 38px; flex: none; place-items: center; border-radius: .65rem; color: var(--brand-ink, #177e83); background: color-mix(in srgb, var(--brand-primary, #34b5b9) 12%, white); }
-.cr-advice-block p { margin: .8rem 0 0 3.25rem; color: #345463; font-size: .9rem; line-height: 1.62; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cr-advice-points { display: grid; gap: .4rem; margin: .75rem 0 0; padding: 0; list-style: none; }
+.cr-advice-columns .cr-advice-points { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cr-advice-points li { display: grid; min-width: 0; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: .4rem; padding: .48rem .55rem; border-left: 2px solid color-mix(in srgb, var(--brand-primary, #34b5b9) 65%, white); border-radius: .35rem; color: #345463; background: #f6fafb; font-size: .8rem; line-height: 1.4; overflow-wrap: anywhere; }
+.cr-advice-points li svg { margin-top: .1rem; color: var(--brand-ink, #177e83); }
+.cr-advice-action .cr-advice-points li { background: #fff; }
 .cr-supplement { background: color-mix(in srgb, var(--brand-primary, #34b5b9) 5%, white); }
 .cr-supplement-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .75rem; margin-top: 1rem; }
 .cr-supplement-item { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .8rem; padding: .85rem 1rem; border: 1px solid #dce9eb; border-radius: .7rem; background: #fff; }
@@ -267,7 +282,7 @@
   .cr-vital-highlights { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .cr-vital-detail-grid, .cr-vital-detail:first-child dl { grid-template-columns: 1fr; }
   .cr-status-overview, .cr-status-metrics { grid-template-columns: 1fr; }
-  .cr-advice-block p { margin-left: 0; }
+  .cr-advice-columns .cr-advice-points { grid-template-columns: 1fr; }
   .cr-nutrition-target-grid { grid-template-columns: 1fr; }
   .cr-renal-caution p { margin-left: 0; }
   .cr-care-grid { grid-template-columns: 1fr; }

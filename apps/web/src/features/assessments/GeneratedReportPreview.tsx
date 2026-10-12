@@ -1,4 +1,4 @@
-import { Activity, BicepsFlexed, Brain, Calculator, CalendarDays, ChartNoAxesCombined, ClipboardList, Droplets, Gauge, HeartPulse, Leaf, Package, Ruler, Scale, ShieldCheck, Soup, Stethoscope, TriangleAlert, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
+import { Activity, ArrowRight, BicepsFlexed, Brain, Calculator, CalendarDays, ChartNoAxesCombined, CircleDot, ClipboardList, Droplets, Gauge, HeartPulse, Leaf, Package, Ruler, Scale, ShieldCheck, Soup, Stethoscope, TriangleAlert, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
 import { reportFaceScanAdditionalMetricGroups, riskColorHex } from "@niq/application-contracts";
 import { useBranding } from "@/lib/branding-context";
 import { BrandMarks } from "@/components/BrandMarks";
@@ -8,7 +8,7 @@ import { cleanWeights, metricText, reportAge, reportDate, reportGuidance, weight
 import { weightChartPoints } from "./generated-report-chart";
 import "./generated-report.css";
 
-type ReportSheetProps = { number: number; title: string; icon: LucideIcon; children: React.ReactNode; report: GeneratedReport; compact?: boolean };
+type ReportSheetProps = { number: number; title: string; icon: LucideIcon; children: React.ReactNode; report: GeneratedReport; compact?: boolean; className?: string };
 type ReportMetric = GeneratedReport["metrics"][number];
 
 const metricIcons: Record<string, LucideIcon> = {
@@ -74,18 +74,30 @@ function CoverArtwork() {
   </div>;
 }
 
-function ReportSheet({ number, title, icon: Icon, children, report, compact = false }: ReportSheetProps) {
+function ReportSheet({ number, title, icon: Icon, children, report, compact = false, className = "" }: ReportSheetProps) {
   const { branding } = useBranding();
-  return <section className={`cr-sheet${compact ? " cr-sheet-compact" : ""}`} aria-label={title}>
+  return <section className={`cr-sheet${compact ? " cr-sheet-compact" : ""}${className ? ` ${className}` : ""}`} aria-label={title}>
     <header className="cr-sheet-header"><div className="cr-sheet-heading"><span className="cr-section-number">{String(number).padStart(2, "0")}</span><Icon size={21} aria-hidden="true"/><h2>{title}</h2></div><BrandMarks className="cr-report-brand" organizationLogoUrl={branding.logoUrl} organizationName={branding.displayName}/></header>
     <div className="cr-sheet-content">{children}</div>
     <footer className="cr-sheet-footer"><span>{branding.displayName} · Clinical nutrition report</span><span>{report.assessment.reference} · {String(number).padStart(2, "0")}</span></footer>
   </section>;
 }
 
-function ReviewedAdvice({ title, text, icon: Icon, action = false }: { title: string; text: string | undefined; icon: LucideIcon; action?: boolean }) {
+const adviceSegmenter = new Intl.Segmenter("en", { granularity: "sentence" });
+
+function adviceSentences(text: string) {
+  return Array.from(adviceSegmenter.segment(text), item => item.segment.trim()).filter(Boolean);
+}
+
+function ReviewedAdvice({ title, text, icon: Icon, action = false, columns = false }: { title: string; text: string | undefined; icon: LucideIcon; action?: boolean; columns?: boolean }) {
   if (!text?.trim()) return null;
-  return <section className={`cr-advice-block${action ? " cr-advice-action" : ""}`}><div className="cr-advice-heading"><span className="cr-advice-icon"><Icon size={20} aria-hidden="true"/></span><h3>{title}</h3></div><p>{text}</p></section>;
+  const PointIcon = action ? ArrowRight : CircleDot;
+  return <section className={`cr-advice-block${action ? " cr-advice-action" : ""}${columns ? " cr-advice-columns" : ""}`}><div className="cr-advice-heading"><span className="cr-advice-icon"><Icon size={20} aria-hidden="true"/></span><h3>{title}</h3></div><ul className="cr-advice-points">{adviceSentences(text).map((sentence, index) => <li key={index}><PointIcon size={15} aria-hidden="true"/><span>{sentence}</span></li>)}</ul></section>;
+}
+
+function singleGuidanceTitle(report: GeneratedReport, type: "comorbidity" | "toxicity", fallback: string) {
+  const titles = [...new Set(reportGuidance(report, type).map(item => item.title.trim()).filter(Boolean))];
+  return titles.length === 1 ? titles[0]! : fallback;
 }
 
 function ProductPlan({ report }: { report: GeneratedReport }) {
@@ -172,6 +184,7 @@ export function GeneratedReportPreview({ report }: { report: GeneratedReport }) 
   const renalGuidance = renalIndividualizationGuidance(report);
   const targets = renalGuidance ? [] : nutritionTargets(report);
   const hasNutritionPage = Boolean(report.narrative.nutritionAdvice?.trim() || report.narrative.treatmentAdvice?.trim() || hasProductPlan || targets.length || renalGuidance);
+  const denseNutrition = (report.narrative.nutritionAdvice?.length ?? 0) + (report.narrative.treatmentAdvice?.length ?? 0) > 900;
   const hasCareAdvice = Boolean(report.narrative.conditionAdvice?.trim() || report.narrative.effectsAdvice?.trim());
   const riskColor = riskColorHex(report.classification?.color);
   let page = 0;
@@ -216,17 +229,17 @@ export function GeneratedReportPreview({ report }: { report: GeneratedReport }) 
       {showClinicalFinding && <section className="cr-clinical-interpretation"><h3>Clinical interpretation</h3><p>{clinicalFinding}</p></section>}
       <WeightTrend report={report}/>
     </ReportSheet>}
-    {hasNutritionPage && <ReportSheet number={nextPage() + 1} title="Nutrition plan" icon={Utensils} report={report} compact>
+    {hasNutritionPage && <ReportSheet number={nextPage() + 1} title="Nutrition plan" icon={Utensils} report={report} compact className={`cr-sheet-nutrition${denseNutrition ? " cr-sheet-nutrition-dense" : ""}`}>
       <div className="cr-care-stack">
       {targets.length > 0 && <section className="cr-nutrition-targets"><h3>Daily nutrition targets</h3><div className="cr-nutrition-target-grid">{targets.map(target => { const Icon = target.icon; return <div className="cr-nutrition-target-card" key={target.label}><Icon size={22} aria-hidden="true"/><span>{target.label}</span><strong>{target.value}</strong></div>; })}</div></section>}
       {renalGuidance && <section className="cr-renal-caution"><div className="cr-advice-heading"><span className="cr-advice-icon"><TriangleAlert size={20} aria-hidden="true"/></span><h3>Individualise nutrition targets</h3></div><p>{renalGuidance.text}</p></section>}
-      <ReviewedAdvice title="Nutrition guidance" text={report.narrative.nutritionAdvice} icon={Soup}/>
+      <ReviewedAdvice title="Nutrition guidance" text={report.narrative.nutritionAdvice} icon={Soup} columns/>
       <ProductPlan report={report}/>
-      <ReviewedAdvice title="During treatment" text={report.narrative.treatmentAdvice} icon={ShieldCheck}/></div>
+      <ReviewedAdvice title="During treatment" text={report.narrative.treatmentAdvice} icon={ShieldCheck} columns/></div>
     </ReportSheet>}
-    {(hasCareAdvice || report.narrative.actionSummary || report.narrative.monitoringSummary) && <ReportSheet number={nextPage() + 1} title="Care and next steps" icon={ShieldCheck} report={report} compact>
-      <div className="cr-care-grid"><ReviewedAdvice title="Other health conditions" text={report.narrative.conditionAdvice} icon={HeartPulse}/>
-      <ReviewedAdvice title="Treatment effects and nutrition" text={report.narrative.effectsAdvice} icon={Droplets}/>
+    {(hasCareAdvice || report.narrative.actionSummary || report.narrative.monitoringSummary) && <ReportSheet number={nextPage() + 1} title="Care and next steps" icon={ShieldCheck} report={report} compact className="cr-sheet-care">
+      <div className="cr-care-grid"><ReviewedAdvice title={singleGuidanceTitle(report, "comorbidity", "Other health conditions")} text={report.narrative.conditionAdvice} icon={HeartPulse}/>
+      <ReviewedAdvice title={singleGuidanceTitle(report, "toxicity", "Treatment effects and nutrition")} text={report.narrative.effectsAdvice} icon={Droplets}/>
       <ReviewedAdvice title="What to do" text={report.narrative.actionSummary} icon={Utensils} action/>
       <ReviewedAdvice title="What to monitor" text={report.narrative.monitoringSummary} icon={ChartNoAxesCombined} action/></div>
     </ReportSheet>}

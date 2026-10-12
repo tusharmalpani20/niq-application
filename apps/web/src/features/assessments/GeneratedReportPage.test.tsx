@@ -149,3 +149,29 @@ test("clinical interpretation is shown when it adds meaning beyond measurements"
     expect(document.querySelector(".cr-clinical-interpretation")?.textContent).toContain("Significant weight loss suggests malnutrition.");
   });
 });
+
+test("care guidance keeps approved sentences and uses matched clinical headings", async () => {
+  const report: GeneratedReport = {
+    ...readyReport,
+    narrative: {
+      ...readyReport.narrative,
+      conditionAdvice: "Discuss a 1.2–1.5 g/kg/day target with your care team. Review fluid intake.",
+      effectsAdvice: "Try small meals. Call your care team if vomiting continues.",
+    },
+    guidance: { sections: [
+      ...readyReport.guidance.sections,
+      { id: "comorbidity_kidney_disease", kind: "comorbidity", title: "Kidney disease", text: "Individualize targets with the treating team." },
+      { id: "toxicity_nausea", kind: "toxicity", title: "Nausea", text: "Matched source guidance" },
+    ] },
+  };
+  await renderWithResponse({ report, generation: { status: "READY" } }, () => {
+    const care = document.querySelector('[aria-label="Care and next steps"]')!;
+    expect(care.querySelectorAll(".cr-advice-block").length).toBe(4);
+    expect(care.textContent).toContain("Kidney disease");
+    expect(care.textContent).toContain("Nausea");
+    expect(Array.from(care.querySelectorAll(".cr-advice-block"))[0]?.querySelectorAll(".cr-advice-points li").length).toBe(2);
+    expect(care.textContent).toContain("1.2–1.5 g/kg/day");
+    expect(care.textContent).toContain("Call your care team if vomiting continues.");
+    expect(care.textContent).not.toContain("Matched source guidance");
+  });
+});
