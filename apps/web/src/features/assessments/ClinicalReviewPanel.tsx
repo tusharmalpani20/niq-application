@@ -100,7 +100,7 @@ export function ClinicalReviewPanel({ organizationId, assessmentId, review, atte
       <div className="mt-4 space-y-4">
         <div className="space-y-2 text-sm">
           {review.currentOwnerMembershipId && <p>Current owner: {review.currentOwner?.displayName ?? "Unavailable"}</p>}
-          {review.assignee && <p>Reviewer: {review.assignee.displayName}</p>}
+          {review.assignee && <p className="text-muted-foreground">Reviewer: <span className="font-medium text-foreground">{review.assignee.displayName}</span></p>}
           {review.correctionPerson && review.state !== "AWAITING_RESUBMISSION" && <p>Corrections assigned to: {review.correctionPerson.displayName}</p>}
           {review.returnReason && review.state === "RETURNED" && <div className="rounded-lg bg-muted p-3"><p>{previouslySent(review) ? "Return reason" : "Correction reason"}</p><p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{review.returnReason}</p></div>}
           {review.state === "NOT_SUBMITTED" && <p className="text-muted-foreground">{review.allowedActions.includes("SEND")
@@ -109,7 +109,7 @@ export function ClinicalReviewPanel({ organizationId, assessmentId, review, atte
           {review.state === "QUEUED" && <p className="text-muted-foreground">An eligible clinician can claim this review.</p>}
           {review.state === "RETURNED" && <p className="text-muted-foreground">The clinician assigned to corrections updates the questionnaire, requests a new score, then {previouslySent(review) ? "resends" : "sends"} it for clinical review.</p>}
           {review.state === "AWAITING_RESUBMISSION" && <p className="text-muted-foreground">Scoring is complete. {review.correctionPerson?.displayName ?? "The clinician assigned to corrections"} can {previouslySent(review) ? "resend" : "send"} this assessment for clinical review.</p>}
-          {review.state === "COMPLETED" && <div><p>This review is final and cannot be reopened.</p>{review.finalRemark && <p className="mt-2 whitespace-pre-wrap break-words">{review.finalRemark}</p>}</div>}
+          {review.state === "COMPLETED" && review.finalRemark && <div className="rounded-lg border border-border bg-muted/40 p-3"><p className="text-xs font-semibold text-muted-foreground">Final remark</p><p className="mt-1 whitespace-pre-wrap break-words">{review.finalRemark}</p></div>}
           {review.riskClassificationPending && <p className="text-muted-foreground">NIQ must confirm the current reviewed risk before this review can be completed. Check the assessment summary below.</p>}
           {blocked && !!review.allowedActions?.length && <p className="text-muted-foreground">Finish or cancel your current changes before changing the review workflow.</p>}
         </div>

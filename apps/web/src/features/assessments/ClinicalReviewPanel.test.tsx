@@ -53,7 +53,7 @@ test("an administrator sees the current draft owner and can transfer ownership",
  expect([...document.querySelectorAll("button")].some(button=>button.textContent==="Transfer assessment owner")).toBe(true);
 },{review:{...review,state:"NOT_SUBMITTED",currentOwnerMembershipId:"owner",currentOwner:{membershipId:"owner",displayName:"Example clinician",role:"DOCTOR"},allowedActions:["TRANSFER_OWNER"]}}));
 test("completed review has no mutation actions and displays final remark",async()=>harness(async()=>{
- expect(document.body.textContent).toContain("Final clinical remark");expect(document.body.textContent).toContain("cannot be reopened");expect(document.querySelectorAll("button").length).toBe(0);
+ expect(document.body.textContent).toContain("Final clinical remark");expect(document.body.textContent).toContain("Final remark");expect(document.body.textContent).not.toContain("cannot be reopened");expect(document.querySelectorAll("button").length).toBe(0);
 },{review:{...review,state:"COMPLETED",allowedActions:[],finalRemark:"Final clinical remark"}}));
 test("completion requires a final remark and confirms automatic report creation",async()=>harness(async({click})=>{
  await click("Complete review");expect(document.body.textContent).toContain("starts automatic report and PDF generation");expect(document.body.textContent).toContain("This does not mean the patient has no side effects");expect(document.querySelector("textarea")?.required).toBe(true);
