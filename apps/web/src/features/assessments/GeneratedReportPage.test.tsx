@@ -59,7 +59,14 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     patient: { displayName: "Test Patient", reference: "PAT-12", dateOfBirth: "1980-01-01", gender: "Female" },
     assessment: { id: "assessment", reference: "NIQ-12", completedAt: "2026-10-12T08:00:00.000Z", submissionId: "submission-1", scoreRevision: 1, ruleVersionId: "rules-2", checksum: "checksum" },
     classification: { id: "high", label: "High Risk", score: 27, color: "red" },
-    metrics: [{ id: "current_weight_kg", label: "Current weight", value: "62", unit: "kg", source: "assessment" }],
+    metrics: [
+      { id: "current_weight_kg", label: "Current weight", value: "62", unit: "kg", source: "assessment" },
+      { id: "height_cm", label: "Height", value: "175", unit: "cm", source: "assessment" },
+      { id: "bmi", label: "BMI", value: "20.2", source: "assessment" },
+      { id: "wellness_score", label: "Wellness score", value: "80", unit: "/100", source: "face_scan" },
+      { id: "sdnn", label: "SDNN", value: "42", unit: "ms", source: "face_scan" },
+      { id: "body_fat", label: "Body fat", value: "21", unit: "%", source: "face_scan" },
+    ],
     weightHistory: [],
     decision: { productStageChoice: null, plannedTreatmentStartDate: null },
     narrative: { overview: "Reviewed patient overview", keyFindings: "", actionSummary: "", monitoringSummary: "", nutritionAdvice: "Reviewed nutrition guidance" },
@@ -83,6 +90,9 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect(document.body.textContent).not.toContain("Draft for clinical review");
     expect(document.querySelectorAll(".clinical-report .brand-marks-partner-logo").length).toBeGreaterThan(1);
     expect(document.querySelector(".cr-metric-card .cr-metric-icon svg")).not.toBeNull();
+    expect(document.querySelector(".cr-report-bmi svg[viewBox='0 0 240 122']")).not.toBeNull();
+    expect(document.querySelector(".cr-vital-detail")?.textContent).toContain("SDNN");
+    expect(document.body.textContent).toContain("Body fat");
     expect((document.querySelector(".cr-score-card strong") as HTMLElement)?.style.color).toBe("rgb(220, 61, 80)");
     expect(document.querySelector("a[download]")?.getAttribute("download")).toBe("NIQ-report-NIQ-12.pdf");
     await act(async () => { (document.querySelectorAll(".cr-preview-tab")[1] as HTMLButtonElement).click(); });
