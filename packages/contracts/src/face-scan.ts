@@ -86,6 +86,38 @@ export const faceScanListSchema = z.object({
 });
 export type FaceScanSession = z.infer<typeof faceScanSessionSchema>;
 
+// Keep the saved Vital IQ detail labels and units consistent across the
+// assessment screen and the clinical report. Unknown provider fields stay out.
+export const faceScanAdditionalMetricGroups = [
+  { id: "circulation", title: "Heart & circulation", metrics: [
+    { key: "sdnn", id: "sdnn", label: "SDNN", unit: "ms" },
+    { key: "rmssd", id: "rmssd", label: "RMSSD", unit: "ms" },
+    { key: "pnn50", id: "pnn50", label: "PNN50", unit: "%" },
+    { key: "cardiacOutput", id: "cardiac_output", label: "Cardiac output", unit: "L/min" },
+    { key: "meanArterialPressure", id: "mean_arterial_pressure", label: "Mean arterial pressure", unit: "mmHg" },
+    { key: "heartUtilisation", id: "heart_utilisation", label: "Heart utilisation", unit: "%" },
+    { key: "heartRateMax", id: "heart_rate_max", label: "Maximum heart rate", unit: "bpm" },
+    { key: "heartRateReserve", id: "heart_rate_reserve", label: "Heart-rate reserve", unit: "bpm" },
+    { key: "targetHeartRateRange", id: "target_heart_rate_range", label: "Target heart-rate range", unit: "bpm" },
+    { key: "stressIndex", id: "stress_index", label: "Stress index", unit: "" },
+    { key: "prq", id: "prq", label: "Pulse-respiration quotient", unit: "" },
+  ] },
+  { id: "fitness", title: "Body & fitness", metrics: [
+    { key: "bmi", id: "scan_bmi", label: "Scan BMI", unit: "kg/m²" },
+    { key: "vo2max", id: "vo2max", label: "VO₂ max", unit: "mL/kg/min" },
+    { key: "intensity", id: "intensity", label: "Activity intensity", unit: "" },
+    { key: "bodyFat", id: "body_fat", label: "Body fat", unit: "%" },
+    { key: "totalBodyWater", id: "total_body_water", label: "Total body water", unit: "" },
+    { key: "bodyWaterPercent", id: "body_water_percent", label: "Body water", unit: "%" },
+    { key: "bloodVolume", id: "blood_volume", label: "Blood volume", unit: "" },
+  ] },
+  { id: "other", title: "Other scores", metrics: [
+    { key: "heartHealthScore", id: "heart_health_score", label: "Heart health score", unit: "/100" },
+    { key: "hba1c", id: "hba1c", label: "HbA1c", unit: "%" },
+    { key: "diabetesControlScore", id: "diabetes_control_score", label: "Diabetes control score", unit: "/100" },
+  ] },
+] as const;
+
 /** A finished capture only satisfies required scanning when it can be used in scoring. */
 export function hasUsableFaceScan(session: FaceScanSession | null | undefined): boolean {
   return session?.state === "COMPLETED" && session.failureCode === null && session.result !== null && session.score?.status === "SCORED";

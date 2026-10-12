@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { GeneratedReportService, assertGeneratedPdf, assertReportReadyForApproval, assertReviewedArtifact, automaticRetryDelay, cleanReportText, finishWeightHistory, normalizeGuidance, normalizeNarrative, prepareNarrativeEdit, reportBrandingFingerprint, reportToxicityAnswers } from "./generated-report";
+import { GeneratedReportService, assertGeneratedPdf, assertReportReadyForApproval, assertReviewedArtifact, automaticRetryDelay, cleanReportText, finishWeightHistory, normalizeGuidance, normalizeNarrative, prepareNarrativeEdit, reportBrandingFingerprint, reportObservations, reportToxicityAnswers } from "./generated-report";
 import { requestScoringReportContent, requestScoringToxicityOptions, scoringReportContentSchema } from "./scoring-report-content";
 import { approveGeneratedReportSchema, editGeneratedNarrativeSchema } from "../../../../packages/contracts/src/generated-report";
 
@@ -92,6 +92,25 @@ test("only allowlisted structured symptom answers and weights cross to Scoring",
     previous_weight_kg: 68, current_weight_kg: 68.1, free_text: "private patient narrative",
   } as any)).toEqual({ gastrointestinal_symptoms: ["nausea", "vomiting"], dietary_symptoms: ["fatigue"],
     appetite_status: "reduced", previous_weight_kg: 68, current_weight_kg: 68.1 });
+});
+
+test("report keeps available Vital IQ details and excludes unknown or missing provider fields", () => {
+  const metrics = reportObservations({ current_weight_kg: 62, height_cm: 175 } as any, { sections: [] } as any,
+    new Date("2026-10-12T08:00:00.000Z"), {
+      completedAt: "2026-10-12T08:00:00.000Z",
+      result: {
+        wellnessScore: 80, healthRiskScore: 20, physiologicalScore: 91, mentalWellbeingScore: null,
+        vitals: { heartRate: 66, oxygenSaturation: 96, respiratoryRate: 16, systolic: 131, diastolic: 84 },
+        additionalMetrics: { sdnn: 42, pnn50: 0, bodyFat: 21, vo2max: null, unknownVendorField: "not for report" },
+      },
+      score: { status: "SCORED", points: 3, stressIndex: 1.6, stressBand: "average" },
+    });
+  expect(metrics.filter(metric => metric.source === "face_scan").map(metric => metric.id)).toEqual([
+    "vital_iq_points", "wellness_score", "health_risk_score", "physiological_score", "heart_rate", "oxygen_saturation",
+    "respiratory_rate", "systolic", "diastolic", "sdnn", "pnn50", "stress_index", "body_fat", "stress_band",
+  ]);
+  expect(metrics.find(metric => metric.id === "pnn50")?.value).toBe("0");
+  expect(metrics.find(metric => metric.id === "body_fat")?.unit).toBe("%");
 });
 
 test("Scoring guidance boundary strips unknown proprietary fields and rejects malformed care plans", () => {

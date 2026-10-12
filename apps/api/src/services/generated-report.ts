@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq, isNull, lt, ne, or, lte, like, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
-import { formatAssessmentReference, hasPermission, reportBrandingPayload, type AssessmentFormManifest, type FormAnswers } from "@niq/application-contracts";
+import { faceScanAdditionalMetricGroups, formatAssessmentReference, hasPermission, reportBrandingPayload, type AssessmentFormManifest, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
 import type { GeneratedReport, GeneratedReportSection, GeneratedNarrative } from "../../../../packages/contracts/src/generated-report";
 import { assessmentScoreResultSchema, type AssessmentPatient } from "../../../../packages/contracts/src/assessment-workflow";
 import { assessmentFaceScans, assessmentSubmissions, assessments, generatedReportArtifacts, generatedReports, organizationBrandAssets, organizations } from "../db/schema";
@@ -148,7 +148,7 @@ export function reportToxicityAnswers(answers: FormAnswers): NonNullable<ReportF
   };
 }
 
-function reportObservations(answers: FormAnswers, manifest: AssessmentFormManifest, completedAt: Date, scan: unknown) {
+export function reportObservations(answers: FormAnswers, manifest: AssessmentFormManifest, completedAt: Date, scan: unknown) {
   const metrics: GeneratedReport["metrics"] = [];
   const add = (id: string, label: string, raw: number | string | null | undefined, unit?: string, source: "assessment" | "face_scan" = "assessment", measuredAt?: string) => {
     if (raw === null || raw === undefined || raw === "") return;
@@ -167,20 +167,22 @@ function reportObservations(answers: FormAnswers, manifest: AssessmentFormManife
   }
   for (const symptom of list(answers.dietary_symptoms).slice(0, 10))
     add(symptom, "Reported dietary symptom", fieldLabel(manifest,"dietary_symptoms",symptom) ?? symptom);
-  const session = scan as { completedAt?: string | null; result?: {
-    wellnessScore?: number | null; healthRiskScore?: number | null;
-    vitals?: { heartRate?: number | null; oxygenSaturation?: number | null; respiratoryRate?: number | null; systolic?: number | null; diastolic?: number | null };
-  }; score?: { stressIndex?: number | null; stressBand?: string | null } } | null;
+  const session = scan as FaceScanSession | null;
   const measuredAt = session?.completedAt ?? undefined;
   const face = (id: string, label: string, raw: number | string | null | undefined, unit?: string) => add(id,label,raw,unit,"face_scan",measuredAt);
+  if (session?.score?.status === "SCORED") face("vital_iq_points","Vital IQ points",session.score.points);
   face("wellness_score","Wellness score",session?.result?.wellnessScore,"/100");
   face("health_risk_score","Health risk score",session?.result?.healthRiskScore,"/100");
+  face("physiological_score","Physiological health score",session?.result?.physiologicalScore,"/100");
+  face("mental_wellbeing_score","Mental wellbeing score",session?.result?.mentalWellbeingScore,"/100");
   face("heart_rate","Heart rate",session?.result?.vitals?.heartRate,"bpm");
   face("oxygen_saturation","Oxygen saturation",session?.result?.vitals?.oxygenSaturation,"%");
   face("respiratory_rate","Breathing rate",session?.result?.vitals?.respiratoryRate,"/min");
   face("systolic","Systolic blood pressure",session?.result?.vitals?.systolic,"mmHg");
   face("diastolic","Diastolic blood pressure",session?.result?.vitals?.diastolic,"mmHg");
-  face("stress_index","Stress index",session?.score?.stressIndex);
+  const details = session?.result?.additionalMetrics;
+  for (const group of faceScanAdditionalMetricGroups) for (const metric of group.metrics)
+    face(metric.id, metric.label, metric.key === "stressIndex" ? session?.score?.stressIndex ?? details?.stressIndex : details?.[metric.key], metric.unit);
   face("stress_band","Stress band",session?.score?.stressBand);
   return metrics;
 }

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { FaceScanSession } from "@niq/application-contracts";
+import { faceScanAdditionalMetricGroups, type FaceScanSession } from "@niq/application-contracts";
 import { Activity, BicepsFlexed, Brain, CalendarDays, ChartNoAxesCombined, ChevronRight, Droplet, Droplets, Gauge, Heart, HeartPulse, Percent, PersonStanding, Ruler, ScanFace, Shield, Target, TrendingUp, UserRound, Weight, Wind, Zap, type LucideIcon } from "lucide-react";
 import { scanPostureLabels } from "./face-scan-posture";
 import { assessFaceScanRange } from "./face-scan-reference-ranges";
@@ -51,26 +51,18 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
   if (!session.result) return null;
   const r = session.result;
   const metric = (key: string, label: string, unit = ""): Metric => ({ key, label, unit, icon: detailIcons[key], value: r.additionalMetrics?.[key] ?? null });
-  const groups: Array<{ title: string; icon: LucideIcon; metrics: Metric[] }> = [
-    { title: "Heart & circulation", icon: HeartPulse, metrics: [
-      metric("sdnn", "SDNN", "ms"), metric("rmssd", "RMSSD", "ms"), metric("pnn50", "PNN50", "%"),
-      metric("cardiacOutput", "Cardiac output", "L/min"), metric("meanArterialPressure", "Mean arterial pressure", "mmHg"),
-      metric("heartUtilisation", "Heart utilisation", "%"), metric("heartRateMax", "Maximum heart rate", "bpm"),
-      metric("heartRateReserve", "Heart-rate reserve", "bpm"), metric("targetHeartRateRange", "Target heart-rate range", "bpm"),
-      metric("stressIndex", "Stress index"), metric("prq", "Pulse-respiration quotient"),
-    ] },
-    { title: "Body & fitness", icon: BicepsFlexed, metrics: [
-      metric("bmi", "Scan BMI", "kg/m²"), metric("vo2max", "VO₂ max", "mL/kg/min"), metric("intensity", "Activity intensity"),
-      metric("bodyFat", "Body fat", "%"), metric("totalBodyWater", "Total body water"), metric("bodyWaterPercent", "Body water", "%"),
-      metric("bloodVolume", "Blood volume"),
-    ] },
-    { title: "Other scores", icon: ChartNoAxesCombined, metrics: [
-      metric("heartHealthScore", "Heart health score", "/ 100"),
-      { label: "Physiological health score", value: r.physiologicalScore, unit: "/ 100", icon: Activity },
-      { label: "Mental wellbeing score", value: r.mentalWellbeingScore, unit: "/ 100", icon: Brain },
-      metric("hba1c", "HbA1c", "%"), metric("diabetesControlScore", "Diabetes control score", "/ 100"),
-    ] },
-  ];
+  const groupIcons = { circulation: HeartPulse, fitness: BicepsFlexed, other: ChartNoAxesCombined };
+  const groups: Array<{ title: string; icon: LucideIcon; metrics: Metric[] }> = faceScanAdditionalMetricGroups.map(group => ({
+    title: group.title,
+    icon: groupIcons[group.id],
+    metrics: [
+      ...group.metrics.map(item => metric(item.key, item.label, item.unit)),
+      ...(group.id === "other" ? [
+        { label: "Physiological health score", value: r.physiologicalScore, unit: "/100", icon: Activity },
+        { label: "Mental wellbeing score", value: r.mentalWellbeingScore, unit: "/100", icon: Brain },
+      ] : []),
+    ],
+  }));
   // A partial pressure reading must not look like a complete measurement.
   const bloodPressure = r.vitals.systolic === null && r.vitals.diastolic === null ? null : `${r.vitals.systolic ?? "—"}/${r.vitals.diastolic ?? "—"}`;
   const vitals: Metric[] = [
