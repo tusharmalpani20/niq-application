@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import type { GeneratedReport } from "@niq/application-contracts";
 import sharp from "sharp";
 import { renderGeneratedReportPdf } from "./report-pdf";
@@ -25,4 +26,11 @@ test("server renders a branded PDF with or without a valid logo", async () => {
     expect(Buffer.from(bytes.subarray(0, 5)).toString()).toBe("%PDF-");
     expect(bytes.length).toBeGreaterThan(1000);
   }
+});
+
+test("a new PDF uses the organization's current color theme", async () => {
+  const first = await renderGeneratedReportPdf(report, { name: "Example Clinic", primaryColor: "#138f94", secondaryColor: "#294e7d" });
+  const second = await renderGeneratedReportPdf(report, { name: "Example Clinic", primaryColor: "#a04362", secondaryColor: "#692a81" });
+  const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+  expect(digest(first)).not.toBe(digest(second));
 });
