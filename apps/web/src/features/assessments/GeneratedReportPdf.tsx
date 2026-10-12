@@ -3,13 +3,18 @@ import type { ReactNode } from "react";
 import type { GeneratedReport } from "./generated-report-api";
 import { cleanWeights, metricText, reportAge, reportDate, reportGuidance, weightChange } from "./generated-report-format";
 import { weightChartPoints } from "./generated-report-chart";
+import { accessibleBrandInk } from "@/lib/colour-contrast";
 
-type PdfBrand = { name: string; primaryColor: string; logoDataUrl: string | null };
+type PdfBrand = { name: string; primaryColor: string; secondaryColor?: string; logoDataUrl: string | null };
 const ink = "#173447";
 const muted = "#5c7480";
 const pale = "#eef7f7";
 const border = "#d8e6e8";
 let fontsRegistered = false;
+
+function tint(hex: string, amount: number) {
+  return `#${[1, 3, 5].map(offset => Math.round(parseInt(hex.slice(offset, offset + 2), 16) * amount + 255 * (1 - amount)).toString(16).padStart(2, "0")).join("")}`;
+}
 
 export function registerReportPdfFonts(regularSrc: string, boldSrc: string) {
   if (fontsRegistered) return;
@@ -66,8 +71,10 @@ function PdfLogo({ brand, cover = false }: { brand: PdfBrand; cover?: boolean })
 }
 
 function PdfSection({ report, brand, title, children }: { report: GeneratedReport; brand: PdfBrand; title: string; children: ReactNode }) {
+  const color = /^#[0-9a-f]{6}$/i.test(brand.primaryColor) ? brand.primaryColor : "#239ca3";
+  const headerColor = accessibleBrandInk(color, ["#ffffff"]);
   return <Page size="A4" style={styles.page} wrap>
-    <View fixed style={styles.pageHeader}><Text style={styles.pageTitle}>{title}</Text><PdfLogo brand={brand}/></View>
+    <View fixed style={[styles.pageHeader, { borderBottomColor: color }]}><Text style={[styles.pageTitle, { color: headerColor }]}>{title}</Text><PdfLogo brand={brand}/></View>
     <View fixed style={styles.footer}><Text>{brand.name} | Clinical nutrition report</Text><Text render={({ pageNumber, totalPages }) => `${report.assessment.reference} | ${pageNumber} / ${totalPages}`}/></View>
     {report.status !== "APPROVED" && <Text fixed style={styles.watermark}>DRAFT - NOT APPROVED</Text>}
     {children}
@@ -93,6 +100,9 @@ function toxicitySource(item: GeneratedReport["guidance"]["sections"][number]) {
 
 export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport; brand: PdfBrand }) {
   const color = /^#[0-9a-f]{6}$/i.test(brand.primaryColor) ? brand.primaryColor : "#239ca3";
+  const secondaryColor = brand.secondaryColor && /^#[0-9a-f]{6}$/i.test(brand.secondaryColor) ? brand.secondaryColor : color;
+  const brandInk = accessibleBrandInk(color, ["#ffffff", tint(color, 0.11)]);
+  const softColor = tint(color, 0.11);
   const faceMetrics = report.metrics.filter(metric => metric.source === "face_scan");
   const assessmentMetrics = report.metrics.filter(metric => metric.source === "assessment");
   const weights = cleanWeights(report);
@@ -105,51 +115,52 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
   const nutritionKinds = ["nutrition", "radiotherapy", "product", "comorbidity", "treatment"] as const;
   const hasNutrition = nutritionKinds.some(kind => reportGuidance(report, kind).length > 0);
   return <Document title={`Clinical nutrition report - ${report.assessment.reference}`} author={brand.name} subject="Clinical nutrition assessment">
-    <Page size="A4" style={styles.cover}>
+    <Page size="A4" style={[styles.cover, { backgroundColor: tint(color, 0.045) }]}>
       <PdfLogo brand={brand} cover/>
-      <Text style={[styles.kicker, { color, marginTop: 90 }]}>{report.status === "APPROVED" ? "Approved assessment report" : "Draft for clinical review"}</Text>
+      <Text style={[styles.kicker, { color: brandInk, marginTop: 90 }]}>{report.status === "APPROVED" ? "Approved assessment report" : "Draft for clinical review"}</Text>
       <Text style={styles.coverTitle}>Medical{"\n"}Nutrition{"\n"}Therapy Report</Text>
-      <Svg width="460" height="175"><Path d="M 230 170 C 260 10, 395 -10, 470 75" stroke={color} strokeWidth="32" fill="none" opacity="0.15"/><Path d="M 280 180 C 310 55, 405 25, 470 90" stroke={color} strokeWidth="9" fill="none" opacity="0.6"/></Svg>
+      <Svg width="460" height="175"><Path d="M 230 170 C 260 10, 395 -10, 470 75" stroke={color} strokeWidth="32" fill="none" opacity="0.15"/><Path d="M 280 180 C 310 55, 405 25, 470 90" stroke={secondaryColor} strokeWidth="9" fill="none" opacity="0.6"/></Svg>
       <Text style={styles.coverPatient}>{report.patient.displayName}</Text>
       <Text style={styles.coverDetail}>{report.patient.reference} | {report.assessment.reference}</Text>
-      <Text style={styles.coverDetail}>Assessment: {reportDate(report.assessment.completedAt)}</Text>
-      <View style={styles.coverBand}><Text style={styles.coverBandText}>Rule-based guidance  |  {report.status === "APPROVED" ? "Clinician approved" : "Clinical review required"}  |  Built around the saved assessment</Text></View>
+      {report.assessment.completedAt && <Text style={styles.coverDetail}>Assessment: {reportDate(report.assessment.completedAt)}</Text>}
+      <View style={[styles.coverBand, { backgroundColor: softColor }]}><Text style={styles.coverBandText}>Rule-based guidance  |  {report.status === "APPROVED" ? "Clinician approved" : "Clinical review required"}  |  Built around the saved assessment</Text></View>
       {report.status !== "APPROVED" && <Text fixed style={styles.watermark}>DRAFT - NOT APPROVED</Text>}
       <View fixed style={styles.footer}><Text>{brand.name}</Text><Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}/></View>
     </Page>
     <PdfSection report={report} brand={brand} title="Patient overview">
-      <View style={styles.feature}><Text style={styles.headline}>{report.patient.displayName}</Text><Text style={styles.small}>{report.patient.reference} | {age === null ? "Age not available" : `${age} years`} | {report.patient.gender || "Gender not recorded"}</Text><Text style={styles.small}>Assessment completed {reportDate(report.assessment.completedAt)}</Text></View>
-      {report.narrative.overview ? <View style={styles.card}><Text style={[styles.label, { color }]}>Clinical overview</Text><Text style={styles.body}>{report.narrative.overview}</Text></View> : <View/>}
-      <View style={styles.wrapRow}>{assessmentMetrics.map(metric => <View key={metric.id} style={[styles.card, styles.cardHalf]}><Text style={styles.cardLabel}>{metric.label}</Text><Text style={styles.cardValue}>{metricText(metric)}</Text>{metric.measuredAt && <Text style={styles.small}>{reportDate(metric.measuredAt)}</Text>}</View>)}</View>
+      <View style={[styles.feature, { backgroundColor: softColor }]}><Text style={styles.headline}>{report.patient.displayName}</Text><Text style={styles.small}>{[report.patient.reference, age === null ? null : `${age} years`, report.patient.gender].filter(Boolean).join(" | ")}</Text>{report.assessment.completedAt && <Text style={styles.small}>Assessment completed {reportDate(report.assessment.completedAt)}</Text>}</View>
+      {report.narrative.overview ? <View style={styles.card}><Text style={[styles.label, { color: brandInk }]}>Clinical overview</Text><Text style={styles.body}>{report.narrative.overview}</Text></View> : <View/>}
+      <View style={styles.wrapRow}>{assessmentMetrics.map(metric => <View key={metric.id} style={[styles.card, styles.cardHalf, { borderTopWidth: 3, borderTopColor: secondaryColor }]}><Text style={styles.cardLabel}>{metric.label}</Text><Text style={styles.cardValue}>{metricText(metric)}</Text>{metric.measuredAt && <Text style={styles.small}>{reportDate(metric.measuredAt)}</Text>}</View>)}</View>
     </PdfSection>
     {faceMetrics.length > 0 && <PdfSection report={report} brand={brand} title="Vital IQ - Face scan">
       <Text style={styles.intro}>Face-scan readings are separate from the NIQ assessment risk score.</Text>
-      <View style={styles.wrapRow}>{faceMetrics.map(metric => <View key={metric.id} style={[styles.card, styles.cardThird]}><Text style={styles.cardLabel}>{metric.label}</Text><Text style={styles.cardValue}>{metricText(metric)}</Text>{metric.measuredAt && <Text style={styles.small}>{reportDate(metric.measuredAt)}</Text>}</View>)}</View>
+      <View style={styles.wrapRow}>{faceMetrics.map(metric => <View key={metric.id} style={[styles.card, styles.cardThird, { borderTopWidth: 3, borderTopColor: secondaryColor }]}><Text style={styles.cardLabel}>{metric.label}</Text><Text style={styles.cardValue}>{metricText(metric)}</Text>{metric.measuredAt && <Text style={styles.small}>{reportDate(metric.measuredAt)}</Text>}</View>)}</View>
     </PdfSection>}
     {(report.classification || weights.length > 0 || report.narrative.keyFindings) && <PdfSection report={report} brand={brand} title="Nutrition status and findings">
-      {report.classification && <View style={styles.feature}><Text style={[styles.label, { color }]}>NIQ assessment</Text><Text style={[styles.score, { color }]}>{report.classification.score} points</Text><Text style={styles.headline}>{report.classification.label}</Text></View>}
-      {report.narrative.keyFindings && <View style={styles.card}><Text style={[styles.label, { color }]}>Key findings</Text><Text style={styles.body}>{report.narrative.keyFindings}</Text></View>}
+      {report.classification && <View style={[styles.feature, { backgroundColor: softColor }]}><Text style={[styles.label, { color: brandInk }]}>NIQ assessment</Text><Text style={[styles.score, { color: brandInk }]}>{report.classification.score} points</Text><Text style={styles.headline}>{report.classification.label}</Text></View>}
+      {report.narrative.keyFindings && <View style={styles.card}><Text style={[styles.label, { color: brandInk }]}>Key findings</Text><Text style={styles.body}>{report.narrative.keyFindings}</Text></View>}
       {weights.length > 0 && <View style={styles.chartBox}><Text style={styles.subhead}>Weight trend</Text>
         {change && <Text style={styles.small}>{change.percentage > 0 ? "+" : ""}{change.percentage.toFixed(1)}% from {change.basis}</Text>}
         {chart.length > 1 ? <><Svg style={styles.chart} viewBox="0 0 500 145">
+          <Path d={`M ${chart[0]!.x} 107 ${chart.map(point => `L ${point.x} ${point.y}`).join(" ")} L ${chart[chart.length - 1]!.x} 107 Z`} fill={color} opacity="0.08"/>
           <Path d={chart.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ")} stroke={color} strokeWidth="3" fill="none"/>
           {chart.map((point, index) => <Circle key={`${point.date ?? "undated"}-${index}`} cx={point.x} cy={point.y} r="5" fill="#ffffff" stroke={color} strokeWidth="2"/>)}
-        </Svg><View style={styles.chartLabels}>{weights.map((item, index) => <Text key={`${item.date ?? "undated"}-${index}`}>{item.label || reportDate(item.date)}{"\n"}{item.kg} kg</Text>)}</View></> : <Text style={styles.body}>{weights[0]!.kg} kg recorded {weights[0]!.label || reportDate(weights[0]!.date)}. A trend appears when another weight is available.</Text>}
+        </Svg><View style={styles.chartLabels}>{weights.map((item, index) => <Text key={`${item.date ?? "undated"}-${index}`}>{item.label || reportDate(item.date)}{"\n"}{item.kg} kg</Text>)}</View></> : <Text style={styles.body}>{weights[0]!.kg} kg recorded {weights[0]!.label || reportDate(weights[0]!.date)}</Text>}
       </View>}
     </PdfSection>}
     {hasNutrition && <PdfSection report={report} brand={brand} title="Nutrition and care plan">
       <Text style={styles.intro}>Guidance matched to this assessment and its saved rule version. The treating clinician should individualise the plan.</Text>
-      <GuidancePdf report={report} kinds={[...nutritionKinds]} color={color}/>
+      <GuidancePdf report={report} kinds={[...nutritionKinds]} color={brandInk}/>
     </PdfSection>}
     {toxicities.length > 0 && <PdfSection report={report} brand={brand} title={hasMatchedToxicities ? "Matched treatment effects and nutrition guidance" : "Possible treatment effects - earlier report"}>
       {hasMatchedToxicities && <Text style={styles.intro}>This nutrition guidance follows assessment answers, recorded weight change, or clinician confirmation. It does not establish that treatment caused an effect.</Text>}
       {hasLegacyToxicities && <View style={styles.caution}><Text>Some guidance in this earlier report lists possible drug-class effects. Those entries are not confirmed symptoms for this patient.</Text></View>}
-      {toxicities.map(item => <View key={item.id} style={styles.toxicityRow} wrap={item.text.length > 1200}><View style={styles.toxicityLabel}><Text style={[styles.label, { color }]}>{item.drugClass || "Selected drug class"}</Text><Text style={styles.subhead}>{item.title}</Text><Text style={styles.small}>{toxicitySource(item)}</Text></View><Text style={styles.toxicityText}>{item.text}</Text></View>)}
+      {toxicities.map(item => <View key={item.id} style={styles.toxicityRow} wrap={item.text.length > 1200}><View style={styles.toxicityLabel}><Text style={[styles.label, { color: brandInk }]}>{item.drugClass || "Selected drug class"}</Text><Text style={styles.subhead}>{item.title}</Text><Text style={styles.small}>{toxicitySource(item)}</Text></View><Text style={styles.toxicityText}>{item.text}</Text></View>)}
     </PdfSection>}
     {(report.narrative.actionSummary || report.narrative.monitoringSummary) && <PdfSection report={report} brand={brand} title="Action plan and monitoring">
-      {report.narrative.actionSummary && <View style={styles.card}><Text style={[styles.label, { color }]}>Action plan</Text><Text style={styles.body}>{report.narrative.actionSummary}</Text></View>}
-      {report.narrative.monitoringSummary && <View style={styles.card}><Text style={[styles.label, { color }]}>What to monitor</Text><Text style={styles.body}>{report.narrative.monitoringSummary}</Text></View>}
-      <View style={styles.feature}><Text style={styles.small}>This report was prepared from a saved assessment and rule version. Review new or worsening symptoms with the treating clinical team.</Text></View>
+      {report.narrative.actionSummary && <View style={styles.card}><Text style={[styles.label, { color: brandInk }]}>Action plan</Text><Text style={styles.body}>{report.narrative.actionSummary}</Text></View>}
+      {report.narrative.monitoringSummary && <View style={styles.card}><Text style={[styles.label, { color: brandInk }]}>What to monitor</Text><Text style={styles.body}>{report.narrative.monitoringSummary}</Text></View>}
+      <View style={[styles.feature, { backgroundColor: softColor }]}><Text style={styles.small}>This report was prepared from a saved assessment and rule version. Review new or worsening symptoms with the treating clinical team.</Text></View>
     </PdfSection>}
   </Document>;
 }
