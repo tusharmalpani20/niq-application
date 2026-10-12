@@ -3,6 +3,7 @@ import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
 import { projectScoreReviews, type AssessmentWorkflow, type AssessmentScoreResult, type ScoreReviewEntry, type AssessmentScoreReviews } from "@niq/application-contracts";
 import { AssessmentScoreReview } from "./AssessmentScoreReview";
 import { AssessmentRiskCircle } from "./AssessmentRiskCircle";
@@ -19,7 +20,7 @@ async function harness(run:(ctx:{click:(name:string)=>Promise<void>;posts:any[];
  for(const [key,value] of Object.entries(values))Object.defineProperty(globalThis,key,{value,configurable:true});
  Object.assign(dom.window.HTMLElement.prototype,{attachEvent(){},detachEvent(){}});
  const root=createRoot(document.getElementById("root")!); const flush=()=>new Promise(resolve=>setTimeout(resolve,0));
- try {await act(async()=>{root.render(<AssessmentScoreReview record={{...record,result:scoredResult}} organizationId="org" renderScan={()=><p>Scan details</p>} reportsContent={<p>Report details</p>}/>);await flush();});await run({posts,rerender:async(next,canReview=true,scanStatus)=>{await act(async()=>{root.render(<AssessmentScoreReview record={next} organizationId="org" canReview={canReview} scanStatus={scanStatus} renderScan={()=><p>Scan details</p>} reportsContent={<p>Report details</p>}/>);await flush();});},click:async name=>{const button=[...document.querySelectorAll("button")].find(b=>(b.getAttribute("aria-label")??b.textContent?.trim())===name);if(!button)throw new Error(`Missing ${name}`);await act(async()=>{button.click();await flush();});}});}finally{await act(async()=>root.unmount());dom.window.close();for(const [key,value] of Object.entries(previous))if(value)Object.defineProperty(globalThis,key,value);else delete (globalThis as any)[key];}
+ try {await act(async()=>{root.render(<MemoryRouter><AssessmentScoreReview record={{...record,result:scoredResult}} organizationId="org" renderScan={()=><p>Scan details</p>} reportsContent={<p>Report details</p>}/></MemoryRouter>);await flush();});await run({posts,rerender:async(next,canReview=true,scanStatus)=>{await act(async()=>{root.render(<MemoryRouter><AssessmentScoreReview record={next} organizationId="org" canReview={canReview} scanStatus={scanStatus} renderScan={()=><p>Scan details</p>} reportsContent={<p>Report details</p>}/></MemoryRouter>);await flush();});},click:async name=>{const button=[...document.querySelectorAll("button")].find(b=>(b.getAttribute("aria-label")??b.textContent?.trim())===name);if(!button)throw new Error(`Missing ${name}`);await act(async()=>{button.click();await flush();});}});}finally{await act(async()=>root.unmount());dom.window.close();for(const [key,value] of Object.entries(previous))if(value)Object.defineProperty(globalThis,key,value);else delete (globalThis as any)[key];}
 }
 test("score ring uses the selected risk color without a range legend while reviewed risk stays separate", async()=>harness(async()=>{
  const circle=document.querySelector('[data-risk-circle]');
@@ -72,19 +73,19 @@ test("summary keeps scored answers readable without score edit controls", async 
   expect(openSection?.className).toContain("border-primary/30");
   expect(openSection?.querySelector('button[aria-expanded="true"]')?.className).toContain("aria-expanded:bg-primary/10");
   expect(document.querySelector("form")).toBeNull();
-  await click("Face scan");
+  await click("Vital IQ");
   expect(document.getElementById("score-section-face_scan")?.hidden).toBe(false);
   await click("Attachments");
   expect(document.getElementById("score-section-reports")?.hidden).toBe(false);
   expect(posts).toHaveLength(0);
 }));
 
-test("available but unperformed face scan shows no Vital IQ score", async () => harness(async ({ rerender }) => {
-  await rerender(record, true, "Face scan ready");
+test("available but unperformed Vital IQ capture shows no Vital IQ score", async () => harness(async ({ rerender }) => {
+  await rerender(record, true, "Vital IQ ready");
   const row = document.getElementById("score-section-face_scan")?.previousElementSibling;
   expect(row?.textContent).toContain("Not done");
   expect(row?.textContent).toContain("Vital IQ —");
-  expect(row?.textContent).not.toContain("Face scan ready");
+  expect(row?.textContent).not.toContain("Vital IQ ready");
 }, [], undefined, result, null));
 
 test("all original and reviewed scores remain visible without adjustment actions", async () => harness(async ({ click, posts }) => {
@@ -94,7 +95,7 @@ test("all original and reviewed scores remain visible without adjustment actions
   expect(document.body.textContent).toContain("Reviewer Two");
   await click("Disease status");
   expect(document.body.textContent).toContain("Reviewed 11 pts");
-  await click("Face scan");
+  await click("Vital IQ");
   expect(document.body.textContent).toContain("Vital IQ 8");
   expect(document.body.textContent).not.toContain("Vital IQ 8 pts");
   expect(document.querySelector('[aria-label^="Adjust "]')).toBeNull();

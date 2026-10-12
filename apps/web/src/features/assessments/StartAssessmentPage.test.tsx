@@ -71,7 +71,7 @@ test("under-one patient can create an assessment and sees scan guidance in perso
     if (url.includes("/patients/")) return Response.json(infant);
     return Response.json({});
   }, async () => {
-    expect(document.body.textContent).toContain("Face scans aren't available for children under 1");
+    expect(document.body.textContent).toContain("Vital IQ captures aren't available for children under 1");
     expect([...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Continue")?.disabled).toBe(false);
   });
 });

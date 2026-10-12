@@ -80,16 +80,15 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
     { key: "respiratoryRate", label: "Breathing", value: r.vitals.respiratoryRate, unit: "/min", icon: Wind },
   ];
   const scores: Array<Metric & { icon: LucideIcon }> = [
-    { label: "Vital IQ score", value: session.score?.status === "SCORED" ? session.score.points ?? null : null, unit: "", icon: ScanFace },
+    { label: "NIQ points from Vital IQ", value: session.score?.status === "SCORED" ? session.score.points ?? null : null, unit: "", icon: ScanFace },
     { label: "Wellness score", value: r.wellnessScore, unit: "/100", icon: HeartPulse },
     { label: "Health risk score", value: r.healthRiskScore, unit: "/100", icon: Shield },
   ];
-  return <section aria-label="Face scan results" className="@container space-y-4">
+  return <section aria-label="Vital IQ results" className="@container space-y-4">
     <p role="status" className="text-xs text-muted-foreground">Completed{session.completedAt ? ` · ${new Date(session.completedAt).toLocaleString()}` : ""}</p>
     <dl className="grid gap-4 rounded-xl border border-border bg-card py-4 @min-[30rem]:grid-cols-3">
       {scores.map(item => <div key={item.label} className="min-w-0 px-4"><dt className="flex items-center gap-2 text-sm text-muted-foreground"><item.icon className="size-4 shrink-0 text-primary" aria-hidden="true" />{item.label}</dt><dd className="mt-1 text-2xl font-semibold tabular-nums">{item.value ?? "—"}{item.value != null && item.unit && <span className="ml-1 text-base font-normal text-muted-foreground">{item.unit}</span>}</dd></div>)}
     </dl>
-    {session.score?.status === "SCORED" && session.score.stressPoints != null && <p className="text-sm text-muted-foreground">Vital IQ points: Overall Health Score {session.score.wellnessPoints ?? "—"} + stress ({session.score.stressBand ?? "unknown"}) {session.score.stressPoints}.</p>}
     <dl className="grid grid-cols-2 gap-3 @min-[44rem]:grid-cols-4">{vitals.map(item => {
       const assessment = item.key ? assessFaceScanRange(item.key, item.value, session.context) : null;
       return <div key={item.label} className="min-w-0 rounded-xl border border-border bg-card p-3">
@@ -104,7 +103,7 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
         <MetricRows metrics={group.metrics} context={session.context}/>
       </ResultGroup>;
     })}
-    <ResultGroup title="Scan details" icon={ScanFace}>
+    <ResultGroup title="Vital IQ capture details" icon={ScanFace}>
       <MetricRows context={session.context} metrics={[
         { label: "Date of birth at scan", value: session.context.dob, unit: "", icon: CalendarDays },
         { label: "Gender at scan", value: session.context.gender === "female" ? "Female" : "Male", unit: "", icon: UserRound },

@@ -14,18 +14,18 @@ test("review distinguishes questionnaire coverage from required readiness", () =
   expect(html).toContain('aria-controls="review-section-face_scan"');
   expect(html).toContain('>Done</span>');
   expect(html).toContain("Loading saved scan results…");
-  expect(html).toContain("Go to Face scan");
+  expect(html).toContain("Go to Vital IQ");
   expect(html).toContain("No attachments added.");
   expect(html).not.toContain("Review attachments");
-  expect(html.indexOf("Face scan")).toBeGreaterThan(html.indexOf("Personal details"));
+  expect(html.indexOf("Vital IQ")).toBeGreaterThan(html.indexOf("Personal details"));
   expect(html.indexOf('>Attachments</button>')).toBeGreaterThan(html.indexOf('>Dietary details</button>'));
 });
 
-test("review includes saved face scan measurements inside its Face scan section", () => {
+test("review includes saved Vital IQ capture measurements inside its Vital IQ section", () => {
   const record = { manifest: buildAssessmentForm(assessmentQuestionnaireFixture()), reports: [], attestations: [], status: "DRAFT" } as unknown as AssessmentWorkflow;
   const scanSession = faceScanSessionSchema.parse({ id: "scan", state: "COMPLETED", context: { dob: "1990-01-01", gender: "female", heightCm: 165, weightKg: 60, posture: "resting", employeeId: "operator" }, createdAt: "2026-09-22T00:00:00Z", updatedAt: "2026-09-22T00:00:00Z", completedAt: "2026-09-22T00:00:00Z", failureCode: null, score: null, result: { schemaVersion: 1, providerScanId: "scan", wellnessScore: 85, healthRiskScore: 15, physiologicalScore: null, mentalWellbeingScore: null, vitals: { heartRate: 82, oxygenSaturation: 99, respiratoryRate: 16, systolic: 124, diastolic: 79 }, additionalMetrics: { sdnn: 45.78 } } });
   const html = renderToStaticMarkup(<AssessmentReview record={record} answers={{}} scanStatus="Done" scanSession={scanSession} organizationId="org" assessmentId="assessment" onSection={() => {}}/>);
-  expect(html).toContain('aria-label="Face scan results"');
+  expect(html).toContain('aria-label="Vital IQ results"');
   expect(html).toContain("Blood pressure");
   expect(html).toContain("124/79");
   expect(html).toContain("SDNN");

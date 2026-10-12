@@ -23,9 +23,9 @@ const terminal = new Set(["COMPLETED", "FAILED", "EXPIRED", "CANCELLED"]);
 const cancellable = new Set(["REQUESTED", "UPLOAD_ACCEPTED", "PAUSED"]);
 function failedScanMessage(code: string | null): string {
   switch (code) {
-    case "MONTHLY_LIMIT_REACHED": return "Face scanning isn't available right now. You can complete the other sections and return to the scan later. Please contact your clinic administrator if you need help.";
-    case "CAPABILITY_DISABLED": case "FACE_SCAN_DISABLED": return "Face scanning is not enabled for this scoring connection. Ask your administrator to check access before trying again.";
-    case "FACE_SCAN_MAPPING_UNAVAILABLE": return "The face-scan scoring rule is unavailable. Ask your administrator to check the scoring setup before trying again.";
+    case "MONTHLY_LIMIT_REACHED": return "Vital IQ capture isn't available right now. You can complete the other sections and return to the scan later. Please contact your clinic administrator if you need help.";
+    case "CAPABILITY_DISABLED": case "FACE_SCAN_DISABLED": return "Vital IQ capture is not enabled for this scoring connection. Ask your administrator to check access before trying again.";
+    case "FACE_SCAN_MAPPING_UNAVAILABLE": return "The Vital IQ scoring rule is unavailable. Ask your administrator to check the scoring setup before trying again.";
     case "UNAUTHORIZED": case "CLIENT_NOT_ALLOWED": return "The scan service rejected this connection. Ask your administrator to check its credentials and access before trying again.";
     case "DEVICE_NOT_SUPPORTED": return "This device is not supported by the scan service. Try a supported device before starting another scan.";
     case "PATIENT_AGE_UNSUPPORTED": return "The scan provider rejected this attempt because the saved birth date showed the patient was under 1. If the date has been corrected, you can start another scan.";
@@ -100,7 +100,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const quotaRestored = quotaFailure && availability?.available === true;
   const quotaUnavailable = quotaFailure && !quotaRestored;
   const ageIneligible = isUnderOneYearOldForFaceScan(record.patient.dateOfBirth);
-  const statusLabel = phase === "capturing" ? "Capturing scan" : phase === "preparing" ? "Preparing scan" : phase === "uploading" ? "Uploading scan" : ageIneligible ? "Face scan unavailable" : quotaRestored ? "Face scan ready" : quotaUnavailable ? "Face scan unavailable" : session ? rejected ? "Scan failed" : session.state === "COMPLETED" && !hasUsableFaceScan(session) ? "Scan result unavailable" : session.state === "REQUESTED" && record.status !== "DRAFT" ? "Scan not completed" : labels[session.state] : data?.enabled ? "Face scan ready" : "Face scan unavailable";
+  const statusLabel = phase === "capturing" ? "Capturing scan" : phase === "preparing" ? "Preparing scan" : phase === "uploading" ? "Uploading scan" : ageIneligible ? "Vital IQ unavailable" : quotaRestored ? "Vital IQ ready" : quotaUnavailable ? "Vital IQ unavailable" : session ? rejected ? "Scan failed" : session.state === "COMPLETED" && !hasUsableFaceScan(session) ? "Scan result unavailable" : session.state === "REQUESTED" && record.status !== "DRAFT" ? "Scan not completed" : labels[session.state] : data?.enabled ? "Vital IQ ready" : "Vital IQ unavailable";
   const selectedPosture = session?.state === "REQUESTED" ? session.context.posture : posture;
   const consentReady = consentApproval?.assessmentId === record.id && consentApproval.approved;
   const handleConsentApproval = useCallback((approved: boolean) => setConsentApproval({ assessmentId: record.id, approved }), [record.id]);
@@ -306,16 +306,16 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
   const canStart = !session || terminal.has(session.state) || session.state === "REQUESTED";
   const noRecordedScan = !!data && record.status !== "DRAFT" && !session && data.sessions.length === 0;
   const startButtonLabel = session?.state === "REQUESTED" ? "Resume capture"
-    : quotaRestored ? "Start face scan"
+    : quotaRestored ? "Start Vital IQ capture"
     : session?.failureCode === "PATIENT_AGE_UNSUPPORTED" ? "Start another scan"
     : session?.state === "FAILED" ? quotaUnavailable ? "Try again later" : "Try again"
-    : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start face scan";
+    : session?.state === "EXPIRED" ? "Start a new scan" : session ? "Start another scan" : "Start Vital IQ capture";
   return <div hidden={!active} className="space-y-5">
-    {!data && !stale && <p role="status">Loading face scan…</p>}
-    {data && ageIneligible && <div role="status" className="rounded-xl border border-primary/20 bg-primary/5 p-4"><p className="font-semibold">Face scan unavailable</p><p className="mt-1 text-sm text-muted-foreground">Face scans aren't available for children under 1. Continue the assessment without a scan. If the birth date is wrong, ask your clinic administrator to correct it.</p></div>}
+    {!data && !stale && <p role="status">Loading Vital IQ capture…</p>}
+    {data && ageIneligible && <div role="status" className="rounded-xl border border-primary/20 bg-primary/5 p-4"><p className="font-semibold">Vital IQ unavailable</p><p className="mt-1 text-sm text-muted-foreground">Vital IQ captures aren't available for children under 1. Continue the assessment without a scan. If the birth date is wrong, ask your clinic administrator to correct it.</p></div>}
     {stale && <div role="alert" className="space-y-2"><p>Scan status could not be refreshed. Any accepted scan continues processing.</p><Button variant="outline" onPress={() => { void refresh().catch(() => setStale(true)); }}>Refresh scan status</Button></div>}
-    {data && !data.enabled && !ageIneligible && !noRecordedScan && <div className="py-6 text-center"><ScanFace className="mx-auto mb-3 size-8 text-brand-ink" aria-hidden="true"/><h3 className="font-semibold">Face scan is not available yet</h3><p className="mt-2 text-sm text-muted-foreground">You can continue with the questionnaire. Face scanning does not affect its completion.</p></div>}
-    {noRecordedScan && <p className="py-4 text-sm text-muted-foreground">No face scan was done for this assessment.</p>}
+    {data && !data.enabled && !ageIneligible && !noRecordedScan && <div className="py-6 text-center"><ScanFace className="mx-auto mb-3 size-8 text-brand-ink" aria-hidden="true"/><h3 className="font-semibold">Vital IQ is not available yet</h3><p className="mt-2 text-sm text-muted-foreground">You can continue with the questionnaire. Vital IQ capture does not affect its completion.</p></div>}
+    {noRecordedScan && <p className="py-4 text-sm text-muted-foreground">No Vital IQ capture was done for this assessment.</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {session && (session.state === "UPLOAD_ACCEPTED" || session.state === "PROCESSING") && <div role="status" aria-label="Scan analysis status" className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
       <LoaderCircle className="mt-0.5 size-5 shrink-0 animate-spin text-primary motion-reduce:animate-none" aria-hidden="true" />
@@ -324,11 +324,11 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
     {session && !ageIneligible && session.state !== "UPLOAD_ACCEPTED" && session.state !== "PROCESSING" && !(session.state === "COMPLETED" && session.result) && <p role="status" className="font-medium">{statusLabel}{stale ? " · Last known status" : ""}</p>}
     {session?.state === "RECONCILIATION_REQUIRED" && <p className="text-sm text-muted-foreground">{rejected ? "The scan could not be processed. Please contact support before trying again. You can continue filling in the form." : "Your scan result is not available. You can continue filling in the form. Please contact support before trying another scan."}</p>}
     {session?.state === "PAUSED" && <p className="text-sm text-muted-foreground">The service has paused this scan. Its saved status will update when processing can continue.</p>}
-    {quotaRestored && <p role="status" className="text-sm text-muted-foreground">Face scans are available again. You can start a new scan. Earlier failed attempts remain in the scan history.</p>}
+    {quotaRestored && <p role="status" className="text-sm text-muted-foreground">Vital IQ captures are available again. You can start a new scan. Earlier failed attempts remain in the scan history.</p>}
     {session?.state === "FAILED" && !quotaRestored && !ageIneligible && <p className="text-sm text-muted-foreground">{failedScanMessage(session.failureCode)}</p>}
-    {quotaUnavailable && !ageIneligible && record.status === "DRAFT" && <div className="space-y-2"><Button variant="outline" isDisabled={checkingAvailability} onPress={() => { void checkAvailability(); }}>{checkingAvailability ? "Checking availability…" : "Check again"}</Button>{availabilityError && <p role="alert" className="text-sm text-destructive">We couldn’t check face scan availability. Please try again.</p>}</div>}
+    {quotaUnavailable && !ageIneligible && record.status === "DRAFT" && <div className="space-y-2"><Button variant="outline" isDisabled={checkingAvailability} onPress={() => { void checkAvailability(); }}>{checkingAvailability ? "Checking availability…" : "Check again"}</Button>{availabilityError && <p role="alert" className="text-sm text-destructive">We couldn’t check Vital IQ capture availability. Please try again.</p>}</div>}
     {session?.state === "EXPIRED" && <p className="text-sm text-muted-foreground">The attempt started on {new Date(session.createdAt).toLocaleString()} ended before analysis, so there is no measurement from that attempt. This record remains in the scan history. A new scan would measure the patient at a new time.</p>}
-    {session?.state === "COMPLETED" && record.status === "DRAFT" && <p className="text-sm text-muted-foreground">{hasUsableFaceScan(session) ? "The saved face scan is retained. Scan again only if a new measurement is needed." : "This scan did not produce a usable result. Scan again before submitting the assessment."}</p>}
+    {session?.state === "COMPLETED" && record.status === "DRAFT" && <p className="text-sm text-muted-foreground">{hasUsableFaceScan(session) ? "The saved Vital IQ capture is retained. Scan again only if a new measurement is needed." : "This scan did not produce a usable result. Scan again before submitting the assessment."}</p>}
     {changedScanInputs.length > 0 && <p role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm">The saved scan used different {changedScanInputs.join(", ")}. Its results still reflect the original scan details shown below; changing questionnaire answers does not update those results.</p>}
     {session && <FaceScanResults session={session}/>}
     {(quotaRestored || previousSessions.length > 0) && <section aria-label="Scan history" className="space-y-2">
@@ -340,12 +340,12 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
           : <p className="text-sm text-muted-foreground">{previous.state === "FAILED" ? failedScanMessage(previous.failureCode) : "This attempt did not produce a measurement."}</p>}</div>
       </details>)}
     </section>}
-    {createPortal(<div hidden={phase !== "capturing" && phase !== "preparing"} className="face-scan-capture-overlay" role="dialog" aria-modal="true" aria-label="Face scan camera">
+    {createPortal(<div hidden={phase !== "capturing" && phase !== "preparing"} className="face-scan-capture-overlay" role="dialog" aria-modal="true" aria-label="Vital IQ camera">
       <div className="face-scan-capture-panel">
-        <div className="face-scan-capture-header"><ScanFace className="size-5 shrink-0" aria-hidden="true"/><span>Face scan</span>{phase === "capturing" && <Button variant="outline" className="ml-auto" onPress={() => { void cancel(); }}>Cancel capture</Button>}</div>
+        <div className="face-scan-capture-header"><ScanFace className="size-5 shrink-0" aria-hidden="true"/><span>Vital IQ</span>{phase === "capturing" && <Button variant="outline" className="ml-auto" onPress={() => { void cancel(); }}>Cancel capture</Button>}</div>
         <div className="face-scan-camera"><video ref={video} autoPlay muted playsInline className="absolute size-px opacity-0" aria-hidden="true"/><canvas ref={canvas} className={`size-full object-contain object-center ${camera === "front" ? "-scale-x-100" : ""}`} aria-label="Camera scan preview"/></div>
         <div className="face-scan-capture-details">
-          {phase === "capturing" ? <><p role="status" aria-live="polite" className="text-center text-base font-medium">{/^\d+% Completed$/i.test(guidance) ? "Hold still and keep your face in view." : guidance}</p><Progress aria-label="Face scan capture progress" value={progress} className="[&_[data-slot=progress-track]]:h-2.5 [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-indicator]]:duration-300"><ProgressLabel>Capturing scan</ProgressLabel><ProgressValue className="font-semibold" /></Progress>{lowPerformance && <p className="text-center text-sm">Device performance is limited. Keep other applications closed during capture.</p>}</> : <p role="status" className="text-center text-base font-medium">Preparing camera…</p>}
+          {phase === "capturing" ? <><p role="status" aria-live="polite" className="text-center text-base font-medium">{/^\d+% Completed$/i.test(guidance) ? "Hold still and keep your face in view." : guidance}</p><Progress aria-label="Vital IQ capture progress" value={progress} className="[&_[data-slot=progress-track]]:h-2.5 [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-indicator]]:duration-300"><ProgressLabel>Capturing scan</ProgressLabel><ProgressValue className="font-semibold" /></Progress>{lowPerformance && <p className="text-center text-sm">Device performance is limited. Keep other applications closed during capture.</p>}</> : <p role="status" className="text-center text-base font-medium">Preparing camera…</p>}
         </div>
       </div>
     </div>, document.body)}
@@ -366,8 +366,8 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
       {session?.state === "REQUESTED" && <p className="text-sm">This attempt uses {session.context.heightCm} cm and {session.context.weightKg} kg, {scanPostureLabels[session.context.posture].toLowerCase()}. Cancel it to use changed details.</p>}
       <p role="status" className="text-sm text-muted-foreground">{consentApproval?.assessmentId !== record.id ? "Checking patient consent…" : consentReady ? "Patient consent recorded" : "Patient consent needed before capture"}</p>
       <div className="flex flex-wrap gap-3"><Button className="min-h-11 w-full border border-primary font-semibold shadow-sm disabled:border-primary/50 disabled:bg-background disabled:text-foreground disabled:opacity-100 data-disabled:border-primary/50 data-disabled:bg-background data-disabled:text-foreground data-disabled:opacity-100" isDisabled={disabled || !selectedPosture || stale} onPress={openConsent}><ScanFace className="size-4" aria-hidden="true"/>{startButtonLabel}</Button>{session?.state === "COMPLETED" && <Button variant="outline" onPress={() => { setRescanRequested(false); }}>Keep current results</Button>}{session?.state === "REQUESTED" && <Button variant="outline" isDisabled={disabled} onPress={() => { void cancel(); }}>Cancel attempt</Button>}</div>
-      {consentOpen && <Dialog isOpen ariaLabel="Patient consent before face scan" className="facility-dialog face-scan-consent-dialog" onOpenChange={open => { if (!open) cameraCheckVersion.current++; setConsentOpen(open); }}>
-        <DialogHeader><DialogTitle className="text-lg font-semibold">Before the face scan</DialogTitle></DialogHeader>
+      {consentOpen && <Dialog isOpen ariaLabel="Patient consent before Vital IQ capture" className="facility-dialog face-scan-consent-dialog" onOpenChange={open => { if (!open) cameraCheckVersion.current++; setConsentOpen(open); }}>
+        <DialogHeader><DialogTitle className="text-lg font-semibold">Before the Vital IQ capture</DialogTitle></DialogHeader>
         <div className="facility-dialog-fields min-h-0 overflow-y-auto">
           <FaceScanConsent key={record.id} organizationId={organizationId} assessmentId={record.id} revision={record.revision} disabled={disabled} onApprovalChange={handleConsentApproval} embedded/>
           {cameraCount !== null && cameraCount > 1 && <div className="mt-4 space-y-2"><p className="text-sm font-medium">Choose a camera</p><ChoiceGroup id="face-scan-camera-choice" label="Camera" options={[{ id: "front", label: "Front camera" }, { id: "back", label: "Back camera" }]} value={camera} onChange={value => setCamera(value as ScanCamera)} disabled={disabled || checkingCameras} /></div>}
@@ -375,7 +375,7 @@ export function AssessmentFaceScan({ organizationId, record, active, disabled, b
         </div>
         <div className="form-footer">
           <Button variant="outline" className="min-h-10 px-4 font-semibold text-foreground" onPress={() => { cameraCheckVersion.current++; setConsentOpen(false); }}>Cancel</Button>
-          <Button className="min-h-10 px-4 font-semibold disabled:border disabled:border-border disabled:bg-muted disabled:text-foreground disabled:shadow-none disabled:opacity-100 data-disabled:border data-disabled:border-border data-disabled:bg-muted data-disabled:text-foreground data-disabled:shadow-none data-disabled:opacity-100" isDisabled={disabled || !consentReady || !selectedPosture || stale || checkingCameras} onPress={() => { void continueAfterConsent(); }}>{cameraCount !== null && cameraCount > 1 ? "Start face scan" : checkingCameras ? "Checking cameras…" : "Continue to face scan"}</Button>
+          <Button className="min-h-10 px-4 font-semibold disabled:border disabled:border-border disabled:bg-muted disabled:text-foreground disabled:shadow-none disabled:opacity-100 data-disabled:border data-disabled:border-border data-disabled:bg-muted data-disabled:text-foreground data-disabled:shadow-none data-disabled:opacity-100" isDisabled={disabled || !consentReady || !selectedPosture || stale || checkingCameras} onPress={() => { void continueAfterConsent(); }}>{cameraCount !== null && cameraCount > 1 ? "Start Vital IQ capture" : checkingCameras ? "Checking cameras…" : "Continue to Vital IQ capture"}</Button>
         </div>
       </Dialog>}
     </div>}

@@ -52,10 +52,10 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; star
     if (!button) throw new Error(`Missing ${text}`);
     await act(async () => { button.click(); await flush(); });
   }
-  async function startScan(label = "Start face scan") {
+  async function startScan(label = "Start Vital IQ capture") {
     await click(label);
     if ([...document.querySelectorAll("button")].some(button => button.textContent?.trim() === "Send consent request")) await click("Send consent request");
-    await click("Continue to face scan");
+    await click("Continue to Vital IQ capture");
   }
   try {
     await act(async () => { root.render(<AssessmentFaceScan organizationId="org" record={record} active disabled={false} beforeStart={async () => { saves++; if (options.hiddenDuringSave) Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true }); return { ...record, revision: 4 }; }} onMissingInputs={fields => { missing = fields; }} onBusyChange={value => { busy = value; }} onStatusChange={() => {}} captureFactory={() => createCaptureController(async () => sdk)}/>); await flush(); });
@@ -71,28 +71,28 @@ async function harness(run: (ctx: { click: (text: string) => Promise<void>; star
   } finally { await act(async () => root.unmount()); dom.window.close(); for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key]; } }
 }
 test("disabled feature never starts SDK or consumes a session", async () => harness(async ({ starts, requests }) => {
-  expect(document.body.textContent).toContain("Face scan is not available yet");
+  expect(document.body.textContent).toContain("Vital IQ is not available yet");
   expect(starts()).toBe(0); expect(requests.every(r => r.body === null)).toBe(true);
 }, { enabled: false }));
 test("start opens consent dialog and waits for a separate continue action", async () => harness(async ({ click, requests, starts }) => {
   await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"][value="standing"]')!.click());
-  const scan = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Start face scan")!;
+  const scan = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Start Vital IQ capture")!;
   expect(document.querySelector('section[aria-label="Patient consent"]')).toBeNull();
   expect(scan.disabled).toBe(false);
-  await click("Start face scan");
+  await click("Start Vital IQ capture");
   expect(document.querySelector('section[aria-label="Patient consent"]')?.textContent).toContain("Request consent from the patient or upload a signed form");
-  const continueButton = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Continue to face scan")!;
+  const continueButton = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Continue to Vital IQ capture")!;
   expect(continueButton.disabled).toBe(true);
   expect(starts()).toBe(0);
   await click("Send consent request");
   expect(continueButton.disabled).toBe(false);
   expect(requests.some(request => request.path.endsWith("/face-scan-consent/request"))).toBe(true);
   expect(starts()).toBe(0);
-  await click("Continue to face scan");
+  await click("Continue to Vital IQ capture");
   expect(starts()).toBe(1);
 }));
 test("missing scan weight directs correction before opening consent or creating a remote session", async () => harness(async ({ consent, click, missing, requests, starts }) => {
-  await consent(); await click("Start face scan");
+  await consent(); await click("Start Vital IQ capture");
   expect(missing()).toEqual(["weightKg"]);
   expect(document.querySelector('section[aria-label="Patient consent"]')).toBeNull();
   expect(requests.some(request => request.body?.requestKey)).toBe(false);
@@ -140,13 +140,13 @@ test("a single camera starts automatically without offering an unavailable back 
   expect(document.querySelector('input[type="radio"][value="back"]')).toBeNull();
 }));
 test("multiple cameras offer a back camera choice and use an unmirrored preview", async () => harness(async ({ consent, click, starts, cameraChecks, cameraStops }) => {
-  await consent(); await click("Start face scan");
-  await click("Send consent request"); await click("Continue to face scan");
+  await consent(); await click("Start Vital IQ capture");
+  await click("Send consent request"); await click("Continue to Vital IQ capture");
   expect(cameraChecks()).toBe(1);
   expect(cameraStops()).toBe(1);
   expect(starts()).toBe(0);
   await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"][value="back"]')!.click());
-  const startButton = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Start face scan" && button.closest('[role="dialog"]'))!;
+  const startButton = [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Start Vital IQ capture" && button.closest('[role="dialog"]'))!;
   await act(async () => { startButton.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
   expect(starts()).toBe(1);
   const canvas = document.querySelector<HTMLCanvasElement>('canvas[aria-label="Camera scan preview"]');
@@ -170,13 +170,13 @@ test("a scored assessment does not ask clinicians to cancel an unfinished scan",
 }, { existing: session, status: "SCORED" }));
 
 test("a scored assessment with no scan explains that none was done", async () => harness(async ({ requests }) => {
-  expect(document.body.textContent).toContain("No face scan was done for this assessment.");
+  expect(document.body.textContent).toContain("No Vital IQ capture was done for this assessment.");
   expect(requests.some(request => request.path.includes("/face-scans"))).toBe(true);
 }, { status: "SCORED" }));
 
 test("a scored assessment without a scan stays clear when scanning is now unavailable", async () => harness(async () => {
-  expect(document.body.textContent).toContain("No face scan was done for this assessment.");
-  expect(document.body.textContent).not.toContain("Face scan is not available yet");
+  expect(document.body.textContent).toContain("No Vital IQ capture was done for this assessment.");
+  expect(document.body.textContent).not.toContain("Vital IQ is not available yet");
 }, { status: "SCORED", enabled: false }));
 
 test("explains an expired attempt and retains earlier attempts in scan history", async () => harness(async ({ starts }) => {
@@ -215,7 +215,7 @@ test("lost start response restores the accepted attempt before camera retry", as
 
 test("requires posture and sends the selected activity with scan creation", async () => harness(async ({ consent, startScan, click, requests }) => {
   expect([...document.querySelectorAll<HTMLInputElement>('#face-scan-posture input[type="radio"]')].map(input => input.value)).toEqual(["resting", "standing"]);
-  const start = [...document.querySelectorAll("button")].find(b => b.textContent?.trim() === "Start face scan")!;
+  const start = [...document.querySelectorAll("button")].find(b => b.textContent?.trim() === "Start Vital IQ capture")!;
   expect(start.disabled).toBe(true);
   await consent(); await startScan();
   expect(requests.find(r => r.body?.requestKey)?.body.posture).toBe("standing");
@@ -238,7 +238,7 @@ test("failed pre-submission attempt offers explicit retry without automatic capt
 }, {existing: {...session, state:"FAILED", failureCode:"SCAN_NOT_SUBMITTED"}}));
 
 test("monthly limit rejection gives clinicians a check without starting another scan", async () => harness(async ({starts, requests}) => {
-  expect(document.body.textContent).toContain("Face scan unavailable");
+  expect(document.body.textContent).toContain("Vital IQ unavailable");
   expect(document.body.textContent).toContain("You can complete the other sections and return to the scan later");
   expect([...document.querySelectorAll("button")].some(button => button.textContent === "Check again")).toBe(true);
   expect([...document.querySelectorAll("button")].some(button => button.textContent === "Try again later")).toBe(false);
@@ -248,21 +248,21 @@ test("monthly limit rejection gives clinicians a check without starting another 
 }, {existing: {...session, state:"FAILED", failureCode:"MONTHLY_LIMIT_REACHED"}, availability: false}));
 
 test("a refreshed limit restores scanning while keeping the failed attempt in history", async () => harness(async ({click, setAvailability, starts, requests}) => {
-  expect(document.body.textContent).toContain("Face scan unavailable");
+  expect(document.body.textContent).toContain("Vital IQ unavailable");
   setAvailability(true);
   await click("Check again");
-  expect(document.body.textContent).toContain("Face scans are available again");
-  expect(document.body.textContent).toContain("Face scan ready");
+  expect(document.body.textContent).toContain("Vital IQ captures are available again");
+  expect(document.body.textContent).toContain("Vital IQ ready");
   expect(document.querySelector('section[aria-label="Scan history"]')?.textContent).toContain("Scan failed");
-  expect([...document.querySelectorAll("button")].some(button => button.textContent === "Start face scan")).toBe(true);
+  expect([...document.querySelectorAll("button")].some(button => button.textContent === "Start Vital IQ capture")).toBe(true);
   expect(starts()).toBe(0);
   expect(requests.filter(request => request.path.endsWith("/face-scans/availability"))).toHaveLength(2);
   expect(requests.every(request => request.body === null)).toBe(true);
 }, {existing: {...session, state:"FAILED", failureCode:"MONTHLY_LIMIT_REACHED"}, availability: false}));
 
 test("a fresh page shows restored quota without manual retry", async () => harness(async ({starts}) => {
-  expect(document.body.textContent).toContain("Face scans are available again");
-  expect(document.body.textContent).toContain("Start face scan");
+  expect(document.body.textContent).toContain("Vital IQ captures are available again");
+  expect(document.body.textContent).toContain("Start Vital IQ capture");
   expect(starts()).toBe(0);
 }, {existing: {...session, state:"FAILED", failureCode:"MONTHLY_LIMIT_REACHED"}, availability: true}));
 
@@ -283,15 +283,15 @@ test("confirmed device rejection offers explicit retry without automatic capture
   expect(requests.filter(r => r.body?.requestKey).length).toBe(1);
 }, {existing: {...session, state:"FAILED", failureCode:"DEVICE_NOT_SUPPORTED"}}));
 
-test("under-one patient can open Face scan and see why capture is unavailable", async () => harness(async ({starts, requests}) => {
-  expect(document.body.textContent).toContain("Face scans aren't available for children under 1");
-  expect([...document.querySelectorAll("button")].some(button => /Start face scan|Start another scan/.test(button.textContent ?? ""))).toBe(false);
+test("under-one patient can open Vital IQ and see why capture is unavailable", async () => harness(async ({starts, requests}) => {
+  expect(document.body.textContent).toContain("Vital IQ captures aren't available for children under 1");
+  expect([...document.querySelectorAll("button")].some(button => /Start Vital IQ capture|Start another scan/.test(button.textContent ?? ""))).toBe(false);
   expect(starts()).toBe(0);
   expect(requests.every(request => request.body === null)).toBe(true);
 }, {dob:"2026-05-05"}));
 
 test("previous age rejection remains in history while new capture is blocked", async () => harness(async ({starts}) => {
-  expect(document.body.textContent).toContain("Face scans aren't available for children under 1");
+  expect(document.body.textContent).toContain("Vital IQ captures aren't available for children under 1");
   expect([...document.querySelectorAll("button")].some(button => button.textContent?.trim() === "Start another scan")).toBe(false);
   expect(starts()).toBe(0);
 }, {existing: {...session, state:"FAILED", failureCode:"PATIENT_AGE_UNSUPPORTED"}, dob:"2026-05-05"}));
@@ -322,10 +322,10 @@ test("completed scan keeps rescan setup closed until explicitly requested", asyn
 
 
 test("retained scan stays visible without requiring another capture", async () => harness(async ({ starts, requests }) => {
-  expect(document.body.textContent).toContain("The saved face scan is retained");
+  expect(document.body.textContent).toContain("The saved Vital IQ capture is retained");
   expect(document.body.textContent).not.toContain("The saved scan used different");
   expect(document.body.textContent).toContain("Scan again");
-  expect(document.body.textContent).not.toContain("Start face scan");
+  expect(document.body.textContent).not.toContain("Start Vital IQ capture");
   expect(starts()).toBe(0);
   expect(requests.every(request => request.body === null)).toBe(true);
 }, { existing: usableSession }));

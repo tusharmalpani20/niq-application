@@ -74,16 +74,16 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
     for (const [key, descriptor] of Object.entries(previous)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete (globalThis as any)[key]; }
   }
 }
-test("new assessment opens directly on face scan after personal details", async () => harness(async () => {
-  expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Face scan");
-  expect(document.querySelector('nav[aria-label="Assessment sections"] button[aria-current="step"]')?.textContent).toContain("Face scan");
+test("new assessment opens directly on Vital IQ capture after personal details", async () => harness(async () => {
+  expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Vital IQ");
+  expect(document.querySelector('nav[aria-label="Assessment sections"] button[aria-current="step"]')?.textContent).toContain("Vital IQ");
 }, {}, "assessment-a", undefined, "OTHER_MEDICAL", false, true));
 
-test("under-one patient can open Face scan without a required-scan review error", async () => harness(async ({ click }) => {
-  await click("Face scan");
-  expect(document.body.textContent).toContain("Face scans aren't available for children under 1");
+test("under-one patient can open Vital IQ without a required-scan review error", async () => harness(async ({ click }) => {
+  await click("Vital IQ");
+  expect(document.body.textContent).toContain("Vital IQ captures aren't available for children under 1");
   await click("Review & score");
-  expect(document.body.textContent).not.toContain("Complete the required face scan");
+  expect(document.body.textContent).not.toContain("Complete the required Vital IQ capture");
   await click("Submit and request score");
   expect(document.querySelector('[aria-label="Verify assessment before scoring"]')).not.toBeNull();
 }, {patient: {...recordFixture().patient, dateOfBirth: "2026-05-05"}}, "assessment-a", undefined, "OTHER_MEDICAL", true));
@@ -178,7 +178,7 @@ test("review highlights the section with a blocking answer until it is corrected
 }, { answers: { ...recordFixture().answers, current_weight_kg: null } }));
 test("Continue identifies missing required answers without blocking draft navigation", async () => harness(async ({ click }) => {
   await click("Continue");
-  expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Face scan");
+  expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Vital IQ");
   expect(document.querySelector('button[aria-label="Personal details; needs attention"]')?.getAttribute("data-has-issue")).toBe("true");
   expect([...document.querySelectorAll('[role="status"]')].some(item => item.textContent?.includes("Personal details still needs 2 required answers"))).toBe(true);
   expect(document.body.textContent).toContain("Height and Current weight");
@@ -214,11 +214,11 @@ test("changing surgical status waits until Save or Continue to reveal the requir
   expect(document.querySelector('button[aria-label="Treatment; needs attention"]')).not.toBeNull();
 }, { answers: { ...recordFixture().answers, cancer_surgical_status: "cancer_surgical_status_not_required" } }));
 test("scan prerequisites open the missing inputs with inline errors and no summary box", async () => harness(async ({ click, requests }) => {
-  await click("Face scan");
+  await click("Vital IQ");
   await act(async () => {
     document.querySelector<HTMLInputElement>('input[type="radio"][value="resting"]')!.click();
   });
-  await click("Start face scan");
+  await click("Start Vital IQ capture");
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
   expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Personal details");
   expect(document.querySelector('section[aria-label="Patient consent"]')).toBeNull();
@@ -351,11 +351,11 @@ test("changing stage clears hidden site and details even after saving", async ()
 }, { answers: { ...recordFixture().answers, stage: "stage_metastatic", metastasis_site: "others", metastasis_other: "Old detail" } }));
 
 
-test("an organization with face scan access cannot submit before completing a scan", async () => harness(async ({ click, requests }) => {
+test("an organization with Vital IQ capture access cannot submit before completing a scan", async () => harness(async ({ click, requests }) => {
   await click("Review & score");
-  expect(document.body.textContent).toContain("Complete the required face scan");
+  expect(document.body.textContent).toContain("Complete the required Vital IQ capture");
   await click("Submit and request score");
-  expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Face scan");
+  expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Vital IQ");
   expect(document.querySelector('[aria-label="Verify assessment before scoring"]')).toBeNull();
   expect(requests.some(request => request.method === "POST" && request.url.endsWith("/submit"))).toBe(false);
 }, {}, "assessment-a", undefined, "OTHER_MEDICAL", true));
@@ -370,9 +370,9 @@ test("a completed capture without usable scoring stays in draft", async () => {
   };
   await harness(async ({ click, requests }) => {
     await click("Review & score");
-    expect(document.body.textContent).toContain("The face scan finished without a usable result. Try again.");
+    expect(document.body.textContent).toContain("The Vital IQ capture finished without a usable result. Try again.");
     await click("Submit and request score");
-    expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Face scan");
+    expect(document.getElementById("assessment-section-heading")?.textContent).toBe("Vital IQ");
     expect(document.querySelector('[aria-label="Verify assessment before scoring"]')).toBeNull();
     expect(requests.some(request => request.method === "POST" && request.url.endsWith("/submit"))).toBe(false);
   }, {}, "assessment-a", undefined, "OTHER_MEDICAL", true, false, scanSession);
@@ -389,8 +389,8 @@ test("submission requires every section review and final confirmation", async ()
     for (let index = 0; index < stepCount; index++) {
       expect([...document.querySelectorAll('[aria-label="Verify assessment before scoring"] button')].some(button => button.textContent?.trim() === "Cancel")).toBe(true);
       if (index === 1) {
-        expect(document.body.textContent).toContain("Open face scan");
-        expect(document.body.textContent).not.toContain("Edit face scan");
+        expect(document.body.textContent).toContain("Open Vital IQ capture");
+        expect(document.body.textContent).not.toContain("Edit Vital IQ capture");
         const dialog = document.querySelector('[aria-label="Verify assessment before scoring"]')!;
         const back = [...dialog.querySelectorAll("button")].find(button => button.textContent?.trim() === "Back");
         const next = [...dialog.querySelectorAll("button")].find(button => button.textContent?.trim() === "Next");

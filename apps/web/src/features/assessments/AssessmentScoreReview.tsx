@@ -60,7 +60,7 @@ function riskCardAppearance(classification: AssessmentScoreResult["classificatio
 const summaryRowClass = "flex items-center gap-2 px-2 py-1 sm:px-3";
 const summaryToggleClass = "min-h-11 min-w-0 flex-1 justify-start gap-2 whitespace-normal text-left hover:bg-primary/5 hover:text-primary aria-expanded:bg-primary/10 aria-expanded:text-primary aria-expanded:hover:bg-primary/15";
 
-export function AssessmentScoreReview({ record, organizationId, renderScan, reportsContent, onSaved, canReview = true, scanStatus = "Face scan unavailable" }: {
+export function AssessmentScoreReview({ record, organizationId, renderScan, reportsContent, onSaved, canReview = true, scanStatus = "Vital IQ unavailable" }: {
   onSaved?: () => Promise<unknown>; canReview?: boolean; scanStatus?: string; record: AssessmentWorkflow; organizationId: string; renderScan: (active: boolean) => ReactNode; reportsContent: ReactNode;
 }) {
   const [data, setData] = useState<AssessmentScoreReviews | null>(null);
@@ -108,11 +108,11 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
   const { result, sections } = view;
   const overall = data?.overall;
   const scan = data?.scan;
-  const scanSummaryStatus = scanStatus === "Face scan ready" ? "Not done" : scanStatus;
+  const scanSummaryStatus = scanStatus === "Vital IQ ready" ? "Not done" : scanStatus;
   const scoreCard = riskCardAppearance(revised ? null : result.classification);
   const scanSection = <div className={`overflow-hidden rounded-xl border ${expanded === "face_scan" ? "border-primary/30" : "border-border"}`}>
     <div className={`${summaryRowClass} ${expanded === "face_scan" ? "bg-primary/5" : ""}`}>
-      <Button variant="ghost" className={summaryToggleClass} aria-expanded={expanded === "face_scan"} aria-controls="score-section-face_scan" onPress={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>{expanded === "face_scan" ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}<assessmentSectionIcons.face_scan className="size-4 shrink-0" aria-hidden="true" />Face scan</Button>
+      <Button variant="ghost" className={summaryToggleClass} aria-expanded={expanded === "face_scan"} aria-controls="score-section-face_scan" onPress={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>{expanded === "face_scan" ? <ChevronDown aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}<assessmentSectionIcons.face_scan className="size-4 shrink-0" aria-hidden="true" />Vital IQ</Button>
       <div className="w-28 shrink-0 text-right text-sm tabular-nums sm:w-36"><p className="text-xs text-muted-foreground">{scanSummaryStatus}</p><p>Vital IQ {scan?.niqPoints ?? "—"}</p>{scan?.overridden && <p className="text-brand-ink">Reviewed Vital IQ {scan.reviewedPoints ?? "—"}</p>}</div>
     </div>
     <div id="score-section-face_scan" hidden={expanded !== "face_scan"} className="border-t border-border p-4">
@@ -163,6 +163,6 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
         <div id={`score-section-${section.id}`} hidden={!open} className="border-t border-border p-4">{record.reports.length ? reportsContent : <p className="text-sm text-muted-foreground">No reports attached.</p>}</div>
       </div>;
     })}
-    {!!data?.entries.length && data && <details className="mt-4 border-t border-border pt-4"><summary className="min-h-11 cursor-pointer font-medium">Score history</summary><ol className="divide-y divide-border">{[...data.entries].reverse().map(entry => <li key={entry.id} className="py-3 text-sm"><p className="font-medium">{entry.targetType === "scan" ? "Face scan score" : entry.targetType === "overall" ? "Overall score" : entry.targetType === "section" ? sections.find(section => section.id === entry.targetId)?.title : result.components.find(item => item.id === entry.targetId)?.label} · {points(entry.previousPoints)} → {entry.points === null ? "Restored" : points(entry.points)}</p><p>{entry.actorName} · {new Date(entry.createdAt).toLocaleString()}</p><p className="whitespace-pre-wrap break-words text-muted-foreground">{entry.reason || "Reason not provided"}</p></li>)}</ol></details>}
+    {!!data?.entries.length && data && <details className="mt-4 border-t border-border pt-4"><summary className="min-h-11 cursor-pointer font-medium">Score history</summary><ol className="divide-y divide-border">{[...data.entries].reverse().map(entry => <li key={entry.id} className="py-3 text-sm"><p className="font-medium">{entry.targetType === "scan" ? "Vital IQ score" : entry.targetType === "overall" ? "Overall score" : entry.targetType === "section" ? sections.find(section => section.id === entry.targetId)?.title : result.components.find(item => item.id === entry.targetId)?.label} · {points(entry.previousPoints)} → {entry.points === null ? "Restored" : points(entry.points)}</p><p>{entry.actorName} · {new Date(entry.createdAt).toLocaleString()}</p><p className="whitespace-pre-wrap break-words text-muted-foreground">{entry.reason || "Reason not provided"}</p></li>)}</ol></details>}
   </section>;
 }

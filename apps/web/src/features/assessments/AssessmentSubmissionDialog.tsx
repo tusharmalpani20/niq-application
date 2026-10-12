@@ -19,7 +19,7 @@ export function AssessmentSubmissionDialog({ record, scanStatus, scanSession, bu
 }) {
   const steps = record.manifest.sections.flatMap(section => [
     { id: section.id, title: section.title },
-    ...(section.id === "personal_details" ? [{ id: "face_scan", title: "Face scan" }] : []),
+    ...(section.id === "personal_details" ? [{ id: "face_scan", title: "Vital IQ" }] : []),
   ]).concat({ id: "reports", title: "Attachments" });
   const [stepIndex, setStepIndex] = useState(0);
   const [reviewed, setReviewed] = useState<string[]>([]);
@@ -50,8 +50,8 @@ export function AssessmentSubmissionDialog({ record, scanStatus, scanSession, bu
         <p className="text-sm text-muted-foreground">All {steps.length} sections reviewed. Your confirmation will be saved with this scoring request.</p>
         <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-muted/30 p-3 text-sm"><input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={confirmed} disabled={busy || !allReviewed} onChange={event => setConfirmed(event.target.checked)}/><span>{ASSESSMENT_ATTESTATION_STATEMENT_V2}</span></label>
       </div> : <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="flex items-center gap-3 text-base font-semibold"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><StepIcon className="size-5" aria-hidden="true" /></span>{step?.title}</h3><Button variant="outline" className="min-h-10" isDisabled={busy} onPress={() => { if (step) onEdit(step.id); }}>{step?.id === "face_scan" ? scanSession?.state === "COMPLETED" || scanStatus === "Done" ? "Rescan" : "Open face scan" : step?.id === "reports" ? "Edit attachments" : "Edit answers"}</Button></div>
-        {step?.id === "face_scan" ? scanSession?.state === "COMPLETED" && scanSession.result ? <FaceScanResults session={scanSession}/> : <p className="text-sm text-muted-foreground">{scanStatus === "Done" ? "A completed face scan is saved. Results are loading." : "No completed face scan results are available."}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="flex items-center gap-3 text-base font-semibold"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><StepIcon className="size-5" aria-hidden="true" /></span>{step?.title}</h3><Button variant="outline" className="min-h-10" isDisabled={busy} onPress={() => { if (step) onEdit(step.id); }}>{step?.id === "face_scan" ? scanSession?.state === "COMPLETED" || scanStatus === "Done" ? "Rescan" : "Open Vital IQ capture" : step?.id === "reports" ? "Edit attachments" : "Edit answers"}</Button></div>
+        {step?.id === "face_scan" ? scanSession?.state === "COMPLETED" && scanSession.result ? <FaceScanResults session={scanSession}/> : <p className="text-sm text-muted-foreground">{scanStatus === "Done" ? "A completed Vital IQ capture is saved. Results are loading." : "No completed Vital IQ capture results are available."}</p>
           : step?.id === "reports" ? record.reports.length ? <AssessmentReports organizationId={record.organizationId} assessmentId={record.id} reports={record.reports} revision={record.revision} readOnly showIntro={false} onChanged={async () => {}} /> : <p className="text-sm text-muted-foreground">No attachments added.</p>
           : record.manifest.sections.filter(section => section.id === step?.id).map(section => <AssessmentVerificationAnswers key={section.id} sectionId={section.id} fields={section.fields} answers={record.answers} />)}
         {step && record.manifest.sections.some(section => section.id === step.id) && <p className="text-xs text-muted-foreground">{coverage.sections.find(section => section.id === step.id)?.answered ?? 0}/{coverage.sections.find(section => section.id === step.id)?.total ?? 0} answers provided</p>}

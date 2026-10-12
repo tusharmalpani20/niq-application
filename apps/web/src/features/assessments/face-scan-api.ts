@@ -8,7 +8,7 @@ const request = (org: string, path: string, method = "GET", body?: unknown) =>
 export const listFaceScans = async (org: string, id: string) => faceScanListSchema.parse(await request(org, base(id)));
 export async function getFaceScanAvailability(org: string, id: string): Promise<{ available: boolean; reason: string | null }> {
   const value: unknown = await request(org, `${base(id)}/availability`);
-  if (!value || typeof value !== "object" || !("available" in value) || typeof value.available !== "boolean" || !("reason" in value) || (value.reason !== null && typeof value.reason !== "string")) throw new Error("Invalid face scan availability response");
+  if (!value || typeof value !== "object" || !("available" in value) || typeof value.available !== "boolean" || !("reason" in value) || (value.reason !== null && typeof value.reason !== "string")) throw new Error("Invalid Vital IQ capture availability response");
   return { available: value.available, reason: value.reason };
 }
 export const startFaceScan = async (org: string, id: string, revision: number, requestKey: string, posture: FaceScanSession["context"]["posture"]) => faceScanSessionSchema.parse(await request(org, base(id), "POST", { revision, posture, requestKey }));

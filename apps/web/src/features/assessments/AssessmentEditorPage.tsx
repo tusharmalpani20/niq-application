@@ -50,7 +50,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   const operation = useRef(false);
   const [reportBusy, setReportBusy] = useState(false);
   const [scanBusy, setScanBusy] = useState(false);
-  const [scanStatus, setScanStatus] = useState("Face scan unavailable");
+  const [scanStatus, setScanStatus] = useState("Vital IQ unavailable");
   const [scanSession, setScanSession] = useState<FaceScanSession | null>(null);
   const [scanAccess, setScanAccess] = useState<boolean | null>(null);
   const [showScoredAnswers, setShowScoredAnswers] = useState(false);
@@ -187,10 +187,10 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   function showMissingScanInputs(fields: MissingScanInput[]) {
     const fieldIds: Record<MissingScanInput, string> = { dob: "age", gender: "gender", heightCm: "height_cm", weightKg: "current_weight_kg" };
     const messages: Record<MissingScanInput, string> = {
-      dob: "Save a valid date of birth in the patient's profile before starting a face scan.",
-      gender: "Save male or female gender in the patient's profile before starting a face scan.",
-      heightCm: "Enter a valid height before starting a face scan.",
-      weightKg: "Enter a valid current weight before starting a face scan."
+      dob: "Save a valid date of birth in the patient's profile before starting a Vital IQ capture.",
+      gender: "Save male or female gender in the patient's profile before starting a Vital IQ capture.",
+      heightCm: "Enter a valid height before starting a Vital IQ capture.",
+      weightKg: "Enter a valid current weight before starting a Vital IQ capture."
     };
     setErrors(Object.fromEntries(fields.map(field => [fieldIds[field], messages[field]])));
     setScanCorrection(true);
@@ -206,10 +206,10 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     const invalid = validateAssessmentAnswers(record.manifest, answers, { requireComplete: true });
     setErrors(invalid);
     if (Object.keys(invalid).length) { setError("Complete required fields before requesting a score."); return; }
-    if (scanAccess === null && !isUnderOneYearOldForFaceScan(record.patient.dateOfBirth)) { setError("Face scan access could not be checked. Refresh the scan status before submitting."); return; }
+    if (scanAccess === null && !isUnderOneYearOldForFaceScan(record.patient.dateOfBirth)) { setError("Vital IQ access could not be checked. Refresh the scan status before submitting."); return; }
     if (scanAccess && !isUnderOneYearOldForFaceScan(record.patient.dateOfBirth) && !hasUsableFaceScan(scanSession)) {
       setSectionId("face_scan");
-      setError("A usable face scan result is required before submitting this assessment. If the scan has finished without a result, try again.");
+      setError("A usable Vital IQ capture result is required before submitting this assessment. If the scan has finished without a result, try again.");
       requestAnimationFrame(() => document.getElementById("assessment-section-heading")?.focus());
       return;
     }
@@ -289,7 +289,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   const sectionScores = Object.fromEntries((scored?.sections ?? []).flatMap(section => { const label = sectionScoreLabel(section); return label ? [[section.id, label]] : []; }));
   const progress = getAssessmentCompletion(record.manifest, answers);
   const coverage = getAssessmentAnswerCoverage(record.manifest, answers);
-  const tabs = record.manifest.sections.flatMap(section => [{ id: section.id, title: section.title }, ...(section.id === "personal_details" ? [{ id: "face_scan", title: "Face scan" }] : [])]).concat([{ id: "reports", title: "Attachments" }, { id: "review", title: "Review & score" }]);
+  const tabs = record.manifest.sections.flatMap(section => [{ id: section.id, title: section.title }, ...(section.id === "personal_details" ? [{ id: "face_scan", title: "Vital IQ" }] : [])]).concat([{ id: "reports", title: "Attachments" }, { id: "review", title: "Review & score" }]);
   const sectionCoverage = coverage.sections.find(item => item.id === sectionId);
   const section = record.manifest.sections.find(item => item.id === sectionId);
   const checkedSection = record.manifest.sections.find(item => item.id === lastCheckedSectionId);
@@ -304,7 +304,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   }
   const index = tabs.findIndex(tab => tab.id === sectionId);
   const locked = busy || reportBusy || scanBusy || reviewBusy || conflict;
-  const scanStepStatus = scanStatus === "Scan complete" ? "Done" : scanStatus === "Face scan ready" ? "Pending" : scanStatus === "Scan being processed" ? "Processing" : scanStatus === "Capturing scan" ? "Capturing" : scanStatus === "Preparing scan" ? "Preparing" : scanStatus === "Uploading scan" ? "Uploading" : scanStatus.replace(/^Face scan |^Scan /, "");
+  const scanStepStatus = scanStatus === "Scan complete" ? "Done" : scanStatus === "Vital IQ ready" ? "Pending" : scanStatus === "Scan being processed" ? "Processing" : scanStatus === "Capturing scan" ? "Capturing" : scanStatus === "Preparing scan" ? "Preparing" : scanStatus === "Uploading scan" ? "Uploading" : scanStatus.replace(/^Vital IQ |^Scan /, "");
   const issueSections = new Set<string>();
   if (!scored) {
     for (const section of record.manifest.sections) {

@@ -76,8 +76,8 @@ export function GeneratedReportPreview({ report }: { report: GeneratedReport }) 
       {report.narrative.overview && <div className="cr-feature-panel"><span className="cr-kicker">Clinical overview</span><p>{report.narrative.overview}</p></div>}
       {assessmentMetrics.length > 0 && <div className="cr-metric-grid">{assessmentMetrics.map(metric => <div className="cr-metric-card" key={metric.id}><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.measuredAt && <small>{reportDate(metric.measuredAt)}</small>}</div>)}</div>}
     </ReportSheet>
-    {faceMetrics.length > 0 && <ReportSheet number={nextPage() + 1} title="Vital IQ · Face scan" icon={HeartPulse} report={report}>
-      <p className="cr-section-intro">Readings captured with the face scan. NIQ assessment risk is shown separately on the next page.</p>
+    {faceMetrics.length > 0 && <ReportSheet number={nextPage() + 1} title="Vital IQ measurements" icon={HeartPulse} report={report}>
+      <p className="cr-section-intro">Readings from the Vital IQ capture. NIQ assessment risk is shown separately on the next page.</p>
       <div className="cr-metric-grid cr-vital-grid">{faceMetrics.map(metric => <div className="cr-metric-card" key={metric.id}><Activity size={22} aria-hidden="true"/><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.measuredAt && <small>{reportDate(metric.measuredAt)}</small>}</div>)}</div>
     </ReportSheet>}
     {(report.classification || report.weightHistory.length > 0 || report.narrative.keyFindings) && <ReportSheet number={nextPage() + 1} title="Nutrition status & findings" icon={Activity} report={report}>

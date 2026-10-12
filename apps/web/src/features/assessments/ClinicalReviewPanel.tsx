@@ -24,7 +24,7 @@ const inReviewActionGroups: { label: string; actions: Action[] }[] = [
   { label: "Needs corrections", actions: ["RETURN_TO_DRAFT"] },
   { label: "Finish review", actions: ["COMPLETE"] },
 ];
-const automaticCancellationMessage = "The face scan is still open. Automatic cancellation was not confirmed; try again when its status updates.";
+const automaticCancellationMessage = "The Vital IQ capture is still open. Automatic cancellation was not confirmed. Try again when its status updates.";
 function previouslySent(review: ClinicalReview) {
   return !!review.submittedAt || review.history.some(event => event.action === "SEND" || event.action === "RESEND");
 }
@@ -198,8 +198,8 @@ export function ClinicalReviewCommandDialog({ action, review, organizationId, as
       await changeClinicalReview(organizationId, assessmentId, { ...body, requestKey: request.current.key } as ClinicalReviewAction);
       await onChanged(); onClose();
     } catch (cause) {
-      if (cause instanceof AssessmentRequestError && cause.status === 409 && cause.message === automaticCancellationMessage) {
-        setError(cause.message);
+      if (cause instanceof AssessmentRequestError && cause.status === 409 && cause.message.includes("Automatic cancellation was not confirmed")) {
+        setError(automaticCancellationMessage);
       } else if (cause instanceof AssessmentRequestError && [403, 409].includes(cause.status)) { setConflict(true); setError("This review or your access has changed. Reload the review before continuing. Your entered details are preserved."); }
       else setError(cause instanceof Error ? cause.message : "Could not update the review. Your details are preserved; try again.");
     } finally { inFlight.current = false; setBusy(false); onBusyChange(false); }

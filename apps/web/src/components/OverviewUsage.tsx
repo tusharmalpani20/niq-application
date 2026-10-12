@@ -33,7 +33,7 @@ export function OverviewUsage({ organizationId }: { organizationId: string }) {
     {error ? <div className="surface p-5"><p role="status">Scoring usage is unavailable.</p><Link className="text-primary underline" to="/settings/scoring">Check scoring connection</Link></div> : !data ? <p role="status" className="text-sm text-muted-foreground">Loading usage…</p> : <>
       <div className="grid gap-4 sm:grid-cols-2">
         <CapacityCard title="Scores" used={data.usage.scores} limit={data.limits.scoresPerMonth} detail={data.services.scoring.enabled ? "Scores used this month" : "Scoring is disabled"} to="/settings/scoring" />
-        <CapacityCard title="Face scans" used={data.usage.faceScans} limit={data.limits.faceScansPerMonth} detail={data.services.faceScan.enabled ? "Face scans used this month" : "Face scans are disabled"} to="/settings/scoring" />
+        <CapacityCard title="Vital IQ captures" used={data.usage.faceScans} limit={data.limits.faceScansPerMonth} detail={data.services.faceScan.enabled ? "Vital IQ captures used this month" : "Vital IQ captures are disabled"} to="/settings/scoring" />
       </div>
       {loadedAt && <p className="text-xs text-muted-foreground">Last refreshed {loadedAt.toLocaleString()}. Monthly limits reset at the start of each UTC month.</p>}
     </>}

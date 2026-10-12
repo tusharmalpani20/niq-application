@@ -120,7 +120,7 @@ test("admin sees facility metrics, assigned team, and management actions", async
     expect(requested.some(url => url.endsWith("/users"))).toBe(true);
     expect(requested.some(url => url.endsWith(`/facilities/${facilityId}/performance`))).toBe(true);
     expect(body.querySelector('[aria-label="Facility performance"]')?.textContent).toContain("Assessments scored4");
-    expect(body.querySelector('[aria-label="Facility performance"]')?.textContent).toContain("Face scans completed3");
+    expect(body.querySelector('[aria-label="Facility performance"]')?.textContent).toContain("Vital IQ captures completed3");
     expect(body.querySelector('[aria-label="Facility performance"] a')).toBeNull();
     expect(body.querySelector('a[href="/assessments/ASM-000001"]')?.className).toContain("text-primary hover:underline");
     expect(body.querySelector('a[href="/patients/PAT-2"]')?.className).toContain("text-primary hover:underline");
