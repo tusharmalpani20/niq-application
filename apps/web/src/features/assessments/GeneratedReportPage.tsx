@@ -3,6 +3,7 @@ import { Link, Navigate, useOutletContext, useParams } from "react-router-dom";
 import { ArrowLeft, Download, FileCheck2, LoaderCircle, RotateCcw } from "lucide-react";
 import { hasPermission, type AuthenticatedUser } from "@niq/application-contracts";
 import { Button } from "@/components/ui/button";
+import { GeneratedReportPdfPreview } from "./GeneratedReportPdfPreview";
 import { generatedReportPdfUrl, getGeneratedReport, type GeneratedReportResponse } from "./generated-report-api";
 import { reportDate } from "./generated-report-format";
 import "./generated-report.css";
@@ -57,7 +58,7 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
 
   return <div className="cr-workspace">
     <nav className="cr-back"><Link to={assessmentPath}><ArrowLeft size={17} aria-hidden="true"/>Back to assessment</Link></nav>
-    <div className="cr-workspace-head"><div><p className="cr-workspace-eyebrow">Clinical reporting</p><h1>Medical nutrition therapy report</h1><p>The report and PDF are prepared automatically after final clinical approval. Generation continues if you leave this page.</p></div><span className={`cr-status ${ready ? "cr-status-approved" : ""}`}>{statusLabel}</span></div>
+    <div className="cr-workspace-head"><div><p className="cr-workspace-eyebrow">Clinical reporting</p><h1>Medical nutrition therapy report</h1></div><span className={`cr-status ${ready ? "cr-status-approved" : ""}`}>{statusLabel}</span></div>
     {error && <div className="cr-message cr-error" role="alert"><p>{error}</p><Button variant="outline" onPress={refresh}><RotateCcw size={16} aria-hidden="true"/>Refresh status</Button></div>}
     {loading && !result && <p role="status" className="cr-empty"><LoaderCircle className="cr-spin" size={20} aria-hidden="true"/>Loading report status</p>}
     {!loading && !error && (generation?.status === "QUEUED" || generation?.status === "GENERATING") &&
@@ -72,8 +73,7 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
       <div className="cr-report-meta"><span>Assessment {report.assessment.reference}</span><span>Generated {reportDate(report.generatedAt)}</span><span>Rule version {report.assessment.ruleVersionId}</span></div>
       <div className="cr-approved-bar"><div><FileCheck2 size={24} aria-hidden="true"/><div><strong>Final report ready</strong><p>The PDF was saved after final clinical approval.</p></div></div><a className="cr-download" href={pdfUrl} download={`NIQ-report-${report.assessment.reference}.pdf`}><Download size={18} aria-hidden="true"/>Download PDF</a></div>
       <div className="cr-preview-heading"><h2>Report preview</h2><p>Saved PDF</p></div>
-      <iframe className="cr-final-pdf-preview" src={pdfUrl} title="Medical nutrition therapy report PDF"/>
-      <p className="cr-message">If the PDF does not appear above, use Download PDF to open the saved report.</p>
+      <GeneratedReportPdfPreview url={pdfUrl}/>
     </>}
   </div>;
 }

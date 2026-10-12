@@ -55,7 +55,8 @@ test("ready report previews and downloads the saved PDF without another approval
   await renderWithResponse({ report, generation: { status: "READY" } }, () => {
     expect(document.body.textContent).toContain("Final report ready");
     expect(document.body.textContent).not.toContain("Approve report");
-    expect(document.querySelector("iframe")?.getAttribute("src")).toBe("/api/v1/organizations/org/assessments/assessment/generated-report/pdf");
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(document.querySelector('[aria-label="Medical nutrition therapy report PDF preview"]')).not.toBeNull();
     expect(document.querySelector("a[download]")?.getAttribute("download")).toBe("NIQ-report-NIQ-12.pdf");
   });
 });

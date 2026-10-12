@@ -82,12 +82,12 @@
 .cr-review-note svg { flex: none; color: var(--brand-primary, #239ca3); }
 .cr-review-note p { margin: 0; }
 .cr-workspace { display: grid; min-width: 0; gap: 1.25rem; padding-bottom: 3rem; }
-.cr-back a { display: inline-flex; min-height: 36px; align-items: center; gap: .4rem; color: var(--brand-ink, #177e83); font-size: .9rem; font-weight: 600; text-decoration: none; }
+.cr-back a { display: inline-flex; min-height: 36px; align-items: center; gap: .4rem; color: var(--primary); font-size: .9rem; font-weight: 600; text-decoration: none; }
 .cr-back a:hover { text-decoration: underline; }
 .cr-workspace-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .cr-workspace-head h1 { margin: .2rem 0 .5rem; color: #15384b; font-size: clamp(1.65rem, 3vw, 2.25rem); line-height: 1.2; }
 .cr-workspace-head p:last-child { max-width: 660px; margin: 0; color: #61798a; font-size: .9rem; line-height: 1.5; }
-.cr-workspace-eyebrow { color: var(--brand-ink, #177e83); font-size: .75rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.cr-workspace-eyebrow { color: var(--primary); font-size: .75rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .cr-status { display: inline-flex; align-items: center; padding: .5rem .85rem; border: 1px solid #edcf9a; border-radius: 99px; color: #855d18; background: #fff6e4; font-size: .8rem; font-weight: 700; }
 .cr-status-approved { border-color: #b4e5cd; color: #186c4c; background: #e8f8ef; }
 .cr-message { display: grid; gap: .4rem; padding: .95rem 1.1rem; border: 1px solid #cae1e3; border-radius: .75rem; color: #285965; background: #edf7f7; font-size: .88rem; }
@@ -154,7 +154,10 @@
 .cr-download:hover { background: #eaf8ef; }
 .cr-preview-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-top: .35rem; }
 .cr-preview-heading p { font-weight: 700; }
-.cr-final-pdf-preview { width: 100%; min-height: min(85vh, 900px); border: 1px solid #dbe7e9; border-radius: .75rem; background: #fff; }
+.cr-final-pdf-preview { display: grid; justify-items: center; gap: 1rem; width: 100%; padding: 1rem; border: 1px solid #dbe7e9; border-radius: .75rem; background: #f4f7f8; }
+.cr-final-pdf-preview img { display: block; width: min(100%, 760px); height: auto; box-shadow: 0 8px 24px #17344720; }
+.cr-preview-loading { display: grid; min-height: 20rem; place-items: center; margin: 0; color: #58717c; }
+.cr-preview-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .8rem; width: 100%; color: #395766; font-size: .85rem; }
 
 @media (max-width: 650px) {
   .clinical-report { gap: .8rem; }
