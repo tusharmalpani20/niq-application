@@ -108,17 +108,19 @@ export function normalizeGuidance(content: ScoringReportContent, manifest: Asses
   for (const row of plan.coMorbidities)
     add({ id: row.id, kind: "comorbidity", title: row.label, text: row.guidance });
   const products = plan.products;
-  for (const row of products.plans) {
-    // The structured items carry the product names and quantities. Showing the
-    // legacy product summary as well would repeat every name in the report.
-    const details = row.items?.map(item => item.quantityPerDay === undefined ? ""
-      : item.productName === "Liss WH" && item.description === "leveled scoops in 150ml water"
-        ? `${item.productName}: ${item.quantityPerDay} ${item.description}`
-        : `${item.quantityPerDay} ${item.productName}${item.description ? ` (${item.description})` : ""}`);
-    if (details?.some(detail => !detail)) continue;
-    add({ id: row.id, kind: "product", title: "Product plan", text: [details?.length ? details.join(" + ") : row.dose || row.products, row.duration].filter(nonempty).join("\n") });
+  if (products.status === "selected") {
+    for (const row of products.plans) {
+      // The structured items carry the product names and quantities. Showing the
+      // legacy product summary as well would repeat every name in the report.
+      const details = row.items?.map(item => item.quantityPerDay === undefined ? ""
+        : item.productName === "Liss WH" && item.description === "leveled scoops in 150ml water"
+          ? `${item.productName}: ${item.quantityPerDay} ${item.description}`
+          : `${item.quantityPerDay} ${item.productName}${item.description ? ` (${item.description})` : ""}`);
+      if (details?.some(detail => !detail)) continue;
+      add({ id: row.id, kind: "product", title: "Product plan", text: [details?.length ? details.join(" + ") : row.dose || row.products, row.duration].filter(nonempty).join("\n") });
+    }
+    for (const row of products.notes) add({id:row.id,kind:"product",title:row.label,text:row.guidance});
   }
-  for (const row of products.notes) add({id:row.id,kind:"product",title:row.label,text:row.guidance});
   // An unresolved product plan contributes no recommendation. Missing facts
   // do not trigger a second exchange with the patient or block other content.
   return {sections,issues};

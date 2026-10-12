@@ -87,7 +87,14 @@ test("weight chart uses an undated previous weight only when no dated history ex
 });
 
 test("possible drug-class effects and an unresolved product stage are omitted", () => {
-  const result = normalizeGuidance(scoringReportContentSchema.parse(packet), manifest);
+  const unresolved = structuredClone(packet) as any;
+  unresolved.guidance.carePlan.products.plans = [
+    { id: "unselected", stage: "surgical", nutritionalStatus: "severely_malnourished", products: "Liss WH", dose: "1 Liss WH", duration: "30 days" },
+  ];
+  unresolved.guidance.carePlan.products.notes = [
+    { id: "diet_exception", kind: "vegetarian_liss_substitution", label: "Vegetarian diet", guidance: "Replace Liss WH with Invigour." },
+  ];
+  const result = normalizeGuidance(scoringReportContentSchema.parse(unresolved), manifest);
   expect(result.issues).toEqual([]);
   expect(result.sections.find(row=>row.id==="nausea")).toBeUndefined();
   expect(result.sections.find(row=>row.kind==="product")).toBeUndefined();
