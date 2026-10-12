@@ -28,6 +28,13 @@ function palette(brand: PdfBrand): Palette {
   return { primary, secondary, ink: "#193744", muted: "#59717c", soft: tint(primary, 0.1), softSecondary: tint(secondary, 0.1), line: tint(primary, 0.22), white: "#ffffff" };
 }
 
+// Numeric readings already appear in the measurement cards; keep findings that interpret their clinical meaning.
+function isObservationOnlyFinding(text: string) {
+  const mentionsMeasurement = /\b(weight|blood pressure|bp|bmi|heart rate|oxygen|saturation|score|fluid intake|appetite|protein intake)\b/i.test(text);
+  const addsClinicalMeaning = /\b(malnutrition|nutritional|dehydration|inadequate|poor intake|reduced intake|treatment|surgery|cancer|diagnosis|symptoms?|requires?|recommend|intervention|monitor|significant|severe|moderate|mild|concerning|abnormal|elevated|outside reference|high blood pressure|low blood pressure|meets|criteria|suggests?|indicates?|consistent with|due to|at risk|urgent|urgency|warrant|assess|review|follow up|concern|impact|impair|referral|escalat|because|therefore)\b/i.test(text);
+  return /\d/.test(text) && mentionsMeasurement && !addsClinicalMeaning && text.trim().split(/\s+/).length <= 45;
+}
+
 export function registerReportPdfFonts(regularSrc: string, boldSrc: string) {
   if (fontsRegistered) return;
   Font.register({ family: "NIQ Sans", fonts: [{ src: regularSrc, fontWeight: 400 }, { src: boldSrc, fontWeight: 700 }] });
@@ -222,7 +229,7 @@ function BmiReferencePanel({ metric, age, weight, height, theme }: { metric: Met
 function NarrativePanel({ title, text, icon, theme, soft = false, accent = false }: { title: string; text: string; icon: IconName; theme: Palette; soft?: boolean; accent?: boolean }) {
   return <View wrap={false} style={[styles.panel, { borderColor: theme.line, borderLeftWidth: accent ? 3 : 1, borderLeftColor: accent ? theme.primary : theme.line, backgroundColor: soft ? theme.soft : theme.white }]}>
     <View style={{ flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 9 }}><Icon name={icon} color={theme.primary} size={20}/><Text style={[styles.subTitle, { marginBottom: 0 }]}>{title}</Text></View>
-    <Text style={styles.body}>{text}</Text>
+    <Text style={styles.body} hyphenationCallback={word => [word]}>{text}</Text>
   </View>;
 }
 
@@ -233,7 +240,7 @@ function CareStep({ number, title, text, icon, theme, width }: { number: string;
       <Text style={[styles.subTitle, { flex: 1, marginBottom: 0 }]}>{title}</Text>
       <Icon name={icon} color={theme.primary} size={18}/>
     </View>
-    <Text style={styles.body}>{text}</Text>
+    <Text style={styles.body} hyphenationCallback={word => [word]}>{text}</Text>
   </View>;
 }
 
@@ -338,17 +345,24 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
   const populatedDetails = detailGroups.filter(group => group.metrics.length > 0);
   const splitVitalDetails = populatedDetails.reduce((total, group) => total + group.metrics.length, 0) > 14;
   let firstPageDetailCount = 0;
+  // Keep enough detail with the vital summary, then use the findings page for whole overflow groups.
   const firstPageDetails = populatedDetails.filter(group => {
-    if (splitVitalDetails && firstPageDetailCount > 0 && firstPageDetailCount + group.metrics.length > 11) return false;
+    if (splitVitalDetails && firstPageDetailCount > 0 && firstPageDetailCount + group.metrics.length > 16) return false;
     firstPageDetailCount += group.metrics.length;
     return true;
   });
   const remainingDetails = populatedDetails.filter(group => !firstPageDetails.includes(group));
   const plan = productParts(report);
   const targets = nutritionTargets(report);
+  const clinicalFinding = report.narrative.keyFindings?.trim();
+  const showClinicalFinding = Boolean(clinicalFinding && !isObservationOnlyFinding(clinicalFinding));
   const hasNutritionPage = Boolean(plan || report.narrative.nutritionAdvice || targets.length || report.narrative.treatmentAdvice);
   const hasConsiderations = Boolean(report.narrative.conditionAdvice || report.narrative.effectsAdvice);
-  const hasFindings = Boolean(report.classification || report.narrative.keyFindings || cleanWeights(report).length || observationMetrics.length);
+  const hasNutritionFindings = Boolean(report.classification || showClinicalFinding || observationMetrics.length || (!hasNutritionPage && cleanWeights(report).length));
+  const hasFindings = Boolean(remainingDetails.length || hasNutritionFindings);
+  const findingsTitle = remainingDetails.length
+    ? hasNutritionFindings ? "Vital IQ and nutrition findings" : "Vital IQ detailed measurements"
+    : "Nutrition status and findings";
   const hasActions = Boolean(report.narrative.actionSummary || report.narrative.monitoringSummary);
   const careStepWidth = report.narrative.actionSummary && report.narrative.monitoringSummary &&
     report.narrative.actionSummary.length + report.narrative.monitoringSummary.length < 420 ? "48.8%" : "100%";
@@ -385,32 +399,33 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
       {report.narrative.overview && <NarrativePanel title="Clinical overview" text={report.narrative.overview} icon="clipboard" theme={theme}/>}
     </ReportPage>
 
-    {faceMetrics.length > 0 && <><ReportPage report={report} brand={brand} number={page++} title="Vital IQ measurements" icon="pulse">
+    {faceMetrics.length > 0 && <ReportPage report={report} brand={brand} number={page++} title="Vital IQ measurements" icon="pulse">
       {vitalPoints && <View style={[styles.softPanel, { backgroundColor: theme.soft, flexDirection: "row", alignItems: "center", gap: 10 }]}><Icon name="pulse" color={theme.primary} size={22}/><Text style={[styles.subTitle, { marginBottom: 0, flex: 1 }]}>Vital IQ points</Text><Text style={[styles.largeValue, { color: brandInk }]}>{vitalPoints.value}</Text></View>}
       {faceScores.length > 0 && <View style={[styles.row, { marginBottom: 13 }]}>{faceScores.map(metric => <ScoreMetric key={metric.id} metric={metric} theme={theme}/>)}</View>}
       {faceReadings.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Vital signs</Text><View style={[styles.wrapRow, { marginBottom: 10 }]}>{faceReadings.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme} width="23.3%"/>)}</View></>}
       {firstPageDetails.map(group => <VitalDetailGroup key={group.id} title={group.title} metrics={group.metrics} theme={theme}/>)}
-      {!splitVitalDetails && faceMetrics[0]?.measuredAt && <View style={[styles.softPanel, { backgroundColor: theme.soft, flexDirection: "row", gap: 8, alignItems: "center", marginTop: 9 }]}><Icon name="calendar" color={theme.primary} size={17}/><Text style={styles.muted}>Captured {reportDate(faceMetrics[0].measuredAt)}</Text></View>}
-    </ReportPage>
-      {remainingDetails.length > 0 && <ReportPage report={report} brand={brand} number={page++} title="Vital IQ detailed measurements" icon="pulse">
-        {remainingDetails.map(group => <VitalDetailGroup key={group.id} title={group.title} metrics={group.metrics} theme={theme}/>)}
-        {faceMetrics[0]?.measuredAt && <View style={[styles.softPanel, { backgroundColor: theme.soft, flexDirection: "row", gap: 8, alignItems: "center", marginTop: 9 }]}><Icon name="calendar" color={theme.primary} size={17}/><Text style={styles.muted}>Captured {reportDate(faceMetrics[0].measuredAt)}</Text></View>}
-      </ReportPage>}</>}
+      {remainingDetails.length === 0 && faceMetrics[0]?.measuredAt && <View style={[styles.softPanel, { backgroundColor: theme.soft, flexDirection: "row", gap: 8, alignItems: "center", marginTop: 9 }]}><Icon name="calendar" color={theme.primary} size={17}/><Text style={styles.muted}>Captured {reportDate(faceMetrics[0].measuredAt)}</Text></View>}
+    </ReportPage>}
 
-    {hasFindings && <ReportPage report={report} brand={brand} number={page++} title="Nutrition status and findings" icon="chart">
-      <View style={[styles.row, { marginBottom: 11 }]}>
+    {hasFindings && <ReportPage report={report} brand={brand} number={page++} title={findingsTitle} icon={remainingDetails.length ? "pulse" : "chart"}>
+      {remainingDetails.length > 0 && <>
+        {remainingDetails.map(group => <VitalDetailGroup key={group.id} title={group.title} metrics={group.metrics} theme={theme}/>)}
+        {faceMetrics[0]?.measuredAt && <Text style={[styles.muted, { marginBottom: 9 }]}>Vital IQ captured {reportDate(faceMetrics[0].measuredAt)}</Text>}
+      </>}
+      {(report.classification || showClinicalFinding) && <View style={[styles.row, { marginBottom: 11 }]}>
         {report.classification && <View style={[styles.softPanel, { backgroundColor: tint(riskColor, 0.09), width: "100%", minHeight: 112, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 0 }]}>
           <View style={{ width: 74, height: 74, borderRadius: 37, borderWidth: 7, borderColor: riskColor, backgroundColor: theme.white, alignItems: "center", justifyContent: "center" }}><Text style={{ fontSize: 24, fontWeight: 700, color: riskInk }}>{report.classification.score}</Text></View><View style={{ flex: 1 }}><Text style={[styles.eyebrow, { color: brandInk }]}>NIQ assessment</Text><Text style={[styles.subTitle, { color: riskInk }]}>{report.classification.label}</Text><Text style={styles.muted}>points</Text></View>
-          {report.narrative.keyFindings && <View style={{ width: "48%", borderLeftWidth: 1, borderLeftColor: tint(riskColor, 0.7), paddingLeft: 12 }}><Text style={[styles.muted, { lineHeight: 1.4 }]}>{report.narrative.keyFindings}</Text></View>}
+          {showClinicalFinding && <View style={{ width: "48%", borderLeftWidth: 1, borderLeftColor: tint(riskColor, 0.7), paddingLeft: 12 }}><Text style={[styles.muted, { lineHeight: 1.4 }]}>{clinicalFinding}</Text></View>}
         </View>}
-        {!report.classification && report.narrative.keyFindings && <View style={{ width: "100%" }}><NarrativePanel title="Key findings" text={report.narrative.keyFindings} icon="clipboard" theme={theme}/></View>}
-      </View>
+        {!report.classification && showClinicalFinding && clinicalFinding && <View style={{ width: "100%" }}><NarrativePanel title="Key findings" text={clinicalFinding} icon="clipboard" theme={theme}/></View>}
+      </View>}
       {observationMetrics.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Assessment observations</Text><View style={[styles.wrapRow, { marginBottom: 11 }]}>{observationMetrics.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme}/>)}</View></>}
-      <WeightGraphic report={report} theme={theme}/>
+      {!hasNutritionPage && <WeightGraphic report={report} theme={theme}/>}
     </ReportPage>}
 
     {hasNutritionPage && <ReportPage report={report} brand={brand} number={page++} title="Nutrition plan" icon="food">
       {targets.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Daily nutrition targets</Text><View style={[styles.wrapRow, { marginBottom: 11 }]}>{targets.map(target => <View key={target.label} style={[styles.productCard, { borderColor: theme.line, backgroundColor: theme.soft, width: "48.8%" }]}><Icon name={target.icon} color={theme.primary}/><Text style={[styles.metricLabel, { marginTop: 8 }]}>{target.label}</Text><Text style={[styles.metricValue, { fontSize: 15 }]}>{target.value}</Text></View>)}</View></>}
+      <WeightGraphic report={report} theme={theme}/>
       {report.narrative.nutritionAdvice && <NarrativePanel title="Nutrition guidance" text={report.narrative.nutritionAdvice} icon="food" theme={theme} accent/>}
       <ProductPlan report={report} theme={theme}/>
       {report.narrative.treatmentAdvice && <NarrativePanel title="During treatment" text={report.narrative.treatmentAdvice} icon="shield" theme={theme} soft/>}
