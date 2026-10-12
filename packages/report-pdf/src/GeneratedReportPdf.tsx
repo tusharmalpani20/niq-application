@@ -313,7 +313,7 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
   const targets = nutritionTargets(report);
   const hasNutritionPage = Boolean(plan || report.narrative.nutritionAdvice || targets.length || report.narrative.treatmentAdvice);
   const hasConsiderations = Boolean(report.narrative.conditionAdvice || report.narrative.effectsAdvice);
-  const hasFindings = Boolean(report.classification || report.narrative.keyFindings || report.weightHistory.length || observationMetrics.length);
+  const hasFindings = Boolean(report.classification || report.narrative.keyFindings || (!hasNutritionPage && report.weightHistory.length) || observationMetrics.length);
   const hasActions = Boolean(report.narrative.actionSummary || report.narrative.monitoringSummary);
   let page = 1;
   return <Document title={`Medical nutrition therapy report - ${report.assessment.reference}`} author={brand.name} subject="Clinical nutrition assessment">
@@ -362,11 +362,12 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
         {report.narrative.keyFindings && <View style={{ width: report.classification ? "48.8%" : "100%" }}><NarrativePanel title="Key findings" text={report.narrative.keyFindings} icon="clipboard" theme={theme}/></View>}
       </View>
       {observationMetrics.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Assessment observations</Text><View style={[styles.wrapRow, { marginBottom: 11 }]}>{observationMetrics.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme}/>)}</View></>}
-      <WeightGraphic report={report} theme={theme}/>
+      {!hasNutritionPage && <WeightGraphic report={report} theme={theme}/>}
     </ReportPage>}
 
     {hasNutritionPage && <ReportPage report={report} brand={brand} number={page++} title="Nutrition plan" icon="food">
       {targets.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Targets from the matched guidance</Text><View style={[styles.wrapRow, { marginBottom: 11 }]}>{targets.map(target => <View key={target.label} style={[styles.productCard, { borderColor: theme.line, backgroundColor: theme.soft, width: "48.8%" }]}><Icon name={target.icon} color={theme.primary}/><Text style={[styles.metricLabel, { marginTop: 8 }]}>{target.label}</Text><Text style={[styles.metricValue, { fontSize: 15 }]}>{target.value}</Text></View>)}</View></>}
+      <WeightGraphic report={report} theme={theme}/>
       {report.narrative.nutritionAdvice && <NarrativePanel title="Nutrition guidance" text={report.narrative.nutritionAdvice} icon="food" theme={theme}/>}
       <ProductPlan report={report} theme={theme}/>
       {report.narrative.treatmentAdvice && <NarrativePanel title="During treatment" text={report.narrative.treatmentAdvice} icon="shield" theme={theme} soft/>}
