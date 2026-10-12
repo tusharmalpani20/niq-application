@@ -1,5 +1,5 @@
 import { Activity, BicepsFlexed, Calculator, ChartNoAxesCombined, ClipboardList, Droplets, Gauge, HeartPulse, Leaf, Package, Ruler, Scale, ShieldCheck, Soup, Stethoscope, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
-import { faceScanAdditionalMetricGroups, riskColorHex } from "@niq/application-contracts";
+import { reportFaceScanAdditionalMetricGroups, riskColorHex } from "@niq/application-contracts";
 import { useBranding } from "@/lib/branding-context";
 import { BrandMarks } from "@/components/BrandMarks";
 import { AssessmentBmiCard } from "./AssessmentBmiCard";
@@ -104,13 +104,13 @@ function WeightTrend({ report }: { report: GeneratedReport }) {
 
 export function GeneratedReportPreview({ report }: { report: GeneratedReport }) {
   const { branding } = useBranding();
-  const faceMetrics = report.metrics.filter(metric => metric.source === "face_scan");
+  const faceMetrics = report.metrics.filter(metric => metric.source === "face_scan" && metric.id !== "hba1c");
   const faceMetric = (id: string) => faceMetrics.find(metric => metric.id === id);
   const faceScores = ["vital_iq_points", "wellness_score", "health_risk_score"].map(faceMetric).filter((metric): metric is ReportMetric => Boolean(metric));
   const bloodPressure = faceMetric("systolic") && faceMetric("diastolic")
     ? `${faceMetric("systolic")!.value}/${faceMetric("diastolic")!.value}` : null;
   const faceVitals = faceMetrics.filter(metric => ["heart_rate", "oxygen_saturation", "respiratory_rate", ...(bloodPressure ? [] : ["systolic", "diastolic"])].includes(metric.id));
-  const faceDetailGroups = faceScanAdditionalMetricGroups.map(group => ({
+  const faceDetailGroups = reportFaceScanAdditionalMetricGroups.map(group => ({
     ...group,
     metrics: [
       ...group.metrics.map(item => faceMetric(item.id)).filter((metric): metric is ReportMetric => Boolean(metric)),
@@ -150,15 +150,14 @@ export function GeneratedReportPreview({ report }: { report: GeneratedReport }) 
       <div className="cr-overview-head"><div className="cr-overview-hero"><div className="cr-avatar" aria-hidden="true">{report.patient.displayName.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase()).join("")}</div><div><h3>{report.patient.displayName}</h3><p>{[report.patient.reference, age === null ? null : `${age} years`, report.patient.gender].filter(Boolean).join(" · ")}</p>{report.assessment.completedAt && <p>Assessment completed {reportDate(report.assessment.completedAt)}</p>}</div></div>
         {keyMetrics.length > 0 && <div className="cr-overview-key">{keyMetrics.map(metric => <div className="cr-metric-card" key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.measuredAt && <small>{reportDate(metric.measuredAt)}</small>}</div>)}</div>}
       </div>
-      {report.narrative.overview && <div className="cr-feature-panel"><span className="cr-kicker">Clinical overview</span><p>{report.narrative.overview}</p></div>}
       {showBmiReference && <div className="cr-report-bmi"><AssessmentBmiCard answers={{ height_cm: height!, current_weight_kg: weight!, ...(age === null ? {} : {age}) }} showAnchor={false}/></div>}
+      {report.narrative.overview && <div className="cr-feature-panel"><span className="cr-kicker">Clinical overview</span><p>{report.narrative.overview}</p></div>}
       {otherMetrics.length > 0 && <div className="cr-overview-observations"><h3>Assessment observations</h3><div className="cr-metric-grid">{otherMetrics.map(metric => <div className="cr-metric-card" key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.measuredAt && <small>{reportDate(metric.measuredAt)}</small>}</div>)}</div></div>}
     </ReportSheet>
     {faceMetrics.length > 0 && <ReportSheet number={nextPage() + 1} title="Vital IQ measurements" icon={HeartPulse} report={report}>
-      <p className="cr-section-intro">Recorded Vital IQ measurements. The overall NIQ assessment risk is shown in the nutrition section.</p>
       {faceScores.length > 0 && <div className="cr-vital-scores">{faceScores.map(metric => <VitalScoreCard key={metric.id} metric={metric}/>)}</div>}
-      {(faceVitals.length > 0 || bloodPressure) && <div className="cr-vital-highlights">{faceVitals.map(metric => <div className="cr-vital-highlight" key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong></div>)}{bloodPressure && <div className="cr-vital-highlight"><MetricIcon id="systolic" label="Blood pressure"/><span>Blood pressure</span><strong>{bloodPressure} mmHg</strong></div>}</div>}
-      {faceDetailGroups.length > 0 && <div className="cr-vital-detail-grid">{faceDetailGroups.map(group => { const Icon = group.id === "circulation" ? HeartPulse : group.id === "fitness" ? BicepsFlexed : ChartNoAxesCombined; return <section className="cr-vital-detail" key={group.id}><h3><Icon size={17} aria-hidden="true"/>{group.title}</h3><dl>{group.metrics.map(metric => <div key={metric.id}><dt>{metric.label}</dt><dd>{metricText(metric)}</dd></div>)}</dl></section>; })}</div>}
+      {(faceVitals.length > 0 || bloodPressure) && <div className="cr-vital-highlights">{faceVitals.map(metric => <div className={`cr-vital-highlight${metric.outsideReferenceRange ? " cr-vital-outside" : ""}`} key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.outsideReferenceRange && metric.referenceRange && <small>Reference: {metric.referenceRange}</small>}</div>)}{bloodPressure && <div className={`cr-vital-highlight${faceMetric("systolic")?.outsideReferenceRange ? " cr-vital-outside" : ""}`}><MetricIcon id="systolic" label="Blood pressure"/><span>Blood pressure</span><strong>{bloodPressure} mmHg</strong>{faceMetric("systolic")?.outsideReferenceRange && faceMetric("systolic")?.referenceRange && <small>Reference: {faceMetric("systolic")!.referenceRange}</small>}</div>}</div>}
+      {faceDetailGroups.length > 0 && <div className="cr-vital-detail-grid">{faceDetailGroups.map(group => { const Icon = group.id === "circulation" ? HeartPulse : group.id === "fitness" ? BicepsFlexed : ChartNoAxesCombined; return <section className="cr-vital-detail" key={group.id}><h3><Icon size={17} aria-hidden="true"/>{group.title}</h3><dl>{group.metrics.map(metric => <div key={metric.id}><dt>{metric.label}</dt><dd className={metric.outsideReferenceRange ? "cr-vital-outside-value" : undefined}>{metricText(metric)}{metric.outsideReferenceRange && metric.referenceRange && <small>Reference: {metric.referenceRange}</small>}</dd></div>)}</dl></section>; })}</div>}
     </ReportSheet>}
     {(report.classification || report.weightHistory.length > 0 || report.narrative.keyFindings) && <ReportSheet number={nextPage() + 1} title="Nutrition status & findings" icon={Activity} report={report}>
       <div className="cr-status-row">{report.classification && <div className="cr-score-card" style={{ borderColor: riskColor, backgroundColor: `color-mix(in srgb, ${riskColor} 10%, white)` }}><span>NIQ assessment</span><strong style={{ color: riskColor }}>{report.classification.score}</strong><span>points</span><b style={{ color: riskColor }}>{report.classification.label}</b></div>}{report.narrative.keyFindings && <div className="cr-feature-panel cr-findings"><span className="cr-kicker">Key findings</span><p>{report.narrative.keyFindings}</p></div>}</div>

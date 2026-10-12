@@ -1,6 +1,6 @@
 import { Circle, Document, Font, Image, Page, Path, Rect, Svg, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { ReactNode } from "react";
-import { adultBmiCategory, adultBmiReference, calculateAssessmentBmi, faceScanAdditionalMetricGroups, riskColorHex, type GeneratedReport } from "@niq/application-contracts";
+import { adultBmiCategory, adultBmiReference, calculateAssessmentBmi, reportFaceScanAdditionalMetricGroups, riskColorHex, type GeneratedReport } from "@niq/application-contracts";
 import { cleanWeights, metricText, reportAge, reportDate, reportGuidance } from "./generated-report-format";
 import { weightChartPoints } from "./generated-report-chart";
 import { accessibleBrandInk } from "./accessible-brand-ink";
@@ -117,10 +117,11 @@ function ReportPage({ report, brand, number, title, icon, children }: { report: 
 }
 
 function MetricCard({ metric, theme, icon, width }: { metric: Metric; theme: Palette; icon?: IconName; width?: string }) {
-  return <View wrap={false} style={[styles.metricCard, { width: width ?? "31.8%", borderColor: theme.line, backgroundColor: theme.white }]}>
+  return <View wrap={false} style={[styles.metricCard, { width: width ?? "31.8%", borderColor: metric.outsideReferenceRange ? "#e2be7d" : theme.line, backgroundColor: metric.outsideReferenceRange ? "#fffaf0" : theme.white }]}>
     <Icon name={icon ?? iconFor(metric.label)} color={theme.primary} size={19}/>
     <Text style={styles.metricLabel}>{metric.label}</Text>
-    <Text style={[styles.metricValue, { color: theme.ink, fontSize: metric.id === "blood_pressure" ? 13 : 16 }]}>{metricText(metric)}</Text>
+    <Text style={[styles.metricValue, { color: metric.outsideReferenceRange ? "#8a5b13" : theme.ink, fontSize: metric.id === "blood_pressure" ? 13 : 16 }]}>{metricText(metric)}</Text>
+    {metric.outsideReferenceRange && metric.referenceRange && <Text style={{ color: "#8a5b13", fontSize: 6.8, marginTop: 3 }}>Reference: {metric.referenceRange}</Text>}
   </View>;
 }
 
@@ -167,7 +168,7 @@ function VitalDetailGroup({ title, metrics, theme }: { title: string; metrics: M
   if (!metrics.length) return null;
   return <View wrap={false} style={[styles.vitalDetailPanel, { borderColor: theme.line }]}>
     <Text style={[styles.vitalDetailHeader, { color: accessibleBrandInk(theme.primary, [theme.soft]), backgroundColor: theme.soft }]}>{title}</Text>
-    <View style={styles.vitalDetailBody}>{metrics.map(metric => <View key={metric.id} style={[styles.vitalDetailRow, { borderBottomColor: theme.line }]}><Text style={[styles.muted, { flex: 1 }]}>{metric.label}</Text><Text style={{ fontSize: 8.2, fontWeight: 700, maxWidth: "48%", textAlign: "right" }}>{metricText(metric)}</Text></View>)}</View>
+    <View style={styles.vitalDetailBody}>{metrics.map(metric => <View key={metric.id} style={[styles.vitalDetailRow, { borderBottomColor: theme.line }]}><Text style={[styles.muted, { flex: 1 }]}>{metric.label}</Text><View style={{ maxWidth: "53%" }}><Text style={{ fontSize: 8.2, fontWeight: 700, color: metric.outsideReferenceRange ? "#8a5b13" : theme.ink, textAlign: "right" }}>{metricText(metric)}</Text>{metric.outsideReferenceRange && metric.referenceRange && <Text style={{ color: "#8a5b13", fontSize: 6.5, textAlign: "right" }}>Reference: {metric.referenceRange}</Text>}</View></View>)}</View>
   </View>;
 }
 
@@ -280,18 +281,19 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
     const parsed = raw ? Number(raw) : NaN;
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   };
-  const faceMetrics = report.metrics.filter(metric => metric.source === "face_scan");
+  const faceMetrics = report.metrics.filter(metric => metric.source === "face_scan" && metric.id !== "hba1c");
   const faceMetric = (id: string) => faceMetrics.find(metric => metric.id === id);
   const faceScores = ["wellness_score", "health_risk_score"].map(faceMetric).filter((metric): metric is Metric => Boolean(metric));
   const vitalPoints = faceMetric("vital_iq_points");
   const systolic = faceMetric("systolic");
   const diastolic = faceMetric("diastolic");
   const bloodPressure: Metric | null = systolic && diastolic
-    ? { id: "blood_pressure", label: "Blood pressure", value: `${systolic.value}/${diastolic.value}`, unit: "mmHg", source: "face_scan" } : null;
+    ? { id: "blood_pressure", label: "Blood pressure", value: `${systolic.value}/${diastolic.value}`, unit: "mmHg", source: "face_scan",
+      ...(systolic.referenceRange ? { referenceRange: systolic.referenceRange, outsideReferenceRange: systolic.outsideReferenceRange } : {}) } : null;
   const faceReadings = faceMetrics.filter(metric => ["heart_rate", "oxygen_saturation", "respiratory_rate", ...(bloodPressure ? [] : ["systolic", "diastolic"])].includes(metric.id));
   if (bloodPressure) faceReadings.push(bloodPressure);
   const groupedIds = new Set(["vital_iq_points", "wellness_score", "health_risk_score", "heart_rate", "oxygen_saturation", "respiratory_rate", "systolic", "diastolic"]);
-  const detailGroups = faceScanAdditionalMetricGroups.map(group => {
+  const detailGroups = reportFaceScanAdditionalMetricGroups.map(group => {
     const metrics = group.metrics.map(item => faceMetric(item.id)).filter((metric): metric is Metric => Boolean(metric));
     metrics.forEach(metric => groupedIds.add(metric.id));
     return { id: group.id, title: group.title, metrics };
@@ -336,12 +338,11 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
         </View>
         {primaryMeasurements.length > 0 && <View style={{ width: "48.8%", justifyContent: "space-between" }}>{primaryMeasurements.map(metric => <View key={metric.id} style={[styles.panel, { minHeight: primaryMeasurements.length === 1 ? 174 : 82, marginBottom: 0, borderColor: theme.line, justifyContent: "center" }]}><Text style={styles.metricLabel}>{metric.label}</Text><Text style={[styles.metricValue, { color: theme.ink }]}>{metricText(metric)}</Text></View>)}</View>}
       </View>
-      {report.narrative.overview && <NarrativePanel title="Clinical overview" text={report.narrative.overview} icon="clipboard" theme={theme}/>}
       {bmiMetric && <BmiReferencePanel metric={bmiMetric} age={age} weight={measurementNumber("current_weight_kg")} height={measurementNumber("height_cm")} theme={theme}/>}
+      {report.narrative.overview && <NarrativePanel title="Clinical overview" text={report.narrative.overview} icon="clipboard" theme={theme}/>}
     </ReportPage>
 
     {faceMetrics.length > 0 && <><ReportPage report={report} brand={brand} number={page++} title="Vital IQ measurements" icon="pulse">
-      <Text style={[styles.muted, { marginBottom: 13 }]}>Vital IQ measurements from the saved capture. The NIQ nutrition risk score appears in the next section.</Text>
       {vitalPoints && <View style={[styles.softPanel, { backgroundColor: theme.soft, flexDirection: "row", alignItems: "center", gap: 10 }]}><Icon name="pulse" color={theme.primary} size={22}/><Text style={[styles.subTitle, { marginBottom: 0, flex: 1 }]}>Vital IQ points</Text><Text style={[styles.largeValue, { color: brandInk }]}>{vitalPoints.value}</Text></View>}
       {faceScores.length > 0 && <View style={[styles.row, { marginBottom: 13 }]}>{faceScores.map(metric => <ScoreMetric key={metric.id} metric={metric} theme={theme}/>)}</View>}
       {faceReadings.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Vital signs</Text><View style={[styles.wrapRow, { marginBottom: 10 }]}>{faceReadings.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme} width="23.3%"/>)}</View></>}

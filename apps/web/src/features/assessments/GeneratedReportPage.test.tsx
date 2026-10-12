@@ -64,8 +64,9 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
       { id: "height_cm", label: "Height", value: "175", unit: "cm", source: "assessment" },
       { id: "bmi", label: "BMI", value: "20.2", source: "assessment" },
       { id: "wellness_score", label: "Wellness score", value: "80", unit: "/100", source: "face_scan" },
-      { id: "sdnn", label: "SDNN", value: "42", unit: "ms", source: "face_scan" },
+      { id: "sdnn", label: "SDNN", value: "42", unit: "ms", source: "face_scan", referenceRange: "60–100 ms", outsideReferenceRange: true },
       { id: "body_fat", label: "Body fat", value: "21", unit: "%", source: "face_scan" },
+      { id: "hba1c", label: "HbA1c", value: "5.8", unit: "%", source: "face_scan" },
     ],
     weightHistory: [],
     decision: { productStageChoice: null, plannedTreatmentStartDate: null },
@@ -92,7 +93,12 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect(document.querySelector(".cr-metric-card .cr-metric-icon svg")).not.toBeNull();
     expect(document.querySelector(".cr-report-bmi svg[viewBox='0 0 240 122']")).not.toBeNull();
     expect(document.querySelector(".cr-vital-detail")?.textContent).toContain("SDNN");
+    expect(document.querySelector(".cr-vital-detail")?.textContent).toContain("Reference: 60–100 ms");
     expect(document.body.textContent).toContain("Body fat");
+    expect(document.body.textContent).not.toContain("HbA1c");
+    expect(document.querySelector('[aria-label="Vital IQ measurements"] .cr-section-intro')).toBeNull();
+    const patientOverview = document.querySelector('[aria-label="Patient overview"]')!;
+    expect(Array.from(patientOverview.children[1]!.children).findIndex(element => element.classList.contains("cr-report-bmi"))).toBeLessThan(Array.from(patientOverview.children[1]!.children).findIndex(element => element.classList.contains("cr-feature-panel")));
     expect((document.querySelector(".cr-score-card strong") as HTMLElement)?.style.color).toBe("rgb(220, 61, 80)");
     expect(document.querySelector("a[download]")?.getAttribute("download")).toBe("NIQ-report-NIQ-12.pdf");
     await act(async () => { (document.querySelectorAll(".cr-preview-tab")[1] as HTMLButtonElement).click(); });
