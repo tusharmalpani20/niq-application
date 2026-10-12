@@ -324,6 +324,9 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
   const assessmentMetrics = report.metrics.filter(metric => metric.source === "assessment");
   const physicalMetrics = assessmentMetrics.filter(metric => /^(current weight|height|bmi)$/i.test(metric.label));
   const observationMetrics = assessmentMetrics.filter(metric => !physicalMetrics.includes(metric));
+  const statusMetricIds = new Set(["weight_loss_percent", "appetite_status", "fluid_intake", "functional_capacity", "protein_intake"]);
+  const statusMetrics = observationMetrics.filter(metric => statusMetricIds.has(metric.id));
+  const otherAssessmentMetrics = observationMetrics.filter(metric => !statusMetricIds.has(metric.id));
   const primaryMeasurements = physicalMetrics.filter(metric => metric.id === "current_weight_kg" || metric.id === "height_cm");
   const bmiMetric = physicalMetrics.find(metric => metric.id === "bmi");
   const measurementNumber = (id: string) => {
@@ -371,9 +374,9 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
   const showClinicalFinding = Boolean(clinicalFinding && !isObservationOnlyFinding(clinicalFinding));
   const hasNutritionPage = Boolean(plan || report.narrative.nutritionAdvice || targets.length || renalGuidance || report.narrative.treatmentAdvice);
   const hasConsiderations = Boolean(report.narrative.conditionAdvice || report.narrative.effectsAdvice);
-  const hasNutritionFindings = Boolean(report.classification || showClinicalFinding || observationMetrics.length || (!hasNutritionPage && cleanWeights(report).length));
+  const hasNutritionFindings = Boolean(report.classification || showClinicalFinding || statusMetrics.length || (!hasNutritionPage && cleanWeights(report).length));
   const hasFindings = Boolean(remainingDetails.length || hasNutritionFindings);
-  const compactNutritionSummary = Boolean(report.classification && !showClinicalFinding && !remainingDetails.length && observationMetrics.length > 0 && observationMetrics.length <= 6);
+  const compactNutritionSummary = Boolean(report.classification && !remainingDetails.length && statusMetrics.length > 0 && statusMetrics.length <= 6);
   const findingsTitle = remainingDetails.length
     ? hasNutritionFindings ? "Vital IQ and nutrition findings" : "Vital IQ detailed measurements"
     : "Nutrition status and findings";
@@ -411,6 +414,7 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
       </View>
       {bmiMetric && <BmiReferencePanel metric={bmiMetric} age={age} weight={measurementNumber("current_weight_kg")} height={measurementNumber("height_cm")} theme={theme}/>}
       {report.narrative.overview && <NarrativePanel title="Clinical overview" text={report.narrative.overview} icon="clipboard" theme={theme}/>}
+      {otherAssessmentMetrics.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Assessment observations</Text><View style={styles.wrapRow}>{otherAssessmentMetrics.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme}/>)}</View></>}
     </ReportPage>
 
     {faceMetrics.length > 0 && <ReportPage report={report} brand={brand} number={page++} title="Vital IQ measurements" icon="pulse">
@@ -443,17 +447,16 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
         </View>
         <View style={[styles.softPanel, { width: "65.7%", marginBottom: 0, backgroundColor: theme.soft, padding: 9 }]}>
           <Text style={[styles.sectionLabel, { color: brandInk, marginBottom: 6 }]}>Assessment indicators</Text>
-          <View style={[styles.wrapRow, { gap: 6 }]}>{observationMetrics.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme} width="48.8%" compact/>)}</View>
+          <View style={[styles.wrapRow, { gap: 6 }]}>{statusMetrics.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme} width="48.8%" compact/>)}</View>
         </View>
       </View>}
-      {!compactNutritionSummary && (report.classification || showClinicalFinding) && <View style={[styles.row, { marginBottom: 11 }]}>
+      {!compactNutritionSummary && report.classification && <View style={[styles.row, { marginBottom: 11 }]}>
         {report.classification && <View style={[styles.softPanel, { backgroundColor: tint(riskColor, 0.09), width: "100%", minHeight: 112, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 0 }]}>
           <View style={{ width: 74, height: 74, borderRadius: 37, borderWidth: 7, borderColor: riskColor, backgroundColor: theme.white, alignItems: "center", justifyContent: "center" }}><Text style={{ fontSize: 24, fontWeight: 700, color: riskInk }}>{report.classification.score}</Text></View><View style={{ flex: 1 }}><Text style={[styles.eyebrow, { color: brandInk }]}>NIQ assessment</Text><Text style={[styles.subTitle, { color: riskInk }]}>{report.classification.label}</Text><Text style={styles.muted}>points</Text></View>
-          {showClinicalFinding && <View style={{ width: "48%", borderLeftWidth: 1, borderLeftColor: tint(riskColor, 0.7), paddingLeft: 12 }}><Text style={[styles.muted, { lineHeight: 1.4 }]}>{clinicalFinding}</Text></View>}
         </View>}
-        {!report.classification && showClinicalFinding && clinicalFinding && <View style={{ width: "100%" }}><NarrativePanel title="Key findings" text={clinicalFinding} icon="clipboard" theme={theme}/></View>}
       </View>}
-      {!compactNutritionSummary && observationMetrics.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Assessment observations</Text><View style={[styles.wrapRow, { marginBottom: 11 }]}>{observationMetrics.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme}/>)}</View></>}
+      {!compactNutritionSummary && statusMetrics.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Assessment indicators</Text><View style={[styles.wrapRow, { marginBottom: 11 }]}>{statusMetrics.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme}/>)}</View></>}
+      {showClinicalFinding && clinicalFinding && <NarrativePanel title="Clinical interpretation" text={clinicalFinding} icon="clipboard" theme={theme} accent/>}
       <WeightGraphic report={report} theme={theme}/>
     </ReportPage>}
 
