@@ -77,13 +77,13 @@ const styles = StyleSheet.create({
   scoreLabel: { fontSize: 9, fontWeight: 700, marginBottom: 5 },
   divider: { borderBottomWidth: 1, marginVertical: 10 },
   sectionLabel: { fontSize: 8, fontWeight: 700, letterSpacing: .6, textTransform: "uppercase", marginBottom: 9 },
-  chartPanel: { borderWidth: 1, borderRadius: 10, padding: 14, marginBottom: 11 },
-  chart: { width: "100%", height: 160 },
-  chartLabels: { flexDirection: "row", justifyContent: "space-between", marginTop: 5 },
+  chartPanel: { borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 9 },
+  chart: { width: "100%", height: 108 },
+  chartLabels: { flexDirection: "row", justifyContent: "space-between", marginTop: 3 },
   chartLabel: { fontSize: 7.5, color: "#59717c", maxWidth: 105 },
-  productCard: { borderWidth: 1, borderRadius: 10, padding: 12, width: "48.8%", minHeight: 88 },
-  productQuantity: { fontSize: 25, fontWeight: 700, lineHeight: 1.1 },
-  productName: { fontSize: 11, fontWeight: 700 },
+  productCard: { borderWidth: 1, borderRadius: 10, padding: 10, width: "48.8%", minHeight: 72 },
+  productQuantity: { fontSize: 23, fontWeight: 700, lineHeight: 1.1 },
+  productName: { fontSize: 11, fontWeight: 700, marginBottom: 6 },
   noteRow: { flexDirection: "row", gap: 11, alignItems: "flex-start", paddingVertical: 11, borderBottomWidth: 1 },
   numberDot: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   numberText: { fontSize: 9, fontWeight: 700, color: "#ffffff" },
@@ -219,9 +219,20 @@ function BmiReferencePanel({ metric, age, weight, height, theme }: { metric: Met
   </View>;
 }
 
-function NarrativePanel({ title, text, icon, theme, soft = false }: { title: string; text: string; icon: IconName; theme: Palette; soft?: boolean }) {
-  return <View wrap={false} style={[styles.panel, { borderColor: theme.line, backgroundColor: soft ? theme.soft : theme.white }]}>
+function NarrativePanel({ title, text, icon, theme, soft = false, accent = false }: { title: string; text: string; icon: IconName; theme: Palette; soft?: boolean; accent?: boolean }) {
+  return <View wrap={false} style={[styles.panel, { borderColor: theme.line, borderLeftWidth: accent ? 3 : 1, borderLeftColor: accent ? theme.primary : theme.line, backgroundColor: soft ? theme.soft : theme.white }]}>
     <View style={{ flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 9 }}><Icon name={icon} color={theme.primary} size={20}/><Text style={[styles.subTitle, { marginBottom: 0 }]}>{title}</Text></View>
+    <Text style={styles.body}>{text}</Text>
+  </View>;
+}
+
+function CareStep({ number, title, text, icon, theme, width }: { number: string; title: string; text: string; icon: IconName; theme: Palette; width: "48.8%" | "100%" }) {
+  return <View wrap={false} style={[styles.panel, { width, minHeight: width === "48.8%" ? 122 : undefined, borderColor: theme.line, backgroundColor: theme.soft }]}>
+    <View style={{ flexDirection: "row", gap: 9, alignItems: "center", marginBottom: 9 }}>
+      <View style={[styles.numberDot, { backgroundColor: theme.primary }]}><Text style={styles.numberText}>{number}</Text></View>
+      <Text style={[styles.subTitle, { flex: 1, marginBottom: 0 }]}>{title}</Text>
+      <Icon name={icon} color={theme.primary} size={18}/>
+    </View>
     <Text style={styles.body}>{text}</Text>
   </View>;
 }
@@ -257,13 +268,14 @@ function nutritionTargets(report: GeneratedReport) {
 function WeightGraphic({ report, theme }: { report: GeneratedReport; theme: Palette }) {
   const weights = cleanWeights(report);
   if (!weights.length) return null;
-  const points = weightChartPoints(weights, 470, 160);
+  const chartHeight = 108;
+  const points = weightChartPoints(weights, 470, chartHeight);
   return <View wrap={false} style={[styles.chartPanel, { borderColor: theme.line }]}>
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}><Icon name="chart" color={theme.primary}/><Text style={styles.subTitle}>Recorded weight history</Text></View>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}><Icon name="chart" color={theme.primary}/><Text style={[styles.subTitle, { marginBottom: 0 }]}>Recorded weight history</Text></View>
     {points.length > 1 ? <>
-      <Svg style={styles.chart} viewBox="0 0 470 160">
-        {[38, 78, 118].map(y => <Path key={y} d={`M 10 ${y} L 460 ${y}`} stroke={theme.line} strokeWidth="1" strokeDasharray="4 5"/>)}
-        <Path d={`M ${points[0]!.x} 136 ${points.map(point => `L ${point.x} ${point.y}`).join(" ")} L ${points[points.length - 1]!.x} 136 Z`} fill={theme.primary} opacity="0.08"/>
+      <Svg style={styles.chart} viewBox={`0 0 470 ${chartHeight}`}>
+        {[30, 52, 74].map(y => <Path key={y} d={`M 10 ${y} L 460 ${y}`} stroke={theme.line} strokeWidth="1" strokeDasharray="4 5"/>)}
+        <Path d={`M ${points[0]!.x} ${chartHeight - 24} ${points.map(point => `L ${point.x} ${point.y}`).join(" ")} L ${points[points.length - 1]!.x} ${chartHeight - 24} Z`} fill={theme.primary} opacity="0.08"/>
         <Path d={points.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ")} stroke={theme.primary} strokeWidth="3.5" fill="none"/>
         {points.map((point, index) => <Circle key={`${point.date ?? "undated"}-${index}`} cx={point.x} cy={point.y} r="5" fill={theme.white} stroke={theme.primary} strokeWidth="2.5"/>)}
       </Svg>
@@ -275,14 +287,16 @@ function WeightGraphic({ report, theme }: { report: GeneratedReport; theme: Pale
 function ProductPlan({ report, theme }: { report: GeneratedReport; theme: Palette }) {
   const plan = productParts(report);
   if (!plan) return null;
-  return <View wrap={false} style={[styles.panel, { borderColor: theme.line }]}>
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 12 }}><Icon name="package" color={theme.primary}/><Text style={styles.subTitle}>Products in your plan</Text></View>
+  return <View wrap={false} style={[styles.panel, { borderColor: theme.line, padding: 11 }]}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 9 }}><Icon name="package" color={theme.primary}/><Text style={[styles.subTitle, { marginBottom: 0 }]}>Supplement recommendation</Text></View>
     <View style={styles.wrapRow}>{plan.items.map((item, index) => <View key={`${item.name}-${index}`} style={[styles.productCard, { borderColor: theme.line, backgroundColor: theme.softSecondary }]}>
-      {item.quantity && <Text style={[styles.productQuantity, { color: accessibleBrandInk(theme.primary, [theme.softSecondary]) }]}>{item.quantity}</Text>}
       <Text style={styles.productName}>{item.name}</Text>
-      {item.detail && <Text style={styles.muted}>{item.detail}</Text>}
+      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 5 }}>
+        {item.quantity && <Text style={[styles.productQuantity, { color: accessibleBrandInk(theme.primary, [theme.softSecondary]) }]}>{item.quantity}</Text>}
+        {item.detail && <Text style={styles.muted}>{item.detail}</Text>}
+      </View>
     </View>)}</View>
-    {plan.duration && <View style={{ flexDirection: "row", gap: 7, alignItems: "center", marginTop: 13 }}><Icon name="calendar" color={theme.primary} size={17}/><Text style={styles.body}>{plan.duration}</Text></View>}
+    {plan.duration && <View style={{ flexDirection: "row", gap: 7, alignItems: "center", marginTop: 9 }}><Icon name="calendar" color={theme.primary} size={17}/><Text style={styles.body}>{plan.duration}</Text></View>}
   </View>;
 }
 
@@ -336,6 +350,8 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
   const hasConsiderations = Boolean(report.narrative.conditionAdvice || report.narrative.effectsAdvice);
   const hasFindings = Boolean(report.classification || report.narrative.keyFindings || (!hasNutritionPage && report.weightHistory.length) || observationMetrics.length);
   const hasActions = Boolean(report.narrative.actionSummary || report.narrative.monitoringSummary);
+  const careStepWidth = report.narrative.actionSummary && report.narrative.monitoringSummary &&
+    report.narrative.actionSummary.length + report.narrative.monitoringSummary.length < 420 ? "48.8%" : "100%";
   let page = 1;
   return <Document title={`Medical nutrition therapy report - ${report.assessment.reference}`} author={brand.name} subject="Clinical nutrition assessment">
     <Page size="A4" style={styles.cover}>
@@ -383,30 +399,33 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
 
     {hasFindings && <ReportPage report={report} brand={brand} number={page++} title="Nutrition status and findings" icon="chart">
       <View style={[styles.row, { marginBottom: 11 }]}>
-        {report.classification && <View style={[styles.softPanel, { backgroundColor: tint(riskColor, 0.09), width: report.narrative.keyFindings ? "48.8%" : "100%", minHeight: 145, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 0 }]}>
+        {report.classification && <View style={[styles.softPanel, { backgroundColor: tint(riskColor, 0.09), width: "100%", minHeight: 112, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 0 }]}>
           <View style={{ width: 74, height: 74, borderRadius: 37, borderWidth: 7, borderColor: riskColor, backgroundColor: theme.white, alignItems: "center", justifyContent: "center" }}><Text style={{ fontSize: 24, fontWeight: 700, color: riskInk }}>{report.classification.score}</Text></View><View style={{ flex: 1 }}><Text style={[styles.eyebrow, { color: brandInk }]}>NIQ assessment</Text><Text style={[styles.subTitle, { color: riskInk }]}>{report.classification.label}</Text><Text style={styles.muted}>points</Text></View>
+          {report.narrative.keyFindings && <View style={{ width: "48%", borderLeftWidth: 1, borderLeftColor: tint(riskColor, 0.7), paddingLeft: 12 }}><Text style={[styles.muted, { lineHeight: 1.4 }]}>{report.narrative.keyFindings}</Text></View>}
         </View>}
-        {report.narrative.keyFindings && <View style={{ width: report.classification ? "48.8%" : "100%" }}><NarrativePanel title="Key findings" text={report.narrative.keyFindings} icon="clipboard" theme={theme}/></View>}
+        {!report.classification && report.narrative.keyFindings && <View style={{ width: "100%" }}><NarrativePanel title="Key findings" text={report.narrative.keyFindings} icon="clipboard" theme={theme}/></View>}
       </View>
       {observationMetrics.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Assessment observations</Text><View style={[styles.wrapRow, { marginBottom: 11 }]}>{observationMetrics.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme}/>)}</View></>}
       {!hasNutritionPage && <WeightGraphic report={report} theme={theme}/>}
     </ReportPage>}
 
     {hasNutritionPage && <ReportPage report={report} brand={brand} number={page++} title="Nutrition plan" icon="food">
-      {targets.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Targets from the matched guidance</Text><View style={[styles.wrapRow, { marginBottom: 11 }]}>{targets.map(target => <View key={target.label} style={[styles.productCard, { borderColor: theme.line, backgroundColor: theme.soft, width: "48.8%" }]}><Icon name={target.icon} color={theme.primary}/><Text style={[styles.metricLabel, { marginTop: 8 }]}>{target.label}</Text><Text style={[styles.metricValue, { fontSize: 15 }]}>{target.value}</Text></View>)}</View></>}
+      {targets.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Daily nutrition targets</Text><View style={[styles.wrapRow, { marginBottom: 11 }]}>{targets.map(target => <View key={target.label} style={[styles.productCard, { borderColor: theme.line, backgroundColor: theme.soft, width: "48.8%" }]}><Icon name={target.icon} color={theme.primary}/><Text style={[styles.metricLabel, { marginTop: 8 }]}>{target.label}</Text><Text style={[styles.metricValue, { fontSize: 15 }]}>{target.value}</Text></View>)}</View></>}
       <WeightGraphic report={report} theme={theme}/>
-      {report.narrative.nutritionAdvice && <NarrativePanel title="Nutrition guidance" text={report.narrative.nutritionAdvice} icon="food" theme={theme}/>}
+      {report.narrative.nutritionAdvice && <NarrativePanel title="Nutrition guidance" text={report.narrative.nutritionAdvice} icon="food" theme={theme} accent/>}
       <ProductPlan report={report} theme={theme}/>
       {report.narrative.treatmentAdvice && <NarrativePanel title="During treatment" text={report.narrative.treatmentAdvice} icon="shield" theme={theme} soft/>}
     </ReportPage>}
 
     {(hasConsiderations || hasActions) && <ReportPage report={report} brand={brand} number={page++} title="Care and next steps" icon="heart">
-      {report.narrative.conditionAdvice && <NarrativePanel title="Other health conditions" text={report.narrative.conditionAdvice} icon="heart" theme={theme}/>}
-      {report.narrative.effectsAdvice && <NarrativePanel title="Treatment effects and nutrition" text={report.narrative.effectsAdvice} icon="drop" theme={theme} soft/>}
+      {report.narrative.conditionAdvice && <NarrativePanel title="Other health conditions" text={report.narrative.conditionAdvice} icon="heart" theme={theme} accent/>}
+      {report.narrative.effectsAdvice && <NarrativePanel title="Treatment effects and nutrition" text={report.narrative.effectsAdvice} icon="drop" theme={theme} soft accent/>}
       {hasActions && <Text style={[styles.sectionLabel, { color: brandInk, marginTop: 5 }]}>Action plan and monitoring</Text>}
-      {report.narrative.actionSummary && <View style={[styles.panel, { borderColor: theme.line, backgroundColor: theme.soft }]}><View style={{ flexDirection: "row", gap: 10, alignItems: "center", marginBottom: 9 }}><View style={[styles.numberDot, { backgroundColor: theme.primary }]}><Text style={styles.numberText}>01</Text></View><Text style={styles.subTitle}>What to do</Text></View><Text style={styles.body}>{report.narrative.actionSummary}</Text></View>}
-      {report.narrative.monitoringSummary && <View style={[styles.panel, { borderColor: theme.line }]}><View style={{ flexDirection: "row", gap: 10, alignItems: "center", marginBottom: 9 }}><View style={[styles.numberDot, { backgroundColor: theme.secondary }]}><Text style={styles.numberText}>02</Text></View><Text style={styles.subTitle}>What to monitor</Text></View><Text style={styles.body}>{report.narrative.monitoringSummary}</Text></View>}
-      <View style={[styles.softPanel, { backgroundColor: theme.softSecondary, flexDirection: "row", gap: 10, alignItems: "center" }]}><Icon name="alert" color={theme.secondary}/><Text style={[styles.muted, { flex: 1 }]}>Discuss new or worsening symptoms with the treating clinical team.</Text></View>
+      {hasActions && <View style={[styles.row, { flexWrap: "wrap" }]}>
+        {report.narrative.actionSummary && <CareStep number="01" title="What to do" text={report.narrative.actionSummary} icon="check" theme={theme} width={careStepWidth}/>}
+        {report.narrative.monitoringSummary && <CareStep number="02" title="What to monitor" text={report.narrative.monitoringSummary} icon="chart" theme={theme} width={careStepWidth}/>}
+      </View>}
+      <View style={[styles.softPanel, { backgroundColor: "#fff7e9", borderWidth: 1, borderColor: "#f0d7a7", flexDirection: "row", gap: 10, alignItems: "center" }]}><Icon name="alert" color="#94611b"/><Text style={[styles.muted, { flex: 1, color: "#725325" }]}>Discuss new or worsening symptoms with the treating clinical team.</Text></View>
     </ReportPage>}
   </Document>;
 }
