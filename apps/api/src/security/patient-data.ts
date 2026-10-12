@@ -29,3 +29,19 @@ export function decryptPatientData(value: Uint8Array, key: Uint8Array): string {
   decipher.setAuthTag(authTag);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
+
+/** Encrypt binary generated PDFs without base64 expansion in the database. */
+export function encryptPatientBytes(value: Uint8Array, key: Uint8Array): Buffer {
+  const iv = randomBytes(IV_LENGTH);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const ciphertext = Buffer.concat([cipher.update(value), cipher.final()]);
+  return Buffer.concat([iv, ciphertext, cipher.getAuthTag()]);
+}
+
+export function decryptPatientBytes(value: Uint8Array, key: Uint8Array): Buffer {
+  const encrypted = Buffer.from(value);
+  if (encrypted.length <= IV_LENGTH + AUTH_TAG_LENGTH) throw new Error("Encrypted patient data is malformed.");
+  const decipher = createDecipheriv("aes-256-gcm", key, encrypted.subarray(0, IV_LENGTH));
+  decipher.setAuthTag(encrypted.subarray(-AUTH_TAG_LENGTH));
+  return Buffer.concat([decipher.update(encrypted.subarray(IV_LENGTH, -AUTH_TAG_LENGTH)), decipher.final()]);
+}

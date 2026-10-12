@@ -731,6 +731,33 @@ export const assessmentFiles = pgTable("assessment_files", {
   foreignKey({columns:[t.organizationId,t.reportId],foreignColumns:[assessmentReports.organizationId,assessmentReports.id]}),
 ]);
 
+/** Generated clinical reports are distinct from source documents uploaded with an assessment. */
+export const generatedReports = pgTable("generated_reports", {
+  id: entityId("id").primaryKey(), organizationId: entityId("organization_id").notNull(), assessmentId: entityId("assessment_id").notNull(),
+  patientId: entityId("patient_id").notNull(), submissionId: entityId("submission_id").notNull(),
+  requestKey: text("request_key").notNull(), sourceFingerprint: text("source_fingerprint").notNull(),
+  status: text("status").notNull().default("GENERATING"), revision: integer("revision").notNull().default(0),
+  runId: text("run_id"), content: jsonb("content"), failureCode: text("failure_code"),
+  approvedByMembershipId: entityId("approved_by_membership_id"), approvedAt: timestamp("approved_at", {withTimezone:true}),
+  ...timestamps,
+}, t => [
+  uniqueIndex("generated_reports_org_id_uidx").on(t.organizationId,t.id),
+  uniqueIndex("generated_reports_request_uidx").on(t.organizationId,t.assessmentId,t.requestKey),
+  index("generated_reports_latest_idx").on(t.organizationId,t.assessmentId,t.createdAt.desc()),
+  foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),
+  foreignKey({columns:[t.organizationId,t.patientId],foreignColumns:[patients.organizationId,patients.id]}),
+  foreignKey({columns:[t.organizationId,t.assessmentId,t.submissionId],foreignColumns:[assessmentSubmissions.organizationId,assessmentSubmissions.assessmentId,assessmentSubmissions.id]}),
+  check("generated_reports_status_ck",sql`${t.status} in ('GENERATING','DRAFT','APPROVED','FAILED','STALE')`),
+]);
+export const generatedReportArtifacts = pgTable("generated_report_artifacts", {
+  reportId: entityId("report_id").primaryKey(), organizationId: entityId("organization_id").notNull(), assessmentId: entityId("assessment_id").notNull(),
+  revision: integer("revision").notNull(), sha256: text("sha256").notNull(), size: integer("size").notNull(),
+  encryptedPdf: encryptedBytes("encrypted_pdf").notNull(), uploadedAt: timestamp("uploaded_at", {withTimezone:true}).notNull().defaultNow(),
+}, t => [
+  foreignKey({columns:[t.organizationId,t.reportId],foreignColumns:[generatedReports.organizationId,generatedReports.id]}),
+  check("generated_report_artifacts_size_ck",sql`${t.size} > 0 and ${t.size} <= 10485760`),
+]);
+
 // Separate from legacy stub sessions: only these durable attempts may contact Scoring.
 export const assessmentFaceScans = pgTable("assessment_face_scans", {
   id: entityId("id").primaryKey(), organizationId: entityId("organization_id").notNull(), assessmentId: entityId("assessment_id").notNull(),

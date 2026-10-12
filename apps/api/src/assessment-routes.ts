@@ -6,6 +6,8 @@ import type { Hono } from "hono";
 import { z } from "zod";
 import { initializeAssessmentSchema, saveAssessmentSchema, assessmentRevisionSchema, assessmentSubmitSchema, reportInputSchema } from "../../../packages/contracts/src/assessment-workflow";
 import { ServiceError } from "./services/application";
+import { GeneratedReportService } from "./services/generated-report";
+import { generateReportInputSchema, editGeneratedNarrativeSchema, approveGeneratedReportSchema } from "../../../packages/contracts/src/generated-report";
 import type { AssessmentWorkflowService } from "./services/assessment-workflow";
 const json=async(c:any)=>{try{return await c.req.json();}catch(error){if(!(error instanceof SyntaxError))throw error;throw new ServiceError("VALIDATION_ERROR","Invalid JSON request.");}};
 const id=z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
@@ -14,6 +16,7 @@ const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{const result=schema.safeP
 export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowService) {
   const clinicalReviews = new ClinicalReviewService(service);
   const scoreReviews = new AssessmentScoreReviewService(service);
+  const generatedReports = new GeneratedReportService(service);
   const base="/v1/organizations/:organizationId";
   const parts=(c:any)=>({actor:c.get("principal"),org:parse(id,c.req.param("organizationId")),assessment:parse(id,c.req.param("assessmentId")),context:{requestId:c.get("requestId")}});
   app.use(`${base}/assessment-initializations*`,async(c,next)=>{c.header("Cache-Control","private, no-store");await next();});
@@ -38,6 +41,22 @@ export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowSe
   const reports=`${base}/assessments/:assessmentId/reports`;
   app.post(reports,async c=>{const p=parts(c);return c.json(await service.reports.edit(p.actor,p.org,p.assessment,parse(reportInputSchema,await json(c)),p.context));});
   app.patch(`${reports}/:reportId`,async c=>{const p=parts(c);return c.json(await service.reports.edit(p.actor,p.org,p.assessment,parse(reportInputSchema,await json(c)),p.context,parse(id,c.req.param("reportId"))));});
+  const generated=base+"/assessments/:assessmentId/generated-report";
+  app.get(generated,async c=>{const p=parts(c);return c.json(await generatedReports.read(p.actor,p.org,p.assessment));});
+  app.post(generated+"/generate",async c=>{const p=parts(c);return c.json(await generatedReports.generate(p.actor,p.org,p.assessment,parse(generateReportInputSchema,await json(c)),p.context));});
+  app.patch(generated+"/narrative",async c=>{const p=parts(c);return c.json(await generatedReports.edit(p.actor,p.org,p.assessment,parse(editGeneratedNarrativeSchema,await json(c)),p.context));});
+  app.post(generated+"/pdf",async c=>{
+    const p=parts(c);
+    if(c.req.header("content-type")?.split(";")[0]?.trim().toLowerCase()!=="application/pdf" || !c.req.raw.body)
+      throw new ServiceError("VALIDATION_ERROR","Upload a PDF.");
+    const revision=parse(z.string().regex(/^\d+$/).transform(Number),c.req.query("revision"));
+    return c.json(await generatedReports.uploadPdf(p.actor,p.org,p.assessment,revision,c.req.raw.body,p.context));
+  });
+  app.post(generated+"/approve",async c=>{const p=parts(c);const input=parse(approveGeneratedReportSchema,await json(c));return c.json(await generatedReports.approve(p.actor,p.org,p.assessment,input.revision,p.context));});
+  app.get(generated+"/pdf",async c=>{
+    const p=parts(c),file=await generatedReports.downloadPdf(p.actor,p.org,p.assessment);
+    return new Response(new Uint8Array(file.pdf),{headers:{"Content-Type":"application/pdf","Content-Length":String(file.pdf.length),"Content-Disposition":"attachment; filename=\"NIQ-clinical-report.pdf\"","ETag":'"'+file.sha256+'"',"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
+  });
   const revision=(c:any)=>parse(z.string().regex(/^\d+$/).transform(Number),c.req.query("revision"));
   app.delete(`${reports}/:reportId`,async c=>{const p=parts(c);return c.json(await service.reports.remove(p.actor,p.org,p.assessment,parse(id,c.req.param("reportId")),revision(c),p.context));});
   app.delete(`${reports}/:reportId/files/:fileId`,async c=>{const p=parts(c);return c.json(await service.reports.remove(p.actor,p.org,p.assessment,parse(id,c.req.param("reportId")),revision(c),p.context,parse(id,c.req.param("fileId"))));});
