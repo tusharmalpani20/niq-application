@@ -228,8 +228,8 @@ function BmiReferencePanel({ metric, age, weight, height, theme }: { metric: Met
   </View>;
 }
 
-function NarrativePanel({ title, text, icon, theme, soft = false, accent = false }: { title: string; text: string; icon: IconName; theme: Palette; soft?: boolean; accent?: boolean }) {
-  return <View wrap={false} style={[styles.panel, { borderColor: theme.line, borderLeftWidth: accent ? 3 : 1, borderLeftColor: accent ? theme.primary : theme.line, backgroundColor: soft ? theme.soft : theme.white }]}>
+function NarrativePanel({ title, text, icon, theme, soft = false, accent = false, width }: { title: string; text: string; icon: IconName; theme: Palette; soft?: boolean; accent?: boolean; width?: "48.8%" }) {
+  return <View wrap={false} style={[styles.panel, { borderColor: theme.line, borderLeftWidth: accent ? 3 : 1, borderLeftColor: accent ? theme.primary : theme.line, backgroundColor: soft ? theme.soft : theme.white }, width ? { width } : undefined]}>
     <View style={{ flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 9 }}><Icon name={icon} color={theme.primary} size={20}/><Text style={[styles.subTitle, { marginBottom: 0 }]}>{title}</Text></View>
     <Text style={styles.body} hyphenationCallback={word => [word]}>{text}</Text>
   </View>;
@@ -381,6 +381,8 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
     ? hasNutritionFindings ? "Vital IQ and nutrition findings" : "Vital IQ detailed measurements"
     : "Nutrition status and findings";
   const hasActions = Boolean(report.narrative.actionSummary || report.narrative.monitoringSummary);
+  const careWordCount = (text: string | undefined) => text?.trim().split(/\s+/).length ?? 0;
+  const pairedCareAdvice = Boolean(report.narrative.conditionAdvice && report.narrative.effectsAdvice && careWordCount(report.narrative.conditionAdvice) <= 60 && careWordCount(report.narrative.effectsAdvice) <= 90);
   const careStepWidth = report.narrative.actionSummary && report.narrative.monitoringSummary &&
     report.narrative.actionSummary.length + report.narrative.monitoringSummary.length < 420 ? "48.8%" : "100%";
   let page = 2;
@@ -473,8 +475,13 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
     </ReportPage>}
 
     {(hasConsiderations || hasActions) && <ReportPage report={report} brand={brand} number={page++} title="Care and next steps" icon="heart">
-      {report.narrative.conditionAdvice && <NarrativePanel title="Other health conditions" text={report.narrative.conditionAdvice} icon="heart" theme={theme} accent/>}
-      {report.narrative.effectsAdvice && <NarrativePanel title="Treatment effects and nutrition" text={report.narrative.effectsAdvice} icon="drop" theme={theme} soft accent/>}
+      {pairedCareAdvice ? <View wrap={false} style={[styles.row, { alignItems: "stretch" }]}>
+        <NarrativePanel title="Other health conditions" text={report.narrative.conditionAdvice!} icon="heart" theme={theme} accent width="48.8%"/>
+        <NarrativePanel title="Treatment effects and nutrition" text={report.narrative.effectsAdvice!} icon="drop" theme={theme} soft accent width="48.8%"/>
+      </View> : <>
+        {report.narrative.conditionAdvice && <NarrativePanel title="Other health conditions" text={report.narrative.conditionAdvice} icon="heart" theme={theme} accent/>}
+        {report.narrative.effectsAdvice && <NarrativePanel title="Treatment effects and nutrition" text={report.narrative.effectsAdvice} icon="drop" theme={theme} soft accent/>}
+      </>}
       {hasActions && <Text style={[styles.sectionLabel, { color: brandInk, marginTop: 5 }]}>Action plan and monitoring</Text>}
       {hasActions && <View style={[styles.row, { flexWrap: "wrap" }]}>
         {report.narrative.actionSummary && <CareStep number="01" title="What to do" text={report.narrative.actionSummary} icon="check" theme={theme} width={careStepWidth}/>}
