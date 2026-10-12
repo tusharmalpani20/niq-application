@@ -3,7 +3,9 @@ import type { GeneratedReport } from "@niq/application-contracts";
 export const reportDate = (value: string | null | undefined) => {
   if (!value) return "Not recorded";
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "Not recorded" : new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(parsed);
+  // Saved report evidence and narrative use the ISO calendar date. Keep the
+  // displayed date stable across the server and a viewer's local time zone.
+  return Number.isNaN(parsed.getTime()) ? "Not recorded" : new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(parsed);
 };
 
 export const reportAge = (birth: string | null, at: string | null) => {
