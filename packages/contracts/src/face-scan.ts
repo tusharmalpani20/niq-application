@@ -118,6 +118,13 @@ export const faceScanAdditionalMetricGroups = [
   ] },
 ] as const;
 
+// The assessment can show all known provider fields. Reports exclude fields
+// that have not been approved for patient-facing publication.
+export const reportFaceScanAdditionalMetricGroups = faceScanAdditionalMetricGroups.map(group => ({
+  ...group,
+  metrics: group.metrics.filter(metric => metric.id !== "hba1c"),
+}));
+
 /** A finished capture only satisfies required scanning when it can be used in scoring. */
 export function hasUsableFaceScan(session: FaceScanSession | null | undefined): boolean {
   return session?.state === "COMPLETED" && session.failureCode === null && session.result !== null && session.score?.status === "SCORED";

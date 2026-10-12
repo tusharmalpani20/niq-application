@@ -98,10 +98,11 @@ test("report keeps available Vital IQ details and excludes unknown or missing pr
   const metrics = reportObservations({ current_weight_kg: 62, height_cm: 175 } as any, { sections: [] } as any,
     new Date("2026-10-12T08:00:00.000Z"), {
       completedAt: "2026-10-12T08:00:00.000Z",
+      context: { dob: "1980-01-01", gender: "male", heightCm: 175, weightKg: 62, posture: "resting", employeeId: "operator" },
       result: {
         wellnessScore: 80, healthRiskScore: 20, physiologicalScore: 91, mentalWellbeingScore: null,
         vitals: { heartRate: 66, oxygenSaturation: 96, respiratoryRate: 16, systolic: 131, diastolic: 84 },
-        additionalMetrics: { sdnn: 42, pnn50: 0, bodyFat: 21, vo2max: null, unknownVendorField: "not for report" },
+        additionalMetrics: { sdnn: 42, pnn50: 0, bodyFat: 21, hba1c: 5.8, vo2max: null, unknownVendorField: "not for report" },
       },
       score: { status: "SCORED", points: 3, stressIndex: 1.6, stressBand: "average" },
     });
@@ -111,6 +112,10 @@ test("report keeps available Vital IQ details and excludes unknown or missing pr
   ]);
   expect(metrics.find(metric => metric.id === "pnn50")?.value).toBe("0");
   expect(metrics.find(metric => metric.id === "body_fat")?.unit).toBe("%");
+  expect(metrics.find(metric => metric.id === "sdnn")).toMatchObject({ referenceRange: "60–100 ms", outsideReferenceRange: true });
+  expect(metrics.find(metric => metric.id === "heart_rate")).toMatchObject({ referenceRange: "60–100 bpm", outsideReferenceRange: false });
+  expect(metrics.find(metric => metric.id === "systolic")).toMatchObject({ referenceRange: "90–120/60–80 mmHg", outsideReferenceRange: true });
+  expect(metrics.some(metric => metric.id === "hba1c")).toBe(false);
 });
 
 test("Scoring guidance boundary strips unknown proprietary fields and rejects malformed care plans", () => {
