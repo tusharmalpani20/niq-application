@@ -194,7 +194,7 @@ export class GeneratedReportService {
   }
   private source(row: WorkflowRow) {
     const review = reviewState(this.service,row);
-    const final = review.finalSnapshot as { submissionId?: string | null; scoreRevision?: number; confirmedToxicityIds?: string[]; score?: { overall?: { reviewedPoints?: number | null }; risk?: { status?: string; resultReference?: string | null; classification?: { id?: string; label?: string } | null } } } | undefined;
+    const final = review.finalSnapshot as { submissionId?: string | null; scoreRevision?: number; confirmedToxicityIds?: string[]; score?: { overall?: { reviewedPoints?: number | null }; risk?: { status?: string; resultReference?: string | null; classification?: { id?: string; label?: string; color?: GeneratedReport["classification"]["color"] } | null } } } | undefined;
     if (row.status !== "COMPLETED" || !row.currentSubmissionId || !row.completedAt || !final || final.submissionId !== row.currentSubmissionId
       || !Number.isInteger(final.scoreRevision) || final.scoreRevision! < 0
       || !Number.isFinite(final.score?.overall?.reviewedPoints) || (final.score?.overall?.reviewedPoints ?? -1) < 0
@@ -364,7 +364,8 @@ export class GeneratedReportService {
         patient:{displayName:patient.displayName,reference:patient.reference,dateOfBirth:patient.dateOfBirth,gender:patient.gender},
         assessment:{id,reference:formatAssessmentReference(assessment.serialNumber),completedAt:assessment.completedAt!.toISOString(),
           submissionId:source.submissionId,scoreRevision:source.scoreRevision,ruleVersionId:generated.ruleVersionId,checksum:generated.checksum},
-        classification:{id:source.risk.id!,label:source.risk.label ?? generated.classification.label,score:source.reviewedScore},
+        classification:{id:source.risk.id!,label:source.risk.label ?? generated.classification.label,score:source.reviewedScore,
+          ...(source.risk.color ? {color:source.risk.color} : {})},
         metrics,weightHistory,decision,
         narrative:normalizeNarrative(generated.narrative),
         omittedNarrativeFields:generated.omittedNarrativeFields ?? [],

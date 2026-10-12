@@ -226,12 +226,13 @@ describe("source binding", () => {
   const service = new GeneratedReportService({ unseal: (stored: unknown) => stored } as any);
   const row = { id: "assessment", status: "COMPLETED", currentSubmissionId: "submission", completedAt: new Date("2026-10-11T00:00:00Z"),
     clinicalReview: { finalSnapshot: { submissionId: "submission", scoreRevision: 2, score: { overall: { reviewedPoints: 28 }, risk: {
-      status: "CONFIRMED", resultReference: "reviewed-result-2", classification: { id: "high", label: "High risk" },
+      status: "CONFIRMED", resultReference: "reviewed-result-2", classification: { id: "high", label: "High risk", color: "red" },
     } } } },
   } as any;
   test("uses the completed reviewed result, and invalidates the report after a score revision changes", () => {
     const source = (service as any).source(row);
     expect(source.resultReference).toBe("reviewed-result-2");
+    expect(source.risk.color).toBe("red");
     const before = (service as any).currentFingerprint(row, "a".repeat(64));
     const changed = structuredClone(row);
     changed.clinicalReview.finalSnapshot.scoreRevision = 3;

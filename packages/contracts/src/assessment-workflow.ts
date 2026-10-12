@@ -70,6 +70,7 @@ export const assessmentRiskColorSchema = z.union([
   z.enum(["green", "amber", "red", "neutral", "blue", "purple"]),
   z.string().regex(/^#[0-9a-f]{6}$/i, "Use a six-digit hex color"),
 ]);
+export type AssessmentRiskColor = z.infer<typeof assessmentRiskColorSchema>;
 export const assessmentRiskCategorySchema = z.object({
   id: z.string(), label: z.string(), color: assessmentRiskColorSchema.optional(),
   min: z.number().finite().nonnegative().nullable(), max: z.number().finite().nonnegative().nullable(),

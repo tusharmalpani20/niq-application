@@ -1,6 +1,6 @@
 import { Circle, Document, Font, Image, Page, Path, Rect, Svg, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { ReactNode } from "react";
-import type { GeneratedReport } from "@niq/application-contracts";
+import { riskColorHex, type GeneratedReport } from "@niq/application-contracts";
 import { cleanWeights, metricText, reportAge, reportDate, reportGuidance } from "./generated-report-format";
 import { weightChartPoints } from "./generated-report-chart";
 import { accessibleBrandInk } from "./accessible-brand-ink";
@@ -229,6 +229,8 @@ function ProductPlan({ report, theme }: { report: GeneratedReport; theme: Palett
 export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport; brand: PdfBrand }) {
   const theme = palette(brand);
   const brandInk = accessibleBrandInk(theme.primary, [theme.white, theme.soft]);
+  const riskColor = riskColorHex(report.classification?.color);
+  const riskInk = accessibleBrandInk(riskColor, [theme.white, tint(riskColor, 0.09)]);
   const age = reportAge(report.patient.dateOfBirth, report.assessment.completedAt);
   const assessmentMetrics = report.metrics.filter(metric => metric.source === "assessment");
   const physicalMetrics = assessmentMetrics.filter(metric => /^(current weight|height|bmi)$/i.test(metric.label));
@@ -275,8 +277,8 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
 
     {hasFindings && <ReportPage report={report} brand={brand} number={page++} title="Nutrition status and findings" icon="chart">
       <View style={[styles.row, { marginBottom: 11 }]}>
-        {report.classification && <View style={[styles.softPanel, { backgroundColor: theme.soft, width: report.narrative.keyFindings ? "48.8%" : "100%", minHeight: 145, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 0 }]}>
-          <View style={{ width: 74, height: 74, borderRadius: 37, borderWidth: 7, borderColor: theme.primary, backgroundColor: theme.white, alignItems: "center", justifyContent: "center" }}><Text style={{ fontSize: 24, fontWeight: 700, color: theme.ink }}>{report.classification.score}</Text></View><View style={{ flex: 1 }}><Text style={[styles.eyebrow, { color: brandInk }]}>NIQ assessment</Text><Text style={styles.subTitle}>{report.classification.label}</Text><Text style={styles.muted}>points</Text></View>
+        {report.classification && <View style={[styles.softPanel, { backgroundColor: tint(riskColor, 0.09), width: report.narrative.keyFindings ? "48.8%" : "100%", minHeight: 145, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 0 }]}>
+          <View style={{ width: 74, height: 74, borderRadius: 37, borderWidth: 7, borderColor: riskColor, backgroundColor: theme.white, alignItems: "center", justifyContent: "center" }}><Text style={{ fontSize: 24, fontWeight: 700, color: riskInk }}>{report.classification.score}</Text></View><View style={{ flex: 1 }}><Text style={[styles.eyebrow, { color: brandInk }]}>NIQ assessment</Text><Text style={[styles.subTitle, { color: riskInk }]}>{report.classification.label}</Text><Text style={styles.muted}>points</Text></View>
         </View>}
         {report.narrative.keyFindings && <View style={{ width: report.classification ? "48.8%" : "100%" }}><NarrativePanel title="Key findings" text={report.narrative.keyFindings} icon="clipboard" theme={theme}/></View>}
       </View>

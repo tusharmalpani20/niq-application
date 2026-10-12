@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AssessmentRiskColor } from "./assessment-workflow";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value);
 export const generateReportInputSchema = z.object({
@@ -61,7 +62,7 @@ export type GeneratedReport = {
   approvedAt: string | null;
   patient: { displayName: string; reference: string; dateOfBirth: string; gender: string };
   assessment: { id: string; reference: string; completedAt: string; submissionId: string; scoreRevision: number; ruleVersionId: string; checksum: string };
-  classification: { id: string; label: string; score: number };
+  classification: { id: string; label: string; score: number; color?: AssessmentRiskColor };
   metrics: Array<{ id: string; label: string; value: string; unit?: string; measuredAt?: string; source: "assessment" | "face_scan" }>;
   weightHistory: Array<{ date: string | null; kg: number; label?: string }>;
   decision: { productStageChoice: "surgical" | "treatment_stage" | null; plannedTreatmentStartDate: string | null; confirmedToxicityIds?: string[] };

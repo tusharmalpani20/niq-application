@@ -5,6 +5,7 @@ export * from "./assessment-form";
 export * from "./assessment-form-validation";
 export * from "./assessment-answer-coverage";
 export * from "./assessment-workflow";
+export * from "./risk-color";
 export * from "./overview-summary";
 
 export const DEFAULT_ORGANIZATION_BRANDING = {
