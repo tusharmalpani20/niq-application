@@ -1,4 +1,4 @@
-import { Activity, Calculator, ClipboardList, Droplets, Gauge, HeartPulse, Package, Ruler, Scale, ShieldCheck, Soup, Stethoscope, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
+import { Activity, Calculator, ClipboardList, Droplets, Gauge, HeartPulse, Leaf, Package, Ruler, Scale, ShieldCheck, Soup, Stethoscope, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
 import { riskColorHex } from "@niq/application-contracts";
 import { useBranding } from "@/lib/branding-context";
 import { BrandMarks } from "@/components/BrandMarks";
@@ -32,6 +32,15 @@ const metricIcons: Record<string, LucideIcon> = {
 function MetricIcon({ id, label }: { id: string; label: string }) {
   const Icon = metricIcons[id] ?? (label === "Reported dietary symptom" ? Stethoscope : Activity);
   return <span className="cr-metric-icon"><Icon size={22} aria-hidden="true" /></span>;
+}
+
+function CoverArtwork() {
+  return <div className="cr-cover-art" aria-hidden="true">
+    <div className="cr-cover-art-rings"><div className="cr-cover-art-core"><Leaf strokeWidth={1.4}/></div></div>
+    <span className="cr-cover-art-badge cr-cover-art-badge-heart"><HeartPulse strokeWidth={1.8}/></span>
+    <span className="cr-cover-art-badge cr-cover-art-badge-food"><Utensils strokeWidth={1.8}/></span>
+    <span className="cr-cover-art-badge cr-cover-art-badge-water"><Droplets strokeWidth={1.8}/></span>
+  </div>;
 }
 
 function ReportSheet({ number, title, icon: Icon, children, report }: ReportSheetProps) {
@@ -99,7 +108,7 @@ export function GeneratedReportPreview({ report }: { report: GeneratedReport }) 
     <section className="cr-sheet cr-cover" aria-label="Report cover">
       <div className="cr-cover-top"><BrandMarks className="cr-cover-brand" organizationLogoUrl={branding.logoUrl} organizationName={branding.displayName}/><span>Personalised clinical nutrition</span></div>
       <div className="cr-cover-main"><div className="cr-cover-copy"><span className="cr-kicker">{isFinal ? "Final clinical report" : "Draft for clinical review"}</span><h1>Medical<br/><em>Nutrition</em><br/>Therapy Report</h1><p className="cr-cover-name">{report.patient.displayName}</p><p>{report.patient.reference} · {report.assessment.reference}</p>{report.assessment.completedAt && <p>Assessment: {reportDate(report.assessment.completedAt)}</p>}</div>
-        <svg className="cr-cover-art" viewBox="0 0 420 470" aria-hidden="true"><path d="M520 39C338-32 191 85 169 207s55 184 158 248" fill="none" stroke="var(--brand-primary, #34b5b9)" strokeWidth="77" opacity=".13"/><path d="M513 96C390 48 263 127 249 247c-10 91 49 148 132 178" fill="none" stroke="var(--brand-secondary, var(--brand-primary, #34b5b9))" strokeWidth="16" opacity=".65"/><circle cx="304" cy="213" r="57" fill="var(--brand-primary, #34b5b9)" opacity=".17"/><path d="M206 414c9-76 41-113 98-113s89 37 98 113" fill="var(--brand-primary, #34b5b9)" opacity=".22"/></svg>
+        <CoverArtwork/>
       </div>
       <div className="cr-cover-bottom"><div><ShieldCheck size={20} aria-hidden="true"/><span>Assessment findings</span></div><div><Stethoscope size={20} aria-hidden="true"/><span>{isFinal ? "Assessment approved" : "Clinical review required"}</span></div><div><HeartPulse size={20} aria-hidden="true"/><span>Built around the assessment</span></div></div>
       <footer className="cr-sheet-footer"><span>{branding.displayName}</span><span>01</span></footer>

@@ -23,13 +23,22 @@
 .cr-cover-brand .brand-marks-partner-logo { width: 125px; height: 42px; }
 .cr-cover-brand .brand-marks-partner-caption { font-size: .6rem; }
 .cr-cover-main { position: relative; display: flex; flex: 1; align-items: center; }
-.cr-cover-copy { position: relative; z-index: 1; width: 66%; }
+.cr-cover-copy { position: relative; z-index: 1; width: 64%; }
 .cr-kicker, .cr-guidance-type { display: block; color: var(--brand-ink, #177e83); font-size: .72rem; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
 .cr-cover h1 { margin: 1.2rem 0 2rem; color: #18384a; font-size: clamp(2.6rem, 5vw, 4.2rem); font-weight: 600; letter-spacing: -.045em; line-height: 1.07; }
 .cr-cover h1 em { color: var(--brand-ink, #177e83); font-style: normal; }
 .cr-cover-copy p { margin: .45rem 0; font-size: .95rem; }
 .cr-cover-copy .cr-cover-name { font-size: 1.2rem; font-weight: 700; }
-.cr-cover-art { position: absolute; right: -2.3rem; bottom: 2%; width: min(52%, 400px); height: auto; }
+.cr-cover-art { position: absolute; top: 50%; right: 0; display: grid; width: min(42%, 330px); aspect-ratio: 1; place-items: center; transform: translateY(-50%); }
+.cr-cover-art-rings { position: relative; display: grid; width: 76%; aspect-ratio: 1; place-items: center; border: 18px solid color-mix(in srgb, var(--brand-primary, #34b5b9) 18%, white); border-radius: 50%; background: color-mix(in srgb, var(--brand-primary, #34b5b9) 7%, white); }
+.cr-cover-art-rings::before { position: absolute; inset: -39px; border: 1px dashed color-mix(in srgb, var(--brand-primary, #34b5b9) 42%, white); border-radius: 50%; content: ""; }
+.cr-cover-art-core { display: grid; width: 65%; aspect-ratio: 1; place-items: center; border-radius: 50%; background: #fff; box-shadow: 0 9px 32px #15344714; color: var(--brand-ink, #177e83); }
+.cr-cover-art-core svg { width: 48%; height: 48%; }
+.cr-cover-art-badge { position: absolute; display: grid; width: 58px; height: 58px; place-items: center; border: 1px solid color-mix(in srgb, var(--brand-primary, #34b5b9) 24%, white); border-radius: 17px; background: #fff; box-shadow: 0 9px 26px #15344716; color: var(--brand-ink, #177e83); }
+.cr-cover-art-badge svg { width: 27px; height: 27px; }
+.cr-cover-art-badge-heart { top: 3%; right: 8%; }
+.cr-cover-art-badge-food { top: 42%; left: 0; }
+.cr-cover-art-badge-water { right: 7%; bottom: 2%; }
 .cr-cover-bottom { position: relative; z-index: 1; justify-content: flex-start; gap: 1.7rem; margin-bottom: 2rem; }
 .cr-cover-bottom div { display: flex; max-width: 150px; align-items: center; gap: .4rem; color: #496a77; font-size: .76rem; }
 .cr-cover-bottom svg { flex: none; color: var(--brand-primary, #239ca3); }
@@ -177,7 +186,11 @@
   .clinical-report { gap: .8rem; }
   .cr-sheet { min-height: 0; padding: 1.2rem 1rem; border-radius: .7rem; }
   .cr-cover { min-height: 620px; }
-  .cr-cover-art { right: -1rem; width: 57%; opacity: .45; }
+  .cr-cover-art { right: -1rem; width: 54%; opacity: .35; }
+  .cr-cover-art-rings { border-width: 12px; }
+  .cr-cover-art-rings::before { inset: -25px; }
+  .cr-cover-art-badge { width: 40px; height: 40px; border-radius: 12px; }
+  .cr-cover-art-badge svg { width: 20px; height: 20px; }
   .cr-cover-copy { width: 85%; }
   .cr-cover-bottom { flex-wrap: wrap; gap: .8rem; }
   .cr-sheet-header { flex-wrap: wrap; align-items: flex-start; }
