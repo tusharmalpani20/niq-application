@@ -4,6 +4,7 @@ import { ArrowLeft, Download, FileCheck2, LoaderCircle, RotateCcw } from "lucide
 import { hasPermission, type AuthenticatedUser } from "@niq/application-contracts";
 import { Button } from "@/components/ui/button";
 import { GeneratedReportPdfPreview } from "./GeneratedReportPdfPreview";
+import { GeneratedReportPreview } from "./GeneratedReportPreview";
 import { generatedReportPdfUrl, getGeneratedReport, type GeneratedReportResponse } from "./generated-report-api";
 import { reportDate } from "./generated-report-format";
 import "./generated-report.css";
@@ -15,6 +16,7 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
+  const [preview, setPreview] = useState<"html" | "pdf">("html");
   const assessmentPath = `/assessments/${encodeURIComponent(assessmentId)}`;
 
   useEffect(() => {
@@ -72,8 +74,12 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
     {!error && ready && report && <>
       <div className="cr-report-meta"><span>Assessment {report.assessment.reference}</span><span>Generated {reportDate(report.generatedAt)}</span></div>
       <div className="cr-approved-bar"><div><FileCheck2 size={24} aria-hidden="true"/><div><strong>Final report ready</strong><p>The PDF was saved after final clinical approval.</p></div></div><a className="cr-download" href={pdfUrl} download={`NIQ-report-${report.assessment.reference}.pdf`}><Download size={18} aria-hidden="true"/>Download PDF</a></div>
-      <div className="cr-preview-heading"><h2>Report preview</h2><p>Saved PDF</p></div>
-      <GeneratedReportPdfPreview url={pdfUrl}/>
+      <div className="cr-preview-heading"><div><h2>Report preview</h2><p>Review the layout in the browser, or view the saved PDF.</p></div></div>
+      <div className="cr-preview-tabs" role="group" aria-label="Report preview format">
+        <button type="button" className={`cr-preview-tab ${preview === "html" ? "cr-preview-tab-active" : ""}`} aria-pressed={preview === "html"} onClick={() => setPreview("html")}>HTML layout</button>
+        <button type="button" className={`cr-preview-tab ${preview === "pdf" ? "cr-preview-tab-active" : ""}`} aria-pressed={preview === "pdf"} onClick={() => setPreview("pdf")}>Saved PDF</button>
+      </div>
+      {preview === "html" ? <div className="cr-html-preview"><p className="cr-preview-note">Layout preview from the saved report content. The downloaded PDF is the issued report.</p><GeneratedReportPreview report={report}/></div> : <GeneratedReportPdfPreview url={pdfUrl}/>}
     </>}
   </div>;
 }

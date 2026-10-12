@@ -1,4 +1,5 @@
-import { Activity, ClipboardList, Droplets, HeartPulse, ShieldCheck, Stethoscope, Utensils, type LucideIcon } from "lucide-react";
+import { Activity, ClipboardList, HeartPulse, ShieldCheck, Stethoscope, Utensils, type LucideIcon } from "lucide-react";
+import { riskColorHex } from "@niq/application-contracts";
 import { useBranding } from "@/lib/branding-context";
 import { BrandMarks } from "@/components/BrandMarks";
 import type { GeneratedReport } from "./generated-report-api";
@@ -17,13 +18,29 @@ function ReportSheet({ number, title, icon: Icon, children, report }: ReportShee
   </section>;
 }
 
-function GuidanceCards({ report, kinds }: { report: GeneratedReport; kinds: Array<GeneratedReport["guidance"]["sections"][number]["kind"]> }) {
-  const entries = kinds.flatMap(kind => reportGuidance(report, kind));
-  if (!entries.length) return null;
-  return <div className="cr-guidance-grid">{entries.map(item => <article className="cr-guidance-card" key={item.id}>
-    <p className="cr-guidance-type">{item.kind === "product" ? "Product plan" : item.kind === "radiotherapy" ? "Radiotherapy" : item.kind === "comorbidity" ? "Co-morbidity" : item.kind === "treatment" ? "Treatment" : "Nutrition"}</p>
-    <h3>{item.title}</h3><p>{item.text}</p>
-  </article>)}</div>;
+function ReviewedAdvice({ title, text }: { title: string; text: string | undefined }) {
+  if (!text?.trim()) return null;
+  return <article className="cr-guidance-card"><h3>{title}</h3><p>{text}</p></article>;
+}
+
+function ProductPlan({ report }: { report: GeneratedReport }) {
+  const section = reportGuidance(report, "product").find(item => item.title.toLowerCase() === "product plan");
+  if (!section) return null;
+  const [dose, duration] = section.text.split("\n").map(part => part.trim()).filter(Boolean);
+  if (!dose) return null;
+  const products = dose.split(/\s+\+\s+/).map(part => {
+    const scoop = /^([^:]+):\s*(\d+(?:\.\d+)?)\s+(.+)$/.exec(part);
+    if (scoop) return { name: scoop[1]!.trim(), quantity: scoop[2]!, detail: scoop[3]!.trim() };
+    const regular = /^(\d+(?:\.\d+)?)\s+(.+)$/.exec(part);
+    if (regular) return { name: regular[2]!.trim(), quantity: regular[1]!, detail: "per day" };
+    return { name: part.trim(), quantity: "", detail: "" };
+  });
+  return <section className="cr-panel"><div className="cr-panel-title"><h3>Products in your plan</h3><Utensils size={20} aria-hidden="true"/></div>
+    <div className="cr-metric-grid">{products.map((product, index) => <div className="cr-metric-card" key={`${product.name}-${index}`}>
+      <span>{product.name}</span>{product.quantity && <strong>{product.quantity}</strong>}{product.detail && <small>{product.detail}</small>}
+    </div>)}</div>
+    {duration && <p>{duration}</p>}
+  </section>;
 }
 
 function WeightTrend({ report }: { report: GeneratedReport }) {
@@ -41,34 +58,25 @@ function WeightTrend({ report }: { report: GeneratedReport }) {
   </section>;
 }
 
-function toxicitySource(item: GeneratedReport["guidance"]["sections"][number]) {
-  if (item.matchSource === "assessment_answer") return item.matchedAnswerLabels?.length
-    ? `Patient-reported in assessment: ${item.matchedAnswerLabels.join(", ")}` : "Patient-reported in assessment";
-  if (item.matchSource === "weight_change") return item.matchedAnswerLabels?.length
-    ? `Recorded weight change: ${item.matchedAnswerLabels.join(", ")}` : "Recorded weight change";
-  if (item.matchSource === "clinician_confirmation") return "Clinician-confirmed for this patient";
-  return "Possible effect from an earlier report";
-}
-
 export function GeneratedReportPreview({ report }: { report: GeneratedReport }) {
   const { branding } = useBranding();
   const faceMetrics = report.metrics.filter(metric => metric.source === "face_scan");
   const assessmentMetrics = report.metrics.filter(metric => metric.source === "assessment");
-  const toxicities = reportGuidance(report, "toxicity");
-  const hasLegacyToxicities = toxicities.some(item => !item.matchSource || item.matchSource === "unknown");
-  const hasMatchedToxicities = toxicities.some(item => item.matchSource && item.matchSource !== "unknown");
-  const nutritionRules = ["nutrition", "radiotherapy", "product", "comorbidity", "treatment"] as const;
-  const hasNutritionGuidance = nutritionRules.some(kind => reportGuidance(report, kind).length > 0);
+  const hasProductPlan = reportGuidance(report, "product").some(item => item.title.toLowerCase() === "product plan");
+  const hasNutritionGuidance = Boolean(report.narrative.nutritionAdvice?.trim() || report.narrative.treatmentAdvice?.trim() || hasProductPlan);
+  const hasCareAdvice = Boolean(report.narrative.conditionAdvice?.trim() || report.narrative.effectsAdvice?.trim());
+  const isFinal = report.status === "READY" || report.status === "APPROVED";
+  const riskColor = riskColorHex(report.classification?.color);
   let page = 0;
   const nextPage = () => ++page;
   const age = reportAge(report.patient.dateOfBirth, report.assessment.completedAt);
   return <article className="clinical-report" aria-label="Generated clinical nutrition report">
     <section className="cr-sheet cr-cover" aria-label="Report cover">
       <div className="cr-cover-top"><BrandMarks className="cr-cover-brand" organizationLogoUrl={branding.logoUrl} organizationName={branding.displayName}/><span>Personalised clinical nutrition</span></div>
-      <div className="cr-cover-main"><div className="cr-cover-copy"><span className="cr-kicker">{report.status === "APPROVED" ? "Approved assessment report" : "Draft for clinical review"}</span><h1>Medical<br/><em>Nutrition</em><br/>Therapy Report</h1><p className="cr-cover-name">{report.patient.displayName}</p><p>{report.patient.reference} · {report.assessment.reference}</p>{report.assessment.completedAt && <p>Assessment: {reportDate(report.assessment.completedAt)}</p>}</div>
+      <div className="cr-cover-main"><div className="cr-cover-copy"><span className="cr-kicker">{isFinal ? "Final clinical report" : "Draft for clinical review"}</span><h1>Medical<br/><em>Nutrition</em><br/>Therapy Report</h1><p className="cr-cover-name">{report.patient.displayName}</p><p>{report.patient.reference} · {report.assessment.reference}</p>{report.assessment.completedAt && <p>Assessment: {reportDate(report.assessment.completedAt)}</p>}</div>
         <svg className="cr-cover-art" viewBox="0 0 420 470" aria-hidden="true"><path d="M520 39C338-32 191 85 169 207s55 184 158 248" fill="none" stroke="var(--brand-primary, #34b5b9)" strokeWidth="77" opacity=".13"/><path d="M513 96C390 48 263 127 249 247c-10 91 49 148 132 178" fill="none" stroke="var(--brand-secondary, var(--brand-primary, #34b5b9))" strokeWidth="16" opacity=".65"/><circle cx="304" cy="213" r="57" fill="var(--brand-primary, #34b5b9)" opacity=".17"/><path d="M206 414c9-76 41-113 98-113s89 37 98 113" fill="var(--brand-primary, #34b5b9)" opacity=".22"/></svg>
       </div>
-      <div className="cr-cover-bottom"><div><ShieldCheck size={20} aria-hidden="true"/><span>Rule-based guidance</span></div><div><Stethoscope size={20} aria-hidden="true"/><span>{report.status === "APPROVED" ? "Clinician approved" : "Clinical review required"}</span></div><div><HeartPulse size={20} aria-hidden="true"/><span>Built around the assessment</span></div></div>
+      <div className="cr-cover-bottom"><div><ShieldCheck size={20} aria-hidden="true"/><span>Assessment findings</span></div><div><Stethoscope size={20} aria-hidden="true"/><span>{isFinal ? "Assessment approved" : "Clinical review required"}</span></div><div><HeartPulse size={20} aria-hidden="true"/><span>Built around the assessment</span></div></div>
       <footer className="cr-sheet-footer"><span>{branding.displayName}</span><span>01</span></footer>
     </section>
     <ReportSheet number={nextPage() + 1} title="Patient overview" icon={ClipboardList} report={report}>
@@ -81,19 +89,15 @@ export function GeneratedReportPreview({ report }: { report: GeneratedReport }) 
       <div className="cr-metric-grid cr-vital-grid">{faceMetrics.map(metric => <div className="cr-metric-card" key={metric.id}><Activity size={22} aria-hidden="true"/><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.measuredAt && <small>{reportDate(metric.measuredAt)}</small>}</div>)}</div>
     </ReportSheet>}
     {(report.classification || report.weightHistory.length > 0 || report.narrative.keyFindings) && <ReportSheet number={nextPage() + 1} title="Nutrition status & findings" icon={Activity} report={report}>
-      <div className="cr-status-row">{report.classification && <div className="cr-score-card"><span>NIQ assessment</span><strong>{report.classification.score}</strong><span>points</span><b>{report.classification.label}</b></div>}{report.narrative.keyFindings && <div className="cr-feature-panel cr-findings"><span className="cr-kicker">Key findings</span><p>{report.narrative.keyFindings}</p></div>}</div>
+      <div className="cr-status-row">{report.classification && <div className="cr-score-card" style={{ borderColor: riskColor, backgroundColor: `color-mix(in srgb, ${riskColor} 10%, white)` }}><span>NIQ assessment</span><strong style={{ color: riskColor }}>{report.classification.score}</strong><span>points</span><b style={{ color: riskColor }}>{report.classification.label}</b></div>}{report.narrative.keyFindings && <div className="cr-feature-panel cr-findings"><span className="cr-kicker">Key findings</span><p>{report.narrative.keyFindings}</p></div>}</div>
       <WeightTrend report={report}/>
     </ReportSheet>}
     {hasNutritionGuidance && <ReportSheet number={nextPage() + 1} title="Nutrition & care plan" icon={Utensils} report={report}>
-      <p className="cr-section-intro">Guidance matched to this assessment and its saved rule version. A clinician should individualise the plan.</p>
-      <GuidanceCards report={report} kinds={[...nutritionRules]}/>
+      <div className="cr-guidance-grid"><ReviewedAdvice title="Nutrition guidance" text={report.narrative.nutritionAdvice}/><ReviewedAdvice title="During treatment" text={report.narrative.treatmentAdvice}/></div>
+      <ProductPlan report={report}/>
     </ReportSheet>}
-    {toxicities.length > 0 && <ReportSheet number={nextPage() + 1} title={hasMatchedToxicities ? "Matched treatment effects & nutrition guidance" : "Possible treatment effects · earlier report"} icon={Droplets} report={report}>
-      {hasMatchedToxicities && <p className="cr-section-intro">This nutrition guidance follows assessment answers, recorded weight change, or clinician confirmation. It does not establish that treatment caused an effect.</p>}
-      {hasLegacyToxicities && <p className="cr-caution">Some guidance in this earlier report lists possible drug-class effects. Those entries are not confirmed symptoms for this patient.</p>}
-      <div className="cr-toxicity-list">{toxicities.map(item => <div className="cr-toxicity-row" key={item.id}><div><span className="cr-guidance-type">{item.drugClass || "Selected drug class"}</span><h3>{item.title}</h3><small>{toxicitySource(item)}</small></div><p>{item.text}</p></div>)}</div>
-    </ReportSheet>}
-    {(report.narrative.actionSummary || report.narrative.monitoringSummary) && <ReportSheet number={nextPage() + 1} title="Action plan & monitoring" icon={ShieldCheck} report={report}>
+    {(hasCareAdvice || report.narrative.actionSummary || report.narrative.monitoringSummary) && <ReportSheet number={nextPage() + 1} title="Care and next steps" icon={ShieldCheck} report={report}>
+      {hasCareAdvice && <div className="cr-guidance-grid"><ReviewedAdvice title="Other health conditions" text={report.narrative.conditionAdvice}/><ReviewedAdvice title="Treatment effects and nutrition" text={report.narrative.effectsAdvice}/></div>}
       <div className="cr-action-grid">{report.narrative.actionSummary && <section className="cr-panel"><div className="cr-panel-title"><h3>Action plan</h3><Utensils size={20} aria-hidden="true"/></div><p>{report.narrative.actionSummary}</p></section>}{report.narrative.monitoringSummary && <section className="cr-panel"><div className="cr-panel-title"><h3>What to monitor</h3><HeartPulse size={20} aria-hidden="true"/></div><p>{report.narrative.monitoringSummary}</p></section>}</div>
       <div className="cr-review-note"><ShieldCheck size={20} aria-hidden="true"/><p>This report was prepared from a saved assessment and rule version. Review new or worsening symptoms with the treating clinical team.</p></div>
     </ReportSheet>}
