@@ -288,6 +288,13 @@
       "when": 1791792001000,
       "tag": "0040_generated_report_branding",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791792002000,
+      "tag": "0041_automatic_report_generation",
+      "breakpoints": true
     }
   ]
 }

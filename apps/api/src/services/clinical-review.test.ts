@@ -19,6 +19,9 @@ test("clinical command schemas require explicit appropriate notes, recipient and
  for(const action of ["SEND","CLAIM","RESEND"] as const){expect(clinicalReviewActionSchema.safeParse({...base,action}).success).toBe(true);expect(clinicalReviewActionSchema.safeParse({...base,action,reason:"surprise"}).success).toBe(false);}
  for(const action of ["TRANSFER","TRANSFER_OWNER","RETURN_TO_DRAFT","REASSIGN_CORRECTION"] as const){expect(clinicalReviewActionSchema.safeParse({...base,action,assigneeId:id,reason:"Reason"}).success).toBe(true);expect(clinicalReviewActionSchema.safeParse({...base,action,assigneeId:id,reason:"  "}).success).toBe(false);}
  expect(clinicalReviewActionSchema.safeParse({...base,action:"COMPLETE",remark:" "}).success).toBe(false);
+ expect(clinicalReviewActionSchema.safeParse({...base,action:"COMPLETE",remark:"Approved"}).success).toBe(false);
+ expect(clinicalReviewActionSchema.safeParse({...base,action:"COMPLETE",remark:"Approved",confirmedToxicityIds:[]}).success).toBe(true);
+ expect(clinicalReviewActionSchema.safeParse({...base,action:"COMPLETE",remark:"Approved",confirmedToxicityIds:["toxicity_1","toxicity_1"]}).success).toBe(false);
 });
 describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review PostgreSQL",()=>{
  const client=postgres(process.env.ASSESSMENT_TEST_DATABASE_URL!,{max:8});const db=drizzle(client);
@@ -40,7 +43,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
  });
  afterAll(async()=>{await client.end();});
  async function assessment(owner=creator, scoringResult: typeof result | (typeof result & { score: null; classification: null })=result){const id=createEntityId(),submission=createEntityId(),snapshot=workflow.seal({answers:{item:"original"},patient:{id:patient},binding,connection:{origin:"http://scoring.test",deploymentId:"deployment",scoringOrganizationId:"scoring-org"}});await db.insert(t.assessments).values({id,organizationId:org,patientId:patient,facilityId:facility,questionnaireDefinitionId:definition,questionnaireScopeKey:org,createdByMembershipId:owner.membershipId,status:"SCORED",workflow:snapshot});await db.insert(t.assessmentSubmissions).values({id:submission,organizationId:org,assessmentId:id,revision:0,snapshot,idempotencyKey:submission,status:"SUCCEEDED",result:workflow.seal(scoringResult)});await db.update(t.assessments).set({currentSubmissionId:submission}).where(eq(t.assessments.id,id));return id;}
- async function command(actor:Principal,id:string,action:ClinicalReviewAction["action"],extra:object={}){const state=await reviews.read(actor,org,id);return reviews.command(actor,org,id,{action,expectedRevision:state.revision,expectedScoreRevision:state.scoreRevision,requestKey:createEntityId(),...extra} as ClinicalReviewAction,context);}
+ async function command(actor:Principal,id:string,action:ClinicalReviewAction["action"],extra:object={}){const state=await reviews.read(actor,org,id);return reviews.command(actor,org,id,{action,expectedRevision:state.revision,expectedScoreRevision:state.scoreRevision,requestKey:createEntityId(),...(action==="COMPLETE"?{confirmedToxicityIds:[]}:{}),...extra} as ClinicalReviewAction,context);}
  test("an unscored blank questionnaire advances through clinical review", async () => {
   const blank = { ...result, score: null, classification: null, components: [{ ...result.components[0]!, points: null, status: "unanswered" }] } as typeof result & {score:null;classification:null};
   const id = await assessment(creator, blank);
@@ -48,7 +51,14 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   await command(creator, id, "SEND");
   await command(nurse, id, "CLAIM");
   expect((await reviews.read(nurse, org, id)).riskClassificationPending).toBe(false);
+  expect((await reviews.toxicityOptions(nurse,org,id,context)).options).toEqual([]);
+  await expect(command(nurse,id,"COMPLETE",{remark:"Unmatched effect",confirmedToxicityIds:["toxicity_1"]})).rejects.toMatchObject({code:"VALIDATION_ERROR"});
   expect((await command(nurse, id, "COMPLETE", {remark:"Reviewed without scoring answers"})).state).toBe("COMPLETED");
+  const [completed]=await db.select().from(t.assessments).where(eq(t.assessments.id,id));
+  expect(workflow.unseal<any>(completed!.clinicalReview).finalSnapshot.confirmedToxicityIds).toEqual([]);
+  const [queued]=await db.select().from(t.generatedReports).where(eq(t.generatedReports.assessmentId,id));
+  expect(queued?.status).toBe("QUEUED");
+  expect(queued!.submissionId).toBe(completed!.currentSubmissionId!);
  });
  test("creator sends, concurrent claims have one winner, transfer revokes ownership and completion freezes score",async()=>{
   const id=await assessment();await expect(command(admin,id,"SEND")).rejects.toMatchObject({code:"FORBIDDEN"});
@@ -60,7 +70,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   await command(winner,id,"TRANSFER",{assigneeId:nurse.membershipId,reason:"Handover"});
   const adjustment={expectedResultReference:"result-1",targetType:"item" as const,targetId:"item",points:4,reason:"Reviewed",expectedRevision:0,requestKey:createEntityId()};
   await expect(scores.add(winner,org,id,adjustment,context)).rejects.toMatchObject({code:"FORBIDDEN"});await scores.add(nurse,org,id,adjustment,context);
-  const before=await reviews.read(nurse,org,id);await expect(reviews.command(nurse,org,id,{action:"COMPLETE",remark:"Done",expectedRevision:before.revision,expectedScoreRevision:0,requestKey:createEntityId()},context)).rejects.toMatchObject({code:"CONFLICT"});
+  const before=await reviews.read(nurse,org,id);await expect(reviews.command(nurse,org,id,{action:"COMPLETE",remark:"Done",confirmedToxicityIds:[],expectedRevision:before.revision,expectedScoreRevision:0,requestKey:createEntityId()},context)).rejects.toMatchObject({code:"CONFLICT"});
   const complete=await command(nurse,id,"COMPLETE",{remark:"Final clinical remark"});expect(complete.state).toBe("COMPLETED");expect(complete.finalRemark).toBe("Final clinical remark");expect((await scores.read(nurse,org,id)).canAdjust).toBe(false);
   await expect(command(admin,id,"RETURN_TO_DRAFT",{assigneeId:creator.membershipId,reason:"Reopen"})).rejects.toMatchObject({code:"FORBIDDEN"});
   await expect(scores.add(nurse,org,id,{...adjustment,expectedRevision:1,points:5,requestKey:createEntityId()},context)).rejects.toMatchObject({code:"FORBIDDEN"});
@@ -176,7 +186,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
  test("completion versus adjustment serializes to a consistent final result",async()=>{
   const id=await assessment();await command(creator,id,"SEND");await command(nurse,id,"CLAIM");const state=await reviews.read(nurse,org,id);
   const result=await Promise.allSettled([
-   reviews.command(nurse,org,id,{action:"COMPLETE",remark:"Concurrent final",expectedRevision:state.revision,expectedScoreRevision:0,requestKey:createEntityId()},context),
+   reviews.command(nurse,org,id,{action:"COMPLETE",remark:"Concurrent final",confirmedToxicityIds:[],expectedRevision:state.revision,expectedScoreRevision:0,requestKey:createEntityId()},context),
    scores.add(nurse,org,id,{expectedResultReference:"result-1",targetType:"item",targetId:"item",points:8,reason:"Concurrent adjustment",expectedRevision:0,requestKey:createEntityId()},context),
   ]);
   expect(result.filter(r=>r.status==="fulfilled")).toHaveLength(1);

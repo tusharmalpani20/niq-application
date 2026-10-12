@@ -39,7 +39,7 @@ export type GeneratedReportSection = {
 export type GeneratedReport = {
   id: string;
   revision: number;
-  status: "DRAFT" | "APPROVED" | "STALE";
+  status: "DRAFT" | "READY" | "APPROVED" | "STALE";
   runId: string;
   model: string;
   promptVersion: string;

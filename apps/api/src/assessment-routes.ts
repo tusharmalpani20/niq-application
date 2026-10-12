@@ -7,7 +7,6 @@ import { z } from "zod";
 import { initializeAssessmentSchema, saveAssessmentSchema, assessmentRevisionSchema, assessmentSubmitSchema, reportInputSchema } from "../../../packages/contracts/src/assessment-workflow";
 import { ServiceError } from "./services/application";
 import { GeneratedReportService } from "./services/generated-report";
-import { generateReportInputSchema, editGeneratedNarrativeSchema, approveGeneratedReportSchema } from "../../../packages/contracts/src/generated-report";
 import type { AssessmentWorkflowService } from "./services/assessment-workflow";
 const json=async(c:any)=>{try{return await c.req.json();}catch(error){if(!(error instanceof SyntaxError))throw error;throw new ServiceError("VALIDATION_ERROR","Invalid JSON request.");}};
 const id=z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
@@ -31,6 +30,7 @@ export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowSe
   app.post(`${base}/assessments/:assessmentId/score-reviews/classification/retry`,async c=>{const p=parts(c);return c.json(await scoreReviews.retryRisk(p.actor,p.org,p.assessment,await json(c),p.context));});
   app.get(`${base}/clinical-reviews`,async c=>{c.header("Cache-Control","private, no-store");return c.json(await clinicalReviews.queue(c.get("principal"),parse(id,c.req.param("organizationId")),parse(z.object({page:z.coerce.number().int().min(1).default(1),pageSize:z.coerce.number().int().min(1).max(100).default(25),search:z.string().max(200).optional(),facilityId:id.optional(),mine:z.enum(["true","false"]).transform(v=>v==="true").optional(),state:z.enum(["QUEUED","IN_REVIEW"]).optional(),risk:z.enum(["low","moderate","high"]).optional()}),c.req.query())));});
   app.get(`${base}/assessments/:assessmentId/clinical-review`,async c=>{const p=parts(c);return c.json(await clinicalReviews.read(p.actor,p.org,p.assessment));});
+  app.get(`${base}/assessments/:assessmentId/clinical-review/toxicity-options`,async c=>{const p=parts(c);return c.json(await clinicalReviews.toxicityOptions(p.actor,p.org,p.assessment,p.context));});
   app.get(`${base}/assessments/:assessmentId/clinical-review/eligible-reviewers`,async c=>{const p=parts(c);return c.json(await clinicalReviews.eligible(p.actor,p.org,p.assessment));});
   app.post(`${base}/assessments/:assessmentId/clinical-review`,async c=>{const p=parts(c);return c.json(await clinicalReviews.command(p.actor,p.org,p.assessment,parse(clinicalReviewActionSchema,await json(c)),p.context));});
   app.patch(`${base}/assessments/:assessmentId`,async c=>{const p=parts(c);return c.json(await service.save(p.actor,p.org,p.assessment,parse(saveAssessmentSchema,await json(c)),p.context));});
@@ -43,21 +43,9 @@ export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowSe
   app.patch(`${reports}/:reportId`,async c=>{const p=parts(c);return c.json(await service.reports.edit(p.actor,p.org,p.assessment,parse(reportInputSchema,await json(c)),p.context,parse(id,c.req.param("reportId"))));});
   const generated=base+"/assessments/:assessmentId/generated-report";
   app.get(generated,async c=>{const p=parts(c);return c.json(await generatedReports.read(p.actor,p.org,p.assessment));});
-  app.get(generated+"/toxicity-options",async c=>{const p=parts(c);return c.json(await generatedReports.toxicityOptions(p.actor,p.org,p.assessment,p.context));});
-  app.post(generated+"/generate",async c=>{const p=parts(c);return c.json(await generatedReports.generate(p.actor,p.org,p.assessment,parse(generateReportInputSchema,await json(c)),p.context));});
-  app.patch(generated+"/narrative",async c=>{const p=parts(c);return c.json(await generatedReports.edit(p.actor,p.org,p.assessment,parse(editGeneratedNarrativeSchema,await json(c)),p.context));});
-  app.post(generated+"/pdf",async c=>{
-    const p=parts(c);
-    if(c.req.header("content-type")?.split(";")[0]?.trim().toLowerCase()!=="application/pdf" || !c.req.raw.body)
-      throw new ServiceError("VALIDATION_ERROR","Upload a PDF.");
-    const revision=parse(z.string().regex(/^\d+$/).transform(Number),c.req.query("revision"));
-    const brandingFingerprint=parse(z.string().regex(/^[a-f0-9]{64}$/),c.req.header("x-report-branding-fingerprint"));
-    return c.json(await generatedReports.uploadPdf(p.actor,p.org,p.assessment,revision,brandingFingerprint,c.req.raw.body,p.context));
-  });
-  app.post(generated+"/approve",async c=>{const p=parts(c);const input=parse(approveGeneratedReportSchema,await json(c));return c.json(await generatedReports.approve(p.actor,p.org,p.assessment,input.revision,input.reviewedSha256,p.context));});
   app.get(generated+"/pdf",async c=>{
     const p=parts(c),file=await generatedReports.downloadPdf(p.actor,p.org,p.assessment);
-    return new Response(new Uint8Array(file.pdf),{headers:{"Content-Type":"application/pdf","Content-Length":String(file.pdf.length),"Content-Disposition":"attachment; filename=\"NIQ-clinical-report.pdf\"","ETag":'"'+file.sha256+'"',"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
+    return new Response(new Uint8Array(file.pdf),{headers:{"Content-Type":"application/pdf","Content-Length":String(file.pdf.length),"Content-Disposition":"inline; filename=\"NIQ-clinical-report.pdf\"","ETag":'"'+file.sha256+'"',"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
   });
   const revision=(c:any)=>parse(z.string().regex(/^\d+$/).transform(Number),c.req.query("revision"));
   app.delete(`${reports}/:reportId`,async c=>{const p=parts(c);return c.json(await service.reports.remove(p.actor,p.org,p.assessment,parse(id,c.req.param("reportId")),revision(c),p.context));});

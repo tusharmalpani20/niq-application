@@ -738,6 +738,9 @@ export const generatedReports = pgTable("generated_reports", {
   requestKey: text("request_key").notNull(), sourceFingerprint: text("source_fingerprint").notNull(),
   status: text("status").notNull().default("GENERATING"), revision: integer("revision").notNull().default(0),
   runId: text("run_id"), content: jsonb("content"), failureCode: text("failure_code"),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  leaseToken: entityId("lease_token"),
+  nextAttemptAt: timestamp("next_attempt_at", {withTimezone:true}),
   approvedByMembershipId: entityId("approved_by_membership_id"), approvedAt: timestamp("approved_at", {withTimezone:true}),
   ...timestamps,
 }, t => [
@@ -747,7 +750,7 @@ export const generatedReports = pgTable("generated_reports", {
   foreignKey({columns:[t.organizationId,t.assessmentId],foreignColumns:[assessments.organizationId,assessments.id]}),
   foreignKey({columns:[t.organizationId,t.patientId],foreignColumns:[patients.organizationId,patients.id]}),
   foreignKey({columns:[t.organizationId,t.assessmentId,t.submissionId],foreignColumns:[assessmentSubmissions.organizationId,assessmentSubmissions.assessmentId,assessmentSubmissions.id]}),
-  check("generated_reports_status_ck",sql`${t.status} in ('GENERATING','DRAFT','APPROVED','FAILED','STALE')`),
+  check("generated_reports_status_ck",sql`${t.status} in ('QUEUED','GENERATING','DRAFT','READY','APPROVED','FAILED','STALE')`),
 ]);
 export const generatedReportArtifacts = pgTable("generated_report_artifacts", {
   reportId: entityId("report_id").primaryKey(), organizationId: entityId("organization_id").notNull(), assessmentId: entityId("assessment_id").notNull(),

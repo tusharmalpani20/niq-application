@@ -6,12 +6,12 @@ import type { AssessmentSubmissionAttestation, ClinicalReview, ClinicalReviewer 
 import { ClinicalReviewPanel } from "./ClinicalReviewPanel";
 
 const review: ClinicalReview = { assessmentId: "assessment", revision: 4, scoreRevision: 2, cycle: 1, state: "IN_REVIEW", assignee: { membershipId: "reviewer", displayName: "Reviewer", role: "DOCTOR" }, correctionPerson: null, previousReviewer: null, defaultCorrectionPersonId: null, returnReason: null, finalRemark: null, submittedAt: null, completedAt: null, history: [], allowedActions: ["COMPLETE", "TRANSFER", "RELEASE", "RETURN_TO_DRAFT"], canAdjustScores: true, canEditDraft: false };
-async function harness(run: (ctx: { click: (label: string) => Promise<void>; type: (value: string) => Promise<void>; posts: unknown[]; changed: () => number }) => Promise<void>, options: { review?: ClinicalReview; attestations?: AssessmentSubmissionAttestation[]; blocked?: boolean; conflict?: boolean; conflictMessage?: string; recipients?: () => ClinicalReviewer[] } = {}) {
+async function harness(run: (ctx: { click: (label: string) => Promise<void>; type: (value: string) => Promise<void>; posts: unknown[]; changed: () => number }) => Promise<void>, options: { review?: ClinicalReview; attestations?: AssessmentSubmissionAttestation[]; blocked?: boolean; conflict?: boolean; conflictMessage?: string; recipients?: () => ClinicalReviewer[]; toxicityOptions?: {id:string;classId:string;treatmentTypeId:string;expectedToxicity:string}[] } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", {url:"http://localhost", pretendToBeVisual:true});
   const values: Record<string,unknown> = { window:dom.window, document:dom.window.document, navigator:dom.window.navigator, IS_REACT_ACT_ENVIRONMENT:true, requestAnimationFrame:(fn:()=>void)=>setTimeout(fn,0), cancelAnimationFrame:clearTimeout, getComputedStyle:dom.window.getComputedStyle };
   for (const key of ["FocusEvent","HTMLElement","SVGElement","Element","Node","NodeFilter","DocumentFragment","HTMLButtonElement","HTMLInputElement","HTMLTextAreaElement","HTMLSelectElement","MutationObserver","CustomEvent","Event"]) values[key]=(dom.window as any)[key];
   const posts: unknown[] = []; let changes = 0;
-  values.fetch = async (_url: string, init?: RequestInit) => { if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return options.conflict ? Response.json({error:{message:options.conflictMessage ?? "Changed"}},{status:409}) : Response.json(options.review ?? review); } return Response.json(options.recipients?.() ?? []); };
+  values.fetch = async (url: string, init?: RequestInit) => { if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return options.conflict ? Response.json({error:{message:options.conflictMessage ?? "Changed"}},{status:409}) : Response.json(options.review ?? review); } return Response.json(url.includes("toxicity-options") ? {options:options.toxicityOptions??[],submissionId:"submission",scoreRevision:(options.review??review).scoreRevision} : options.recipients?.() ?? []); };
   const previous = Object.fromEntries(Object.keys(values).map(key => [key,Object.getOwnPropertyDescriptor(globalThis,key)]));
   for (const [key,value] of Object.entries(values)) Object.defineProperty(globalThis,key,{value,configurable:true});
   Object.assign(dom.window.HTMLElement.prototype,{attachEvent(){},detachEvent(){}});
@@ -55,8 +55,8 @@ test("an administrator sees the current draft owner and can transfer ownership",
 test("completed review has no mutation actions and displays final remark",async()=>harness(async()=>{
  expect(document.body.textContent).toContain("Final clinical remark");expect(document.body.textContent).toContain("cannot be reopened");expect(document.querySelectorAll("button").length).toBe(0);
 },{review:{...review,state:"COMPLETED",allowedActions:[],finalRemark:"Final clinical remark"}}));
-test("completion requires a final remark and confirms permanent completion",async()=>harness(async({click})=>{
- await click("Complete review");expect(document.body.textContent).toContain("Completion is permanent");expect(document.querySelector("textarea")?.required).toBe(true);
+test("completion requires a final remark and confirms automatic report creation",async()=>harness(async({click})=>{
+ await click("Complete review");expect(document.body.textContent).toContain("The report and PDF will then be generated automatically");expect(document.querySelector("textarea")?.required).toBe(true);
  expect([...document.querySelectorAll("button")].filter(b=>b.textContent==="Complete review").at(-1)?.disabled).toBe(true);
 }));
 test("transfer does not silently select someone and needs an eligible recipient",async()=>harness(async({click,posts})=>{
@@ -64,8 +64,16 @@ test("transfer does not silently select someone and needs an eligible recipient"
 }));
 test("completion sends both revisions and a replay key with the required remark",async()=>harness(async({click,type,posts,changed})=>{
  await click("Complete review");await type("Review finished");await click("Complete review");
- expect(posts).toHaveLength(1);expect(posts[0]).toMatchObject({action:"COMPLETE",expectedRevision:4,expectedScoreRevision:2,remark:"Review finished"});expect((posts[0] as any).requestKey).toHaveLength(36);expect(changed()).toBe(1);
+ expect(posts).toHaveLength(1);expect(posts[0]).toMatchObject({action:"COMPLETE",expectedRevision:4,expectedScoreRevision:2,remark:"Review finished",confirmedToxicityIds:[]});expect((posts[0] as any).requestKey).toHaveLength(36);expect(changed()).toBe(1);
 }));
+test("completion sends only clinician-selected additional treatment effects",async()=>harness(async({click,type,posts})=>{
+ await click("Complete review");
+ const option=document.querySelector<HTMLInputElement>('.cr-toxicity-picker input[type="checkbox"]');
+ expect(option).toBeDefined();
+ await act(async()=>{option!.click();});
+ await type("Confirmed review");await click("Complete review");
+ expect(posts[0]).toMatchObject({action:"COMPLETE",confirmedToxicityIds:["toxicity_1"]});
+},{toxicityOptions:[{id:"toxicity_1",classId:"class_1",treatmentTypeId:"therapy_1",expectedToxicity:"Confirmed symptom"}]}));
 test("a stale transition preserves the note and requires an explicit reload",async()=>harness(async({click,type,posts})=>{
  await click("Complete review");await type("Keep this remark");await click("Complete review");
  expect(posts).toHaveLength(1);expect(document.querySelector("textarea")?.value).toBe("Keep this remark");expect(document.body.textContent).toContain("Your entered details are preserved");

@@ -3,6 +3,8 @@ import type { MembershipRole } from "./roles";
 const base = { expectedRevision:z.number().int().nonnegative(), expectedScoreRevision:z.number().int().nonnegative(), requestKey:z.string().min(16).max(128) };
 const recipient = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 const reason = z.string().trim().min(1).max(4000);
+const confirmedToxicityIds = z.array(z.string().regex(/^[a-z][a-z0-9_]{0,79}$/)).max(200)
+ .refine(ids => new Set(ids).size === ids.length, "Choose each effect once");
 export const clinicalReviewActionSchema = z.discriminatedUnion("action", [
  z.object({...base,action:z.literal("SEND")}).strict(),
  z.object({...base,action:z.literal("CLAIM")}).strict(),
@@ -12,7 +14,7 @@ export const clinicalReviewActionSchema = z.discriminatedUnion("action", [
  z.object({...base,action:z.literal("RETURN_TO_DRAFT"),assigneeId:recipient,reason}).strict(),
  z.object({...base,action:z.literal("REASSIGN_CORRECTION"),assigneeId:recipient,reason}).strict(),
  z.object({...base,action:z.literal("RESEND")}).strict(),
- z.object({...base,action:z.literal("COMPLETE"),remark:reason}).strict(),
+ z.object({...base,action:z.literal("COMPLETE"),remark:reason,confirmedToxicityIds}).strict(),
 ]);
 export type ClinicalReviewAction = z.infer<typeof clinicalReviewActionSchema>;
 export type ClinicalReviewer = {membershipId:string;displayName:string;role:MembershipRole};

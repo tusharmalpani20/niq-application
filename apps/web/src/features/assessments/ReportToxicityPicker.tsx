@@ -34,7 +34,7 @@ export function ReportToxicityPicker({ options, selectedIds, loading, error, dis
     <p>Assessment answers are matched automatically. Select an effect here only when you have confirmed it for this patient. Nothing is selected by default.</p>
     {loading ? <p role="status">Loading effects available for this treatment…</p> : error ?
       <div className="cr-toxicity-picker-error" role="alert"><span>{error}</span><button type="button" onClick={onRetry}>Retry</button></div> :
-      <>{unavailableCount > 0 && <p className="cr-toxicity-picker-warning" role="alert">{unavailableCount} previously selected {unavailableCount === 1 ? "effect is" : "effects are"} no longer available for this assessment and will be omitted on regeneration.</p>}
+      <>{unavailableCount > 0 && <p className="cr-toxicity-picker-warning" role="alert">{unavailableCount} previously selected {unavailableCount === 1 ? "effect is" : "effects are"} no longer available for this assessment and will be omitted.</p>}
       {groups.size ? <div className="cr-toxicity-picker-list">
         {[...groups].map(([key, group]) => <fieldset key={key} disabled={disabled}>
           <legend>{group.label}</legend>

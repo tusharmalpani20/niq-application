@@ -41,6 +41,9 @@ export async function isDatabaseSchemaReady(sql: postgres.Sql): Promise<boolean>
       and to_regclass('public.assessment_files') is not null
       and to_regclass('public.generated_reports') is not null
       and to_regclass('public.generated_report_artifacts') is not null
+      and exists (select 1 from information_schema.columns where table_schema='public' and table_name='generated_reports' and column_name='attempt_count')
+      and exists (select 1 from information_schema.columns where table_schema='public' and table_name='generated_reports' and column_name='lease_token')
+      and exists (select 1 from information_schema.columns where table_schema='public' and table_name='generated_reports' and column_name='next_attempt_at')
       and to_regclass('public.audit_events') is not null
       and to_regclass('drizzle.__drizzle_migrations') is not null
       and exists(select 1 from drizzle.__drizzle_migrations) as ready

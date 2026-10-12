@@ -2,7 +2,7 @@ import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
 import { formatAssessmentReference, hasPermission, type MembershipRole } from "@niq/application-contracts";
 import { clinicalReviewActionSchema, type ClinicalReviewAction, type ClinicalReview, type ClinicalReviewer, type ClinicalReviewQueue, type ClinicalReviewQueueItem } from "../../../../packages/contracts/src/clinical-review";
-import { assessments, assessmentHistory, assessmentSubmissions, assessmentScoreReviews, assessmentFaceScans, assessmentPriorities, facilities, organizationMemberships, users, patients } from "../db/schema";
+import { assessments, assessmentHistory, assessmentSubmissions, assessmentScoreReviews, assessmentFaceScans, assessmentPriorities, facilities, generatedReports, organizationMemberships, users, patients } from "../db/schema";
 import { decryptPatientData, patientDataKey } from "../security/patient-data";
 import { ServiceError, type Principal, type RequestContext } from "./application";
 import type { AssessmentWorkflowService, WorkflowExecutor, WorkflowRow, StoredWorkflow } from "./assessment-workflow";
@@ -13,6 +13,9 @@ import { AssessmentScoreReviewService } from "./assessment-score-reviews";
 import { loadAssessmentRiskCategories, type AssessmentRiskCategory } from "./assessment-risk-categories";
 import { publishWorkspaceChange, type NotificationRecipient } from "./workspace-notifications";
 import { finalResultFromSnapshot } from "./overview-risk";
+import { assessmentScoreResultSchema } from "../../../../packages/contracts/src/assessment-workflow";
+import { requestScoringToxicityOptions, ScoringReportContentError } from "./scoring-report-content";
+import { AUTOMATIC_REPORT_KEY_PREFIX } from "./generated-report";
 const clinicalRoles:MembershipRole[]=["DOCTOR","NUTRITIONIST","OTHER_MEDICAL"];
 export class ClinicalReviewService {
  constructor(private service:AssessmentWorkflowService){}
@@ -53,6 +56,42 @@ export class ClinicalReviewService {
   return {riskClassificationPending,assessmentId:row.id,currentOwnerMembershipId,currentOwner:eligible.find(person=>person.membershipId===currentOwnerMembershipId)??null,revision:s.revision,scoreRevision:await this.scoreRevision(tx,row),cycle:row.cycle,state:row.status==="COMPLETED"?"COMPLETED":s.correctionPerson?(row.status==="SCORED"?"AWAITING_RESUBMISSION":"RETURNED"):row.status==="UNDER_REVIEW"?(s.assignee?"IN_REVIEW":"QUEUED"):"NOT_SUBMITTED",assignee:s.assignee,correctionPerson:s.correctionPerson,previousReviewer:s.previousReviewer,defaultCorrectionPersonId:eligible.find(r=>r.membershipId===currentOwnerMembershipId)?.membershipId??null,returnReason:history?s.returnReason:null,finalRemark:history?s.finalRemark:null,submittedAt:s.submittedAt,completedAt:s.completedAt,history:history?s.history:[],allowedActions:actions,canAdjustScores:canAdjustClinicalScore(this.service,row,actor),canEditDraft:row.status==="DRAFT"&&isCurrentAssessmentOwner(row,actor,s.correctionPerson?.membershipId)&&hasPermission(actor.role,"assessments.edit")};
  }
  async read(actor:Principal,org:string,id:string){await this.actor(actor,org);return this.projection(actor,await this.service.authorize(actor,org,id));}
+ async toxicityOptions(actor:Principal,org:string,id:string,context:RequestContext){
+  const row=await this.service.authorize(actor,org,id);
+  await this.actor(actor,org);
+  const review=await this.projection(actor,row);
+  if(!review.allowedActions.includes("COMPLETE")||!row.currentSubmissionId)
+   throw new ServiceError("FORBIDDEN","Only the assigned clinician can confirm treatment effects before approval.");
+  const [submission]=await this.service.db.select().from(assessmentSubmissions).where(and(
+   eq(assessmentSubmissions.organizationId,org),eq(assessmentSubmissions.assessmentId,id),eq(assessmentSubmissions.id,row.currentSubmissionId)));
+  if(submission?.status!=="SUCCEEDED"||!submission.result)
+   throw new ServiceError("CONFLICT","The current scored submission is unavailable.");
+  const frozen=this.service.unseal<StoredWorkflow>(submission.snapshot);
+  const result=assessmentScoreResultSchema.parse(this.service.unseal(submission.result));
+  const score=await new AssessmentScoreReviewService(this.service).readProjection(actor,row);
+  const treatmentTypeIds=Array.isArray(frozen.answers.current_cancer_treatment)?frozen.answers.current_cancer_treatment.filter((id):id is string=>typeof id==="string"):[];
+  const drugClassIds=Array.isArray(frozen.answers.drug_classes)?frozen.answers.drug_classes.filter((id):id is string=>typeof id==="string"):[];
+  const resultReference=score.risk?.resultReference;
+  if(result.checksum!==frozen.binding.checksum)
+   throw new ServiceError("CONFLICT","The reviewed score does not match the submitted rule version.");
+  if(!treatmentTypeIds.length||!drugClassIds.length)
+   return {options:[],submissionId:row.currentSubmissionId,scoreRevision:review.scoreRevision};
+  if(!resultReference)
+   throw new ServiceError("CONFLICT","The reviewed score does not match the submitted rule version.");
+  try {
+   const transport=await this.service.transport(org,context,frozen.connection);
+   const options=await requestScoringToxicityOptions({...transport,
+    assessmentReference:frozen.binding.assessmentReference,resultReference,
+    treatmentTypeIds,drugClassIds});
+   if(options.checksum!==frozen.binding.checksum||options.ruleVersionId!==frozen.binding.ruleVersionId)
+    throw new ScoringReportContentError("invalid","RULE_VERSION_MISMATCH");
+   return {options:options.options,submissionId:row.currentSubmissionId,scoreRevision:review.scoreRevision};
+  } catch(error) {
+   if(error instanceof ScoringReportContentError)throw new ServiceError(error.kind==="blocked"?"CONFLICT":"SCORING_UNAVAILABLE",
+    error.kind==="blocked"?"NIQ Scoring could not list treatment effects for this assessment.":"Treatment effects are unavailable. Try again.");
+   throw error;
+  }
+ }
  async queue(actor:Principal,org:string,query:{page:number;pageSize:number;search?:string;facilityId?:string;state?:string;mine?:boolean;risk?:AssessmentRiskCategory}):Promise<ClinicalReviewQueue>{
   await this.actor(actor,org);await this.service.applicationService.getOrganization(actor,org);
   const empty=():ClinicalReviewQueue=>({items:[],total:0,page:query.page,pageSize:query.pageSize});
@@ -87,6 +126,25 @@ export class ClinicalReviewService {
  }
  async command(actor:Principal,org:string,id:string,raw:ClinicalReviewAction,context:RequestContext){
   const parsed=clinicalReviewActionSchema.safeParse(raw);if(!parsed.success)throw new ServiceError("VALIDATION_ERROR","Complete the required clinical review fields.");const input=parsed.data;
+  if(input.action==="COMPLETE"&&input.confirmedToxicityIds.length){
+   const row=await this.service.authorize(actor,org,id);
+   await this.actor(actor,org);
+   const [replay]=await this.service.db.select().from(assessmentHistory).where(and(eq(assessmentHistory.organizationId,org),eq(assessmentHistory.assessmentId,id),eq(assessmentHistory.actorId,actor.membershipId),eq(assessmentHistory.requestKey,input.requestKey)));
+   if(replay){
+    const payload=this.service.unseal<{command:ClinicalReviewAction}>(replay.payload);
+    if(JSON.stringify(payload.command)!==JSON.stringify(input))throw new ServiceError("CONFLICT","This request key belongs to a different clinical review action.");
+    return this.projection(actor,row);
+   }
+  }
+  // Resolve selected effect IDs before opening the workflow transaction. The
+  // submission and score revision are checked again under lock below.
+  const selectedEffects=input.action==="COMPLETE"&&input.confirmedToxicityIds.length
+   ? await this.toxicityOptions(actor,org,id,context) : null;
+  if(selectedEffects&&input.action==="COMPLETE"){
+   const available=new Set(selectedEffects.options.map(option=>option.id));
+   if(input.confirmedToxicityIds.some(id=>!available.has(id)))
+    throw new ServiceError("VALIDATION_ERROR","Choose only treatment effects available for this assessment.");
+  }
   if(input.action==="SEND"||input.action==="RESEND") {
    const current=await this.read(actor,org,id);
    if(current.allowedActions.includes(input.action)&&current.revision===input.expectedRevision&&current.scoreRevision===input.expectedScoreRevision) {
@@ -106,7 +164,9 @@ export class ClinicalReviewService {
    const [replay]=await tx.select().from(assessmentHistory).where(and(eq(assessmentHistory.organizationId,org),eq(assessmentHistory.assessmentId,id),eq(assessmentHistory.actorId,actor.membershipId),eq(assessmentHistory.requestKey,input.requestKey)));
    if(replay){const payload=this.service.unseal<{command:ClinicalReviewAction}>(replay.payload);if(JSON.stringify(payload.command)!==JSON.stringify(input))throw new ServiceError("CONFLICT","This request key belongs to a different clinical review action.");return this.projection(actor,row,tx);}
    const projection=await this.projection(actor,row,tx);if(!projection.allowedActions.includes(input.action))throw new ServiceError("FORBIDDEN","This action is not permitted for the current clinical review.");
-   if(projection.revision!==input.expectedRevision||projection.scoreRevision!==input.expectedScoreRevision)throw new ServiceError("CONFLICT","The review or score has changed. Reload before continuing.");
+   if(projection.revision!==input.expectedRevision||projection.scoreRevision!==input.expectedScoreRevision
+    ||selectedEffects&&(selectedEffects.submissionId!==row.currentSubmissionId||selectedEffects.scoreRevision!==projection.scoreRevision))
+    throw new ServiceError("CONFLICT","The review or score has changed. Reload before continuing.");
    const s=reviewState(this.service,row), now=new Date(), eligible=await this.eligible(actor,org,id,tx,row);
    const recipient="assigneeId"in input?eligible.find(r=>r.membershipId===input.assigneeId):null;
    if("assigneeId"in input&&!recipient)throw new ServiceError("VALIDATION_ERROR","Choose an active clinician with access to this assessment and patient.");
@@ -141,7 +201,7 @@ export class ClinicalReviewService {
     }
     case "REASSIGN_CORRECTION":if(s.correctionPerson?.membershipId===recipient!.membershipId)throw new ServiceError("VALIDATION_ERROR","Choose a different correction person.");s.correctionPerson=recipient!;s.returnReason=input.reason;currentOwnerMembershipId=recipient!.membershipId;break;
     case "RESEND":s.assignee=eligible.find(r=>r.membershipId===s.previousReviewer?.membershipId)??null;s.correctionPerson=null;s.submittedAt=now.toISOString();status="UNDER_REVIEW";currentOwnerMembershipId=s.assignee?.membershipId??null;break;
-    case "COMPLETE":if(!["ORIGINAL","CONFIRMED"].includes((score as {risk?:{status:string}})?.risk?.status??""))throw new ServiceError("CONFLICT","Confirm the reviewed risk classification before completing the review.");s.finalRemark=input.remark;s.completedAt=now.toISOString();s.finalSnapshot={score,scans,submissionId:row.currentSubmissionId,scoreRevision:projection.scoreRevision};completedAt=now;status="COMPLETED";currentOwnerMembershipId=null;break;
+    case "COMPLETE":if(!["ORIGINAL","CONFIRMED"].includes((score as {risk?:{status:string}})?.risk?.status??""))throw new ServiceError("CONFLICT","Confirm the reviewed risk classification before completing the review.");s.finalRemark=input.remark;s.completedAt=now.toISOString();s.finalSnapshot={score,scans,submissionId:row.currentSubmissionId,scoreRevision:projection.scoreRevision,confirmedToxicityIds:input.confirmedToxicityIds};completedAt=now;status="COMPLETED";currentOwnerMembershipId=null;break;
    }
    s.revision++;s.history.push({id:createEntityId(),action:input.action,revision:s.revision,cycle,actor:{membershipId:actor.membershipId,displayName:actor.displayName,role:actor.role as MembershipRole},assignee:s.correctionPerson??s.assignee,createdAt:now.toISOString(),...("reason"in input?{reason:input.reason}:{}),...("remark"in input?{remark:input.remark}:{})});
    await appendAssessmentHistory(this.service,tx,row,actor,input.action,{command:input,from,to:{status,assignee:s.assignee,correctionPerson:s.correctionPerson,currentOwnerMembershipId},workflow:this.service.unseal(row.workflow),score,scans},input.requestKey);
@@ -149,6 +209,13 @@ export class ClinicalReviewService {
    const finalScore = finalResult ? finalResult.finalScore : status === "COMPLETED" ? row.finalScore : null;
    const finalRiskCategory = finalResult ? finalResult.finalRiskCategory : status === "COMPLETED" ? row.finalRiskCategory : null;
    const [updated]=await tx.update(assessments).set({status,cycle,currentSubmissionId,workflow,clinicalReview:this.service.seal(s),assignedToMembershipId:s.assignee?.membershipId??null,currentOwnerMembershipId,revision:row.revision+1,completedAt,finalScore,finalRiskCategory,updatedAt:now}).where(and(eq(assessments.id,id),eq(assessments.organizationId,org))).returning();
+   if(input.action==="COMPLETE") {
+    // The report job is committed with final clinical approval. A server worker
+    // can finish it even when the approving browser has closed.
+    await tx.insert(generatedReports).values({id:createEntityId(),organizationId:org,assessmentId:id,patientId:row.patientId,
+     submissionId:row.currentSubmissionId!,requestKey:`${AUTOMATIC_REPORT_KEY_PREFIX}${row.currentSubmissionId}`,
+     sourceFingerprint:"",status:"QUEUED",nextAttemptAt:now});
+   }
    await this.service.audit(tx,actor,context,id,`CLINICAL_REVIEW_${input.action}`,{cycle,revision:s.revision,assigneeId:s.assignee?.membershipId??null,correctionPersonId:s.correctionPerson?.membershipId??null,currentOwnerMembershipId});
    const reference=formatAssessmentReference(row.serialNumber);
    const notify=(membershipId:string,kind:NotificationRecipient["kind"]):NotificationRecipient=>({membershipId,kind,reference});
