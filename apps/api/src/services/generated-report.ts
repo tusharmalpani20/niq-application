@@ -75,6 +75,10 @@ export function prepareNarrativeEdit(data: ReportData, input: { narrative: Parti
   return { data: { ...data, narrative, omittedNarrativeFields, ...(input.issueResolution ? { issues: [], issueResolution: resolution } : {}) }, resolvedIssueCount: input.issueResolution ? data.issues.length : 0 };
 }
 
+export function normalizeNarrative(content: ScoringReportContent["narrative"]): GeneratedNarrative {
+  return Object.fromEntries(Object.entries(content).map(([field, entry]) => [field, cleanReportText(entry.text)])) as GeneratedNarrative;
+}
+
 export function normalizeGuidance(content: ScoringReportContent, manifest: AssessmentFormManifest): {sections:GeneratedReportSection[]; issues:string[]} {
   const sections: GeneratedReportSection[] = [];
   const issues:string[]=[];
@@ -362,7 +366,7 @@ export class GeneratedReportService {
           submissionId:source.submissionId,scoreRevision:source.scoreRevision,ruleVersionId:generated.ruleVersionId,checksum:generated.checksum},
         classification:{id:source.risk.id!,label:source.risk.label ?? generated.classification.label,score:source.reviewedScore},
         metrics,weightHistory,decision,
-        narrative:Object.fromEntries(Object.entries(generated.narrative).map(([key,entry])=>[key,cleanReportText(entry.text)])) as GeneratedNarrative,
+        narrative:normalizeNarrative(generated.narrative),
         omittedNarrativeFields:generated.omittedNarrativeFields ?? [],
         guidance:{sections:normalized.sections},
         issues:[...generated.issues,...normalized.issues],issueResolution:null,

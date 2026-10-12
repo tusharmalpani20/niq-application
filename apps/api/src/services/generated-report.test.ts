@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { GeneratedReportService, assertGeneratedPdf, assertReportReadyForApproval, assertReviewedArtifact, automaticRetryDelay, cleanReportText, finishWeightHistory, normalizeGuidance, prepareNarrativeEdit, reportBrandingFingerprint, reportToxicityAnswers } from "./generated-report";
+import { GeneratedReportService, assertGeneratedPdf, assertReportReadyForApproval, assertReviewedArtifact, automaticRetryDelay, cleanReportText, finishWeightHistory, normalizeGuidance, normalizeNarrative, prepareNarrativeEdit, reportBrandingFingerprint, reportToxicityAnswers } from "./generated-report";
 import { requestScoringReportContent, requestScoringToxicityOptions, scoringReportContentSchema } from "./scoring-report-content";
-import { approveGeneratedReportSchema } from "../../../../packages/contracts/src/generated-report";
+import { approveGeneratedReportSchema, editGeneratedNarrativeSchema } from "../../../../packages/contracts/src/generated-report";
 
 const narrative = { overview: "Overview", keyFindings: "Findings", actionSummary: "Actions", monitoringSummary: "Monitoring" };
 const packet = {
@@ -39,6 +39,25 @@ test("report-content request binds the clinician-reviewed score and result refer
     assessmentReference: packet.assessmentReference, resultReference: "wrong-result", idempotencyKey: "request-1234567891",
     facts: sent.facts, fetcher: async () => Response.json(packet),
   } as any)).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+});
+
+test("v2 care-plan passages are required, cleaned, and kept separate from older saved reports", () => {
+  const current = structuredClone(packet) as any;
+  current.schemaVersion = 2;
+  expect(scoringReportContentSchema.safeParse(current).success).toBe(false);
+  current.narrative.nutritionAdvice = { text: "Take small meals; monitor intake.", evidenceIds: ["rule:nutrition"] };
+  current.narrative.treatmentAdvice = { text: "Discuss treatment effects.", evidenceIds: ["rule:treatment"] };
+  current.narrative.conditionAdvice = { text: "Check blood pressure.", evidenceIds: ["rule:condition"] };
+  current.narrative.effectsAdvice = { text: "", evidenceIds: [] };
+  current.omittedNarrativeFields = ["effectsAdvice"];
+  const parsed = scoringReportContentSchema.parse(current);
+  expect(normalizeNarrative(parsed.narrative)).toMatchObject({
+    nutritionAdvice: "Take small meals. monitor intake.", treatmentAdvice: "Discuss treatment effects.",
+    conditionAdvice: "Check blood pressure.", effectsAdvice: "",
+  });
+  expect(parsed.omittedNarrativeFields).toEqual(["effectsAdvice"]);
+  expect(normalizeNarrative(scoringReportContentSchema.parse(packet).narrative).nutritionAdvice).toBeUndefined();
+  expect(editGeneratedNarrativeSchema.safeParse({ revision: 1, narrative: { conditionAdvice: "Check blood pressure." } }).success).toBe(true);
 });
 
 test("automatic generation retries an in-progress Scoring run with bounded delay", async () => {

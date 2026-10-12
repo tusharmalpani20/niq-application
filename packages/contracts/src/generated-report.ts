@@ -13,6 +13,10 @@ export const editGeneratedNarrativeSchema = z.object({
     keyFindings: z.string().trim().max(1800).optional(),
     actionSummary: z.string().trim().max(1800).optional(),
     monitoringSummary: z.string().trim().max(1800).optional(),
+    nutritionAdvice: z.string().trim().max(1800).optional(),
+    treatmentAdvice: z.string().trim().max(1800).optional(),
+    conditionAdvice: z.string().trim().max(1800).optional(),
+    effectsAdvice: z.string().trim().max(1800).optional(),
   }).strict(),
   issueResolution: z.object({explanation:z.string().trim().min(10).max(1000)}).strict().optional(),
 }).strict().refine(value=>Object.keys(value.narrative).length>0 || Boolean(value.issueResolution),"Edit wording or resolve an issue");
@@ -25,7 +29,17 @@ export function reportBrandingPayload(brand: ReportBrandingSource): string {
   return JSON.stringify([brand.displayName.trim(), brand.logoObjectKey, brand.primaryColor, brand.secondaryColor]);
 }
 
-export type GeneratedNarrative = { overview: string; keyFindings: string; actionSummary: string; monitoringSummary: string };
+export type GeneratedNarrative = {
+  overview: string;
+  keyFindings: string;
+  actionSummary: string;
+  monitoringSummary: string;
+  // Older saved reports predate reviewed care-plan passages.
+  nutritionAdvice?: string;
+  treatmentAdvice?: string;
+  conditionAdvice?: string;
+  effectsAdvice?: string;
+};
 export type GeneratedReportSection = {
   id: string;
   kind: "nutrition" | "radiotherapy" | "product" | "comorbidity" | "toxicity" | "treatment";

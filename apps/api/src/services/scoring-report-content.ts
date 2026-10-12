@@ -38,9 +38,22 @@ export const scoringReportContentSchema = z.object({
   model: z.string().min(1), promptVersion: z.string().min(1), schemaVersion: z.number().int().positive(),
   classification: z.object({ id: z.string(), label: z.string() }),
   guidance: selectedGuidance,
-  narrative: z.object({ overview: narrative, keyFindings: narrative, actionSummary: narrative, monitoringSummary: narrative }),
+  narrative: z.object({
+    overview: narrative, keyFindings: narrative, actionSummary: narrative, monitoringSummary: narrative,
+    nutritionAdvice: narrative.optional(), treatmentAdvice: narrative.optional(),
+    conditionAdvice: narrative.optional(), effectsAdvice: narrative.optional(),
+  }),
   issues: z.array(z.string().max(1000)).max(100),
-  omittedNarrativeFields: z.array(z.enum(["overview", "keyFindings", "actionSummary", "monitoringSummary"])).max(4).optional(),
+  omittedNarrativeFields: z.array(z.enum([
+    "overview", "keyFindings", "actionSummary", "monitoringSummary",
+    "nutritionAdvice", "treatmentAdvice", "conditionAdvice", "effectsAdvice",
+  ])).max(8).optional(),
+}).superRefine((content, context) => {
+  // In-flight v1 runs can finish after a deployment. Only the v2 response
+  // requires the new reviewed passages.
+  if (content.schemaVersion < 2) return;
+  for (const field of ["nutritionAdvice", "treatmentAdvice", "conditionAdvice", "effectsAdvice"] as const)
+    if (!content.narrative[field]) context.addIssue({ code: "custom", path: ["narrative", field], message: "Reviewed care-plan passage is required" });
 });
 export type ScoringReportContent = z.infer<typeof scoringReportContentSchema>;
 
