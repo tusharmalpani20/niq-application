@@ -147,6 +147,7 @@
 .cr-renal-caution .cr-advice-icon { color: #94611b; background: #ffebc8; }
 .cr-renal-caution p { margin: .7rem 0 0 3.3rem; color: #5c4b32; font-size: .87rem; line-height: 1.55; white-space: pre-wrap; }
 .cr-care-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; }
+.cr-status-actions { margin-top: 1.2rem; }
 .cr-sheet-care .cr-sheet-content { display: flex; flex-direction: column; }
 .cr-sheet-care .cr-care-grid { width: 100%; margin-block: auto; }
 .cr-advice-block, .cr-supplement { min-width: 0; padding: 1rem 1.1rem; border: 1px solid #dce9eb; border-radius: .85rem; background: #fff; }

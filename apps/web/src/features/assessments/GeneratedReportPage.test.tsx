@@ -193,3 +193,19 @@ test("care guidance keeps approved sentences and uses matched clinical headings"
     expect(care.textContent).not.toContain("Matched source guidance");
   });
 });
+
+test("action and monitoring advice share the findings page when there is no other care advice", async () => {
+  const report: GeneratedReport = {
+    ...readyReport,
+    weightHistory: [{ date: null, kg: 70, label: "Previous weight" }, { date: "2026-10-12", kg: 69 }],
+    narrative: { ...readyReport.narrative, conditionAdvice: "", effectsAdvice: "" },
+  };
+  await renderWithResponse({ report, generation: { status: "READY" } }, () => {
+    const status = document.querySelector('[aria-label="Nutrition status and findings"]')!;
+    expect(status.querySelector(".cr-weight-panel")).not.toBeNull();
+    expect(status.querySelector(".cr-status-actions")?.textContent).toContain("Reviewed action plan");
+    expect(status.querySelector(".cr-status-actions")?.textContent).toContain("Reviewed monitoring plan");
+    expect(document.querySelector('[aria-label="Care and next steps"]')).toBeNull();
+    expect(document.querySelectorAll(".clinical-report > .cr-sheet").length).toBe(5);
+  });
+});
