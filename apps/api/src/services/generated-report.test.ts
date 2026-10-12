@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { GeneratedReportService, assertGeneratedPdf, assertReportReadyForApproval, cleanReportText, finishWeightHistory, normalizeGuidance, prepareNarrativeEdit, reportToxicityAnswers } from "./generated-report";
+import { GeneratedReportService, assertGeneratedPdf, assertReportReadyForApproval, assertReviewedArtifact, cleanReportText, finishWeightHistory, normalizeGuidance, prepareNarrativeEdit, reportBrandingFingerprint, reportToxicityAnswers } from "./generated-report";
 import { requestScoringReportContent, requestScoringToxicityOptions, scoringReportContentSchema } from "./scoring-report-content";
+import { approveGeneratedReportSchema } from "../../../../packages/contracts/src/generated-report";
 
 const narrative = { overview: "Overview", keyFindings: "Findings", actionSummary: "Actions", monitoringSummary: "Monitoring" };
 const packet = {
@@ -147,6 +148,22 @@ test("approval requires an artifact for the exact revision and PDF bytes must be
   expect(() => assertReportReadyForApproval([], 3, 3)).not.toThrow();
   expect(() => assertGeneratedPdf(Buffer.from("not a PDF"))).toThrow("valid generated PDF");
   expect(() => assertGeneratedPdf(Buffer.from("%PDF-1.7\n1 0 obj\nendobj\n%%EOF"))).not.toThrow();
+});
+
+test("approval binds the reviewed PDF and current organisation branding", () => {
+  const brand = { displayName: " Example Clinic ", logoObjectKey: "database:logo-1", primaryColor: "#112233", secondaryColor: "#445566" };
+  const fingerprint = reportBrandingFingerprint(brand);
+  expect(reportBrandingFingerprint({ ...brand, displayName: "Example Clinic" })).toBe(fingerprint);
+  expect(reportBrandingFingerprint({ ...brand, logoObjectKey: "database:logo-2" })).not.toBe(fingerprint);
+  expect(reportBrandingFingerprint({ ...brand, secondaryColor: "#000000" })).not.toBe(fingerprint);
+  const sha256 = "a".repeat(64);
+  const artifact = { sha256, brandingFingerprint: fingerprint };
+  expect(() => assertReviewedArtifact(artifact, sha256, fingerprint)).not.toThrow();
+  expect(() => assertReviewedArtifact({ ...artifact, sha256: "b".repeat(64) }, sha256, fingerprint)).toThrow("PDF changed after review");
+  expect(() => assertReviewedArtifact({ ...artifact, brandingFingerprint: null }, sha256, fingerprint)).toThrow("theme changed");
+  expect(() => assertReviewedArtifact(artifact, sha256, reportBrandingFingerprint({ ...brand, primaryColor: "#abcdef" }))).toThrow("theme changed");
+  expect(approveGeneratedReportSchema.safeParse({ revision: 0, reviewedSha256: sha256 }).success).toBe(true);
+  expect(approveGeneratedReportSchema.safeParse({ revision: 0 }).success).toBe(false);
 });
 
 test("report copy removes emojis, semicolons and em dashes", () => {

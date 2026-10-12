@@ -7,7 +7,7 @@ import { getOrganization } from "@/lib/api";
 import { brandingFromOrganization, type TenantBranding } from "@/lib/branding";
 import { useBranding } from "@/lib/branding-context";
 import { GeneratedReportPreview } from "./GeneratedReportPreview";
-import { approveGeneratedReport, generateReport, generatedReportPdfUrl, getGeneratedReport, getReportToxicityOptions, saveReportNarrative, uploadGeneratedReportPdf, type GeneratedNarrative, type GeneratedReport, type ReportToxicityOption } from "./generated-report-api";
+import { approveGeneratedReport, generateReport, generatedReportPdfUrl, getGeneratedReport, getReportToxicityOptions, pdfSha256, reportBrandingFingerprint, saveReportNarrative, uploadGeneratedReportPdf, type GeneratedNarrative, type GeneratedReport, type ReportToxicityOption } from "./generated-report-api";
 import { reportDate } from "./generated-report-format";
 import { ReportToxicityPicker } from "./ReportToxicityPicker";
 import { useDraftNavigationGuard } from "./useDraftNavigationGuard";
@@ -30,6 +30,18 @@ async function assetDataUrl(url: string | null, imageOnly = false): Promise<stri
     if (!response.ok) return null;
     const blob = await response.blob();
     if (imageOnly && !blob.type.startsWith("image/")) return null;
+    if (imageOnly && blob.type === "image/webp") {
+      const bitmap = await createImageBitmap(blob);
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const context = canvas.getContext("2d");
+        if (!context) return null;
+        context.drawImage(bitmap, 0, 0);
+        return canvas.toDataURL("image/png");
+      } finally { bitmap.close(); }
+    }
     return await new Promise<string | null>(resolve => {
       const reader = new FileReader();
       reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
@@ -50,6 +62,7 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
   const [notice, setNotice] = useState("");
   const [candidateUrl, setCandidateUrl] = useState<string | null>(null);
   const [candidateBrandKey, setCandidateBrandKey] = useState<string | null>(null);
+  const [candidateSha256, setCandidateSha256] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [issueExplanation, setIssueExplanation] = useState("");
   const [productStageChoice, setProductStageChoice] = useState<"" | "surgical" | "treatment_stage">("");
@@ -85,6 +98,7 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
     candidateRef.current = null;
     setCandidateUrl(null);
     setCandidateBrandKey(null);
+    setCandidateSha256(null);
   }, []);
 
   useEffect(() => {
@@ -94,6 +108,7 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
     candidateRef.current = null;
     setCandidateUrl(null);
     setCandidateBrandKey(null);
+    setCandidateSha256(null);
     setConfirmed(false);
   }, [brandKey]);
 
@@ -176,9 +191,16 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
   async function preparePdf() {
     if (!report || busy || dirty || generationInputsChanged || !editable) return;
     const preparingBrandKey = brandKey;
+    if (candidateRef.current) URL.revokeObjectURL(candidateRef.current);
+    candidateRef.current = null;
+    setCandidateUrl(null);
+    setCandidateBrandKey(null);
+    setCandidateSha256(null);
+    setConfirmed(false);
     setBusy("pdf"); setError(""); setNotice("");
     try {
-      const latestBranding = brandingFromOrganization((await getOrganization(user.organizationId, { includeInvitations: false })).organization);
+      const latestOrganization = (await getOrganization(user.organizationId, { includeInvitations: false })).organization;
+      const latestBranding = brandingFromOrganization(latestOrganization);
       if (reportBrandKey(latestBranding) !== preparingBrandKey) {
         updateBranding(latestBranding);
         throw new Error("The organisation theme changed. Prepare the PDF with the current theme.");
@@ -189,6 +211,7 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
         assetDataUrl(branding.logoUrl, true),
       ]);
       if (!regularFont || !boldFont) throw new Error("The report fonts could not be loaded. Try again when the application is online.");
+      if (branding.logoUrl && !logoDataUrl) throw new Error("The organisation logo could not be loaded. Prepare the PDF again when the logo is available.");
       const [{ pdf }, { GeneratedReportPdf, registerReportPdfFonts }] = await Promise.all([
         import("@react-pdf/renderer"), import("./GeneratedReportPdf"),
       ]);
@@ -197,8 +220,11 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
       const candidate = { ...report, status: "APPROVED" as const };
       const blob = await pdf(<GeneratedReportPdf report={candidate} brand={{ name: branding.displayName, primaryColor: branding.primaryColor, secondaryColor: branding.secondaryColor, logoDataUrl }}/>).toBlob();
       if (!blob.size) throw new Error("The PDF was empty. Try preparing it again.");
-      const uploaded = await uploadGeneratedReportPdf(user.organizationId, assessmentId, report.revision, blob);
+      const [brandingFingerprint, preparedSha256] = await Promise.all([reportBrandingFingerprint(latestOrganization), pdfSha256(blob)]);
+      const uploaded = await uploadGeneratedReportPdf(user.organizationId, assessmentId, report.revision, brandingFingerprint, blob);
       setReport(uploaded.report);
+      if (uploaded.report.artifact?.sha256 !== preparedSha256 || uploaded.report.artifact.brandingFingerprint !== brandingFingerprint)
+        throw new Error("The saved PDF changed while being prepared. Prepare and review it again.");
       if (currentBrandKey.current !== preparingBrandKey) {
         setNotice("The organisation theme changed while this PDF was prepared. Prepare it again before approval.");
         return;
@@ -208,13 +234,14 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
       candidateRef.current = url;
       setCandidateUrl(url);
       setCandidateBrandKey(preparingBrandKey);
+      setCandidateSha256(preparedSha256);
       setNotice("Final PDF candidate saved. Open and inspect it, then approve the report.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The PDF could not be prepared."); }
     finally { setBusy(null); }
   }
 
   async function approve() {
-    if (!report || report.issues.length || !report.artifact || !candidateUrl || candidateBrandKey !== brandKey || !confirmed || dirty || generationInputsChanged || busy || !editable) return;
+    if (!report || report.issues.length || !report.artifact || !candidateUrl || !candidateSha256 || report.artifact.sha256 !== candidateSha256 || candidateBrandKey !== brandKey || !confirmed || dirty || generationInputsChanged || busy || !editable) return;
     setBusy("approve"); setError(""); setNotice("");
     try {
       const latestBranding = brandingFromOrganization((await getOrganization(user.organizationId, { includeInvitations: false })).organization);
@@ -222,7 +249,7 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
         updateBranding(latestBranding);
         throw new Error("The organisation theme changed. Prepare and review a new PDF before approval.");
       }
-      accept((await approveGeneratedReport(user.organizationId, assessmentId, report.revision)).report);
+      accept((await approveGeneratedReport(user.organizationId, assessmentId, report.revision, candidateSha256)).report);
       setNotice("Clinical report approved. The saved PDF is now available to download.");
     }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not approve the report."); }
@@ -276,10 +303,9 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
       </section>}
       {generationInputsChanged && <p className="cr-message" role="status">Report inputs have changed. Regenerate the draft to apply them. The current preview and PDF candidate still use the saved inputs.</p>}
       {editable && narrative && <section className="cr-review-editor" aria-label="Review generated text"><div className="cr-review-heading"><div><h2>Review generated text</h2><p>These four passages are the only model-written parts. Check them against the confirmed facts and guidance in the preview.</p></div><span>{dirty ? "Unsaved edits" : "Saved"}</span></div><div className="cr-narrative-grid">{narrativeFields.map(field => <label key={field.id}><strong>{field.label}</strong><small>{field.help}</small><textarea value={narrative[field.id]} maxLength={1800} rows={5} disabled={!!busy} onChange={event => { setNarrative(current => current ? { ...current, [field.id]: event.target.value } : current); setConfirmed(false); }} /></label>)}</div><div className="cr-review-actions"><Button variant="outline" isDisabled={!dirty || !!busy} onPress={() => accept(report, true)}>Discard edits</Button><Button isDisabled={!dirty || !!busy} onPress={() => { void saveNarrative(); }}>{busy === "save" ? "Saving…" : "Save text"}</Button></div></section>}
-      {editable && <section className="cr-approval-bar" aria-label="Final PDF and approval"><div><h2>Final PDF</h2><p>Prepare the exact PDF, inspect it, and then approve. Any later text edit or theme change requires a new PDF.</p></div><div className="cr-approval-actions"><Button variant="outline" isDisabled={dirty || generationInputsChanged || !!busy || report.issues.length > 0} onPress={() => { void preparePdf(); }}><FileCheck2 size={17} aria-hidden="true"/>{busy === "pdf" ? "Preparing PDF…" : report.artifact ? "Prepare PDF again" : "Prepare PDF"}</Button>{currentCandidateUrl && <a className="cr-pdf-link" href={currentCandidateUrl} target="_blank" rel="noopener noreferrer">Open PDF candidate</a>}</div>{currentCandidateUrl && <label className="cr-approval-confirm"><input type="checkbox" checked={confirmed} disabled={!!busy || generationInputsChanged} onChange={event => setConfirmed(event.target.checked)}/><span>I reviewed the complete report and PDF candidate and approve this content for clinical use.</span></label>}<Button isDisabled={report.issues.length > 0 || !report.artifact || !currentCandidateUrl || !confirmed || dirty || generationInputsChanged || !!busy} onPress={() => { void approve(); }}><CheckCircle2 size={17} aria-hidden="true"/>{busy === "approve" ? "Approving…" : "Approve report"}</Button><p className="cr-private-note">The PDF candidate stays private until approval.</p></section>}
+      {editable && <section className="cr-approval-bar" aria-label="Final PDF and approval"><div><h2>Final PDF</h2><p>Prepare the exact PDF, inspect it, and then approve. Any later text edit or theme change requires a new PDF.</p></div><div className="cr-approval-actions"><Button variant="outline" isDisabled={dirty || generationInputsChanged || !!busy || report.issues.length > 0} onPress={() => { void preparePdf(); }}><FileCheck2 size={17} aria-hidden="true"/>{busy === "pdf" ? "Preparing PDF…" : report.artifact ? "Prepare PDF again" : "Prepare PDF"}</Button>{currentCandidateUrl && <a className="cr-pdf-link" href={currentCandidateUrl} target="_blank" rel="noopener noreferrer">Open PDF candidate</a>}</div>{currentCandidateUrl && <label className="cr-approval-confirm"><input type="checkbox" checked={confirmed} disabled={!!busy || generationInputsChanged} onChange={event => setConfirmed(event.target.checked)}/><span>I reviewed the complete report and PDF candidate and approve this content for clinical use.</span></label>}<Button isDisabled={report.issues.length > 0 || !report.artifact || !currentCandidateUrl || !candidateSha256 || report.artifact.sha256 !== candidateSha256 || !confirmed || dirty || generationInputsChanged || !!busy} onPress={() => { void approve(); }}><CheckCircle2 size={17} aria-hidden="true"/>{busy === "approve" ? "Approving…" : "Approve report"}</Button><p className="cr-private-note">The PDF candidate stays private until approval.</p></section>}
       {report.status === "APPROVED" && <div className="cr-approved-bar"><div><CheckCircle2 size={24} aria-hidden="true"/><div><strong>Clinician approved</strong><p>The final PDF is stored with this report.</p></div></div><a className="cr-download" href={generatedReportPdfUrl(user.organizationId, assessmentId)} download={`NIQ-report-${report.assessment.reference}.pdf`}><Download size={18} aria-hidden="true"/>Download final PDF</a></div>}
-      <div className="cr-preview-heading"><h2>Report preview</h2><p>{report.status === "APPROVED" ? "Approved report" : "Draft preview · not approved for clinical use"}</p></div>
-      <GeneratedReportPreview report={report}/>
+      {report.status === "APPROVED" ? <p className="cr-message">The approved layout is preserved in the saved PDF. Download the final PDF above to view the exact approved report.</p> : <><div className="cr-preview-heading"><h2>Report preview</h2><p>Draft preview · not approved for clinical use</p></div><GeneratedReportPreview report={report}/></>}
     </>}
     {navigationDialog}
   </div>;

@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq, lt, ne } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
-import { formatAssessmentReference, hasPermission, type AssessmentFormManifest, type FormAnswers } from "@niq/application-contracts";
+import { formatAssessmentReference, hasPermission, reportBrandingPayload, type AssessmentFormManifest, type FormAnswers } from "@niq/application-contracts";
 import type { GeneratedReport, GeneratedReportSection, GeneratedNarrative } from "../../../../packages/contracts/src/generated-report";
 import { assessmentScoreResultSchema, type AssessmentPatient } from "../../../../packages/contracts/src/assessment-workflow";
-import { assessmentFaceScans, assessmentSubmissions, assessments, generatedReportArtifacts, generatedReports } from "../db/schema";
+import { assessmentFaceScans, assessmentSubmissions, assessments, generatedReportArtifacts, generatedReports, organizations } from "../db/schema";
 import { decryptPatientBytes, encryptPatientBytes, patientDataKey } from "../security/patient-data";
 import { reviewState } from "./clinical-review-state";
 import { ServiceError, type Principal, type RequestContext } from "./application";
@@ -42,6 +42,17 @@ export function finishWeightHistory(priorMostRecentFirst: GeneratedReport["weigh
 export function assertReportReadyForApproval(issues: string[], artifactRevision: number | null, reportRevision: number) {
   if (issues.length) throw new ServiceError("CONFLICT", "Resolve report-generation issues before approval.");
   if (artifactRevision !== reportRevision) throw new ServiceError("CONFLICT", "Generate the final PDF for this report revision before approving.");
+}
+
+export function assertReviewedArtifact(artifact: { sha256: string; brandingFingerprint: string | null } | undefined, reviewedSha256: string, currentBrandingFingerprint: string) {
+  if (!artifact || artifact.sha256 !== reviewedSha256)
+    throw new ServiceError("CONFLICT", "The PDF changed after review. Open and review the latest PDF before approval.");
+  if (artifact.brandingFingerprint !== currentBrandingFingerprint)
+    throw new ServiceError("CONFLICT", "The organisation theme changed. Prepare and review a new PDF before approval.");
+}
+
+export function reportBrandingFingerprint(brand: Parameters<typeof reportBrandingPayload>[0]): string {
+  return createHash("sha256").update(reportBrandingPayload(brand)).digest("hex");
 }
 
 export function assertGeneratedPdf(pdf: Buffer) {
@@ -202,7 +213,7 @@ export class GeneratedReportService {
     const artifact = await this.artifact(row.organizationId,row.id);
     const stale = row.status === "STALE" || this.currentFingerprint(assessment,data.assessment.checksum,data.decision) !== row.sourceFingerprint;
     return { ...data,id:row.id,revision:row.revision,status:stale?"STALE":row.status as GeneratedReport["status"],approvedAt:row.approvedAt?.toISOString() ?? null,
-      artifact:artifact && artifact.revision === row.revision ? {sha256:artifact.sha256,size:artifact.size,uploadedAt:artifact.uploadedAt.toISOString()}:null };
+      artifact:artifact && artifact.revision === row.revision ? {sha256:artifact.sha256,size:artifact.size,uploadedAt:artifact.uploadedAt.toISOString(),brandingFingerprint:artifact.brandingFingerprint}:null };
   }
   async read(actor: Principal, org: string, id: string): Promise<{report: GeneratedReport | null}> {
     const assessment=await this.clinical(actor,org,id);
@@ -379,7 +390,7 @@ export class GeneratedReportService {
     });
     return {report:await this.dto(saved!,assessment)};
   }
-  async uploadPdf(actor:Principal,org:string,id:string,revision:number,body:ReadableStream<Uint8Array>,context:RequestContext) {
+  async uploadPdf(actor:Principal,org:string,id:string,revision:number,brandingFingerprint:string,body:ReadableStream<Uint8Array>,context:RequestContext) {
     const {assessment,row}=await this.editable(actor,org,id,revision);
     const reader=body.getReader();const chunks:Uint8Array[]=[];let size=0;
     try {
@@ -393,16 +404,20 @@ export class GeneratedReportService {
       const currentAssessment=await this.service.authorize(actor,org,id,tx,true);
       const data=this.service.unseal<ReportData>(row.content);
       if(this.currentFingerprint(currentAssessment,data.assessment.checksum,data.decision)!==row.sourceFingerprint)throw new ServiceError("CONFLICT","The clinical review changed. Regenerate the report.");
+      const [brand]=await tx.select({displayName:organizations.displayName,logoObjectKey:organizations.logoObjectKey,
+        primaryColor:organizations.primaryColor,secondaryColor:organizations.secondaryColor}).from(organizations).where(eq(organizations.id,org)).for("update");
+      if(!brand || reportBrandingFingerprint(brand)!==brandingFingerprint)
+        throw new ServiceError("CONFLICT","The organisation theme changed. Prepare the PDF with the current theme.");
       const [fresh]=await tx.select().from(generatedReports).where(and(eq(generatedReports.organizationId,org),eq(generatedReports.id,row.id))).for("update");
       if(!fresh || fresh.status!=="DRAFT" || fresh.revision!==revision)throw new ServiceError("CONFLICT","The report changed while its PDF was being uploaded.");
-      await tx.insert(generatedReportArtifacts).values({reportId:row.id,organizationId:org,assessmentId:id,revision,sha256:hash,size:pdf.length,encryptedPdf:encryptPatientBytes(pdf,key)})
-        .onConflictDoUpdate({target:generatedReportArtifacts.reportId,set:{revision,sha256:hash,size:pdf.length,encryptedPdf:encryptPatientBytes(pdf,key),uploadedAt:new Date()}});
+      await tx.insert(generatedReportArtifacts).values({reportId:row.id,organizationId:org,assessmentId:id,revision,sha256:hash,size:pdf.length,brandingFingerprint,encryptedPdf:encryptPatientBytes(pdf,key)})
+        .onConflictDoUpdate({target:generatedReportArtifacts.reportId,set:{revision,sha256:hash,size:pdf.length,brandingFingerprint,encryptedPdf:encryptPatientBytes(pdf,key),uploadedAt:new Date()}});
       await this.service.audit(tx,actor,context,id,"GENERATED_REPORT_PDF_UPLOADED",{reportId:row.id,revision,sha256:hash,size:pdf.length});
     });
     const [fresh]=await this.service.db.select().from(generatedReports).where(eq(generatedReports.id,row.id));
     return {report:await this.dto(fresh!,assessment)};
   }
-  async approve(actor:Principal,org:string,id:string,revision:number,context:RequestContext) {
+  async approve(actor:Principal,org:string,id:string,revision:number,reviewedSha256:string,context:RequestContext) {
     if(!hasPermission(actor.role,"reviews.complete"))throw new ServiceError("FORBIDDEN","A clinician must approve the final report.");
     const {assessment,row}=await this.editable(actor,org,id,revision);
     const data=this.service.unseal<ReportData>(row.content);
@@ -410,8 +425,12 @@ export class GeneratedReportService {
     const [saved]=await this.service.db.transaction(async tx=>{
       const currentAssessment=await this.service.authorize(actor,org,id,tx,true);
       if(this.currentFingerprint(currentAssessment,data.assessment.checksum,data.decision)!==row.sourceFingerprint)throw new ServiceError("CONFLICT","The clinical review changed. Regenerate the report.");
+      const [brand]=await tx.select({displayName:organizations.displayName,logoObjectKey:organizations.logoObjectKey,
+        primaryColor:organizations.primaryColor,secondaryColor:organizations.secondaryColor}).from(organizations).where(eq(organizations.id,org)).for("update");
+      if(!brand)throw new ServiceError("NOT_FOUND","Organisation not found.");
       const [artifact]=await tx.select().from(generatedReportArtifacts).where(and(eq(generatedReportArtifacts.organizationId,org),eq(generatedReportArtifacts.reportId,row.id)));
       assertReportReadyForApproval(data.issues,artifact?.revision??null,revision);
+      assertReviewedArtifact(artifact,reviewedSha256,reportBrandingFingerprint(brand));
       const [updated]=await tx.update(generatedReports).set({status:"APPROVED",approvedByMembershipId:actor.membershipId,approvedAt:new Date(),updatedAt:new Date()})
         .where(and(eq(generatedReports.id,row.id),eq(generatedReports.organizationId,org),eq(generatedReports.status,"DRAFT"),eq(generatedReports.revision,revision))).returning();
       if(!updated)throw new ServiceError("CONFLICT","The report changed before approval.");

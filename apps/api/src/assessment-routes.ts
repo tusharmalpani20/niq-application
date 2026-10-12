@@ -51,9 +51,10 @@ export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowSe
     if(c.req.header("content-type")?.split(";")[0]?.trim().toLowerCase()!=="application/pdf" || !c.req.raw.body)
       throw new ServiceError("VALIDATION_ERROR","Upload a PDF.");
     const revision=parse(z.string().regex(/^\d+$/).transform(Number),c.req.query("revision"));
-    return c.json(await generatedReports.uploadPdf(p.actor,p.org,p.assessment,revision,c.req.raw.body,p.context));
+    const brandingFingerprint=parse(z.string().regex(/^[a-f0-9]{64}$/),c.req.header("x-report-branding-fingerprint"));
+    return c.json(await generatedReports.uploadPdf(p.actor,p.org,p.assessment,revision,brandingFingerprint,c.req.raw.body,p.context));
   });
-  app.post(generated+"/approve",async c=>{const p=parts(c);const input=parse(approveGeneratedReportSchema,await json(c));return c.json(await generatedReports.approve(p.actor,p.org,p.assessment,input.revision,p.context));});
+  app.post(generated+"/approve",async c=>{const p=parts(c);const input=parse(approveGeneratedReportSchema,await json(c));return c.json(await generatedReports.approve(p.actor,p.org,p.assessment,input.revision,input.reviewedSha256,p.context));});
   app.get(generated+"/pdf",async c=>{
     const p=parts(c),file=await generatedReports.downloadPdf(p.actor,p.org,p.assessment);
     return new Response(new Uint8Array(file.pdf),{headers:{"Content-Type":"application/pdf","Content-Length":String(file.pdf.length),"Content-Disposition":"attachment; filename=\"NIQ-clinical-report.pdf\"","ETag":'"'+file.sha256+'"',"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});

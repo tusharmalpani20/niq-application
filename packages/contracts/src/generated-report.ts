@@ -16,7 +16,14 @@ export const editGeneratedNarrativeSchema = z.object({
   }).strict(),
   issueResolution: z.object({explanation:z.string().trim().min(10).max(1000)}).strict().optional(),
 }).strict().refine(value=>Object.keys(value.narrative).length>0 || Boolean(value.issueResolution),"Edit wording or resolve an issue");
-export const approveGeneratedReportSchema = z.object({ revision: z.number().int().nonnegative() }).strict();
+export const approveGeneratedReportSchema = z.object({ revision: z.number().int().nonnegative(), reviewedSha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
+
+export type ReportBrandingSource = { displayName: string; logoObjectKey: string | null; primaryColor: string; secondaryColor: string };
+
+/** Canonical branding fields shared by the browser and the approval service. */
+export function reportBrandingPayload(brand: ReportBrandingSource): string {
+  return JSON.stringify([brand.displayName.trim(), brand.logoObjectKey, brand.primaryColor, brand.secondaryColor]);
+}
 
 export type GeneratedNarrative = { overview: string; keyFindings: string; actionSummary: string; monitoringSummary: string };
 export type GeneratedReportSection = {
@@ -49,5 +56,5 @@ export type GeneratedReport = {
   guidance: { sections: GeneratedReportSection[] };
   issues: string[];
   issueResolution: { originalIssues: string[]; explanation: string; clinicianName: string; resolvedAt: string } | null;
-  artifact: { sha256: string; size: number; uploadedAt: string } | null;
+  artifact: { sha256: string; size: number; uploadedAt: string; brandingFingerprint: string | null } | null;
 };

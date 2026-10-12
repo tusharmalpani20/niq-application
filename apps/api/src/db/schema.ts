@@ -752,7 +752,8 @@ export const generatedReports = pgTable("generated_reports", {
 export const generatedReportArtifacts = pgTable("generated_report_artifacts", {
   reportId: entityId("report_id").primaryKey(), organizationId: entityId("organization_id").notNull(), assessmentId: entityId("assessment_id").notNull(),
   revision: integer("revision").notNull(), sha256: text("sha256").notNull(), size: integer("size").notNull(),
-  encryptedPdf: encryptedBytes("encrypted_pdf").notNull(), uploadedAt: timestamp("uploaded_at", {withTimezone:true}).notNull().defaultNow(),
+  encryptedPdf: encryptedBytes("encrypted_pdf").notNull(), brandingFingerprint: text("branding_fingerprint"),
+  uploadedAt: timestamp("uploaded_at", {withTimezone:true}).notNull().defaultNow(),
 }, t => [
   foreignKey({columns:[t.organizationId,t.reportId],foreignColumns:[generatedReports.organizationId,generatedReports.id]}),
   check("generated_report_artifacts_size_ck",sql`${t.size} > 0 and ${t.size} <= 10485760`),

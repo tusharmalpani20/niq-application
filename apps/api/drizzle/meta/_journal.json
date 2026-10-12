@@ -281,6 +281,13 @@
       "when": 1791792000000,
       "tag": "0039_generated_clinical_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791792001000,
+      "tag": "0040_generated_report_branding",
+      "breakpoints": true
     }
   ]
 }
