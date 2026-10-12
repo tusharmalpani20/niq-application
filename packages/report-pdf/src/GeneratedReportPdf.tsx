@@ -395,6 +395,7 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
     ? hasNutritionFindings ? "Vital IQ and nutrition findings" : "Vital IQ detailed measurements"
     : "Nutrition status and findings";
   const hasActions = Boolean(report.narrative.actionSummary || report.narrative.monitoringSummary);
+  const actionOnly = hasActions && !hasConsiderations;
   const careWordCount = (text: string | undefined) => text?.trim().split(/\s+/).length ?? 0;
   const pairedCareAdvice = Boolean(report.narrative.conditionAdvice && report.narrative.effectsAdvice && careWordCount(report.narrative.conditionAdvice) <= 100 && careWordCount(report.narrative.effectsAdvice) <= 100);
   const careStepWidth = report.narrative.actionSummary && report.narrative.monitoringSummary &&
@@ -483,6 +484,10 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
       {!compactNutritionSummary && statusMetrics.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Assessment indicators</Text><View style={[styles.wrapRow, { marginBottom: 11 }]}>{statusMetrics.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme}/>)}</View></>}
       {showClinicalFinding && clinicalFinding && <NarrativePanel title="Clinical interpretation" text={clinicalFinding} icon="clipboard" theme={theme} accent/>}
       <WeightGraphic report={report} theme={theme}/>
+      {actionOnly && <View style={[styles.row, { flexWrap: "wrap", marginTop: 7 }]}>
+        {report.narrative.actionSummary && <AdvicePanel title="What to do" text={report.narrative.actionSummary} icon="food" theme={theme} action width={careStepWidth} compact/>}
+        {report.narrative.monitoringSummary && <AdvicePanel title="What to monitor" text={report.narrative.monitoringSummary} icon="chart" theme={theme} action width={careStepWidth} compact/>}
+      </View>}
     </ReportPage>}
 
     {hasNutritionPage && <ReportPage report={report} brand={brand} number={page++} title="Nutrition plan" icon="food">
@@ -497,7 +502,7 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
       {report.narrative.treatmentAdvice && <AdvicePanel title="During treatment" text={report.narrative.treatmentAdvice} icon="shield" theme={theme} columns compact={denseNutrition} tight={veryDenseNutrition}/>}
     </ReportPage>}
 
-    {(hasConsiderations || hasActions) && <ReportPage report={report} brand={brand} number={page++} title="Care and next steps" icon="heart">
+    {(hasConsiderations || (hasActions && !hasFindings)) && <ReportPage report={report} brand={brand} number={page++} title="Care and next steps" icon="heart">
       <View style={{ marginTop: compactCare ? 117 : 0, gap: 10 }}>
         {pairedCareAdvice ? <View wrap={false} style={[styles.row, { alignItems: "stretch" }]}>
           <AdvicePanel title={singleGuidanceTitle(report, "comorbidity", "Other health conditions")} text={report.narrative.conditionAdvice!} icon="heart" theme={theme} width="48.8%" compact minHeight={compactCare ? 250 : undefined}/>
