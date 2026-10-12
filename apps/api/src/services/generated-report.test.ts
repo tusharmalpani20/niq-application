@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { GeneratedReportService, assertGeneratedPdf, assertReportReadyForApproval, assertReviewedArtifact, cleanReportText, finishWeightHistory, normalizeGuidance, prepareNarrativeEdit, reportBrandingFingerprint, reportToxicityAnswers } from "./generated-report";
+import { GeneratedReportService, assertGeneratedPdf, assertReportReadyForApproval, assertReviewedArtifact, automaticRetryDelay, cleanReportText, finishWeightHistory, normalizeGuidance, prepareNarrativeEdit, reportBrandingFingerprint, reportToxicityAnswers } from "./generated-report";
 import { requestScoringReportContent, requestScoringToxicityOptions, scoringReportContentSchema } from "./scoring-report-content";
 import { approveGeneratedReportSchema } from "../../../../packages/contracts/src/generated-report";
 
@@ -39,6 +39,15 @@ test("report-content request binds the clinician-reviewed score and result refer
     assessmentReference: packet.assessmentReference, resultReference: "wrong-result", idempotencyKey: "request-1234567891",
     facts: sent.facts, fetcher: async () => Response.json(packet),
   } as any)).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+});
+
+test("automatic generation retries an in-progress Scoring run with bounded delay", async () => {
+  expect([1,2,3,4,20].map(automaticRetryDelay)).toEqual([30_000,60_000,120_000,240_000,300_000]);
+  await expect(requestScoringReportContent({ baseUrl: "http://scoring.test", credential: "private", requestId: "r1", timeoutMs: 1000,
+    assessmentReference: packet.assessmentReference, resultReference: packet.resultReference, idempotencyKey: "report-request-retry",
+    facts: { reviewedScore: 28, treatmentTypeIds: [], drugClassIds: [], confirmedToxicityIds: [], assessmentDate: "2026-10-12", observations: [] },
+    fetcher: async () => Response.json({ error: "REQUEST_IN_PROGRESS" }, { status: 409 }),
+  } as any)).rejects.toMatchObject({ kind: "unavailable", code: "REQUEST_IN_PROGRESS" });
 });
 
 test("toxicity options request binds the reviewed result and only sends selected treatment IDs", async () => {

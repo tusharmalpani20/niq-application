@@ -89,7 +89,8 @@ export async function requestScoringToxicityOptions(input: AssessmentScoringTran
   try { body = await response.json(); } catch { throw new ScoringReportContentError("unavailable", "INVALID_RESPONSE"); }
   if (!response.ok) {
     const code = z.object({ error: z.string().max(100) }).safeParse(body);
-    throw new ScoringReportContentError(response.status === 503 || response.status >= 500 ? "unavailable" : "blocked", code.success ? code.data.error : "UPSTREAM_FAILURE");
+    const errorCode = code.success ? code.data.error : "UPSTREAM_FAILURE";
+    throw new ScoringReportContentError(response.status === 503 || response.status >= 500 || errorCode === "REQUEST_IN_PROGRESS" ? "unavailable" : "blocked", errorCode);
   }
   const parsed = scoringToxicityOptionsSchema.safeParse(body);
   if (!parsed.success || parsed.data.assessmentReference !== input.assessmentReference || parsed.data.resultReference !== input.resultReference)
@@ -112,7 +113,8 @@ export async function requestScoringReportContent(input: AssessmentScoringTransp
   try { body = await response.json(); } catch { throw new ScoringReportContentError("unavailable", "INVALID_RESPONSE"); }
   if (!response.ok) {
     const code = z.object({ error: z.string().max(100) }).safeParse(body);
-    throw new ScoringReportContentError(response.status === 503 || response.status >= 500 ? "unavailable" : "blocked", code.success ? code.data.error : "UPSTREAM_FAILURE");
+    const errorCode = code.success ? code.data.error : "UPSTREAM_FAILURE";
+    throw new ScoringReportContentError(response.status === 503 || response.status >= 500 || errorCode === "REQUEST_IN_PROGRESS" ? "unavailable" : "blocked", errorCode);
   }
   const parsed = scoringReportContentSchema.safeParse(body);
   if (!parsed.success || parsed.data.assessmentReference !== input.assessmentReference || parsed.data.resultReference !== input.resultReference)

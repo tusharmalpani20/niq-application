@@ -140,7 +140,6 @@ export function createApp(dependencies: AppDependencies) {
     if (!assessmentMutation || ["GET", "HEAD", "OPTIONS"].includes(context.req.method)) return next();
     // Files stream through a separately bounded storage adapter; JSON drafts are bounded here.
     if (/\/reports\/[^/]+\/files$/.test(path) && context.req.method === "POST") return next();
-    if (/\/generated-report\/pdf$/.test(path) && context.req.method === "POST") return next();
     if (/\/face-scan-consent\/upload$/.test(path) && context.req.method === "POST") return next();
     if (/\/face-scans(?:\/|$)/.test(path)) return next(); // Routes count actual bytes and enforce an upload deadline.
     return bodyLimit({ maxSize: 256 * 1024, onError: c => c.json(errorBody("VALIDATION_ERROR", "The request is too large.", c.get("requestId")), 413) })(context, next);

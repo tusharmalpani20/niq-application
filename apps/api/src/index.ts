@@ -6,6 +6,7 @@ import { DevelopmentOtpDelivery, UnconfiguredOtpDelivery } from "./services/dev-
 import { PostgresApplicationService } from "./services/postgres-application";
 import { AssessmentWorkflowService } from "./services/assessment-workflow";
 import { WebPushService } from "./services/web-push";
+import { GeneratedReportService } from "./services/generated-report";
 
 const config = loadApplicationConfig(process.env);
 const { db, sql } = createDatabase(config);
@@ -23,6 +24,7 @@ const pushWorker = setInterval(async () => {
 }, 10_000);
 pushWorker.unref();
 const faceScans = new AssessmentFaceScanService(workflow);
+const automaticReports = new GeneratedReportService(workflow);
 let reconciling = false;
 const recovery = setInterval(async () => {
   if (reconciling) return;
@@ -31,6 +33,14 @@ const recovery = setInterval(async () => {
   finally { reconciling = false; }
 }, config.FACE_SCAN_RECONCILE_INTERVAL_MS);
 recovery.unref();
+let preparingReports = false;
+const reportWorker = setInterval(async () => {
+  if (preparingReports) return;
+  preparingReports = true;
+  try { await automaticReports.processDue(); } catch { console.warn("Automatic report worker temporarily unavailable"); }
+  finally { preparingReports = false; }
+}, 5_000);
+reportWorker.unref();
 
 const app = createApp({
   allowedOrigin: config.WEB_ORIGIN,

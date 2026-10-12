@@ -1,17 +1,20 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, lt, ne } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, ne, or, lte, like, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
 import { formatAssessmentReference, hasPermission, reportBrandingPayload, type AssessmentFormManifest, type FormAnswers } from "@niq/application-contracts";
 import type { GeneratedReport, GeneratedReportSection, GeneratedNarrative } from "../../../../packages/contracts/src/generated-report";
 import { assessmentScoreResultSchema, type AssessmentPatient } from "../../../../packages/contracts/src/assessment-workflow";
-import { assessmentFaceScans, assessmentSubmissions, assessments, generatedReportArtifacts, generatedReports, organizations } from "../db/schema";
+import { assessmentFaceScans, assessmentSubmissions, assessments, generatedReportArtifacts, generatedReports, organizationBrandAssets, organizations } from "../db/schema";
 import { decryptPatientBytes, encryptPatientBytes, patientDataKey } from "../security/patient-data";
 import { reviewState } from "./clinical-review-state";
 import { ServiceError, type Principal, type RequestContext } from "./application";
 import type { AssessmentWorkflowService, StoredWorkflow, WorkflowRow } from "./assessment-workflow";
 import { requestScoringReportContent, requestScoringToxicityOptions, ScoringReportContentError, type ReportFacts, type ScoringReportContent } from "./scoring-report-content";
+import { renderGeneratedReportPdf } from "./report-pdf";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
+export const AUTOMATIC_REPORT_KEY_PREFIX = "auto-final-v1:";
+export const automaticRetryDelay = (attempt: number) => Math.min(300_000, 30_000 * 2 ** Math.min(4, Math.max(0, attempt - 1)));
 type ReportData = Omit<GeneratedReport, "id" | "revision" | "status" | "approvedAt" | "artifact">;
 type ReportRow = typeof generatedReports.$inferSelect;
 type ArtifactRow = typeof generatedReportArtifacts.$inferSelect;
@@ -187,13 +190,14 @@ export class GeneratedReportService {
   }
   private source(row: WorkflowRow) {
     const review = reviewState(this.service,row);
-    const final = review.finalSnapshot as { submissionId?: string | null; scoreRevision?: number; score?: { overall?: { reviewedPoints?: number | null }; risk?: { status?: string; resultReference?: string | null; classification?: { id?: string; label?: string } | null } } } | undefined;
+    const final = review.finalSnapshot as { submissionId?: string | null; scoreRevision?: number; confirmedToxicityIds?: string[]; score?: { overall?: { reviewedPoints?: number | null }; risk?: { status?: string; resultReference?: string | null; classification?: { id?: string; label?: string } | null } } } | undefined;
     if (row.status !== "COMPLETED" || !row.currentSubmissionId || !row.completedAt || !final || final.submissionId !== row.currentSubmissionId
       || !Number.isInteger(final.scoreRevision) || final.scoreRevision! < 0
       || !Number.isFinite(final.score?.overall?.reviewedPoints) || (final.score?.overall?.reviewedPoints ?? -1) < 0
       || !["ORIGINAL","CONFIRMED"].includes(final.score?.risk?.status ?? "") || !final.score?.risk?.classification?.id || !final.score?.risk?.resultReference)
       throw new ServiceError("CONFLICT","Complete the clinical review and confirm its risk classification before generating a report.");
-    return { submissionId: row.currentSubmissionId, scoreRevision: final.scoreRevision!, reviewedScore: final.score!.overall!.reviewedPoints!, risk: final.score!.risk!.classification!, resultReference:final.score!.risk!.resultReference!, completedAt: row.completedAt };
+    return { submissionId: row.currentSubmissionId, scoreRevision: final.scoreRevision!, reviewedScore: final.score!.overall!.reviewedPoints!, risk: final.score!.risk!.classification!, resultReference:final.score!.risk!.resultReference!, completedAt: row.completedAt,
+      confirmedToxicityIds: Array.isArray(final.confirmedToxicityIds) ? final.confirmedToxicityIds : [] };
   }
   private currentFingerprint(row: WorkflowRow, checksum: string, decision?:GeneratedReport["decision"]): string | null {
     try {
@@ -202,7 +206,7 @@ export class GeneratedReportService {
     } catch { return null; }
   }
   private async latest(org: string, id: string): Promise<ReportRow | undefined> {
-    const [row] = await this.service.db.select().from(generatedReports).where(and(eq(generatedReports.organizationId,org),eq(generatedReports.assessmentId,id),ne(generatedReports.status,"FAILED"))).orderBy(desc(generatedReports.createdAt),desc(generatedReports.id)).limit(1);
+    const [row] = await this.service.db.select().from(generatedReports).where(and(eq(generatedReports.organizationId,org),eq(generatedReports.assessmentId,id))).orderBy(desc(generatedReports.createdAt),desc(generatedReports.id)).limit(1);
     return row;
   }
   private async artifact(org: string, reportId: string): Promise<ArtifactRow | undefined> {
@@ -217,10 +221,16 @@ export class GeneratedReportService {
     return { ...data,id:row.id,revision:row.revision,status:stale?"STALE":row.status as GeneratedReport["status"],approvedAt:row.approvedAt?.toISOString() ?? null,
       artifact:artifact && artifact.revision === row.revision ? {sha256:artifact.sha256,size:artifact.size,uploadedAt:artifact.uploadedAt.toISOString(),brandingFingerprint:artifact.brandingFingerprint}:null };
   }
-  async read(actor: Principal, org: string, id: string): Promise<{report: GeneratedReport | null}> {
+  async read(actor: Principal, org: string, id: string): Promise<{report: GeneratedReport | null; generation: {status:"QUEUED"|"GENERATING"|"FAILED"|"READY";failureCode:string|null}|null}> {
     const assessment=await this.clinical(actor,org,id);
     const row=await this.latest(org,id);
-    return {report:row?.content ? await this.dto(row,assessment):null};
+    if(!row) return {report:null,generation:null};
+    if(!row.requestKey.startsWith(AUTOMATIC_REPORT_KEY_PREFIX) && row.status!=="READY" && row.status!=="APPROVED")
+      return {report:null,generation:null};
+    const status=row.status==="READY"||row.status==="APPROVED"?"READY":row.status==="FAILED"?"FAILED":row.status==="QUEUED"?"QUEUED":"GENERATING";
+    const report=row.content && status==="READY" ? await this.dto(row,assessment):null;
+    return {report:report?.status==="APPROVED"?{...report,status:"READY"}:report,
+      generation:{status,failureCode:row.failureCode}};
   }
   async toxicityOptions(actor: Principal, org: string, id: string, context: RequestContext) {
     if (!hasPermission(actor.role,"reviews.complete")) throw new ServiceError("FORBIDDEN","A clinician must confirm treatment effects.");
@@ -265,29 +275,37 @@ export class GeneratedReportService {
     }
     return finishWeightHistory(points,currentKg && currentKg<600?{date:dateOnly(row.completedAt!),kg:currentKg}:null,previousKg);
   }
-  async generate(actor:Principal,org:string,id:string,input:{requestKey:string;productStageChoice?:"surgical"|"treatment_stage";confirmedToxicityIds?:string[]},context:RequestContext):Promise<{report:GeneratedReport}> {
-    if (input.confirmedToxicityIds?.length && !hasPermission(actor.role,"reviews.complete"))
+  async generate(actor:Principal,org:string,id:string,input:{requestKey:string;productStageChoice?:"surgical"|"treatment_stage";confirmedToxicityIds?:string[]},context:RequestContext, internal=false):Promise<{report:GeneratedReport}> {
+    if (!internal && input.confirmedToxicityIds?.length && !hasPermission(actor.role,"reviews.complete"))
       throw new ServiceError("FORBIDDEN","A clinician must confirm treatment effects.");
-    const assessment=await this.clinical(actor,org,id,"reports.manage");
+    const assessment=internal
+      ? (await this.service.db.select().from(assessments).where(and(eq(assessments.organizationId,org),eq(assessments.id,id))).limit(1))[0]
+      : await this.clinical(actor,org,id,"reports.manage");
+    if(!assessment) throw new ServiceError("NOT_FOUND","Assessment not found.");
     const source=this.source(assessment);
+    if (input.confirmedToxicityIds && JSON.stringify([...input.confirmedToxicityIds].sort())!==JSON.stringify([...source.confirmedToxicityIds].sort()))
+      throw new ServiceError("CONFLICT","Confirmed treatment effects changed after clinical approval.");
     const [submission]=await this.service.db.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,org),eq(assessmentSubmissions.assessmentId,id),eq(assessmentSubmissions.id,source.submissionId)));
     if(submission?.status!=="SUCCEEDED" || !submission.result)throw new ServiceError("CONFLICT","The final scored submission is unavailable.");
     const frozen=this.service.unseal<StoredWorkflow>(submission.snapshot);
     const result=assessmentScoreResultSchema.parse(this.service.unseal(submission.result));
     if(result.checksum!==frozen.binding.checksum || result.resultReference.length===0)throw new ServiceError("CONFLICT","The submitted score does not match its rule version.");
     const decision={productStageChoice:input.productStageChoice??null,plannedTreatmentStartDate:value(frozen.answers.planned_treatment_start_date)??null,
-      confirmedToxicityIds:[...(input.confirmedToxicityIds??[])].sort()};
+      confirmedToxicityIds:[...source.confirmedToxicityIds].sort()};
     const fingerprint=this.currentFingerprint(assessment,frozen.binding.checksum,decision)!;
     // Lock the assessment while reserving the local request key. This serializes
     // concurrent clicks, review changes and retry claims without a network call in the transaction.
     const claim=await this.service.db.transaction(async tx=>{
-      const currentAssessment=await this.service.authorize(actor,org,id,tx,true);
+      const currentAssessment=internal
+        ? (await tx.select().from(assessments).where(and(eq(assessments.organizationId,org),eq(assessments.id,id))).for("update"))[0]
+        : await this.service.authorize(actor,org,id,tx,true);
+      if(!currentAssessment) throw new ServiceError("NOT_FOUND","Assessment not found.");
       if(this.currentFingerprint(currentAssessment,frozen.binding.checksum,decision)!==fingerprint)
         throw new ServiceError("CONFLICT","The clinical review changed. Regenerate from the completed review.");
       const [existing]=await tx.select().from(generatedReports).where(and(eq(generatedReports.organizationId,org),eq(generatedReports.assessmentId,id),eq(generatedReports.requestKey,input.requestKey))).for("update");
       if(existing) {
-        if(existing.sourceFingerprint!==fingerprint)throw new ServiceError("CONFLICT","This request key belongs to a different reviewed assessment.");
-        if(existing.content && ["DRAFT","APPROVED","STALE"].includes(existing.status))return {reportId:existing.id,replay:existing};
+        if(existing.sourceFingerprint && existing.sourceFingerprint!==fingerprint)throw new ServiceError("CONFLICT","This request key belongs to a different reviewed assessment.");
+        if(existing.content && ["DRAFT","READY","APPROVED","STALE"].includes(existing.status))return {reportId:existing.id,replay:existing};
         if(existing.status==="GENERATING" && Date.now()-existing.updatedAt.getTime()<this.service.config.REPORT_GENERATION_TIMEOUT_MS+10_000)
           throw new ServiceError("CONFLICT","Report generation is already in progress.");
       }
@@ -297,9 +315,10 @@ export class GeneratedReportService {
       if(recent && recent.id!==existing?.id && Date.now()-recent.updatedAt.getTime()<this.service.config.REPORT_GENERATION_TIMEOUT_MS+10_000)
         throw new ServiceError("CONFLICT","Another report generation is already in progress.");
       const reportId=existing?.id??createEntityId();
-      if(existing)await tx.update(generatedReports).set({status:"GENERATING",failureCode:null,updatedAt:new Date()}).where(eq(generatedReports.id,reportId));
-      else await tx.insert(generatedReports).values({id:reportId,organizationId:org,assessmentId:id,patientId:assessment.patientId,submissionId:source.submissionId,requestKey:input.requestKey,sourceFingerprint:fingerprint,status:"GENERATING"});
-      return {reportId,replay:null};
+      const leaseToken=createEntityId();
+      if(existing)await tx.update(generatedReports).set({status:"GENERATING",sourceFingerprint:fingerprint,failureCode:null,nextAttemptAt:null,leaseToken,attemptCount:sql`${generatedReports.attemptCount}+1`,updatedAt:new Date()}).where(eq(generatedReports.id,reportId));
+      else await tx.insert(generatedReports).values({id:reportId,organizationId:org,assessmentId:id,patientId:assessment.patientId,submissionId:source.submissionId,requestKey:input.requestKey,sourceFingerprint:fingerprint,status:"GENERATING",attemptCount:1,leaseToken});
+      return {reportId,replay:null,leaseToken,attemptCount:(existing?.attemptCount??0)+1};
     });
     if(claim.replay)return {report:await this.dto(claim.replay,assessment)};
     const reportId=claim.reportId;
@@ -349,19 +368,25 @@ export class GeneratedReportService {
         issues:[...generated.issues,...normalized.issues],issueResolution:null,
       };
       const [saved]=await this.service.db.transaction(async tx=>{
-        const currentAssessment=await this.service.authorize(actor,org,id,tx,true);
+        const currentAssessment=internal
+          ? (await tx.select().from(assessments).where(and(eq(assessments.organizationId,org),eq(assessments.id,id))).for("update"))[0]
+          : await this.service.authorize(actor,org,id,tx,true);
+        if(!currentAssessment) throw new ServiceError("NOT_FOUND","Assessment not found.");
         if(this.currentFingerprint(currentAssessment,generated.checksum,decision)!==fingerprint)
           throw new ServiceError("CONFLICT","The clinical review changed during report generation. Regenerate from the completed review.");
-        return tx.update(generatedReports).set({status:"DRAFT",runId:generated.runId,content:this.service.seal(data),updatedAt:new Date()})
-          .where(and(eq(generatedReports.id,reportId),eq(generatedReports.organizationId,org),eq(generatedReports.status,"GENERATING"))).returning();
+        return tx.update(generatedReports).set({status:"DRAFT",runId:generated.runId,content:this.service.seal(data),leaseToken:null,updatedAt:new Date()})
+          .where(and(eq(generatedReports.id,reportId),eq(generatedReports.organizationId,org),eq(generatedReports.status,"GENERATING"),eq(generatedReports.leaseToken,claim.leaseToken!))).returning();
       });
       if(!saved)throw new ServiceError("CONFLICT","Report generation changed while waiting for NIQ Scoring.");
       await this.service.db.update(generatedReports).set({status:"STALE",updatedAt:new Date()}).where(and(eq(generatedReports.organizationId,org),eq(generatedReports.assessmentId,id),ne(generatedReports.id,reportId),eq(generatedReports.status,"DRAFT")));
       await this.service.audit(this.service.db,actor,context,id,"GENERATED_REPORT_CREATED",{reportId,runId:generated.runId,submissionId:source.submissionId,scoreRevision:source.scoreRevision,ruleChecksum:generated.checksum});
       return {report:await this.dto(saved,assessment)};
     } catch(error) {
-      await this.service.db.update(generatedReports).set({status:"FAILED",failureCode:error instanceof ScoringReportContentError?error.code:"GENERATION_FAILED",updatedAt:new Date()})
-        .where(and(eq(generatedReports.id,reportId),eq(generatedReports.status,"GENERATING")));
+      const retryable=internal && (error instanceof ScoringReportContentError
+        ? error.kind==="unavailable" : claim.attemptCount!<5 && !(error instanceof ServiceError && error.code==="CONFLICT"));
+      await this.service.db.update(generatedReports).set({status:retryable?"QUEUED":"FAILED",failureCode:error instanceof ScoringReportContentError?error.code:"GENERATION_FAILED",leaseToken:null,
+        nextAttemptAt:retryable ? new Date(Date.now()+automaticRetryDelay(claim.attemptCount!)) : null,updatedAt:new Date()})
+        .where(and(eq(generatedReports.id,reportId),eq(generatedReports.status,"GENERATING"),eq(generatedReports.leaseToken,claim.leaseToken!)));
       if(error instanceof ScoringReportContentError)throw new ServiceError(error.kind==="blocked"?"CONFLICT":"SCORING_UNAVAILABLE",
         error.kind==="blocked"?"NIQ Scoring could not generate content for this assessment.":"Report content is unavailable. Try again.");
       throw error;
@@ -442,21 +467,117 @@ export class GeneratedReportService {
     });
     return {report:await this.dto(saved!,assessment)};
   }
+  private async automaticActor(assessment:WorkflowRow):Promise<Principal> {
+    const review=reviewState(this.service,assessment);
+    const completion=[...review.history].reverse().find(event=>event.action==="COMPLETE");
+    if(!completion) throw new ServiceError("CONFLICT","Final clinical approval is missing.");
+    return {organizationId:assessment.organizationId,membershipId:completion.actor.membershipId,
+      displayName:completion.actor.displayName,role:completion.actor.role,userId:"",email:"",platformRole:"USER"};
+  }
+  private async finalizeAutomatic(row:ReportRow, actor:Principal, context:RequestContext) {
+    const leaseToken=createEntityId();
+    const leaseUntil=new Date(Date.now()+Math.max(this.service.config.REPORT_GENERATION_TIMEOUT_MS,120_000));
+    const claimed=await this.service.db.transaction(async tx=>{
+      const [current]=await tx.select().from(generatedReports).where(eq(generatedReports.id,row.id)).for("update");
+      if(!current || current.status!=="DRAFT" || current.nextAttemptAt && current.nextAttemptAt>new Date())return null;
+      const [updated]=await tx.update(generatedReports).set({leaseToken,nextAttemptAt:leaseUntil,attemptCount:sql`${generatedReports.attemptCount}+1`,updatedAt:new Date()})
+        .where(eq(generatedReports.id,row.id)).returning();
+      return updated;
+    });
+    if(!claimed?.content)return;
+    try {
+      const [assessment]=await this.service.db.select().from(assessments).where(and(eq(assessments.organizationId,row.organizationId),eq(assessments.id,row.assessmentId)));
+      if(!assessment)throw new ServiceError("NOT_FOUND","Assessment not found.");
+      const report=await this.dto(claimed,assessment);
+      if(report.status==="STALE")throw new ServiceError("CONFLICT","The approved assessment changed.");
+      const [brand]=await this.service.db.select({displayName:organizations.displayName,logoObjectKey:organizations.logoObjectKey,
+        primaryColor:organizations.primaryColor,secondaryColor:organizations.secondaryColor}).from(organizations).where(eq(organizations.id,row.organizationId));
+      if(!brand)throw new ServiceError("NOT_FOUND","Organisation not found.");
+      const brandFingerprint=reportBrandingFingerprint(brand);
+      const [asset]=brand.logoObjectKey ? await this.service.db.select({content:organizationBrandAssets.content,mimeType:organizationBrandAssets.mimeType})
+        .from(organizationBrandAssets).where(and(eq(organizationBrandAssets.organizationId,row.organizationId),eq(organizationBrandAssets.id,brand.logoObjectKey.replace(/^database:/,"")))) : [];
+      const bytes=await renderGeneratedReportPdf(report,{name:brand.displayName,primaryColor:brand.primaryColor,secondaryColor:brand.secondaryColor,
+        logo:asset?{data:new Uint8Array(asset.content),mimeType:asset.mimeType}:null});
+      const pdf=Buffer.from(bytes);
+      assertGeneratedPdf(pdf);
+      const hash=createHash("sha256").update(pdf).digest("hex");
+      const key=patientDataKey(this.service.config.PATIENT_DATA_ENCRYPTION_KEY,this.service.config.SESSION_SECRET);
+      await this.service.db.transaction(async tx=>{
+        const [currentAssessment]=await tx.select().from(assessments).where(and(eq(assessments.organizationId,row.organizationId),eq(assessments.id,row.assessmentId))).for("update");
+        if(!currentAssessment || this.currentFingerprint(currentAssessment,report.assessment.checksum,report.decision)!==row.sourceFingerprint)
+          throw new ServiceError("CONFLICT","The approved assessment changed during report generation.");
+        const [currentBrand]=await tx.select({displayName:organizations.displayName,logoObjectKey:organizations.logoObjectKey,
+          primaryColor:organizations.primaryColor,secondaryColor:organizations.secondaryColor}).from(organizations).where(eq(organizations.id,row.organizationId)).for("update");
+        if(!currentBrand || reportBrandingFingerprint(currentBrand)!==brandFingerprint)
+          throw new ServiceError("CONFLICT","The organisation theme changed during report generation.");
+        const [current]=await tx.select().from(generatedReports).where(eq(generatedReports.id,row.id)).for("update");
+        if(!current || current.status!=="DRAFT" || current.leaseToken!==leaseToken || current.revision!==claimed.revision)
+          throw new ServiceError("CONFLICT","The report changed during PDF generation.");
+        await tx.insert(generatedReportArtifacts).values({reportId:row.id,organizationId:row.organizationId,assessmentId:row.assessmentId,
+          revision:current.revision,sha256:hash,size:pdf.length,brandingFingerprint:brandFingerprint,encryptedPdf:encryptPatientBytes(pdf,key)})
+          .onConflictDoUpdate({target:generatedReportArtifacts.reportId,set:{revision:current.revision,sha256:hash,size:pdf.length,
+            brandingFingerprint:brandFingerprint,encryptedPdf:encryptPatientBytes(pdf,key),uploadedAt:new Date()}});
+        await tx.update(generatedReports).set({status:"READY",leaseToken:null,nextAttemptAt:null,failureCode:null,updatedAt:new Date()})
+          .where(eq(generatedReports.id,row.id));
+        await this.service.audit(tx,actor,context,row.assessmentId,"GENERATED_REPORT_READY",{reportId:row.id,revision:current.revision,
+          sha256:hash,runId:report.runId,ruleChecksum:report.assessment.checksum,model:report.model,promptVersion:report.promptVersion});
+      });
+    } catch(error) {
+      const retryable=claimed.attemptCount<5 && !(error instanceof ServiceError && error.code==="NOT_FOUND");
+      await this.service.db.update(generatedReports).set({status:retryable?"DRAFT":"FAILED",failureCode:"PDF_RENDER_FAILED",leaseToken:null,
+        nextAttemptAt:retryable?new Date(Date.now()+automaticRetryDelay(claimed.attemptCount)):null,updatedAt:new Date()})
+        .where(and(eq(generatedReports.id,row.id),eq(generatedReports.status,"DRAFT"),eq(generatedReports.leaseToken,leaseToken)));
+      throw error;
+    }
+  }
+  async processDue(limit=3) {
+    const now=new Date();
+    const expired=new Date(Date.now()-this.service.config.REPORT_GENERATION_TIMEOUT_MS-30_000);
+    const rows=await this.service.db.select().from(generatedReports).where(and(like(generatedReports.requestKey,`${AUTOMATIC_REPORT_KEY_PREFIX}%`),or(
+      and(eq(generatedReports.status,"QUEUED"),or(isNull(generatedReports.nextAttemptAt),lte(generatedReports.nextAttemptAt,now))),
+      and(eq(generatedReports.status,"GENERATING"),lte(generatedReports.updatedAt,expired)),
+      and(eq(generatedReports.status,"DRAFT"),or(isNull(generatedReports.nextAttemptAt),lte(generatedReports.nextAttemptAt,now))),
+      and(eq(generatedReports.status,"FAILED"),lte(generatedReports.nextAttemptAt,now)),
+    ))).orderBy(generatedReports.createdAt).limit(limit);
+    await Promise.allSettled(rows.map(async row=>{
+      const context={requestId:createEntityId()};
+      try {
+        const [assessment]=await this.service.db.select().from(assessments).where(and(eq(assessments.organizationId,row.organizationId),eq(assessments.id,row.assessmentId)));
+        if(!assessment)throw new ServiceError("NOT_FOUND","Assessment not found.");
+        const actor=await this.automaticActor(assessment);
+        if(row.status==="DRAFT")return await this.finalizeAutomatic(row,actor,context);
+        const {report}=await this.generate(actor,row.organizationId,row.assessmentId,{requestKey:row.requestKey},context,true);
+        if(report.status==="DRAFT") {
+          const [current]=await this.service.db.select().from(generatedReports).where(eq(generatedReports.id,report.id));
+          if(current)await this.finalizeAutomatic(current,actor,context);
+        }
+      } catch(error) {
+        // Source failures before the first claim cannot be retried by generate.
+        // Record a terminal state instead of showing a queue that never moves.
+        const invalidSource=error instanceof ServiceError && (error.code==="NOT_FOUND" ||
+          error.code==="CONFLICT" && !error.message.includes("in progress"));
+        if(row.status==="QUEUED" && invalidSource)
+          await this.service.db.update(generatedReports).set({status:"FAILED",failureCode:"APPROVAL_SOURCE_INVALID",nextAttemptAt:null,updatedAt:new Date()})
+            .where(and(eq(generatedReports.id,row.id),eq(generatedReports.status,"QUEUED"),eq(generatedReports.attemptCount,row.attemptCount)));
+        console.warn("Automatic report generation delayed",{reportId:row.id,error:error instanceof Error?error.message:String(error)});
+      }
+    }));
+  }
   async downloadPdf(actor:Principal,org:string,id:string) {
     const assessment=await this.clinical(actor,org,id);
-    // A later draft does not withdraw the last approved report from clinical use.
+    // A later attempt does not withdraw the last completed PDF from clinical use.
     const [row]=await this.service.db.select().from(generatedReports)
-      .where(and(eq(generatedReports.organizationId,org),eq(generatedReports.assessmentId,id),eq(generatedReports.status,"APPROVED")))
-      .orderBy(desc(generatedReports.approvedAt),desc(generatedReports.id)).limit(1);
+      .where(and(eq(generatedReports.organizationId,org),eq(generatedReports.assessmentId,id),or(eq(generatedReports.status,"READY"),eq(generatedReports.status,"APPROVED"))))
+      .orderBy(desc(generatedReports.createdAt),desc(generatedReports.id)).limit(1);
     if(!row?.content)
-      throw new ServiceError("NOT_FOUND","An approved current PDF is not available.");
+      throw new ServiceError("NOT_FOUND","A final report PDF is not available.");
     const data=this.service.unseal<ReportData>(row.content);
     if(this.currentFingerprint(assessment,data.assessment.checksum,data.decision)!==row.sourceFingerprint)
-      throw new ServiceError("NOT_FOUND","An approved current PDF is not available.");
+      throw new ServiceError("NOT_FOUND","A final report PDF is not available.");
     const artifact=await this.artifact(org,row.id);
-    if(!artifact || artifact.revision!==row.revision)throw new ServiceError("NOT_FOUND","The approved PDF is unavailable.");
+    if(!artifact || artifact.revision!==row.revision)throw new ServiceError("NOT_FOUND","The final PDF is unavailable.");
     const pdf=decryptPatientBytes(artifact.encryptedPdf,patientDataKey(this.service.config.PATIENT_DATA_ENCRYPTION_KEY,this.service.config.SESSION_SECRET));
-    if(createHash("sha256").update(pdf).digest("hex")!==artifact.sha256)throw new ServiceError("CONFLICT","The approved PDF failed its integrity check.");
+    if(createHash("sha256").update(pdf).digest("hex")!==artifact.sha256)throw new ServiceError("CONFLICT","The final PDF failed its integrity check.");
     return {pdf,sha256:artifact.sha256};
   }
 }
