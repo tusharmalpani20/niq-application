@@ -24,6 +24,12 @@ const fieldLabel = (manifest: AssessmentFormManifest, fieldId: string, optionId:
 const dateOnly = (date: Date | string): string => new Date(date).toISOString().slice(0, 10);
 const nonempty = (text: unknown): text is string => typeof text === "string" && text.trim().length > 0;
 
+export function cleanReportText(text: string): string {
+  return text.replace(/;/g, ".").replace(/—/g, " - ")
+    .replace(/[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Modifier}\uFE0F\u200D\u20E3]/gu, "")
+    .replace(/[ \t]{2,}/g, " ").trim();
+}
+
 export function finishWeightHistory(priorMostRecentFirst: GeneratedReport["weightHistory"], current: GeneratedReport["weightHistory"][number] | null, previousKg: number | null): GeneratedReport["weightHistory"] {
   const points = [...priorMostRecentFirst];
   if (current) points.unshift(current);
@@ -33,9 +39,8 @@ export function finishWeightHistory(priorMostRecentFirst: GeneratedReport["weigh
   return [...unique.values()].slice(-6);
 }
 
-export function assertReportReadyForApproval(issues: string[], artifactRevision: number | null, reportRevision: number, narrative: GeneratedNarrative) {
+export function assertReportReadyForApproval(issues: string[], artifactRevision: number | null, reportRevision: number) {
   if (issues.length) throw new ServiceError("CONFLICT", "Resolve report-generation issues before approval.");
-  if (Object.values(narrative).some(text => !text.trim())) throw new ServiceError("CONFLICT", "Complete every report text section before approval.");
   if (artifactRevision !== reportRevision) throw new ServiceError("CONFLICT", "Generate the final PDF for this report revision before approving.");
 }
 
@@ -46,19 +51,29 @@ export function assertGeneratedPdf(pdf: Buffer) {
 }
 
 export function prepareNarrativeEdit(data: ReportData, input: { narrative: Partial<GeneratedNarrative>; issueResolution?: { explanation: string } }, clinicianName: string, now: Date) {
-  const narrative = { ...data.narrative, ...input.narrative };
+  const narrative = Object.fromEntries(Object.entries({ ...data.narrative, ...input.narrative })
+    .map(([field, text]) => [field, cleanReportText(text)])) as GeneratedNarrative;
   if (input.issueResolution && !data.issues.length) throw new ServiceError("VALIDATION_ERROR", "There are no generation issues to resolve.");
-  if (input.issueResolution && Object.values(narrative).some(text => !text.trim())) throw new ServiceError("VALIDATION_ERROR", "Complete every report text section before resolving generation issues.");
   const resolution = input.issueResolution
     ? { originalIssues: data.issues, explanation: input.issueResolution.explanation, clinicianName, resolvedAt: now.toISOString() }
     : data.issueResolution;
-  return { data: { ...data, narrative, ...(input.issueResolution ? { issues: [], issueResolution: resolution } : {}) }, resolvedIssueCount: input.issueResolution ? data.issues.length : 0 };
+  const omittedNarrativeFields = data.omittedNarrativeFields?.filter(field => !narrative[field]);
+  return { data: { ...data, narrative, omittedNarrativeFields, ...(input.issueResolution ? { issues: [], issueResolution: resolution } : {}) }, resolvedIssueCount: input.issueResolution ? data.issues.length : 0 };
 }
 
 export function normalizeGuidance(content: ScoringReportContent, manifest: AssessmentFormManifest): {sections:GeneratedReportSection[]; issues:string[]} {
   const sections: GeneratedReportSection[] = [];
   const issues:string[]=[];
-  const add = (entry: GeneratedReportSection) => { if (entry.text.trim()) sections.push(entry); };
+  const add = (entry: GeneratedReportSection) => {
+    const cleaned = {
+      ...entry,
+      title: cleanReportText(entry.title),
+      text: cleanReportText(entry.text),
+      ...(entry.drugClass ? { drugClass: cleanReportText(entry.drugClass) } : {}),
+      ...(entry.matchedAnswerLabels ? { matchedAnswerLabels: entry.matchedAnswerLabels.map(cleanReportText) } : {}),
+    };
+    if (cleaned.text) sections.push(cleaned);
+  };
   const classLabel = (id:string) => fieldLabel(manifest,"drug_classes",id) ?? "Selected drug class";
   const treatmentLabel = (id:string) => fieldLabel(manifest,"current_cancer_treatment",id) ?? "Treatment";
   for (const row of content.guidance.nutritionInterventions)
@@ -85,11 +100,8 @@ export function normalizeGuidance(content: ScoringReportContent, manifest: Asses
   for (const row of products.plans)
     add({ id: row.id, kind: "product", title: "Product plan", text: [row.products, row.dose, row.duration].filter(nonempty).join("\n") });
   for (const row of products.notes) add({id:row.id,kind:"product",title:row.label,text:row.guidance});
-  if(products.status==="clinician_choice_required") {
-    const names=(products.choices??[]).map(row=>row.stage).join(" or ");
-    issues.push("Choose the appropriate product stage"+(names?" ("+names+")":"")+" and regenerate, or document why no plan should be selected.");
-  }
-  if(products.status==="facts_required") issues.push("Confirm the facts needed for the product plan and regenerate, or document why the plan is omitted."+(products.reason?" "+products.reason:""));
+  // An unresolved product plan contributes no recommendation. Missing facts
+  // do not trigger a second exchange with the patient or block other content.
   return {sections,issues};
 }
 
@@ -310,7 +322,8 @@ export class GeneratedReportService {
           submissionId:source.submissionId,scoreRevision:source.scoreRevision,ruleVersionId:generated.ruleVersionId,checksum:generated.checksum},
         classification:{id:source.risk.id!,label:source.risk.label ?? generated.classification.label,score:source.reviewedScore},
         metrics,weightHistory,decision,
-        narrative:Object.fromEntries(Object.entries(generated.narrative).map(([key,entry])=>[key,entry.text])) as GeneratedNarrative,
+        narrative:Object.fromEntries(Object.entries(generated.narrative).map(([key,entry])=>[key,cleanReportText(entry.text)])) as GeneratedNarrative,
+        omittedNarrativeFields:generated.omittedNarrativeFields ?? [],
         guidance:{sections:normalized.sections},
         issues:[...generated.issues,...normalized.issues],issueResolution:null,
       };
@@ -385,12 +398,12 @@ export class GeneratedReportService {
     if(!hasPermission(actor.role,"reviews.complete"))throw new ServiceError("FORBIDDEN","A clinician must approve the final report.");
     const {assessment,row}=await this.editable(actor,org,id,revision);
     const data=this.service.unseal<ReportData>(row.content);
-    if(data.issues.length || Object.values(data.narrative).some(text=>!text.trim()))assertReportReadyForApproval(data.issues,null,revision,data.narrative);
+    if(data.issues.length)assertReportReadyForApproval(data.issues,null,revision);
     const [saved]=await this.service.db.transaction(async tx=>{
       const currentAssessment=await this.service.authorize(actor,org,id,tx,true);
       if(this.currentFingerprint(currentAssessment,data.assessment.checksum,data.decision)!==row.sourceFingerprint)throw new ServiceError("CONFLICT","The clinical review changed. Regenerate the report.");
       const [artifact]=await tx.select().from(generatedReportArtifacts).where(and(eq(generatedReportArtifacts.organizationId,org),eq(generatedReportArtifacts.reportId,row.id)));
-      assertReportReadyForApproval(data.issues,artifact?.revision??null,revision,data.narrative);
+      assertReportReadyForApproval(data.issues,artifact?.revision??null,revision);
       const [updated]=await tx.update(generatedReports).set({status:"APPROVED",approvedByMembershipId:actor.membershipId,approvedAt:new Date(),updatedAt:new Date()})
         .where(and(eq(generatedReports.id,row.id),eq(generatedReports.organizationId,org),eq(generatedReports.status,"DRAFT"),eq(generatedReports.revision,revision))).returning();
       if(!updated)throw new ServiceError("CONFLICT","The report changed before approval.");

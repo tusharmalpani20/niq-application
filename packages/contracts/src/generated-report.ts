@@ -45,6 +45,7 @@ export type GeneratedReport = {
   weightHistory: Array<{ date: string | null; kg: number; label?: string }>;
   decision: { productStageChoice: "surgical" | "treatment_stage" | null; plannedTreatmentStartDate: string | null; confirmedToxicityIds?: string[] };
   narrative: GeneratedNarrative;
+  omittedNarrativeFields?: Array<keyof GeneratedNarrative>;
   guidance: { sections: GeneratedReportSection[] };
   issues: string[];
   issueResolution: { originalIssues: string[]; explanation: string; clinicianName: string; resolvedAt: string } | null;

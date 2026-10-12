@@ -39,6 +39,7 @@ export const scoringReportContentSchema = z.object({
   guidance: selectedGuidance,
   narrative: z.object({ overview: narrative, keyFindings: narrative, actionSummary: narrative, monitoringSummary: narrative }),
   issues: z.array(z.string().max(1000)).max(100),
+  omittedNarrativeFields: z.array(z.enum(["overview", "keyFindings", "actionSummary", "monitoringSummary"])).max(4).optional(),
 });
 export type ScoringReportContent = z.infer<typeof scoringReportContentSchema>;
 

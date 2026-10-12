@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { GeneratedReportService, assertGeneratedPdf, assertReportReadyForApproval, finishWeightHistory, normalizeGuidance, prepareNarrativeEdit, reportToxicityAnswers } from "./generated-report";
+import { GeneratedReportService, assertGeneratedPdf, assertReportReadyForApproval, cleanReportText, finishWeightHistory, normalizeGuidance, prepareNarrativeEdit, reportToxicityAnswers } from "./generated-report";
 import { requestScoringReportContent, requestScoringToxicityOptions, scoringReportContentSchema } from "./scoring-report-content";
 
 const narrative = { overview: "Overview", keyFindings: "Findings", actionSummary: "Actions", monitoringSummary: "Monitoring" };
@@ -85,12 +85,12 @@ test("weight chart uses an undated previous weight only when no dated history ex
   ]);
 });
 
-test("possible drug-class effects are excluded; unresolved product stage blocks approval", () => {
+test("possible drug-class effects and an unresolved product stage are omitted", () => {
   const result = normalizeGuidance(scoringReportContentSchema.parse(packet), manifest);
-  expect(result.issues).toHaveLength(1);
-  expect(result.issues[0]).toContain("Choose the appropriate product stage");
+  expect(result.issues).toEqual([]);
   expect(result.sections.find(row=>row.id==="nausea")).toBeUndefined();
-  expect(() => assertReportReadyForApproval(result.issues, 1, 1, narrative)).toThrow("Resolve report-generation issues");
+  expect(result.sections.find(row=>row.kind==="product")).toBeUndefined();
+  expect(() => assertReportReadyForApproval(result.issues, 1, 1)).not.toThrow();
 });
 
 test("matched treatment, status, co-morbidity, product, and exception guidance enter display sections", () => {
@@ -118,21 +118,42 @@ test("a compound source topic is displayed using only the symptom actually repor
   expect(section).toMatchObject({ title: "Fatigue", matchSource: "assessment_answer", matchedAnswerLabels: ["Fatigue"] });
 });
 
-test("a clinician can resolve generation issues only with complete edited text, recording the original issue", () => {
+test("a clinician can resolve generation issues while omitting unsupported passages", () => {
   const data = { narrative: { overview: "", keyFindings: "", actionSummary: "", monitoringSummary: "" }, issues: ["Unsupported claim"], issueResolution: null } as any;
-  expect(() => prepareNarrativeEdit(data, { narrative: { overview: "Corrected" }, issueResolution: { explanation: "Removed unsupported claim" } }, "Clinician", new Date("2026-10-11T00:00:00Z"))).toThrow("Complete every report text section");
-  const prepared = prepareNarrativeEdit(data, { narrative, issueResolution: { explanation: "I checked and rewrote the claim" } }, "Clinician", new Date("2026-10-11T00:00:00Z"));
+  const prepared = prepareNarrativeEdit(data, { narrative: { overview: "Corrected" }, issueResolution: { explanation: "I checked and removed the unsupported claim" } }, "Clinician", new Date("2026-10-11T00:00:00Z"));
   expect(prepared.resolvedIssueCount).toBe(1);
   expect(prepared.data.issues).toEqual([]);
-  expect(prepared.data.issueResolution).toEqual({ originalIssues: ["Unsupported claim"], explanation: "I checked and rewrote the claim", clinicianName: "Clinician", resolvedAt: "2026-10-11T00:00:00.000Z" });
+  expect(prepared.data.narrative).toEqual({ overview: "Corrected", keyFindings: "", actionSummary: "", monitoringSummary: "" });
+  expect(prepared.data.issueResolution).toEqual({ originalIssues: ["Unsupported claim"], explanation: "I checked and removed the unsupported claim", clinicianName: "Clinician", resolvedAt: "2026-10-11T00:00:00.000Z" });
 });
 
 test("approval requires an artifact for the exact revision and PDF bytes must be valid", () => {
-  expect(() => assertReportReadyForApproval([], 2, 3, narrative)).toThrow("final PDF");
-  expect(() => assertReportReadyForApproval([], 3, 3, narrative)).not.toThrow();
-  expect(() => assertReportReadyForApproval([], 3, 3, { ...narrative, overview: "" })).toThrow("Complete every report text section");
+  expect(() => assertReportReadyForApproval(["Unresolved claim"], 3, 3)).toThrow("Resolve report-generation issues");
+  expect(() => assertReportReadyForApproval([], 2, 3)).toThrow("final PDF");
+  expect(() => assertReportReadyForApproval([], 3, 3)).not.toThrow();
   expect(() => assertGeneratedPdf(Buffer.from("not a PDF"))).toThrow("valid generated PDF");
   expect(() => assertGeneratedPdf(Buffer.from("%PDF-1.7\n1 0 obj\nendobj\n%%EOF"))).not.toThrow();
+});
+
+test("report copy removes emojis, semicolons and em dashes", () => {
+  expect(cleanReportText("Use Nourish; monitor intake — daily 🩺")).toBe("Use Nourish. monitor intake - daily");
+  const selected = structuredClone(packet) as any;
+  selected.guidance.carePlan.products = { status: "selected", plans: [], notes: [
+    { id: "note", kind: "vegetarian", label: "Diet 🥗", guidance: "Use Invigour; avoid Liss WH — today." },
+  ] };
+  expect(normalizeGuidance(scoringReportContentSchema.parse(selected), manifest).sections).toMatchObject([
+    { title: "Diet", text: "Use Invigour. avoid Liss WH - today." },
+  ]);
+  const edited = prepareNarrativeEdit({ narrative, issues: [], issueResolution: null } as any,
+    { narrative: { overview: "Review; keep going — today 🩺" } }, "Clinician", new Date());
+  expect(edited.data.narrative.overview).toBe("Review. keep going - today");
+});
+
+test("a clinician adding supported text clears that passage from the omitted list", () => {
+  const data = { narrative: { ...narrative, overview: "", actionSummary: "" },
+    omittedNarrativeFields: ["overview", "actionSummary"], issues: [], issueResolution: null } as any;
+  const edited = prepareNarrativeEdit(data, { narrative: { overview: "Reviewed risk" } }, "Clinician", new Date());
+  expect(edited.data.omittedNarrativeFields).toEqual(["actionSummary"]);
 });
 
 describe("source binding", () => {
