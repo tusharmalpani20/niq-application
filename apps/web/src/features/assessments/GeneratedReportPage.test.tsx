@@ -46,8 +46,7 @@ test("queued report shows automatic progress without a generation control", asyn
   });
 });
 
-test("ready report shows HTML layout with access to the saved PDF", async () => {
-  const report: GeneratedReport = {
+const readyReport: GeneratedReport = {
     id: "report-1",
     revision: 0,
     status: "READY",
@@ -63,14 +62,17 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
       { id: "current_weight_kg", label: "Current weight", value: "62", unit: "kg", source: "assessment" },
       { id: "height_cm", label: "Height", value: "175", unit: "cm", source: "assessment" },
       { id: "bmi", label: "BMI", value: "20.2", source: "assessment" },
+      { id: "weight_loss_percent", label: "Reported weight loss", value: "8", unit: "%", source: "assessment" },
       { id: "wellness_score", label: "Wellness score", value: "80", unit: "/100", source: "face_scan" },
+      { id: "systolic", label: "Systolic blood pressure", value: "131", unit: "mmHg", source: "face_scan" },
+      { id: "diastolic", label: "Diastolic blood pressure", value: "84", unit: "mmHg", source: "face_scan" },
       { id: "sdnn", label: "SDNN", value: "42", unit: "ms", source: "face_scan", referenceRange: "60–100 ms", outsideReferenceRange: true },
       { id: "body_fat", label: "Body fat", value: "21", unit: "%", source: "face_scan" },
       { id: "hba1c", label: "HbA1c", value: "5.8", unit: "%", source: "face_scan" },
     ],
     weightHistory: [],
     decision: { productStageChoice: null, plannedTreatmentStartDate: null },
-    narrative: { overview: "Reviewed patient overview", keyFindings: "", actionSummary: "", monitoringSummary: "", nutritionAdvice: "Reviewed nutrition guidance" },
+    narrative: { overview: "Reviewed patient overview", keyFindings: "Current weight is 62 kg and blood pressure is 131/84 mmHg.", actionSummary: "Reviewed action plan", monitoringSummary: "Reviewed monitoring plan", nutritionAdvice: "Reviewed nutrition guidance", treatmentAdvice: "Reviewed treatment guidance", conditionAdvice: "Reviewed condition guidance", effectsAdvice: "Reviewed effects guidance" },
     guidance: { sections: [
       { id: "nutrition-1", kind: "nutrition", title: "Matched rule", text: "Raw rule wording for internal guidance" },
       { id: "product-1", kind: "product", title: "Product plan", text: "1 Invigour + 2 Protect\nAt least 90 days during treatment" },
@@ -78,7 +80,10 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     issues: [],
     issueResolution: null,
     artifact: { sha256: "a".repeat(64), size: 1024, uploadedAt: "2026-10-12T08:00:00.000Z", brandingFingerprint: null },
-  };
+};
+
+test("ready report shows HTML layout with access to the saved PDF", async () => {
+  const report = readyReport;
   await renderWithResponse({ report, generation: { status: "READY" } }, async () => {
     expect(document.body.textContent).toContain("Final report ready");
     expect(document.body.textContent).not.toContain("Approve report");
@@ -86,14 +91,23 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect(document.querySelector('[aria-label="Generated clinical nutrition report"]')).not.toBeNull();
     expect(document.body.textContent).toContain("Reviewed patient overview");
     expect(document.body.textContent).toContain("Reviewed nutrition guidance");
-    expect(document.body.textContent).toContain("Products in your plan");
+    expect(document.body.textContent).toContain("Supplement recommendation");
+    expect(document.body.textContent).toContain("Reviewed treatment guidance");
+    expect(document.body.textContent).toContain("Reviewed condition guidance");
+    expect(document.body.textContent).toContain("Reviewed effects guidance");
     expect(document.body.textContent).not.toContain("Raw rule wording for internal guidance");
     expect(document.body.textContent).not.toContain("Draft for clinical review");
+    expect(document.body.textContent).not.toContain("Final clinical report");
+    expect(document.body.textContent).not.toContain("Current weight is 62 kg and blood pressure is 131/84 mmHg.");
+    expect(document.body.textContent).toContain("Assessment indicators");
+    expect(document.body.textContent).toContain("Reported weight loss");
+    expect(document.querySelectorAll(".cr-supplement-item").length).toBe(2);
     expect(document.querySelectorAll(".clinical-report .brand-marks-partner-logo").length).toBeGreaterThan(1);
     expect(document.querySelector(".cr-metric-card .cr-metric-icon svg")).not.toBeNull();
     expect(document.querySelector(".cr-report-bmi svg[viewBox='0 0 240 122']")).not.toBeNull();
     expect(document.querySelector(".cr-vital-detail")?.textContent).toContain("SDNN");
     expect(document.querySelector(".cr-vital-detail")?.textContent).toContain("Reference: 60–100 ms");
+    expect(document.querySelector(".cr-vital-detail dt .cr-metric-icon svg")).not.toBeNull();
     expect(document.body.textContent).toContain("Body fat");
     expect(document.body.textContent).not.toContain("HbA1c");
     expect(document.querySelector('[aria-label="Vital IQ measurements"] .cr-section-intro')).toBeNull();
@@ -103,5 +117,12 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect(document.querySelector("a[download]")?.getAttribute("download")).toBe("NIQ-report-NIQ-12.pdf");
     await act(async () => { (document.querySelectorAll(".cr-preview-tab")[1] as HTMLButtonElement).click(); });
     expect(document.querySelector('[aria-label="Medical nutrition therapy report PDF preview"]')).not.toBeNull();
+  });
+});
+
+test("clinical interpretation is shown when it adds meaning beyond measurements", async () => {
+  const report: GeneratedReport = { ...readyReport, narrative: { ...readyReport.narrative, keyFindings: "Significant weight loss suggests malnutrition." } };
+  await renderWithResponse({ report, generation: { status: "READY" } }, () => {
+    expect(document.querySelector(".cr-clinical-interpretation")?.textContent).toContain("Significant weight loss suggests malnutrition.");
   });
 });

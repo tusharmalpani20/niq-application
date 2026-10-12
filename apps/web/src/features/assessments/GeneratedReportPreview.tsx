@@ -1,4 +1,4 @@
-import { Activity, BicepsFlexed, Calculator, ChartNoAxesCombined, ClipboardList, Droplets, Gauge, HeartPulse, Leaf, Package, Ruler, Scale, ShieldCheck, Soup, Stethoscope, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
+import { Activity, BicepsFlexed, Brain, Calculator, CalendarDays, ChartNoAxesCombined, ClipboardList, Droplets, Gauge, HeartPulse, Leaf, Package, Ruler, Scale, ShieldCheck, Soup, Stethoscope, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
 import { reportFaceScanAdditionalMetricGroups, riskColorHex } from "@niq/application-contracts";
 import { useBranding } from "@/lib/branding-context";
 import { BrandMarks } from "@/components/BrandMarks";
@@ -8,7 +8,7 @@ import { cleanWeights, metricText, reportAge, reportDate, reportGuidance, weight
 import { weightChartPoints } from "./generated-report-chart";
 import "./generated-report.css";
 
-type ReportSheetProps = { number: number; title: string; icon: LucideIcon; children: React.ReactNode; report: GeneratedReport };
+type ReportSheetProps = { number: number; title: string; icon: LucideIcon; children: React.ReactNode; report: GeneratedReport; compact?: boolean };
 type ReportMetric = GeneratedReport["metrics"][number];
 
 const metricIcons: Record<string, LucideIcon> = {
@@ -29,6 +29,27 @@ const metricIcons: Record<string, LucideIcon> = {
   diastolic: Gauge,
   stress_index: Activity,
   stress_band: Activity,
+  sdnn: HeartPulse,
+  rmssd: HeartPulse,
+  pnn50: HeartPulse,
+  cardiac_output: HeartPulse,
+  mean_arterial_pressure: Gauge,
+  heart_utilisation: HeartPulse,
+  heart_rate_max: HeartPulse,
+  heart_rate_reserve: HeartPulse,
+  target_heart_rate_range: Gauge,
+  prq: Wind,
+  scan_bmi: Calculator,
+  vo2max: Wind,
+  intensity: BicepsFlexed,
+  body_fat: Scale,
+  total_body_water: Droplets,
+  body_water_percent: Droplets,
+  blood_volume: Droplets,
+  heart_health_score: HeartPulse,
+  diabetes_control_score: ShieldCheck,
+  physiological_score: Activity,
+  mental_wellbeing_score: Brain,
 };
 
 function MetricIcon({ id, label }: { id: string; label: string }) {
@@ -53,18 +74,18 @@ function CoverArtwork() {
   </div>;
 }
 
-function ReportSheet({ number, title, icon: Icon, children, report }: ReportSheetProps) {
+function ReportSheet({ number, title, icon: Icon, children, report, compact = false }: ReportSheetProps) {
   const { branding } = useBranding();
-  return <section className="cr-sheet" aria-label={title}>
+  return <section className={`cr-sheet${compact ? " cr-sheet-compact" : ""}`} aria-label={title}>
     <header className="cr-sheet-header"><div className="cr-sheet-heading"><span className="cr-section-number">{String(number).padStart(2, "0")}</span><Icon size={21} aria-hidden="true"/><h2>{title}</h2></div><BrandMarks className="cr-report-brand" organizationLogoUrl={branding.logoUrl} organizationName={branding.displayName}/></header>
     <div className="cr-sheet-content">{children}</div>
     <footer className="cr-sheet-footer"><span>{branding.displayName} · Clinical nutrition report</span><span>{report.assessment.reference} · {String(number).padStart(2, "0")}</span></footer>
   </section>;
 }
 
-function ReviewedAdvice({ title, text }: { title: string; text: string | undefined }) {
+function ReviewedAdvice({ title, text, icon: Icon, action = false }: { title: string; text: string | undefined; icon: LucideIcon; action?: boolean }) {
   if (!text?.trim()) return null;
-  return <article className="cr-guidance-card"><h3>{title}</h3><p>{text}</p></article>;
+  return <section className={`cr-advice-block${action ? " cr-advice-action" : ""}`}><div className="cr-advice-heading"><span className="cr-advice-icon"><Icon size={20} aria-hidden="true"/></span><h3>{title}</h3></div><p>{text}</p></section>;
 }
 
 function ProductPlan({ report }: { report: GeneratedReport }) {
@@ -79,11 +100,11 @@ function ProductPlan({ report }: { report: GeneratedReport }) {
     if (regular) return { name: regular[2]!.trim(), quantity: regular[1]!, detail: "per day" };
     return { name: part.trim(), quantity: "", detail: "" };
   });
-  return <section className="cr-panel"><div className="cr-panel-title"><h3>Products in your plan</h3><Utensils size={20} aria-hidden="true"/></div>
-    <div className="cr-metric-grid">{products.map((product, index) => <div className="cr-metric-card" key={`${product.name}-${index}`}>
-      <span className="cr-metric-icon"><Package size={22} aria-hidden="true" /></span><span>{product.name}</span>{product.quantity && <strong>{product.quantity}</strong>}{product.detail && <small>{product.detail}</small>}
+  return <section className="cr-supplement"><div className="cr-advice-heading"><span className="cr-advice-icon"><Package size={20} aria-hidden="true"/></span><h3>Supplement recommendation</h3></div>
+    <div className="cr-supplement-items">{products.map((product, index) => <div className="cr-supplement-item" key={`${product.name}-${index}`}>
+      <div><h4>{product.name}</h4>{product.detail && <p>{product.detail}</p>}</div>{product.quantity && <div className="cr-supplement-quantity"><strong>{product.quantity}</strong><span>Quantity</span></div>}
     </div>)}</div>
-    {duration && <p>{duration}</p>}
+    {duration && <p className="cr-supplement-duration"><CalendarDays size={17} aria-hidden="true"/><span>Duration</span><strong>{duration}</strong></p>}
   </section>;
 }
 
@@ -102,6 +123,13 @@ function WeightTrend({ report }: { report: GeneratedReport }) {
   </section>;
 }
 
+// Measurement-only prose adds little beside the saved values and chart.
+function isObservationOnlyFinding(text: string) {
+  const mentionsMeasurement = /\b(weight|blood pressure|bp|bmi|heart rate|oxygen|saturation|score|fluid intake|appetite|protein intake)\b/i.test(text);
+  const addsClinicalMeaning = /\b(malnutrition|nutritional|dehydration|inadequate|poor intake|reduced intake|treatment|surgery|cancer|diagnosis|symptoms?|requires?|recommend|intervention|monitor|significant|severe|moderate|mild|concerning|abnormal|elevated|outside reference|high blood pressure|low blood pressure|meets|criteria|suggests?|indicates?|consistent with|due to|at risk|urgent|urgency|warrant|assess|review|follow up|concern|impact|impair|referral|escalat|because|therefore)\b/i.test(text);
+  return /\d/.test(text) && mentionsMeasurement && !addsClinicalMeaning && text.trim().split(/\s+/).length <= 45;
+}
+
 export function GeneratedReportPreview({ report }: { report: GeneratedReport }) {
   const { branding } = useBranding();
   const faceMetrics = report.metrics.filter(metric => metric.source === "face_scan" && metric.id !== "hba1c");
@@ -118,10 +146,12 @@ export function GeneratedReportPreview({ report }: { report: GeneratedReport }) 
     ],
   })).filter(group => group.metrics.length > 0);
   const assessmentMetrics = report.metrics.filter(metric => metric.source === "assessment");
+  const statusMetrics = assessmentMetrics.filter(metric => ["weight_loss_percent", "appetite_status", "fluid_intake", "functional_capacity", "protein_intake"].includes(metric.id));
+  const clinicalFinding = report.narrative.keyFindings?.trim();
+  const showClinicalFinding = Boolean(clinicalFinding && !isObservationOnlyFinding(clinicalFinding));
   const hasProductPlan = reportGuidance(report, "product").some(item => item.title.toLowerCase() === "product plan");
   const hasNutritionGuidance = Boolean(report.narrative.nutritionAdvice?.trim() || report.narrative.treatmentAdvice?.trim() || hasProductPlan);
   const hasCareAdvice = Boolean(report.narrative.conditionAdvice?.trim() || report.narrative.effectsAdvice?.trim());
-  const isFinal = report.status === "READY" || report.status === "APPROVED";
   const riskColor = riskColorHex(report.classification?.color);
   let page = 0;
   const nextPage = () => ++page;
@@ -136,14 +166,13 @@ export function GeneratedReportPreview({ report }: { report: GeneratedReport }) 
   const weight = overviewNumber("current_weight_kg");
   const showBmiReference = Boolean(overviewMetric("bmi") && height && weight);
   const keyMetrics = assessmentMetrics.filter(metric => metric.id === "current_weight_kg" || metric.id === "height_cm");
-  const otherMetrics = assessmentMetrics.filter(metric => !["current_weight_kg", "height_cm", ...(showBmiReference ? ["bmi"] : [])].includes(metric.id));
+  const otherMetrics = assessmentMetrics.filter(metric => !["current_weight_kg", "height_cm", ...(showBmiReference ? ["bmi"] : []), ...statusMetrics.map(item => item.id)].includes(metric.id));
   return <article className="clinical-report" aria-label="Generated clinical nutrition report">
     <section className="cr-sheet cr-cover" aria-label="Report cover">
       <div className="cr-cover-top"><BrandMarks className="cr-cover-brand" organizationLogoUrl={branding.logoUrl} organizationName={branding.displayName}/><span>Personalised clinical nutrition</span></div>
-      <div className="cr-cover-main"><div className="cr-cover-copy"><span className="cr-kicker">{isFinal ? "Final clinical report" : "Draft for clinical review"}</span><h1>Medical<br/><em>Nutrition</em><br/>Therapy Report</h1><p className="cr-cover-name">{report.patient.displayName}</p><p>{report.patient.reference} · {report.assessment.reference}</p>{report.assessment.completedAt && <p>Assessment: {reportDate(report.assessment.completedAt)}</p>}</div>
+      <div className="cr-cover-main"><div className="cr-cover-copy"><h1>Medical<br/><em>Nutrition</em><br/>Therapy Report</h1><p className="cr-cover-name">{report.patient.displayName}</p><p>{report.patient.reference} · {report.assessment.reference}</p>{report.assessment.completedAt && <p>Assessment: {reportDate(report.assessment.completedAt)}</p>}</div>
         <CoverArtwork/>
       </div>
-      <div className="cr-cover-bottom"><div><ShieldCheck size={20} aria-hidden="true"/><span>Assessment findings</span></div><div><Stethoscope size={20} aria-hidden="true"/><span>{isFinal ? "Assessment approved" : "Clinical review required"}</span></div><div><HeartPulse size={20} aria-hidden="true"/><span>Built around the assessment</span></div></div>
       <footer className="cr-sheet-footer"><span>{branding.displayName}</span><span>01</span></footer>
     </section>
     <ReportSheet number={nextPage() + 1} title="Patient overview" icon={ClipboardList} report={report}>
@@ -157,20 +186,25 @@ export function GeneratedReportPreview({ report }: { report: GeneratedReport }) 
     {faceMetrics.length > 0 && <ReportSheet number={nextPage() + 1} title="Vital IQ measurements" icon={HeartPulse} report={report}>
       {faceScores.length > 0 && <div className="cr-vital-scores">{faceScores.map(metric => <VitalScoreCard key={metric.id} metric={metric}/>)}</div>}
       {(faceVitals.length > 0 || bloodPressure) && <div className="cr-vital-highlights">{faceVitals.map(metric => <div className={`cr-vital-highlight${metric.outsideReferenceRange ? " cr-vital-outside" : ""}`} key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.outsideReferenceRange && metric.referenceRange && <small>Reference: {metric.referenceRange}</small>}</div>)}{bloodPressure && <div className={`cr-vital-highlight${faceMetric("systolic")?.outsideReferenceRange ? " cr-vital-outside" : ""}`}><MetricIcon id="systolic" label="Blood pressure"/><span>Blood pressure</span><strong>{bloodPressure} mmHg</strong>{faceMetric("systolic")?.outsideReferenceRange && faceMetric("systolic")?.referenceRange && <small>Reference: {faceMetric("systolic")!.referenceRange}</small>}</div>}</div>}
-      {faceDetailGroups.length > 0 && <div className="cr-vital-detail-grid">{faceDetailGroups.map(group => { const Icon = group.id === "circulation" ? HeartPulse : group.id === "fitness" ? BicepsFlexed : ChartNoAxesCombined; return <section className="cr-vital-detail" key={group.id}><h3><Icon size={17} aria-hidden="true"/>{group.title}</h3><dl>{group.metrics.map(metric => <div key={metric.id}><dt>{metric.label}</dt><dd className={metric.outsideReferenceRange ? "cr-vital-outside-value" : undefined}>{metricText(metric)}{metric.outsideReferenceRange && metric.referenceRange && <small>Reference: {metric.referenceRange}</small>}</dd></div>)}</dl></section>; })}</div>}
+      {faceDetailGroups.length > 0 && <div className="cr-vital-detail-grid">{faceDetailGroups.map(group => { const Icon = group.id === "circulation" ? HeartPulse : group.id === "fitness" ? BicepsFlexed : ChartNoAxesCombined; return <section className="cr-vital-detail" key={group.id}><h3><Icon size={17} aria-hidden="true"/>{group.title}</h3><dl>{group.metrics.map(metric => <div key={metric.id}><dt><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span></dt><dd className={metric.outsideReferenceRange ? "cr-vital-outside-value" : undefined}>{metricText(metric)}{metric.outsideReferenceRange && metric.referenceRange && <small>Reference: {metric.referenceRange}</small>}</dd></div>)}</dl></section>; })}</div>}
     </ReportSheet>}
-    {(report.classification || report.weightHistory.length > 0 || report.narrative.keyFindings) && <ReportSheet number={nextPage() + 1} title="Nutrition status & findings" icon={Activity} report={report}>
-      <div className="cr-status-row">{report.classification && <div className="cr-score-card" style={{ borderColor: riskColor, backgroundColor: `color-mix(in srgb, ${riskColor} 10%, white)` }}><span>NIQ assessment</span><strong style={{ color: riskColor }}>{report.classification.score}</strong><span>points</span><b style={{ color: riskColor }}>{report.classification.label}</b></div>}{report.narrative.keyFindings && <div className="cr-feature-panel cr-findings"><span className="cr-kicker">Key findings</span><p>{report.narrative.keyFindings}</p></div>}</div>
+    {(report.classification || report.weightHistory.length > 0 || statusMetrics.length > 0 || showClinicalFinding) && <ReportSheet number={nextPage() + 1} title="Nutrition status and findings" icon={Activity} report={report} compact>
+      <div className={`cr-status-overview${statusMetrics.length ? "" : " cr-status-single"}`}>{report.classification && <div className="cr-score-card" style={{ borderColor: riskColor, backgroundColor: `color-mix(in srgb, ${riskColor} 10%, white)` }}><span>Nutrition risk</span><strong style={{ color: riskColor }}>{report.classification.score}</strong><span>NIQ points</span><b style={{ color: riskColor }}>{report.classification.label}</b></div>}
+        {statusMetrics.length > 0 && <section className="cr-status-evidence"><h3>Assessment indicators</h3><div className="cr-status-metrics">{statusMetrics.map(metric => <div className="cr-status-metric" key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong></div>)}</div></section>}
+      </div>
+      {showClinicalFinding && <section className="cr-clinical-interpretation"><h3>Clinical interpretation</h3><p>{clinicalFinding}</p></section>}
       <WeightTrend report={report}/>
     </ReportSheet>}
-    {hasNutritionGuidance && <ReportSheet number={nextPage() + 1} title="Nutrition & care plan" icon={Utensils} report={report}>
-      <div className="cr-guidance-grid"><ReviewedAdvice title="Nutrition guidance" text={report.narrative.nutritionAdvice}/><ReviewedAdvice title="During treatment" text={report.narrative.treatmentAdvice}/></div>
+    {hasNutritionGuidance && <ReportSheet number={nextPage() + 1} title="Nutrition plan" icon={Utensils} report={report} compact>
+      <div className="cr-care-stack"><ReviewedAdvice title="Nutrition guidance" text={report.narrative.nutritionAdvice} icon={Soup}/>
       <ProductPlan report={report}/>
+      <ReviewedAdvice title="During treatment" text={report.narrative.treatmentAdvice} icon={ShieldCheck}/></div>
     </ReportSheet>}
-    {(hasCareAdvice || report.narrative.actionSummary || report.narrative.monitoringSummary) && <ReportSheet number={nextPage() + 1} title="Care and next steps" icon={ShieldCheck} report={report}>
-      {hasCareAdvice && <div className="cr-guidance-grid"><ReviewedAdvice title="Other health conditions" text={report.narrative.conditionAdvice}/><ReviewedAdvice title="Treatment effects and nutrition" text={report.narrative.effectsAdvice}/></div>}
-      <div className="cr-action-grid">{report.narrative.actionSummary && <section className="cr-panel"><div className="cr-panel-title"><h3>Action plan</h3><Utensils size={20} aria-hidden="true"/></div><p>{report.narrative.actionSummary}</p></section>}{report.narrative.monitoringSummary && <section className="cr-panel"><div className="cr-panel-title"><h3>What to monitor</h3><HeartPulse size={20} aria-hidden="true"/></div><p>{report.narrative.monitoringSummary}</p></section>}</div>
-      <div className="cr-review-note"><ShieldCheck size={20} aria-hidden="true"/><p>This report was prepared from a saved assessment and rule version. Review new or worsening symptoms with the treating clinical team.</p></div>
+    {(hasCareAdvice || report.narrative.actionSummary || report.narrative.monitoringSummary) && <ReportSheet number={nextPage() + 1} title="Care and next steps" icon={ShieldCheck} report={report} compact>
+      <div className="cr-care-grid"><ReviewedAdvice title="Other health conditions" text={report.narrative.conditionAdvice} icon={HeartPulse}/>
+      <ReviewedAdvice title="Treatment effects and nutrition" text={report.narrative.effectsAdvice} icon={Droplets}/>
+      <ReviewedAdvice title="What to do" text={report.narrative.actionSummary} icon={Utensils} action/>
+      <ReviewedAdvice title="What to monitor" text={report.narrative.monitoringSummary} icon={ChartNoAxesCombined} action/></div>
     </ReportSheet>}
   </article>;
 }
