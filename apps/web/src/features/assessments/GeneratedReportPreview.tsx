@@ -1,4 +1,4 @@
-import { Activity, ClipboardList, HeartPulse, ShieldCheck, Stethoscope, Utensils, type LucideIcon } from "lucide-react";
+import { Activity, Calculator, ClipboardList, Droplets, Gauge, HeartPulse, Package, Ruler, Scale, ShieldCheck, Soup, Stethoscope, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
 import { riskColorHex } from "@niq/application-contracts";
 import { useBranding } from "@/lib/branding-context";
 import { BrandMarks } from "@/components/BrandMarks";
@@ -8,6 +8,31 @@ import { weightChartPoints } from "./generated-report-chart";
 import "./generated-report.css";
 
 type ReportSheetProps = { number: number; title: string; icon: LucideIcon; children: React.ReactNode; report: GeneratedReport };
+
+const metricIcons: Record<string, LucideIcon> = {
+  current_weight_kg: Scale,
+  height_cm: Ruler,
+  bmi: Calculator,
+  weight_loss_percent: TrendingDown,
+  appetite_status: Soup,
+  fluid_intake: Droplets,
+  functional_capacity: Activity,
+  protein_intake: Utensils,
+  wellness_score: HeartPulse,
+  health_risk_score: ShieldCheck,
+  heart_rate: HeartPulse,
+  oxygen_saturation: Droplets,
+  respiratory_rate: Wind,
+  systolic: Gauge,
+  diastolic: Gauge,
+  stress_index: Activity,
+  stress_band: Activity,
+};
+
+function MetricIcon({ id, label }: { id: string; label: string }) {
+  const Icon = metricIcons[id] ?? (label === "Reported dietary symptom" ? Stethoscope : Activity);
+  return <span className="cr-metric-icon"><Icon size={22} aria-hidden="true" /></span>;
+}
 
 function ReportSheet({ number, title, icon: Icon, children, report }: ReportSheetProps) {
   const { branding } = useBranding();
@@ -37,7 +62,7 @@ function ProductPlan({ report }: { report: GeneratedReport }) {
   });
   return <section className="cr-panel"><div className="cr-panel-title"><h3>Products in your plan</h3><Utensils size={20} aria-hidden="true"/></div>
     <div className="cr-metric-grid">{products.map((product, index) => <div className="cr-metric-card" key={`${product.name}-${index}`}>
-      <span>{product.name}</span>{product.quantity && <strong>{product.quantity}</strong>}{product.detail && <small>{product.detail}</small>}
+      <span className="cr-metric-icon"><Package size={22} aria-hidden="true" /></span><span>{product.name}</span>{product.quantity && <strong>{product.quantity}</strong>}{product.detail && <small>{product.detail}</small>}
     </div>)}</div>
     {duration && <p>{duration}</p>}
   </section>;
@@ -82,11 +107,11 @@ export function GeneratedReportPreview({ report }: { report: GeneratedReport }) 
     <ReportSheet number={nextPage() + 1} title="Patient overview" icon={ClipboardList} report={report}>
       <div className="cr-overview-hero"><div className="cr-avatar" aria-hidden="true">{report.patient.displayName.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase()).join("")}</div><div><h3>{report.patient.displayName}</h3><p>{[report.patient.reference, age === null ? null : `${age} years`, report.patient.gender].filter(Boolean).join(" · ")}</p>{report.assessment.completedAt && <p>Assessment completed {reportDate(report.assessment.completedAt)}</p>}</div></div>
       {report.narrative.overview && <div className="cr-feature-panel"><span className="cr-kicker">Clinical overview</span><p>{report.narrative.overview}</p></div>}
-      {assessmentMetrics.length > 0 && <div className="cr-metric-grid">{assessmentMetrics.map(metric => <div className="cr-metric-card" key={metric.id}><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.measuredAt && <small>{reportDate(metric.measuredAt)}</small>}</div>)}</div>}
+      {assessmentMetrics.length > 0 && <div className="cr-metric-grid">{assessmentMetrics.map(metric => <div className="cr-metric-card" key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.measuredAt && <small>{reportDate(metric.measuredAt)}</small>}</div>)}</div>}
     </ReportSheet>
     {faceMetrics.length > 0 && <ReportSheet number={nextPage() + 1} title="Vital IQ measurements" icon={HeartPulse} report={report}>
       <p className="cr-section-intro">Readings from the Vital IQ capture. NIQ assessment risk is shown separately on the next page.</p>
-      <div className="cr-metric-grid cr-vital-grid">{faceMetrics.map(metric => <div className="cr-metric-card" key={metric.id}><Activity size={22} aria-hidden="true"/><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.measuredAt && <small>{reportDate(metric.measuredAt)}</small>}</div>)}</div>
+      <div className="cr-metric-grid cr-vital-grid">{faceMetrics.map(metric => <div className="cr-metric-card" key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.measuredAt && <small>{reportDate(metric.measuredAt)}</small>}</div>)}</div>
     </ReportSheet>}
     {(report.classification || report.weightHistory.length > 0 || report.narrative.keyFindings) && <ReportSheet number={nextPage() + 1} title="Nutrition status & findings" icon={Activity} report={report}>
       <div className="cr-status-row">{report.classification && <div className="cr-score-card" style={{ borderColor: riskColor, backgroundColor: `color-mix(in srgb, ${riskColor} 10%, white)` }}><span>NIQ assessment</span><strong style={{ color: riskColor }}>{report.classification.score}</strong><span>points</span><b style={{ color: riskColor }}>{report.classification.label}</b></div>}{report.narrative.keyFindings && <div className="cr-feature-panel cr-findings"><span className="cr-kicker">Key findings</span><p>{report.narrative.keyFindings}</p></div>}</div>
