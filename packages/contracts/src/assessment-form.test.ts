@@ -12,7 +12,7 @@ function fixture() {
   ], supportingInputs: ["palliative_status", "palliative_timing", "previous_surgery_count", "previous_weight_kg", "current_weight_kg", "dietary_intake"].map(id => ({ id, label: id, kind: id.includes("weight") || id.endsWith("count") ? "number" : "select", options: [{ id: "post_treatment", label: "Post treatment" }] })) };
   const all = q.sections.flatMap(s => s.fields);
   all.find(f => f.id === "stage")!.options = [{ id: "stage_metastatic", label: "Metastatic" }];
-  all.find(f => f.id === "treatment_status")!.options = [{ id: "treatment_status_palliative_care", label: "Palliative" }];
+  all.find(f => f.id === "treatment_status")!.options = [{ id: "treatment_status_newly_diagnosed", label: "Newly Diagnosed" }, { id: "treatment_status_palliative_care", label: "Palliative" }];
   all.find(f => f.id === "cancer_surgical_status")!.options = ["done", "planned"].map(id => ({ id: `cancer_surgical_status_${id}`, label: id }));
   all.find(f => f.id === "treatment_status")!.dependencies = ["palliative_status", "palliative_timing"];
   all.find(f => f.id === "previous_surgeries")!.dependencies = ["previous_surgery_count"];
@@ -108,6 +108,15 @@ test("every workbook conditional detail is required only while its parent path i
   expect(isAssessmentFieldApplicable(site, { metastasis_site: "others" })).toBe(false);
 });
 
+test("new assessments collect a planned treatment date only for newly diagnosed patients", () => {
+  const form = buildAssessmentForm(fixture());
+  const field = form.sections.flatMap(section => section.fields).find(item => item.id === "planned_treatment_start_date")!;
+  expect(field).toMatchObject({ kind: "date", owner: "application", required: false });
+  expect(isAssessmentFieldApplicable(field, { treatment_status: "treatment_status_newly_diagnosed" })).toBe(true);
+  expect(isAssessmentFieldApplicable(field, { treatment_status: "treatment_status_under_treatment" })).toBe(false);
+  expect(getEffectiveAssessmentAnswers(form, { treatment_status: "treatment_status_under_treatment", planned_treatment_start_date: "2026-10-20" }).planned_treatment_start_date).toBeUndefined();
+});
+
 test("existing drafts gain the conditional metastasis requirement without changing the stored manifest", () => {
   const current = buildAssessmentForm(fixture());
   const legacy = {
@@ -123,7 +132,7 @@ test("existing drafts gain the conditional metastasis requirement without changi
   expect(validateAssessmentAnswers(upgraded, { stage: "stage_metastatic" }, { requireComplete: true }).metastasis_site).toBe("Required");
   expect(validateAssessmentAnswers(upgraded, { stage: "stage_metastatic" }).metastasis_site).toBeUndefined();
   expect(validateAssessmentAnswers(upgraded, { stage: null }, { requireComplete: true }).metastasis_site).toBeUndefined();
-  expect(upgraded.version).toBe(current.version);
+  expect(upgraded.version).toBe("niq-final-overlay-v2");
   expect(upgradeDraftAssessmentForm(upgraded)).toBe(upgraded);
   expect(legacy.sections.flatMap(section => section.fields).find(field => field.id === "metastasis_site")?.required).toBe(false);
 });

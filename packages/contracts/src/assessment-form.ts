@@ -2,7 +2,7 @@ import { z } from "zod";
 import { cancerTypeOptions } from "./assessment-form-options";
 
 export const ASSESSMENT_ANSWER_TEXT_LIMIT = 2000;
-export const ASSESSMENT_FORM_VERSION = "niq-final-overlay-v2";
+export const ASSESSMENT_FORM_VERSION = "niq-final-overlay-v3";
 export const OTHER_DRUG_CLASS_ID = "other";
 export type FormAnswer = string | number | string[] | null;
 export type FormAnswers = Record<string, FormAnswer>;
@@ -93,6 +93,7 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
     app("metastasis_site", "Metastasis site", "select", "F42:H46", { required: true, options: choices(["Brain", "Liver", "Lung", "Bone", "Others"]), visibleWhen: [when("stage", "stage_metastatic")] }),
     app("metastasis_other", "Specify metastasis site", "text", "H42", { required: true, visibleWhen: [when("stage", "stage_metastatic"), when("metastasis_site", "others")] }));
   add("treatment",
+    app("planned_treatment_start_date", "Planned treatment start date", "date", "APP_TREATMENT_START_DATE", { visibleWhen: [when("treatment_status", "treatment_status_newly_diagnosed")] }),
     app("surgery_date", "Surgery date", "date", "H54", { required: true, visibleWhen: [when("cancer_surgical_status", "cancer_surgical_status_done")] }),
     app("planned_surgery_date", "Planned surgery date", "date", "H54", { required: true, visibleWhen: [when("cancer_surgical_status", "cancer_surgical_status_planned")] }),
     app("treatment_cycle_number", "Cycle number", "text", "B64:F64"), app("treatment_cycle_frequency", "Cycle frequency", "text", "F65"));
@@ -134,7 +135,7 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
   sections.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
   for (const section of sections) section.fields.sort((a, b) => {
     // App-only fields use semantic placement after their controlling question.
-    const position = (field: FormField) => field.id === "drug_classes" ? 63.5 : field.id === "diet_preference" ? 131.5 : Number(field.source.match(/\d+/)?.[0]);
+    const position = (field: FormField) => field.id === "drug_classes" ? 63.5 : field.id === "diet_preference" ? 131.5 : field.id === "planned_treatment_start_date" ? 53.5 : Number(field.source.match(/\d+/)?.[0]);
     return position(a) - position(b);
   });
   return { version: ASSESSMENT_FORM_VERSION, sections, ...(remote.drugClassConfig ? { drugClassSuggestions: remote.drugClassConfig.suggestions } : {}) };
@@ -147,7 +148,7 @@ export function upgradeDraftAssessmentForm(manifest: AssessmentFormManifest): As
   if (!hasLegacyVersion && (!drugClass || drugClass.options?.some(option => option.id === OTHER_DRUG_CLASS_ID))) return manifest;
   return {
     ...manifest,
-    version: hasLegacyVersion ? ASSESSMENT_FORM_VERSION : manifest.version,
+    version: hasLegacyVersion ? "niq-final-overlay-v2" : manifest.version,
     sections: manifest.sections.map(section => ({
       ...section,
       fields: section.fields.map(field => {
