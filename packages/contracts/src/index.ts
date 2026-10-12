@@ -4,6 +4,7 @@ export * from "./roles";
 export * from "./assessment-form";
 export * from "./assessment-form-validation";
 export * from "./assessment-answer-coverage";
+export * from "./bmi-reference";
 export * from "./assessment-workflow";
 export * from "./risk-color";
 export * from "./overview-summary";

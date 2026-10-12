@@ -1,6 +1,6 @@
 import { Circle, Document, Font, Image, Page, Path, Rect, Svg, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { ReactNode } from "react";
-import { riskColorHex, type GeneratedReport } from "@niq/application-contracts";
+import { adultBmiCategory, adultBmiReference, calculateAssessmentBmi, faceScanAdditionalMetricGroups, riskColorHex, type GeneratedReport } from "@niq/application-contracts";
 import { cleanWeights, metricText, reportAge, reportDate, reportGuidance } from "./generated-report-format";
 import { weightChartPoints } from "./generated-report-chart";
 import { accessibleBrandInk } from "./accessible-brand-ink";
@@ -55,6 +55,10 @@ const styles = StyleSheet.create({
   metricCard: { width: "31.8%", minHeight: 84, borderWidth: 1, borderRadius: 9, padding: 10, marginBottom: 1 },
   metricLabel: { fontSize: 8.1, color: "#59717c", marginTop: 7, marginBottom: 5 },
   metricValue: { fontSize: 16, lineHeight: 1.15, fontWeight: 700 },
+  vitalDetailPanel: { borderWidth: 1, borderRadius: 9, marginBottom: 9, overflow: "hidden" },
+  vitalDetailHeader: { paddingHorizontal: 11, paddingVertical: 7, fontSize: 9, fontWeight: 700 },
+  vitalDetailBody: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 11, paddingBottom: 5 },
+  vitalDetailRow: { width: "50%", flexDirection: "row", justifyContent: "space-between", gap: 6, paddingVertical: 6, paddingRight: 10, borderBottomWidth: .5 },
   largeValue: { fontSize: 21, fontWeight: 700, lineHeight: 1.15 },
   scoreCard: { width: "48.8%", minHeight: 132, flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderWidth: 1, borderRadius: 10 },
   scoreLabel: { fontSize: 9, fontWeight: 700, marginBottom: 5 },
@@ -116,7 +120,7 @@ function MetricCard({ metric, theme, icon, width }: { metric: Metric; theme: Pal
   return <View wrap={false} style={[styles.metricCard, { width: width ?? "31.8%", borderColor: theme.line, backgroundColor: theme.white }]}>
     <Icon name={icon ?? iconFor(metric.label)} color={theme.primary} size={19}/>
     <Text style={styles.metricLabel}>{metric.label}</Text>
-    <Text style={[styles.metricValue, { color: theme.ink }]}>{metricText(metric)}</Text>
+    <Text style={[styles.metricValue, { color: theme.ink, fontSize: metric.id === "blood_pressure" ? 13 : 16 }]}>{metricText(metric)}</Text>
   </View>;
 }
 
@@ -156,6 +160,40 @@ function ScoreMetric({ metric, theme }: { metric: Metric; theme: Palette }) {
   const hasRing = value !== null && value >= 0 && value <= 100;
   return <View wrap={false} style={[styles.scoreCard, { borderColor: theme.line, backgroundColor: theme.soft }]}>
     {hasRing ? <ScoreRing value={value} maximum={100} theme={theme}/> : <Icon name="pulse" color={theme.primary} size={38}/>}<View style={{ flex: 1 }}><Text style={styles.scoreLabel}>{metric.label}</Text><Text style={styles.muted}>{hasRing ? "out of 100" : metric.unit ?? "Vital IQ reading"}</Text></View>
+  </View>;
+}
+
+function VitalDetailGroup({ title, metrics, theme }: { title: string; metrics: Metric[]; theme: Palette }) {
+  if (!metrics.length) return null;
+  return <View wrap={false} style={[styles.vitalDetailPanel, { borderColor: theme.line }]}>
+    <Text style={[styles.vitalDetailHeader, { color: accessibleBrandInk(theme.primary, [theme.soft]), backgroundColor: theme.soft }]}>{title}</Text>
+    <View style={styles.vitalDetailBody}>{metrics.map(metric => <View key={metric.id} style={[styles.vitalDetailRow, { borderBottomColor: theme.line }]}><Text style={[styles.muted, { flex: 1 }]}>{metric.label}</Text><Text style={{ fontSize: 8.2, fontWeight: 700, maxWidth: "48%", textAlign: "right" }}>{metricText(metric)}</Text></View>)}</View>
+  </View>;
+}
+
+function bmiArcPoint(value: number): [number, number] {
+  const angle = Math.PI * (1 - (value - 10) / 30);
+  return [120 + 89 * Math.cos(angle), 108 - 89 * Math.sin(angle)];
+}
+
+function bmiArcPath(start: number, end: number) {
+  const [x1, y1] = bmiArcPoint(start);
+  const [x2, y2] = bmiArcPoint(end);
+  return `M ${x1} ${y1} A 89 89 0 0 1 ${x2} ${y2}`;
+}
+
+function BmiReferencePanel({ metric, age, weight, height, theme }: { metric: Metric; age: number | null; weight: number | null; height: number | null; theme: Palette }) {
+  const exactBmi = weight !== null && height !== null ? calculateAssessmentBmi(height, weight) : null;
+  const adult = age !== null && age >= 20 && exactBmi !== null;
+  const marker = adult ? bmiArcPoint(Math.max(10, Math.min(40, exactBmi))) : null;
+  return <View wrap={false} style={[styles.softPanel, { backgroundColor: theme.soft, borderWidth: 1, borderColor: theme.line }]}>
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+      <View style={{ flex: 1 }}><Text style={[styles.sectionLabel, { color: accessibleBrandInk(theme.primary, [theme.soft]) }]}>Body mass index</Text><Text style={[styles.largeValue, { fontSize: 27 }]}>{metric.value} <Text style={[styles.muted, { fontSize: 9, fontWeight: 400 }]}>kg/m²</Text></Text>
+        {adult && <Text style={[styles.subTitle, { marginTop: 7 }]}>{adultBmiCategory(exactBmi)}  |  Adult reference</Text>}
+        <Text style={styles.muted}>BMI is a screening tool, not a diagnosis.</Text></View>
+      {adult && <Svg width={214} height={109} viewBox="0 0 240 122">{adultBmiReference.map(band => <Path key={band.label} d={bmiArcPath(band.min, band.max)} fill="none" stroke={band.color} strokeWidth={15}/>)}{marker && <><Circle cx={marker[0]} cy={marker[1]} r={10} fill="#ffffff" stroke={theme.ink} strokeWidth={2.5}/><Circle cx={marker[0]} cy={marker[1]} r={3} fill={theme.ink}/></>}</Svg>}
+    </View>
+    {adult && <View style={{ flexDirection: "row", gap: 5, borderTopWidth: 1, borderTopColor: theme.line, paddingTop: 8, marginTop: 8 }}>{adultBmiReference.map(band => <View key={band.label} style={{ width: "25%", flexDirection: "row", alignItems: "center", gap: 4 }}><View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: band.color }}/><Text style={{ fontSize: 6.8 }}>{band.label}</Text><Text style={[styles.muted, { fontSize: 6.5 }]}>{band.range}</Text></View>)}</View>}
   </View>;
 }
 
@@ -235,9 +273,40 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
   const assessmentMetrics = report.metrics.filter(metric => metric.source === "assessment");
   const physicalMetrics = assessmentMetrics.filter(metric => /^(current weight|height|bmi)$/i.test(metric.label));
   const observationMetrics = assessmentMetrics.filter(metric => !physicalMetrics.includes(metric));
+  const primaryMeasurements = physicalMetrics.filter(metric => metric.id === "current_weight_kg" || metric.id === "height_cm");
+  const bmiMetric = physicalMetrics.find(metric => metric.id === "bmi");
+  const measurementNumber = (id: string) => {
+    const raw = physicalMetrics.find(metric => metric.id === id)?.value.trim();
+    const parsed = raw ? Number(raw) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
   const faceMetrics = report.metrics.filter(metric => metric.source === "face_scan");
-  const faceScores = faceMetrics.filter(metric => /wellness score|health risk score/i.test(metric.label));
-  const faceReadings = faceMetrics.filter(metric => !faceScores.includes(metric));
+  const faceMetric = (id: string) => faceMetrics.find(metric => metric.id === id);
+  const faceScores = ["wellness_score", "health_risk_score"].map(faceMetric).filter((metric): metric is Metric => Boolean(metric));
+  const vitalPoints = faceMetric("vital_iq_points");
+  const systolic = faceMetric("systolic");
+  const diastolic = faceMetric("diastolic");
+  const bloodPressure: Metric | null = systolic && diastolic
+    ? { id: "blood_pressure", label: "Blood pressure", value: `${systolic.value}/${diastolic.value}`, unit: "mmHg", source: "face_scan" } : null;
+  const faceReadings = faceMetrics.filter(metric => ["heart_rate", "oxygen_saturation", "respiratory_rate", ...(bloodPressure ? [] : ["systolic", "diastolic"])].includes(metric.id));
+  if (bloodPressure) faceReadings.push(bloodPressure);
+  const groupedIds = new Set(["vital_iq_points", "wellness_score", "health_risk_score", "heart_rate", "oxygen_saturation", "respiratory_rate", "systolic", "diastolic"]);
+  const detailGroups = faceScanAdditionalMetricGroups.map(group => {
+    const metrics = group.metrics.map(item => faceMetric(item.id)).filter((metric): metric is Metric => Boolean(metric));
+    metrics.forEach(metric => groupedIds.add(metric.id));
+    return { id: group.id, title: group.title, metrics };
+  });
+  const otherDetails = faceMetrics.filter(metric => !groupedIds.has(metric.id));
+  detailGroups.find(group => group.id === "other")!.metrics.push(...otherDetails);
+  const populatedDetails = detailGroups.filter(group => group.metrics.length > 0);
+  const splitVitalDetails = populatedDetails.reduce((total, group) => total + group.metrics.length, 0) > 14;
+  let firstPageDetailCount = 0;
+  const firstPageDetails = populatedDetails.filter(group => {
+    if (splitVitalDetails && firstPageDetailCount > 0 && firstPageDetailCount + group.metrics.length > 11) return false;
+    firstPageDetailCount += group.metrics.length;
+    return true;
+  });
+  const remainingDetails = populatedDetails.filter(group => !firstPageDetails.includes(group));
   const plan = productParts(report);
   const targets = nutritionTargets(report);
   const hasNutritionPage = Boolean(plan || report.narrative.nutritionAdvice || targets.length || report.narrative.treatmentAdvice);
@@ -260,20 +329,29 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
     </Page>
 
     <ReportPage report={report} brand={brand} number={page++} title="Patient overview" icon="person">
-      <View style={[styles.softPanel, { backgroundColor: theme.soft, flexDirection: "row", alignItems: "center", gap: 15, padding: 17 }]}>
-        <View style={{ width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: theme.white }}><Icon name="person" color={theme.primary} size={31}/></View>
-        <View><Text style={styles.title}>{report.patient.displayName}</Text><Text style={styles.muted}>{[report.patient.reference, age === null ? null : `${age} years`, report.patient.gender].filter(Boolean).join("  |  ")}</Text><Text style={[styles.muted, { marginTop: 4 }]}>Assessment completed {reportDate(report.assessment.completedAt)}</Text></View>
+      <View style={[styles.row, { alignItems: "stretch", marginBottom: 11 }]}>
+        <View style={[styles.softPanel, { width: primaryMeasurements.length ? "48.8%" : "100%", minHeight: 174, marginBottom: 0, backgroundColor: theme.soft, alignItems: "center", justifyContent: "center", padding: 15 }]}>
+          <View style={{ width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: theme.white, marginBottom: 10 }}><Icon name="person" color={theme.primary} size={31}/></View>
+          <Text style={[styles.title, { textAlign: "center" }]}>{report.patient.displayName}</Text><Text style={[styles.muted, { textAlign: "center" }]}>{[report.patient.reference, age === null ? null : `${age} years`, report.patient.gender].filter(Boolean).join("  |  ")}</Text><Text style={[styles.muted, { marginTop: 4, textAlign: "center" }]}>Assessment completed {reportDate(report.assessment.completedAt)}</Text>
+        </View>
+        {primaryMeasurements.length > 0 && <View style={{ width: "48.8%", justifyContent: "space-between" }}>{primaryMeasurements.map(metric => <View key={metric.id} style={[styles.panel, { minHeight: primaryMeasurements.length === 1 ? 174 : 82, marginBottom: 0, borderColor: theme.line, justifyContent: "center" }]}><Text style={styles.metricLabel}>{metric.label}</Text><Text style={[styles.metricValue, { color: theme.ink }]}>{metricText(metric)}</Text></View>)}</View>}
       </View>
       {report.narrative.overview && <NarrativePanel title="Clinical overview" text={report.narrative.overview} icon="clipboard" theme={theme}/>}
-      {physicalMetrics.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Body measurements</Text><View style={styles.wrapRow}>{physicalMetrics.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme}/>)}</View></>}
+      {bmiMetric && <BmiReferencePanel metric={bmiMetric} age={age} weight={measurementNumber("current_weight_kg")} height={measurementNumber("height_cm")} theme={theme}/>}
     </ReportPage>
 
-    {faceMetrics.length > 0 && <ReportPage report={report} brand={brand} number={page++} title="Vital IQ measurements" icon="pulse">
+    {faceMetrics.length > 0 && <><ReportPage report={report} brand={brand} number={page++} title="Vital IQ measurements" icon="pulse">
       <Text style={[styles.muted, { marginBottom: 13 }]}>Vital IQ measurements from the saved capture. The NIQ nutrition risk score appears in the next section.</Text>
+      {vitalPoints && <View style={[styles.softPanel, { backgroundColor: theme.soft, flexDirection: "row", alignItems: "center", gap: 10 }]}><Icon name="pulse" color={theme.primary} size={22}/><Text style={[styles.subTitle, { marginBottom: 0, flex: 1 }]}>Vital IQ points</Text><Text style={[styles.largeValue, { color: brandInk }]}>{vitalPoints.value}</Text></View>}
       {faceScores.length > 0 && <View style={[styles.row, { marginBottom: 13 }]}>{faceScores.map(metric => <ScoreMetric key={metric.id} metric={metric} theme={theme}/>)}</View>}
-      {faceReadings.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Measurements and other scores</Text><View style={styles.wrapRow}>{faceReadings.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme}/>)}</View></>}
-      {faceMetrics[0]?.measuredAt && <View style={[styles.softPanel, { backgroundColor: theme.soft, flexDirection: "row", gap: 8, alignItems: "center", marginTop: 9 }]}><Icon name="calendar" color={theme.primary} size={17}/><Text style={styles.muted}>Captured {reportDate(faceMetrics[0].measuredAt)}</Text></View>}
-    </ReportPage>}
+      {faceReadings.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Vital signs</Text><View style={[styles.wrapRow, { marginBottom: 10 }]}>{faceReadings.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme} width="23.3%"/>)}</View></>}
+      {firstPageDetails.map(group => <VitalDetailGroup key={group.id} title={group.title} metrics={group.metrics} theme={theme}/>)}
+      {!splitVitalDetails && faceMetrics[0]?.measuredAt && <View style={[styles.softPanel, { backgroundColor: theme.soft, flexDirection: "row", gap: 8, alignItems: "center", marginTop: 9 }]}><Icon name="calendar" color={theme.primary} size={17}/><Text style={styles.muted}>Captured {reportDate(faceMetrics[0].measuredAt)}</Text></View>}
+    </ReportPage>
+      {remainingDetails.length > 0 && <ReportPage report={report} brand={brand} number={page++} title="Vital IQ detailed measurements" icon="pulse">
+        {remainingDetails.map(group => <VitalDetailGroup key={group.id} title={group.title} metrics={group.metrics} theme={theme}/>)}
+        {faceMetrics[0]?.measuredAt && <View style={[styles.softPanel, { backgroundColor: theme.soft, flexDirection: "row", gap: 8, alignItems: "center", marginTop: 9 }]}><Icon name="calendar" color={theme.primary} size={17}/><Text style={styles.muted}>Captured {reportDate(faceMetrics[0].measuredAt)}</Text></View>}
+      </ReportPage>}</>}
 
     {hasFindings && <ReportPage report={report} brand={brand} number={page++} title="Nutrition status and findings" icon="chart">
       <View style={[styles.row, { marginBottom: 11 }]}>
