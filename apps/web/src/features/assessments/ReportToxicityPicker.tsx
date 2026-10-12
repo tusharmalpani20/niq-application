@@ -30,8 +30,8 @@ export function ReportToxicityPicker({ options, selectedIds, loading, error, dis
   }
 
   return <section className="cr-toxicity-picker" aria-labelledby={headingId}>
-    <h3 id={headingId}>Additional clinician-confirmed effects</h3>
-    <p>Assessment answers are matched automatically. Select an effect here only when you have confirmed it for this patient. Nothing is selected by default.</p>
+    <h3 id={headingId}>Additional treatment effects</h3>
+    {!loading && !error && groups.size > 0 && <p>Assessment answers are matched to guidance automatically. Add an effect only if you have confirmed it for this patient.</p>}
     {loading ? <p role="status">Loading effects available for this treatment…</p> : error ?
       <div className="cr-toxicity-picker-error" role="alert"><span>{error}</span><button type="button" onClick={onRetry}>Retry</button></div> :
       <>{unavailableCount > 0 && <p className="cr-toxicity-picker-warning" role="alert">{unavailableCount} previously selected {unavailableCount === 1 ? "effect is" : "effects are"} no longer available for this assessment and will be omitted.</p>}
@@ -43,6 +43,6 @@ export function ReportToxicityPicker({ options, selectedIds, loading, error, dis
             <span>{option.expectedToxicity}</span>
           </label>)}
         </fieldset>)}
-      </div> : <p>No additional effects are available for the selected treatment and drug class.</p>}</>}
+      </div> : <p className="cr-toxicity-picker-empty">There are no additional effects to select for this treatment and drug class. This does not mean the patient has no side effects.</p>}</>}
   </section>;
 }

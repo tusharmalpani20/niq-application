@@ -104,6 +104,7 @@
 .cr-toxicity-picker { width: min(100%, 700px); margin: .5rem 0 .8rem; padding: .85rem 1rem; border: 1px solid #c7dadd; border-radius: .7rem; background: #fff; color: #264756; text-align: left; }
 .cr-toxicity-picker h3 { margin: 0 0 .35rem; font-size: .9rem; }
 .cr-toxicity-picker p, .cr-empty .cr-toxicity-picker p { max-width: none; margin: 0 0 .7rem; color: #58717c; font-size: .78rem; line-height: 1.5; }
+.cr-toxicity-picker .cr-toxicity-picker-empty { margin-bottom: 0; }
 .cr-toxicity-picker-list { display: grid; gap: .7rem; max-height: 280px; overflow-y: auto; }
 .cr-toxicity-picker fieldset { display: grid; gap: .35rem; margin: 0; padding: .55rem .7rem .7rem; border: 1px solid #e0eaec; border-radius: .5rem; }
 .cr-toxicity-picker legend { padding: 0 .3rem; color: #365968; font-size: .75rem; font-weight: 700; }
