@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
   wrapRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   panel: { borderWidth: 1, borderRadius: 10, padding: 14, marginBottom: 11, backgroundColor: "#ffffff" },
   softPanel: { borderRadius: 10, padding: 15, marginBottom: 11 },
-  metricCard: { width: "31.8%", minHeight: 84, borderWidth: 1, borderRadius: 9, padding: 10, marginBottom: 1 },
+  metricCard: { width: "31.8%", minHeight: 80, borderWidth: 1, borderRadius: 9, padding: 10, marginBottom: 1 },
   metricLabel: { fontSize: 8.1, color: "#59717c", marginTop: 7, marginBottom: 5 },
   metricValue: { fontSize: 16, lineHeight: 1.15, fontWeight: 700 },
   vitalDetailPanel: { borderWidth: 1, borderRadius: 9, marginBottom: 9, overflow: "hidden" },
@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
   vitalDetailBody: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 11, paddingBottom: 5 },
   vitalDetailRow: { width: "50%", flexDirection: "row", justifyContent: "space-between", gap: 6, paddingVertical: 6, paddingRight: 10, borderBottomWidth: .5 },
   largeValue: { fontSize: 21, fontWeight: 700, lineHeight: 1.15 },
-  scoreCard: { width: "48.8%", minHeight: 132, flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderWidth: 1, borderRadius: 10 },
+  scoreCard: { width: "48.8%", minHeight: 124, flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderWidth: 1, borderRadius: 10 },
   scoreLabel: { fontSize: 9, fontWeight: 700, marginBottom: 5 },
   divider: { borderBottomWidth: 1, marginVertical: 10 },
   sectionLabel: { fontSize: 8, fontWeight: 700, letterSpacing: .6, textTransform: "uppercase", marginBottom: 9 },
@@ -272,6 +272,12 @@ function nutritionTargets(report: GeneratedReport) {
   ].filter((item): item is { label: string; value: string; icon: IconName } => Boolean(item.value));
 }
 
+function renalIndividualizationGuidance(report: GeneratedReport) {
+  return reportGuidance(report, "comorbidity").find(section =>
+    (section.id === "comorbidity_kidney_disease" || /\b(kidney|renal)\b/i.test(section.title)) &&
+    /\bindividuali[sz]/i.test(section.text));
+}
+
 function WeightGraphic({ report, theme }: { report: GeneratedReport; theme: Palette }) {
   const weights = cleanWeights(report);
   if (!weights.length) return null;
@@ -353,10 +359,12 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
   });
   const remainingDetails = populatedDetails.filter(group => !firstPageDetails.includes(group));
   const plan = productParts(report);
-  const targets = nutritionTargets(report);
+  const renalGuidance = renalIndividualizationGuidance(report);
+  // Generic nutrition ranges should not appear as fixed targets beside matched renal guidance that calls for individualisation.
+  const targets = renalGuidance ? [] : nutritionTargets(report);
   const clinicalFinding = report.narrative.keyFindings?.trim();
   const showClinicalFinding = Boolean(clinicalFinding && !isObservationOnlyFinding(clinicalFinding));
-  const hasNutritionPage = Boolean(plan || report.narrative.nutritionAdvice || targets.length || report.narrative.treatmentAdvice);
+  const hasNutritionPage = Boolean(plan || report.narrative.nutritionAdvice || targets.length || renalGuidance || report.narrative.treatmentAdvice);
   const hasConsiderations = Boolean(report.narrative.conditionAdvice || report.narrative.effectsAdvice);
   const hasNutritionFindings = Boolean(report.classification || showClinicalFinding || observationMetrics.length || (!hasNutritionPage && cleanWeights(report).length));
   const hasFindings = Boolean(remainingDetails.length || hasNutritionFindings);
@@ -425,6 +433,10 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
 
     {hasNutritionPage && <ReportPage report={report} brand={brand} number={page++} title="Nutrition plan" icon="food">
       {targets.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Daily nutrition targets</Text><View style={[styles.wrapRow, { marginBottom: 11 }]}>{targets.map(target => <View key={target.label} style={[styles.productCard, { borderColor: theme.line, backgroundColor: theme.soft, width: "48.8%" }]}><Icon name={target.icon} color={theme.primary}/><Text style={[styles.metricLabel, { marginTop: 8 }]}>{target.label}</Text><Text style={[styles.metricValue, { fontSize: 15 }]}>{target.value}</Text></View>)}</View></>}
+      {renalGuidance && <View wrap={false} style={[styles.panel, { borderColor: "#f0d7a7", backgroundColor: "#fff7e9" }]}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 8 }}><Icon name="alert" color="#94611b" size={20}/><Text style={[styles.subTitle, { marginBottom: 0 }]}>Individualise nutrition targets</Text></View>
+        <Text style={styles.body} hyphenationCallback={word => [word]}>{renalGuidance.text}</Text>
+      </View>}
       <WeightGraphic report={report} theme={theme}/>
       {report.narrative.nutritionAdvice && <NarrativePanel title="Nutrition guidance" text={report.narrative.nutritionAdvice} icon="food" theme={theme} accent/>}
       <ProductPlan report={report} theme={theme}/>
