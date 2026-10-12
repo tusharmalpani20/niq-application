@@ -46,6 +46,15 @@ test("queued report shows automatic progress without a generation control", asyn
   });
 });
 
+test("review-required generation never presents a final PDF", async () => {
+  await renderWithResponse({ report: null, generation: { status: "FAILED", failureCode: "REVIEW_REQUIRED" } }, () => {
+    expect(document.body.textContent).toContain("Clinical review required");
+    expect(document.body.textContent).toContain("before a PDF can be issued");
+    expect(document.body.textContent).not.toContain("Final report ready");
+    expect(document.querySelector(".cr-download")).toBeNull();
+  });
+});
+
 const readyReport: GeneratedReport = {
     id: "report-1",
     revision: 0,

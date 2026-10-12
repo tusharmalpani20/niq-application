@@ -14,6 +14,10 @@ import { renderGeneratedReportPdf } from "./report-pdf";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 export const AUTOMATIC_REPORT_KEY_PREFIX = "auto-final-v1:";
+export const REPORT_REVIEW_REQUIRED = "REVIEW_REQUIRED";
+class AutomaticReportReviewRequired extends Error {
+  constructor() { super("Generated content requires clinical review before a PDF can be issued."); }
+}
 export const automaticRetryDelay = (attempt: number) => Math.min(300_000, 30_000 * 2 ** Math.min(4, Math.max(0, attempt - 1)));
 type ReportData = Omit<GeneratedReport, "id" | "revision" | "status" | "approvedAt" | "artifact">;
 type ReportRow = typeof generatedReports.$inferSelect;
@@ -26,6 +30,28 @@ const fieldLabel = (manifest: AssessmentFormManifest, fieldId: string, optionId:
   manifest.sections.flatMap(section => section.fields).find(field => field.id === fieldId)?.options?.find(option => option.id === optionId)?.label;
 const dateOnly = (date: Date | string): string => new Date(date).toISOString().slice(0, 10);
 const nonempty = (text: unknown): text is string => typeof text === "string" && text.trim().length > 0;
+
+export function reportNeedsClinicalReview(status: ScoringReportContent["status"], issues: string[]): boolean {
+  return status === REPORT_REVIEW_REQUIRED || issues.length > 0;
+}
+
+export function reportGenerationIssues(status: ScoringReportContent["status"], issues: string[]): string[] {
+  return status === REPORT_REVIEW_REQUIRED && issues.length === 0
+    ? ["Generated text needs clinical review before a PDF can be issued."] : issues;
+}
+
+export function automaticReportCanFinalize(status: string, failureCode: string | null, issues: string[]): boolean {
+  return status === "DRAFT" && failureCode !== REPORT_REVIEW_REQUIRED && issues.length === 0;
+}
+
+export function publicReportGeneration(status: string, failureCode: string | null, issues: string[]): { status: "QUEUED" | "GENERATING" | "FAILED" | "READY"; failureCode: string | null } {
+  if (failureCode === REPORT_REVIEW_REQUIRED || issues.length) return { status: "FAILED", failureCode: REPORT_REVIEW_REQUIRED };
+  return { status: status === "READY" || status === "APPROVED" ? "READY" : status === "FAILED" ? "FAILED" : status === "QUEUED" ? "QUEUED" : "GENERATING", failureCode };
+}
+
+export function assertReportPdfDownloadable(issues: string[]) {
+  if (issues.length) throw new ServiceError("NOT_FOUND", "A final report PDF is not available.");
+}
 
 export function cleanReportText(text: string): string {
   return text.replace(/;/g, ".").replace(/—/g, " - ")
@@ -248,10 +274,11 @@ export class GeneratedReportService {
     if(!row) return {report:null,generation:null};
     if(!row.requestKey.startsWith(AUTOMATIC_REPORT_KEY_PREFIX) && row.status!=="READY" && row.status!=="APPROVED")
       return {report:null,generation:null};
-    const status=row.status==="READY"||row.status==="APPROVED"?"READY":row.status==="FAILED"?"FAILED":row.status==="QUEUED"?"QUEUED":"GENERATING";
-    const report=row.content && status==="READY" ? await this.dto(row,assessment):null;
+    const issues=row.content ? this.service.unseal<ReportData>(row.content).issues : [];
+    const generation=publicReportGeneration(row.status,row.failureCode,issues);
+    const report=row.content && (generation.status==="READY" || row.status==="DRAFT" && generation.failureCode===REPORT_REVIEW_REQUIRED) ? await this.dto(row,assessment):null;
     return {report:report?.status==="APPROVED"?{...report,status:"READY"}:report,
-      generation:{status,failureCode:row.failureCode}};
+      generation};
   }
   async toxicityOptions(actor: Principal, org: string, id: string, context: RequestContext) {
     if (!hasPermission(actor.role,"reviews.complete")) throw new ServiceError("FORBIDDEN","A clinician must confirm treatment effects.");
@@ -387,8 +414,9 @@ export class GeneratedReportService {
         narrative:normalizeNarrative(generated.narrative),
         omittedNarrativeFields:generated.omittedNarrativeFields ?? [],
         guidance:{sections:normalized.sections},
-        issues:[...generated.issues,...normalized.issues],issueResolution:null,
+        issues:reportGenerationIssues(generated.status,[...generated.issues,...normalized.issues]),issueResolution:null,
       };
+      const reviewRequired=reportNeedsClinicalReview(generated.status,data.issues);
       const [saved]=await this.service.db.transaction(async tx=>{
         const currentAssessment=internal
           ? (await tx.select().from(assessments).where(and(eq(assessments.organizationId,org),eq(assessments.id,id))).for("update"))[0]
@@ -396,7 +424,8 @@ export class GeneratedReportService {
         if(!currentAssessment) throw new ServiceError("NOT_FOUND","Assessment not found.");
         if(this.currentFingerprint(currentAssessment,generated.checksum,decision)!==fingerprint)
           throw new ServiceError("CONFLICT","The clinical review changed during report generation. Regenerate from the completed review.");
-        return tx.update(generatedReports).set({status:"DRAFT",runId:generated.runId,content:this.service.seal(data),leaseToken:null,updatedAt:new Date()})
+        return tx.update(generatedReports).set({status:"DRAFT",runId:generated.runId,content:this.service.seal(data),
+          failureCode:reviewRequired?REPORT_REVIEW_REQUIRED:null,leaseToken:null,nextAttemptAt:null,updatedAt:new Date()})
           .where(and(eq(generatedReports.id,reportId),eq(generatedReports.organizationId,org),eq(generatedReports.status,"GENERATING"),eq(generatedReports.leaseToken,claim.leaseToken!))).returning();
       });
       if(!saved)throw new ServiceError("CONFLICT","Report generation changed while waiting for NIQ Scoring.");
@@ -480,7 +509,7 @@ export class GeneratedReportService {
       const [artifact]=await tx.select().from(generatedReportArtifacts).where(and(eq(generatedReportArtifacts.organizationId,org),eq(generatedReportArtifacts.reportId,row.id)));
       assertReportReadyForApproval(data.issues,artifact?.revision??null,revision);
       assertReviewedArtifact(artifact,reviewedSha256,reportBrandingFingerprint(brand));
-      const [updated]=await tx.update(generatedReports).set({status:"APPROVED",approvedByMembershipId:actor.membershipId,approvedAt:new Date(),updatedAt:new Date()})
+      const [updated]=await tx.update(generatedReports).set({status:"APPROVED",failureCode:null,approvedByMembershipId:actor.membershipId,approvedAt:new Date(),updatedAt:new Date()})
         .where(and(eq(generatedReports.id,row.id),eq(generatedReports.organizationId,org),eq(generatedReports.status,"DRAFT"),eq(generatedReports.revision,revision))).returning();
       if(!updated)throw new ServiceError("CONFLICT","The report changed before approval.");
       await this.service.audit(tx,actor,context,id,"GENERATED_REPORT_APPROVED",{reportId:row.id,revision,sha256:artifact!.sha256,
@@ -502,6 +531,13 @@ export class GeneratedReportService {
     const claimed=await this.service.db.transaction(async tx=>{
       const [current]=await tx.select().from(generatedReports).where(eq(generatedReports.id,row.id)).for("update");
       if(!current || current.status!=="DRAFT" || current.nextAttemptAt && current.nextAttemptAt>new Date())return null;
+      const issues=current.content ? this.service.unseal<ReportData>(current.content).issues : [];
+      if(!automaticReportCanFinalize(current.status,current.failureCode,issues)) {
+        if(current.failureCode!==REPORT_REVIEW_REQUIRED)
+          await tx.update(generatedReports).set({failureCode:REPORT_REVIEW_REQUIRED,nextAttemptAt:null,leaseToken:null,updatedAt:new Date()})
+            .where(eq(generatedReports.id,row.id));
+        return null;
+      }
       const [updated]=await tx.update(generatedReports).set({leaseToken,nextAttemptAt:leaseUntil,attemptCount:sql`${generatedReports.attemptCount}+1`,updatedAt:new Date()})
         .where(eq(generatedReports.id,row.id)).returning();
       return updated;
@@ -512,6 +548,8 @@ export class GeneratedReportService {
       if(!assessment)throw new ServiceError("NOT_FOUND","Assessment not found.");
       const report=await this.dto(claimed,assessment);
       if(report.status==="STALE")throw new ServiceError("CONFLICT","The approved assessment changed.");
+      if(!automaticReportCanFinalize(claimed.status,claimed.failureCode,report.issues))
+        throw new AutomaticReportReviewRequired();
       const [brand]=await this.service.db.select({displayName:organizations.displayName,logoObjectKey:organizations.logoObjectKey,
         primaryColor:organizations.primaryColor,secondaryColor:organizations.secondaryColor}).from(organizations).where(eq(organizations.id,row.organizationId));
       if(!brand)throw new ServiceError("NOT_FOUND","Organisation not found.");
@@ -535,6 +573,8 @@ export class GeneratedReportService {
         const [current]=await tx.select().from(generatedReports).where(eq(generatedReports.id,row.id)).for("update");
         if(!current || current.status!=="DRAFT" || current.leaseToken!==leaseToken || current.revision!==claimed.revision)
           throw new ServiceError("CONFLICT","The report changed during PDF generation.");
+        if(current.failureCode===REPORT_REVIEW_REQUIRED || !current.content || this.service.unseal<ReportData>(current.content).issues.length)
+          throw new AutomaticReportReviewRequired();
         await tx.insert(generatedReportArtifacts).values({reportId:row.id,organizationId:row.organizationId,assessmentId:row.assessmentId,
           revision:current.revision,sha256:hash,size:pdf.length,brandingFingerprint:brandFingerprint,encryptedPdf:encryptPatientBytes(pdf,key)})
           .onConflictDoUpdate({target:generatedReportArtifacts.reportId,set:{revision:current.revision,sha256:hash,size:pdf.length,
@@ -545,8 +585,9 @@ export class GeneratedReportService {
           sha256:hash,runId:report.runId,ruleChecksum:report.assessment.checksum,model:report.model,promptVersion:report.promptVersion});
       });
     } catch(error) {
-      const retryable=claimed.attemptCount<5 && !(error instanceof ServiceError && error.code==="NOT_FOUND");
-      await this.service.db.update(generatedReports).set({status:retryable?"DRAFT":"FAILED",failureCode:"PDF_RENDER_FAILED",leaseToken:null,
+      const reviewRequired=error instanceof AutomaticReportReviewRequired;
+      const retryable=!reviewRequired && claimed.attemptCount<5 && !(error instanceof ServiceError && error.code==="NOT_FOUND");
+      await this.service.db.update(generatedReports).set({status:retryable||reviewRequired?"DRAFT":"FAILED",failureCode:reviewRequired?REPORT_REVIEW_REQUIRED:"PDF_RENDER_FAILED",leaseToken:null,
         nextAttemptAt:retryable?new Date(Date.now()+automaticRetryDelay(claimed.attemptCount)):null,updatedAt:new Date()})
         .where(and(eq(generatedReports.id,row.id),eq(generatedReports.status,"DRAFT"),eq(generatedReports.leaseToken,leaseToken)));
       throw error;
@@ -558,8 +599,9 @@ export class GeneratedReportService {
     const rows=await this.service.db.select().from(generatedReports).where(and(like(generatedReports.requestKey,`${AUTOMATIC_REPORT_KEY_PREFIX}%`),or(
       and(eq(generatedReports.status,"QUEUED"),or(isNull(generatedReports.nextAttemptAt),lte(generatedReports.nextAttemptAt,now))),
       and(eq(generatedReports.status,"GENERATING"),lte(generatedReports.updatedAt,expired)),
-      and(eq(generatedReports.status,"DRAFT"),or(isNull(generatedReports.nextAttemptAt),lte(generatedReports.nextAttemptAt,now))),
-      and(eq(generatedReports.status,"FAILED"),lte(generatedReports.nextAttemptAt,now)),
+      and(eq(generatedReports.status,"DRAFT"),or(isNull(generatedReports.failureCode),ne(generatedReports.failureCode,REPORT_REVIEW_REQUIRED)),
+        or(isNull(generatedReports.nextAttemptAt),lte(generatedReports.nextAttemptAt,now))),
+      and(eq(generatedReports.status,"FAILED"),ne(generatedReports.failureCode,REPORT_REVIEW_REQUIRED),lte(generatedReports.nextAttemptAt,now)),
     ))).orderBy(generatedReports.createdAt).limit(limit);
     await Promise.allSettled(rows.map(async row=>{
       const context={requestId:createEntityId()};
@@ -571,7 +613,8 @@ export class GeneratedReportService {
         const {report}=await this.generate(actor,row.organizationId,row.assessmentId,{requestKey:row.requestKey},context,true);
         if(report.status==="DRAFT") {
           const [current]=await this.service.db.select().from(generatedReports).where(eq(generatedReports.id,report.id));
-          if(current)await this.finalizeAutomatic(current,actor,context);
+          if(current && automaticReportCanFinalize(current.status,current.failureCode,report.issues))
+            await this.finalizeAutomatic(current,actor,context);
         }
       } catch(error) {
         // Source failures before the first claim cannot be retried by generate.
@@ -594,6 +637,7 @@ export class GeneratedReportService {
     if(!row?.content)
       throw new ServiceError("NOT_FOUND","A final report PDF is not available.");
     const data=this.service.unseal<ReportData>(row.content);
+    assertReportPdfDownloadable(data.issues);
     if(this.currentFingerprint(assessment,data.assessment.checksum,data.decision)!==row.sourceFingerprint)
       throw new ServiceError("NOT_FOUND","A final report PDF is not available.");
     const artifact=await this.artifact(org,row.id);

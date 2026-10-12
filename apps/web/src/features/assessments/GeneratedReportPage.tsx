@@ -54,8 +54,9 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
   const generation = result?.generation;
   const report = result?.report;
   const ready = generation?.status === "READY" && report?.status === "READY" && Boolean(report.artifact);
+  const reviewRequired = generation?.status === "FAILED" && generation.failureCode === "REVIEW_REQUIRED";
   const pdfUrl = generatedReportPdfUrl(user.organizationId, assessmentId);
-  const statusLabel = loading && !result ? "Loading" : error ? "Status unavailable" : generation?.status === "QUEUED" ? "Queued" : generation?.status === "GENERATING" ? "Preparing" : generation?.status === "FAILED" ? "Generation failed" : ready ? "Ready" : generation?.status === "READY" ? "Report unavailable" : "Not started";
+  const statusLabel = loading && !result ? "Loading" : error ? "Status unavailable" : generation?.status === "QUEUED" ? "Queued" : generation?.status === "GENERATING" ? "Preparing" : reviewRequired ? "Clinical review required" : generation?.status === "FAILED" ? "Generation failed" : ready ? "Ready" : generation?.status === "READY" ? "Report unavailable" : "Not started";
   const refresh = () => setReload(current => current + 1);
 
   return <div className="cr-workspace">
@@ -65,7 +66,9 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
     {loading && !result && <p role="status" className="cr-empty"><LoaderCircle className="cr-spin" size={20} aria-hidden="true"/>Loading report status</p>}
     {!loading && !error && (generation?.status === "QUEUED" || generation?.status === "GENERATING") &&
       <section className="cr-empty" role="status"><LoaderCircle className="cr-spin" size={35} aria-hidden="true"/><h2>{generation.status === "QUEUED" ? "Report queued" : "Preparing report"}</h2><p>The saved assessment is being turned into a clinical report and PDF. This page updates automatically.</p></section>}
-    {!loading && !error && generation?.status === "FAILED" &&
+    {!loading && !error && reviewRequired &&
+      <section className="cr-empty" role="alert"><h2>Clinical review required</h2><p>A clinician must review and approve this report before a PDF can be issued.</p></section>}
+    {!loading && !error && generation?.status === "FAILED" && !reviewRequired &&
       <section className="cr-empty" role="alert"><h2>Report generation could not finish</h2><p>The assessment remains approved. The report is not available yet. Please contact your administrator if this does not resolve.</p><Button variant="outline" onPress={refresh}><RotateCcw size={16} aria-hidden="true"/>Check status again</Button></section>}
     {!loading && !error && !generation &&
       <section className="cr-empty"><FileCheck2 size={35} aria-hidden="true"/><h2>Report not started</h2><p>Complete the final clinical review to start report and PDF generation.</p><Link to={assessmentPath}>Return to assessment</Link></section>}

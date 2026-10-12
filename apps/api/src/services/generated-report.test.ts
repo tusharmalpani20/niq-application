@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { GeneratedReportService, assertGeneratedPdf, assertReportReadyForApproval, assertReviewedArtifact, automaticRetryDelay, cleanReportText, finishWeightHistory, normalizeGuidance, normalizeNarrative, prepareNarrativeEdit, reportBrandingFingerprint, reportObservations, reportToxicityAnswers } from "./generated-report";
+import { GeneratedReportService, REPORT_REVIEW_REQUIRED, assertGeneratedPdf, assertReportPdfDownloadable, assertReportReadyForApproval, assertReviewedArtifact, automaticReportCanFinalize, automaticRetryDelay, cleanReportText, finishWeightHistory, normalizeGuidance, normalizeNarrative, prepareNarrativeEdit, publicReportGeneration, reportBrandingFingerprint, reportGenerationIssues, reportNeedsClinicalReview, reportObservations, reportToxicityAnswers } from "./generated-report";
 import { requestScoringReportContent, requestScoringToxicityOptions, scoringReportContentSchema } from "./scoring-report-content";
 import { approveGeneratedReportSchema, editGeneratedNarrativeSchema } from "../../../../packages/contracts/src/generated-report";
 
@@ -67,6 +67,22 @@ test("automatic generation retries an in-progress Scoring run with bounded delay
     facts: { reviewedScore: 28, treatmentTypeIds: [], drugClassIds: [], confirmedToxicityIds: [], assessmentDate: "2026-10-12", observations: [] },
     fetcher: async () => Response.json({ error: "REQUEST_IN_PROGRESS" }, { status: 409 }),
   } as any)).rejects.toMatchObject({ kind: "unavailable", code: "REQUEST_IN_PROGRESS" });
+});
+
+test("Scoring review failures and local rule issues stay out of automatic PDF generation", () => {
+  expect(reportGenerationIssues("REVIEW_REQUIRED", [])).toEqual(["Generated text needs clinical review before a PDF can be issued."]);
+  expect(reportGenerationIssues("READY", ["Choose a product stage"])).toEqual(["Choose a product stage"]);
+  expect(reportNeedsClinicalReview("REVIEW_REQUIRED", [])).toBe(true);
+  expect(reportNeedsClinicalReview("READY", ["Choose a product stage"])).toBe(true);
+  expect(reportNeedsClinicalReview("READY", [])).toBe(false);
+  expect(automaticReportCanFinalize("DRAFT", REPORT_REVIEW_REQUIRED, [])).toBe(false);
+  expect(automaticReportCanFinalize("DRAFT", null, ["Unresolved content issue"])).toBe(false);
+  expect(automaticReportCanFinalize("DRAFT", null, [])).toBe(true);
+  expect(publicReportGeneration("DRAFT", REPORT_REVIEW_REQUIRED, [])).toEqual({ status: "FAILED", failureCode: "REVIEW_REQUIRED" });
+  expect(publicReportGeneration("READY", null, ["Legacy unresolved issue"])).toEqual({ status: "FAILED", failureCode: "REVIEW_REQUIRED" });
+  expect(publicReportGeneration("READY", null, [])).toEqual({ status: "READY", failureCode: null });
+  expect(() => assertReportPdfDownloadable(["Legacy unresolved issue"])).toThrow("final report PDF is not available");
+  expect(() => assertReportPdfDownloadable([])).not.toThrow();
 });
 
 test("toxicity options request binds the reviewed result and only sends selected treatment IDs", async () => {
