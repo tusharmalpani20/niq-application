@@ -157,7 +157,7 @@ function WeightTrend({ report }: { report: GeneratedReport }) {
 // Measurement-only prose adds little beside the saved values and chart.
 function isObservationOnlyFinding(text: string) {
   const mentionsMeasurement = /\b(weight|blood pressure|bp|bmi|heart rate|oxygen|saturation|score|fluid intake|appetite|protein intake)\b/i.test(text);
-  const addsClinicalMeaning = /\b(malnutrition|nutritional|dehydration|inadequate|poor intake|reduced intake|treatment|surgery|cancer|diagnosis|symptoms?|requires?|recommend|intervention|monitor|significant|severe|moderate|mild|concerning|abnormal|elevated|outside reference|high blood pressure|low blood pressure|meets|criteria|suggests?|indicates?|consistent with|due to|at risk|urgent|urgency|warrant|assess|review|follow up|concern|impact|impair|referral|escalat|because|therefore)\b/i.test(text);
+  const addsClinicalMeaning = /\b(malnutrition|nutritional|nutrition (?:support|care|risk)|dehydration|inadequate|poor intake|reduced intake|treatment|surgery|cancer|diagnosis|symptoms?|requires?|recommend|intervention|monitor(?:s|ed|ing)?|watch(?:es|ed|ing)?|prevent(?:s|ed|ing)?|protect|priorit(?:y|ies)|significant|severe|moderate|mild|concerning|abnormal|elevated|outside reference|high blood pressure|low blood pressure|meets|criteria|suggests?|indicates?|consistent with|due to|at risk|urgent|urgency|warrant|assess|review|follow up|concern|impact|impair|referral|escalat|because|therefore)\b/i.test(text);
   return /\d/.test(text) && mentionsMeasurement && !addsClinicalMeaning && text.trim().split(/\s+/).length <= 45;
 }
 

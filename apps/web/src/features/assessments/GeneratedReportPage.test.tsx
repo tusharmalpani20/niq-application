@@ -150,6 +150,24 @@ test("clinical interpretation is shown when it adds meaning beyond measurements"
   });
 });
 
+test("clinical interpretation keeps care implications but omits a measurement recap", async () => {
+  const meaningfulFindings = [
+    "The recorded weight loss alongside moderate nutrition risk makes early nutrition support and monitoring important.",
+    "The recorded 10.1% weight loss makes preventing further weight and muscle loss an important priority.",
+  ];
+  for (const keyFindings of meaningfulFindings) {
+    const report: GeneratedReport = { ...readyReport, narrative: { ...readyReport.narrative, keyFindings } };
+    await renderWithResponse({ report, generation: { status: "READY" } }, () => {
+      expect(document.querySelector(".cr-clinical-interpretation")?.textContent).toContain(keyFindings);
+    });
+  }
+  const measurementOnly = "Your recorded weight decreased from 76 kg to 72 kg, a loss of 5.3%.";
+  const report: GeneratedReport = { ...readyReport, narrative: { ...readyReport.narrative, keyFindings: measurementOnly } };
+  await renderWithResponse({ report, generation: { status: "READY" } }, () => {
+    expect(document.querySelector(".cr-clinical-interpretation")).toBeNull();
+  });
+});
+
 test("care guidance keeps approved sentences and uses matched clinical headings", async () => {
   const report: GeneratedReport = {
     ...readyReport,
