@@ -53,7 +53,7 @@ export type ReportFacts = {
   coMorbidityIds?: string[]; cancerTypeId?: string; treatmentStatusId?: string;
   dietPreferenceId?: "vegetarian" | "non_vegetarian" | "eggetarian" | "jain";
   surgicalStatusId?: string; surgeryDate?: string; plannedSurgeryDate?: string;
-  plannedTreatmentStartDate?: string; assessmentDate?: string; productStageChoice?: "surgical" | "treatment_stage";
+  plannedTreatmentStartDate?: string; assessmentDate: string; productStageChoice?: "surgical" | "treatment_stage";
   reviewedScore: number; reviewedRiskCategoryId?: string;
   observations: Array<{ id: string; label: string; value: string; unit?: string; measuredAt?: string }>;
 };
