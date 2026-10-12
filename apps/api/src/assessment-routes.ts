@@ -42,9 +42,15 @@ export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowSe
   app.post(reports,async c=>{const p=parts(c);return c.json(await service.reports.edit(p.actor,p.org,p.assessment,parse(reportInputSchema,await json(c)),p.context));});
   app.patch(`${reports}/:reportId`,async c=>{const p=parts(c);return c.json(await service.reports.edit(p.actor,p.org,p.assessment,parse(reportInputSchema,await json(c)),p.context,parse(id,c.req.param("reportId"))));});
   const generated=base+"/assessments/:assessmentId/generated-report";
-  app.get(generated,async c=>{const p=parts(c);return c.json(await generatedReports.read(p.actor,p.org,p.assessment));});
+  const generatedParts=async(c:any)=>{
+    const actor=c.get("principal"),org=parse(id,c.req.param("organizationId"));
+    const requested=parse(z.union([id,z.string().regex(/^ASM-[0-9]{6,10}$/)]),c.req.param("assessmentId"));
+    const assessment=requested.startsWith("ASM-")?(await service.read(actor,org,requested)).id:requested;
+    return {actor,org,assessment};
+  };
+  app.get(generated,async c=>{const p=await generatedParts(c);return c.json(await generatedReports.read(p.actor,p.org,p.assessment));});
   app.get(generated+"/pdf",async c=>{
-    const p=parts(c),file=await generatedReports.downloadPdf(p.actor,p.org,p.assessment);
+    const p=await generatedParts(c),file=await generatedReports.downloadPdf(p.actor,p.org,p.assessment);
     return new Response(new Uint8Array(file.pdf),{headers:{"Content-Type":"application/pdf","Content-Length":String(file.pdf.length),"Content-Disposition":"inline; filename=\"NIQ-clinical-report.pdf\"","ETag":'"'+file.sha256+'"',"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
   });
   const revision=(c:any)=>parse(z.string().regex(/^\d+$/).transform(Number),c.req.query("revision"));
