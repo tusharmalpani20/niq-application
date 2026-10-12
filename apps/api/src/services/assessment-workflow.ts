@@ -75,7 +75,7 @@ export class AssessmentWorkflowService {
     try { return (await requestScoringOrganizationInfo(transport)).services.faceScan.enabled; }
     catch(error) {
       if(error instanceof ScoringOrganizationInfoRequestError && error.reason==="disabled") return false;
-      throw new ServiceError("SCORING_UNAVAILABLE","Face scan access could not be checked. Try again before submitting.");
+      throw new ServiceError("SCORING_UNAVAILABLE","Vital IQ access could not be checked. Try again before submitting.");
     }
   }
   async initialize(actor:Principal,organizationId:string,input:{patientId:string;requestKey:string},context:RequestContext):Promise<AssessmentInitialization> {
@@ -216,7 +216,7 @@ export class AssessmentWorkflowService {
     let scanBeforeCancellation: Awaited<ReturnType<AssessmentWorkflowService["reviewScan"]>> = null;
     const [openScan]=await this.db.select({id:assessmentFaceScans.id}).from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId,organizationId),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true),eq(assessmentFaceScans.active,true)));
     if(openScan) {
-      if(scanRequired) throw new ServiceError("VALIDATION_ERROR","Complete the required face scan before submitting this assessment.");
+      if(scanRequired) throw new ServiceError("VALIDATION_ERROR","Complete the required Vital IQ measurement before submitting this assessment.");
       const row=await this.authorize(actor,organizationId,id);
       if(row.status==="DRAFT") {
         this.editable(row,input.revision,actor);
@@ -235,7 +235,7 @@ export class AssessmentWorkflowService {
         if(!/^[a-f0-9]{64}$/.test(input.reviewToken)||!timingSafeEqual(Buffer.from(token,"hex"),Buffer.from(input.reviewToken,"hex"))) throw new ServiceError("CONFLICT","Assessment details changed during review. Review the latest values before submitting.");
         const { AssessmentFaceScanService }=await import("./assessment-face-scan");
         const cancelled=await new AssessmentFaceScanService(this).mutate(actor,organizationId,id,openScan.id,"cancel");
-        if(cancelled.state!=="CANCELLED") throw new ServiceError("CONFLICT","The face scan is still open. Scoring was not requested.");
+        if(cancelled.state!=="CANCELLED") throw new ServiceError("CONFLICT","The Vital IQ measurement is still open. Scoring was not requested.");
         scanBeforeCancellation=scan;
       }
     }
@@ -254,7 +254,7 @@ export class AssessmentWorkflowService {
       if(!input.attestation.confirmed||reviewed.size!==expectedSections.length||expectedSections.some(section=>!reviewed.has(section))) throw new ServiceError("VALIDATION_ERROR","Review every section and confirm the submission before requesting a score.");
       const reports=await this.reports.list(organizationId,id,tx);
       const scan=await this.reviewScan(organizationId,id,tx);
-      if(scanBeforeCancellation && (scan?.id!==scanBeforeCancellation.id || scan.state!=="CANCELLED")) throw new ServiceError("CONFLICT","The face scan changed during submission. Review the latest scan before submitting.");
+      if(scanBeforeCancellation && (scan?.id!==scanBeforeCancellation.id || scan.state!=="CANCELLED")) throw new ServiceError("CONFLICT","The Vital IQ measurement changed during submission. Review the latest result before submitting.");
       const actualToken=this.reviewToken(row,patient,answers,reports,scanBeforeCancellation??scan);
       if(!/^[a-f0-9]{64}$/.test(input.reviewToken)||!timingSafeEqual(Buffer.from(actualToken,"hex"),Buffer.from(input.reviewToken,"hex"))) throw new ServiceError("CONFLICT","Assessment details changed during review. Review the latest values before submitting.");
       const errors=validateAssessmentAnswers(form,answers,{requireComplete:true});
@@ -264,7 +264,7 @@ export class AssessmentWorkflowService {
       const [currentScan]=await tx.select({remoteId:assessmentFaceScans.remoteId,state:assessmentFaceScans.state,projection:assessmentFaceScans.projection}).from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId,organizationId),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true)));
       const scanSession=currentScan?.projection?this.unseal<FaceScanSession>(currentScan.projection):null;
       const usableScan=Boolean(currentScan?.state==="COMPLETED" && currentScan.remoteId && hasUsableFaceScan(scanSession));
-      if(scanRequired && !usableScan) throw new ServiceError("VALIDATION_ERROR","A usable face scan result is required before submitting this assessment.");
+      if(scanRequired && !usableScan) throw new ServiceError("VALIDATION_ERROR","A usable Vital IQ result is required before submitting this assessment.");
       const frozen={...state,manifest:form,patient,answers,cycle:row.cycle,faceScanSessionId:usableScan?currentScan!.remoteId:null};
       const attestation:AssessmentSubmissionAttestation={submissionId,cycle:row.cycle,revision:row.revision,confirmedAt:new Date().toISOString(),actorMembershipId:actor.membershipId,actorDisplayName:actor.displayName,statementVersion:input.attestation.statementVersion,reviewedSectionIds:expectedSections};
       await tx.insert(assessmentSubmissions).values({id:submissionId,organizationId,assessmentId:id,revision:row.revision,snapshot:this.seal({...frozen,reports:manifest}),attestation:this.seal(attestation),idempotencyKey:submissionId});

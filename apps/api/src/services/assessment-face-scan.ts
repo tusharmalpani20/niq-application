@@ -44,7 +44,7 @@ export function frozenFaceScanContext(patient: {
   gender: string;
 }, answers: Record<string, unknown>, employeeId: string, posture: FaceScanContext["posture"] = "resting"): FaceScanContext {
   if (isUnderOneYearOldForFaceScan(patient.dateOfBirth))
-    throw new ServiceError("VALIDATION_ERROR", "Face scans are not available for patients under 1 year old.");
+    throw new ServiceError("VALIDATION_ERROR", "Vital IQ is not available for patients under 1 year old.");
   const value = faceScanContextSchema.safeParse({
     dob: patient.dateOfBirth,
     gender: patient.gender === "MALE" ? "male" : patient.gender === "FEMALE" ? "female" : null,
@@ -54,7 +54,7 @@ export function frozenFaceScanContext(patient: {
     posture
   });
   if (!value.success)
-    throw new ServiceError("VALIDATION_ERROR", "Face scan requires a saved date of birth, supported gender, height and current weight.");
+    throw new ServiceError("VALIDATION_ERROR", "Vital IQ requires a saved date of birth, supported gender, height and current weight.");
   return value.data;
 }
 export class AssessmentFaceScanService {
@@ -115,7 +115,7 @@ export class AssessmentFaceScanService {
     return {
       enabled,
       ...(!enabled ? {
-        reason: "Face scan is not enabled for this organization."
+        reason: "Vital IQ is not enabled for this organization."
       } : {}),
       sessions: rows.map(row => this.dto(row)),
       currentSessionId: rows.find(row => row.isCurrent)?.id ?? null
@@ -138,7 +138,7 @@ export class AssessmentFaceScanService {
       return availabilitySchema.parse(JSON.parse(await boundedResponse(response, 16 * 1024)));
     } catch {
       // An uncertain upstream response must not be presented as permission to start a scan.
-      throw new ServiceError("SCORING_UNAVAILABLE", "Face scan availability could not be checked. Please try again.");
+      throw new ServiceError("SCORING_UNAVAILABLE", "Vital IQ availability could not be checked. Please try again.");
     }
   }
   async start(actor: Principal, org: string, assessment: string, input: {
@@ -158,16 +158,16 @@ export class AssessmentFaceScanService {
       this.workflow.editable(assessmentRow, input.revision, actor);
       const patient = await this.workflow.applicationService.getPatient(actor, org, assessmentRow.patientId) as AssessmentPatient;
       if (isUnderOneYearOldForFaceScan(patient.dateOfBirth))
-        throw new ServiceError("VALIDATION_ERROR", "Face scans are not available for patients under 1 year old.");
+        throw new ServiceError("VALIDATION_ERROR", "Vital IQ is not available for patients under 1 year old.");
       const consent = await new FaceScanConsentService(this.workflow).current(actor, org, assessment, tx, context);
       if (!consent || consent.status !== "APPROVED" ||
           (consent.provenance === "SIMULATED" && this.workflow.config.NODE_ENV === "production"))
-        throw new ServiceError("VALIDATION_ERROR", "Patient consent is required before starting a face scan.");
+        throw new ServiceError("VALIDATION_ERROR", "Patient consent is required before starting a Vital IQ measurement.");
       const [existing] = await tx.select().from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId, org), eq(assessmentFaceScans.assessmentId, assessment), eq(assessmentFaceScans.active, true)));
       if (existing)
-        throw new ServiceError("CONFLICT", "A face scan attempt already exists. Restore it before starting another.", { currentSessionId: existing.id });
+        throw new ServiceError("CONFLICT", "A Vital IQ measurement already exists. Restore it before starting another.", { currentSessionId: existing.id });
       if (!this.workflow.config.FACE_SCAN_ENABLED)
-        throw new ServiceError("SCORING_UNAVAILABLE", "Face scan is not enabled.");
+        throw new ServiceError("SCORING_UNAVAILABLE", "Vital IQ is not enabled.");
       const connection = await this.transport(org, undefined, tx);
       const state = this.workflow.unseal<StoredWorkflow>(assessmentRow.workflow);
       const employeeId = this.workflow.config.FACE_SCAN_EMPLOYEE_ID_OVERRIDE ?? `${connection.identity.deploymentId}:${actor.membershipId}`;

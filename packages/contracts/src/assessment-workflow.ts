@@ -96,6 +96,6 @@ export const assessmentScoreResultSchema = z.object({
   if (result.score === null && (result.classification !== null || answered || result.faceScan || result.components.some(component => component.status === "pending")))
     ctx.addIssue({ code: "custom", message: "An unscored result must have only unanswered components" });
   if (result.score !== null && (result.classification === null || !answered && !result.faceScan))
-    ctx.addIssue({ code: "custom", message: "A scored result needs questionnaire or face scan points and a classification" });
+    ctx.addIssue({ code: "custom", message: "A scored result needs questionnaire or Vital IQ points and a classification" });
 });
 export type AssessmentScoreResult = z.infer<typeof assessmentScoreResultSchema>;

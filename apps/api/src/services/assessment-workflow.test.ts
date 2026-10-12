@@ -159,7 +159,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
  test("uncertain scoring freezes edits and preserves retry key",async()=>{let record=await service.read(actor,org,id);
   const scanRequiredWorkflow=new AssessmentWorkflowService({db,applicationService:service.applicationService,config:{...service.config,FACE_SCAN_ENABLED:true},fetcher:async()=>Response.json(faceScanOrganizationInfo)});
   const requiredScanSections=[...record.manifest.sections.map(section=>section.id),"face-scan","attachments"];
-  await expect(scanRequiredWorkflow.submit(actor,org,id,{revision:record.revision,reviewToken:record.reviewToken,attestation:{statementVersion:1,reviewedSectionIds:requiredScanSections,confirmed:true}},context)).rejects.toMatchObject({code:"VALIDATION_ERROR",message:"A usable face scan result is required before submitting this assessment."});
+  await expect(scanRequiredWorkflow.submit(actor,org,id,{revision:record.revision,reviewToken:record.reviewToken,attestation:{statementVersion:1,reviewedSectionIds:requiredScanSections,confirmed:true}},context)).rejects.toMatchObject({code:"VALIDATION_ERROR",message:"A usable Vital IQ result is required before submitting this assessment."});
   expect((await service.read(actor,org,id)).status).toBe("DRAFT");
   const sections=[...record.manifest.sections.map(section=>section.id),"face-scan","attachments"];
   await expect(service.submit(actor,org,id,{revision:record.revision,reviewToken:record.reviewToken,attestation:{statementVersion:1,reviewedSectionIds:sections.slice(1),confirmed:true}},context)).rejects.toMatchObject({code:"VALIDATION_ERROR"});

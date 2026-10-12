@@ -8,7 +8,7 @@ const id = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success)
-    throw new ServiceError("VALIDATION_ERROR", "The face scan request is invalid.");
+    throw new ServiceError("VALIDATION_ERROR", "The Vital IQ request is invalid.");
   return result.data;
 }
 async function json(c: any, maxBytes = 16 * 1024) {

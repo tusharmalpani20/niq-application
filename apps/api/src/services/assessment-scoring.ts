@@ -98,7 +98,7 @@ export async function requestAssessmentScoringCalculate(input: AssessmentScoring
   const reply = await post(input, "calculate", { assessmentReference: input.binding.assessmentReference, idempotencyKey: input.idempotencyKey, answers: answers.data, ...(input.faceScanSessionId ? { faceScanSessionId: input.faceScanSessionId } : {}) });
   if (!reply.response.ok) {
     if (reply.response.status === 422 && z.object({ error: z.literal("FACE_SCAN_UNAVAILABLE") }).safeParse(reply.body).success)
-      throw new AssessmentScoringRequestError("rejected", "FACE_SCAN_UNAVAILABLE", [{ path: "face_scan", code: "FACE_SCAN_UNAVAILABLE", message: "The reviewed face scan is unavailable for scoring." }]);
+      throw new AssessmentScoringRequestError("rejected", "FACE_SCAN_UNAVAILABLE", [{ path: "face_scan", code: "FACE_SCAN_UNAVAILABLE", message: "The reviewed Vital IQ result is unavailable for scoring." }]);
     const rejection = z.object({ error: z.enum(["INVALID_ASSESSMENT_ANSWERS", "ASSESSMENT_INCOMPLETE"]), result: evaluationSchema }).strict().safeParse(reply.body);
     if (rejection.success && sameEvidence(rejection.data.result, input.binding) &&
       (reply.response.status === 400 && rejection.data.error === "INVALID_ASSESSMENT_ANSWERS" && rejection.data.result.issues.length > 0 || reply.response.status === 422 && rejection.data.error === "ASSESSMENT_INCOMPLETE" && !rejection.data.result.complete)) {

@@ -38,8 +38,8 @@ const templates: Record<NotificationKind, Template> = {
     push: { title: "Scoring needs attention", body: "An assessment needs your attention in NIQ." },
   },
   SCAN_FAILED: {
-    inApp: reference => ({ title: "Face scan needs attention", body: `The face scan for ${reference} needs attention.` }),
-    push: { title: "Face scan needs attention", body: "An assessment needs your attention in NIQ." },
+    inApp: reference => ({ title: "Vital IQ needs attention", body: `The Vital IQ measurement for ${reference} needs attention.` }),
+    push: { title: "Vital IQ needs attention", body: "An assessment needs your attention in NIQ." },
   },
 };
 

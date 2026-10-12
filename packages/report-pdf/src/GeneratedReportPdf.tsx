@@ -129,8 +129,8 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
       {report.narrative.overview ? <View style={styles.card}><Text style={[styles.label, { color: brandInk }]}>Clinical overview</Text><Text style={styles.body}>{report.narrative.overview}</Text></View> : <View/>}
       <View style={styles.wrapRow}>{assessmentMetrics.map(metric => <View key={metric.id} style={[styles.card, styles.cardHalf, { borderTopWidth: 3, borderTopColor: secondaryColor }]}><Text style={styles.cardLabel}>{metric.label}</Text><Text style={styles.cardValue}>{metricText(metric)}</Text>{metric.measuredAt && <Text style={styles.small}>{reportDate(metric.measuredAt)}</Text>}</View>)}</View>
     </PdfSection>
-    {faceMetrics.length > 0 && <PdfSection report={report} brand={brand} title="Vital IQ - Face scan">
-      <Text style={styles.intro}>Face-scan readings are separate from the NIQ assessment risk score.</Text>
+    {faceMetrics.length > 0 && <PdfSection report={report} brand={brand} title="Vital IQ">
+      <Text style={styles.intro}>Vital IQ readings are separate from the NIQ assessment risk score.</Text>
       <View style={styles.wrapRow}>{faceMetrics.map(metric => <View key={metric.id} style={[styles.card, styles.cardThird, { borderTopWidth: 3, borderTopColor: secondaryColor }]}><Text style={styles.cardLabel}>{metric.label}</Text><Text style={styles.cardValue}>{metricText(metric)}</Text>{metric.measuredAt && <Text style={styles.small}>{reportDate(metric.measuredAt)}</Text>}</View>)}</View>
     </PdfSection>}
     {(report.classification || weights.length > 0 || report.narrative.keyFindings) && <PdfSection report={report} brand={brand} title="Nutrition status and findings">

@@ -152,7 +152,7 @@ export class ClinicalReviewService {
     if(openScan) {
      const { AssessmentFaceScanService }=await import("./assessment-face-scan");
      const cancelled=await new AssessmentFaceScanService(this.service).mutate(actor,org,id,openScan.id,"cancel");
-     if(cancelled.state!=="CANCELLED")throw new ServiceError("CONFLICT","The face scan is still open. Automatic cancellation was not confirmed; try again when its status updates.");
+     if(cancelled.state!=="CANCELLED")throw new ServiceError("CONFLICT","The Vital IQ measurement is still open. Automatic cancellation was not confirmed. Try again when its status updates.");
     }
    }
   }
@@ -171,7 +171,7 @@ export class ClinicalReviewService {
    const recipient="assigneeId"in input?eligible.find(r=>r.membershipId===input.assigneeId):null;
    if("assigneeId"in input&&!recipient)throw new ServiceError("VALIDATION_ERROR","Choose an active clinician with access to this assessment and patient.");
    const scans=await tx.select().from(assessmentFaceScans).where(and(eq(assessmentFaceScans.organizationId,org),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true)));
-   if(scans.some(scan=>scan.cycle===row.cycle&&(scan.active||(scan.leaseExpiresAt&&scan.leaseExpiresAt>now)||scan.state==="RECONCILIATION_REQUIRED"||scan.failureCode==="RECONCILIATION_REQUIRED")))throw new ServiceError("CONFLICT","Resolve the pending face scan before changing the review workflow.");
+   if(scans.some(scan=>scan.cycle===row.cycle&&(scan.active||(scan.leaseExpiresAt&&scan.leaseExpiresAt>now)||scan.state==="RECONCILIATION_REQUIRED"||scan.failureCode==="RECONCILIATION_REQUIRED")))throw new ServiceError("CONFLICT","Resolve the pending Vital IQ measurement before changing the review workflow.");
    let score:unknown=null;
    if(row.status==="SCORED"||row.status==="UNDER_REVIEW"){
     const [submission]=row.currentSubmissionId?await tx.select().from(assessmentSubmissions).where(and(eq(assessmentSubmissions.id,row.currentSubmissionId),eq(assessmentSubmissions.organizationId,org),eq(assessmentSubmissions.assessmentId,id))):[];
