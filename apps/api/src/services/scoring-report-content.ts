@@ -5,7 +5,8 @@ const bounded = z.string().max(6000);
 const guidanceText = z.string().max(12000);
 const narrative = z.object({ text: bounded, evidenceIds: z.array(z.string().max(200)).max(100) });
 const id = z.string().max(200);
-const productPlan = z.object({ id, stage: id, nutritionalStatus: bounded, products: guidanceText, dose: guidanceText, duration: guidanceText });
+const productPlan = z.object({ id, stage: id, nutritionalStatus: bounded, products: guidanceText, dose: guidanceText, duration: guidanceText,
+  items: z.array(z.object({ productName: bounded, quantityPerDay: z.number().int().min(1).max(100).optional(), description: guidanceText.optional() })).max(20).optional() });
 // Parse only selected guidance fields that the Application can display. Zod strips
 // unexpected Scoring fields before this packet can enter a patient report snapshot.
 const carePlan = z.object({

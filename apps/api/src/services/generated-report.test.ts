@@ -108,6 +108,20 @@ test("matched treatment, status, co-morbidity, product, and exception guidance e
   expect(result.sections.find(row => row.id === "exception")?.text).toBe("Use once daily.");
 });
 
+test("structured product quantities appear once with preparation and duration", () => {
+  const selected = structuredClone(packet) as any;
+  selected.guidance.carePlan.products = { status: "selected", plans: [{
+    id: "surgical", stage: "surgical", nutritionalStatus: "severely_malnourished",
+    products: "Invigour + Liss WH", dose: "1 Invigour + 2 leveled scoops in 150ml water", duration: "30 days after surgery",
+    items: [{ productName: "Invigour", quantityPerDay: 1 }, { productName: "Liss WH", quantityPerDay: 2, description: "leveled scoops in 150ml water" }],
+  }], notes: [] };
+  const parsed = scoringReportContentSchema.parse(selected);
+  expect(parsed.guidance.carePlan.products.plans[0]?.items).toHaveLength(2);
+  expect(normalizeGuidance(parsed, manifest).sections[0]?.text).toBe("1 Invigour + Liss WH: 2 leveled scoops in 150ml water\n30 days after surgery");
+  selected.guidance.carePlan.products.plans[0].items[1].quantityPerDay = undefined;
+  expect(normalizeGuidance(scoringReportContentSchema.parse(selected), manifest).sections).toEqual([]);
+});
+
 test("a compound source topic is displayed using only the symptom actually reported", () => {
   const selected = structuredClone(packet) as any;
   selected.guidance.possibleToxicities = [];
