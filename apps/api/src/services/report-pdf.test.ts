@@ -26,6 +26,9 @@ test("server renders a branded PDF with or without a valid logo", async () => {
     expect(Buffer.from(bytes.subarray(0, 5)).toString()).toBe("%PDF-");
     expect(bytes.length).toBeGreaterThan(1000);
   }
+  const imageCount = (bytes: Uint8Array) => Buffer.from(bytes).toString("latin1").match(/\/Subtype\s*\/Image\b/g)?.length ?? 0;
+  expect(imageCount(withoutLogo)).toBeGreaterThan(imageCount(withWebp));
+  expect(imageCount(withDamagedLogo)).toBe(imageCount(withoutLogo));
 });
 
 test("a new PDF uses the organization's current color theme", async () => {

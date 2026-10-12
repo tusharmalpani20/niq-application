@@ -5,7 +5,14 @@ import { cleanWeights, metricText, reportAge, reportDate, reportGuidance } from 
 import { weightChartPoints } from "./generated-report-chart";
 import { accessibleBrandInk } from "./accessible-brand-ink";
 
-export type PdfBrand = { name: string; primaryColor: string; secondaryColor?: string; logoDataUrl: string | null };
+export type PdfBrand = {
+  name: string;
+  primaryColor: string;
+  secondaryColor?: string;
+  logoDataUrl: string | null;
+  applicationLogoDataUrl?: string | null;
+  partnerLogoDataUrl?: string | null;
+};
 type Metric = GeneratedReport["metrics"][number];
 type IconName = "person" | "heart" | "shield" | "weight" | "height" | "chart" | "drop" | "pulse" | "lungs" | "food" | "package" | "calendar" | "clipboard" | "check" | "alert";
 type Palette = { primary: string; secondary: string; ink: string; muted: string; soft: string; softSecondary: string; line: string; white: string };
@@ -32,6 +39,12 @@ const styles = StyleSheet.create({
   cover: { backgroundColor: "#ffffff", color: "#193744", fontFamily: "NIQ Sans", paddingTop: 39, paddingBottom: 48, paddingHorizontal: 43 },
   coverLogo: { width: 132, height: 54, objectFit: "contain" },
   headerLogo: { width: 73, height: 28, objectFit: "contain" },
+  coverBrandMarks: { flexDirection: "row", alignItems: "center", gap: 12 },
+  headerBrandMarks: { flexDirection: "row", alignItems: "center", gap: 7 },
+  coverApplicationLogo: { width: 87, height: 53, objectFit: "contain" },
+  headerApplicationLogo: { width: 56, height: 34, objectFit: "contain" },
+  coverPartnerLogo: { width: 126, height: 42, objectFit: "contain" },
+  headerPartnerLogo: { width: 91, height: 31, objectFit: "contain" },
   brandName: { fontSize: 16, fontWeight: 700 },
   brandNameSmall: { fontSize: 9, fontWeight: 700, width: 108, textAlign: "right" },
   coverKicker: { fontSize: 9, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 14 },
@@ -99,9 +112,17 @@ function Icon({ name, color, size = 21 }: { name: IconName; color: string; size?
 }
 
 function PdfLogo({ brand, cover = false }: { brand: PdfBrand; cover?: boolean }) {
-  return brand.logoDataUrl
-    ? <Image src={brand.logoDataUrl} style={cover ? styles.coverLogo : styles.headerLogo}/>
-    : <Text style={cover ? styles.brandName : styles.brandNameSmall}>{brand.name}</Text>;
+  if (brand.logoDataUrl) return <Image src={brand.logoDataUrl} style={cover ? styles.coverLogo : styles.headerLogo}/>;
+  if (!brand.applicationLogoDataUrl || !brand.partnerLogoDataUrl) {
+    return <Text style={cover ? styles.brandName : styles.brandNameSmall}>{brand.name}</Text>;
+  }
+  return <View style={cover ? styles.coverBrandMarks : styles.headerBrandMarks}>
+    <Image src={brand.applicationLogoDataUrl} style={cover ? styles.coverApplicationLogo : styles.headerApplicationLogo}/>
+    <View style={{ borderLeftWidth: 1, borderLeftColor: "#dce9ec", paddingLeft: cover ? 11 : 7, alignItems: "center" }}>
+      <Image src={brand.partnerLogoDataUrl} style={cover ? styles.coverPartnerLogo : styles.headerPartnerLogo}/>
+      <Text style={{ color: "#59717c", fontSize: cover ? 7 : 5.7, fontWeight: 700 }}>Knowledge Partner</Text>
+    </View>
+  </View>;
 }
 
 function ReportPage({ report, brand, number, title, icon, children }: { report: GeneratedReport; brand: PdfBrand; number: number; title: string; icon: IconName; children: ReactNode }) {
@@ -318,7 +339,13 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
   let page = 1;
   return <Document title={`Medical nutrition therapy report - ${report.assessment.reference}`} author={brand.name} subject="Clinical nutrition assessment">
     <Page size="A4" style={styles.cover}>
-      <View style={{ position: "absolute", top: 0, right: 0, width: 260, height: 550 }}><Svg width="260" height="550" viewBox="0 0 260 550"><Path d="M270 -30C90 40 20 168 75 292c39 87 108 129 207 141" stroke={theme.primary} strokeWidth="78" fill="none" opacity=".12"/><Path d="M280 28C145 77 95 181 132 290c29 85 86 112 149 134" stroke={theme.secondary} strokeWidth="16" fill="none" opacity=".65"/><Circle cx="177" cy="254" r="46" fill={theme.primary} opacity=".12"/><Path d="M103 424c8-58 31-89 76-89s68 31 76 89" fill={theme.primary} opacity=".15"/></Svg></View>
+      <View style={{ position: "absolute", top: 126, right: -46, width: 310, height: 385 }}><Svg width="310" height="385" viewBox="0 0 310 385">
+        <Circle cx="193" cy="192" r="146" fill={theme.soft} opacity=".65"/>
+        <Circle cx="193" cy="192" r="116" stroke={theme.primary} strokeWidth="19" fill="none" opacity=".13"/>
+        <Circle cx="193" cy="192" r="87" stroke={theme.secondary} strokeWidth="1.6" fill="none" opacity=".34"/>
+        <Path d="M151 224c20-56 57-86 102-79-2 45-24 83-70 91-18 3-29-1-32-12Z" stroke={theme.primary} strokeWidth="4" fill={theme.white} opacity=".82"/>
+        <Path d="M152 225c28-20 53-36 87-47M189 204l-5-27M211 191l18 14" stroke={theme.primary} strokeWidth="3" fill="none" opacity=".7"/>
+      </Svg></View>
       <PdfLogo brand={brand} cover/>
       <View style={{ marginTop: 98 }}><Text style={[styles.coverKicker, { color: brandInk }]}>Personalised clinical nutrition</Text><Text style={styles.coverTitle}>Medical{"\n"}Nutrition{"\n"}Therapy Report</Text></View>
       <View style={{ position: "absolute", left: 43, right: 43, bottom: 164 }}><View style={{ height: 4, width: 82, borderRadius: 2, backgroundColor: theme.primary, marginBottom: 22 }}/><Text style={styles.coverPatient}>{report.patient.displayName}</Text><Text style={styles.coverDetail}>{[report.patient.reference, age === null ? null : `${age} years`, report.patient.gender].filter(Boolean).join("  |  ")}</Text><Text style={styles.coverDetail}>Assessment {report.assessment.reference}  |  {reportDate(report.assessment.completedAt)}</Text></View>

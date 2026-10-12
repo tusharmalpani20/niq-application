@@ -15,19 +15,37 @@ export type ReportPdfBrand = {
 };
 
 let fontsReady: Promise<void> | null = null;
+let defaultBrandMarksReady: Promise<{ applicationLogoDataUrl: string; partnerLogoDataUrl: string }> | null = null;
 
-function fontPath(name: string): string {
+function assetPath(name: string): string {
   const moduleDirectory = dirname(fileURLToPath(import.meta.url));
   // Source files and the deployed bundle have different paths relative to assets.
   const candidates = [resolve(moduleDirectory, "../assets", name), resolve(moduleDirectory, "../../assets", name)];
   const path = candidates.find(candidate => existsSync(candidate));
-  if (!path) throw new Error(`Report font asset is missing: ${name}`);
+  if (!path) throw new Error(`Report asset is missing: ${name}`);
   return path;
 }
 
 async function fontDataUrl(name: string): Promise<string> {
-  const bytes = await Bun.file(fontPath(name)).arrayBuffer();
+  const bytes = await Bun.file(assetPath(name)).arrayBuffer();
   return `data:font/ttf;base64,${Buffer.from(bytes).toString("base64")}`;
+}
+
+async function pngDataUrl(name: string): Promise<string> {
+  const bytes = await Bun.file(assetPath(name)).arrayBuffer();
+  return `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`;
+}
+
+function defaultBrandMarks() {
+  if (!defaultBrandMarksReady) {
+    defaultBrandMarksReady = Promise.all([pngDataUrl("nutra-iq-logo.png"), pngDataUrl("eioms-logo.png")])
+      .then(([applicationLogoDataUrl, partnerLogoDataUrl]) => ({ applicationLogoDataUrl, partnerLogoDataUrl }))
+      .catch(error => {
+        defaultBrandMarksReady = null;
+        throw error;
+      });
+  }
+  return defaultBrandMarksReady;
 }
 
 function ensureReportFonts(): Promise<void> {
@@ -60,9 +78,10 @@ async function logoDataUrl(logo: ReportPdfBrand["logo"]): Promise<string | null>
 export async function renderGeneratedReportPdf(report: GeneratedReport, brand: ReportPdfBrand): Promise<Uint8Array> {
   await ensureReportFonts();
   const dataUrl = await logoDataUrl(brand.logo);
+  const brandMarks = dataUrl ? null : await defaultBrandMarks();
   const document = createElement(GeneratedReportPdf, {
     report,
-    brand: { name: brand.name, primaryColor: brand.primaryColor, secondaryColor: brand.secondaryColor, logoDataUrl: dataUrl },
+    brand: { name: brand.name, primaryColor: brand.primaryColor, secondaryColor: brand.secondaryColor, logoDataUrl: dataUrl, ...brandMarks },
   });
   const blob = await pdf(document as Parameters<typeof pdf>[0]).toBlob();
   const bytes = new Uint8Array(await blob.arrayBuffer());
