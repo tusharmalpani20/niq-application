@@ -216,9 +216,8 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
         import("@react-pdf/renderer"), import("./GeneratedReportPdf"),
       ]);
       registerReportPdfFonts(regularFont, boldFont);
-      // The candidate stays private until clinician approval; it is the exact final-style file that will be released.
-      const candidate = { ...report, status: "APPROVED" as const };
-      const blob = await pdf(<GeneratedReportPdf report={candidate} brand={{ name: branding.displayName, primaryColor: branding.primaryColor, secondaryColor: branding.secondaryColor, logoDataUrl }}/>).toBlob();
+      // Approval status is kept in Application so the reviewed bytes can be released unchanged.
+      const blob = await pdf(<GeneratedReportPdf report={report} brand={{ name: branding.displayName, primaryColor: branding.primaryColor, secondaryColor: branding.secondaryColor, logoDataUrl }}/>).toBlob();
       if (!blob.size) throw new Error("The PDF was empty. Try preparing it again.");
       const [brandingFingerprint, preparedSha256] = await Promise.all([reportBrandingFingerprint(latestOrganization), pdfSha256(blob)]);
       const uploaded = await uploadGeneratedReportPdf(user.organizationId, assessmentId, report.revision, brandingFingerprint, blob);

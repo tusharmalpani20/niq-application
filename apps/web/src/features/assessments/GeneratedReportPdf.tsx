@@ -38,7 +38,6 @@ const styles = StyleSheet.create({
   pageBrand: { fontSize: 9, fontWeight: 700, color: muted },
   headerLogo: { width: 75, height: 27, objectFit: "contain" },
   footer: { position: "absolute", top: 795, left: 43, right: 43, flexDirection: "row", justifyContent: "space-between", paddingTop: 7, borderTopWidth: 1, borderTopColor: border, color: muted, fontSize: 7.5 },
-  watermark: { position: "absolute", top: 410, left: 85, color: "#d9dfe0", opacity: 0.6, fontSize: 32, transform: "rotate(-30deg)" },
   intro: { marginBottom: 15, color: muted, fontSize: 9.5 },
   row: { flexDirection: "row", gap: 9 },
   wrapRow: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
@@ -76,7 +75,6 @@ function PdfSection({ report, brand, title, children }: { report: GeneratedRepor
   return <Page size="A4" style={styles.page} wrap>
     <View fixed style={[styles.pageHeader, { borderBottomColor: color }]}><Text style={[styles.pageTitle, { color: headerColor }]}>{title}</Text><PdfLogo brand={brand}/></View>
     <View fixed style={styles.footer}><Text>{brand.name} | Clinical nutrition report</Text><Text render={({ pageNumber, totalPages }) => `${report.assessment.reference} | ${pageNumber} / ${totalPages}`}/></View>
-    {report.status !== "APPROVED" && <Text fixed style={styles.watermark}>DRAFT - NOT APPROVED</Text>}
     {children}
   </Page>;
 }
@@ -117,14 +115,13 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
   return <Document title={`Clinical nutrition report - ${report.assessment.reference}`} author={brand.name} subject="Clinical nutrition assessment">
     <Page size="A4" style={[styles.cover, { backgroundColor: tint(color, 0.045) }]}>
       <PdfLogo brand={brand} cover/>
-      <Text style={[styles.kicker, { color: brandInk, marginTop: 90 }]}>{report.status === "APPROVED" ? "Approved assessment report" : "Draft for clinical review"}</Text>
+      <Text style={[styles.kicker, { color: brandInk, marginTop: 90 }]}>Clinical assessment report</Text>
       <Text style={styles.coverTitle}>Medical{"\n"}Nutrition{"\n"}Therapy Report</Text>
       <Svg width="460" height="175"><Path d="M 230 170 C 260 10, 395 -10, 470 75" stroke={color} strokeWidth="32" fill="none" opacity="0.15"/><Path d="M 280 180 C 310 55, 405 25, 470 90" stroke={secondaryColor} strokeWidth="9" fill="none" opacity="0.6"/></Svg>
       <Text style={styles.coverPatient}>{report.patient.displayName}</Text>
       <Text style={styles.coverDetail}>{report.patient.reference} | {report.assessment.reference}</Text>
       {report.assessment.completedAt && <Text style={styles.coverDetail}>Assessment: {reportDate(report.assessment.completedAt)}</Text>}
-      <View style={[styles.coverBand, { backgroundColor: softColor }]}><Text style={styles.coverBandText}>Rule-based guidance  |  {report.status === "APPROVED" ? "Clinician approved" : "Clinical review required"}  |  Built around the saved assessment</Text></View>
-      {report.status !== "APPROVED" && <Text fixed style={styles.watermark}>DRAFT - NOT APPROVED</Text>}
+      <View style={[styles.coverBand, { backgroundColor: softColor }]}><Text style={styles.coverBandText}>Rule-based guidance  |  Verify approval in NIQ Application</Text></View>
       <View fixed style={styles.footer}><Text>{brand.name}</Text><Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}/></View>
     </Page>
     <PdfSection report={report} brand={brand} title="Patient overview">
