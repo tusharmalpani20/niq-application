@@ -74,7 +74,7 @@ const readyReport: GeneratedReport = {
     decision: { productStageChoice: null, plannedTreatmentStartDate: null },
     narrative: { overview: "Reviewed patient overview", keyFindings: "Current weight is 62 kg and blood pressure is 131/84 mmHg.", actionSummary: "Reviewed action plan", monitoringSummary: "Reviewed monitoring plan", nutritionAdvice: "Reviewed nutrition guidance", treatmentAdvice: "Reviewed treatment guidance", conditionAdvice: "Reviewed condition guidance", effectsAdvice: "Reviewed effects guidance" },
     guidance: { sections: [
-      { id: "nutrition-1", kind: "nutrition", title: "Matched rule", text: "Raw rule wording for internal guidance" },
+      { id: "nutrition-1", kind: "nutrition", title: "Matched rule", text: "Energy: 30–35 kcal/kg/day\nProtein: 1.5–2.0 g/kg/day\nRaw rule wording for internal guidance" },
       { id: "product-1", kind: "product", title: "Product plan", text: "1 Invigour + 2 Protect\nAt least 90 days during treatment" },
     ] },
     issues: [],
@@ -91,6 +91,9 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect(document.querySelector('[aria-label="Generated clinical nutrition report"]')).not.toBeNull();
     expect(document.body.textContent).toContain("Reviewed patient overview");
     expect(document.body.textContent).toContain("Reviewed nutrition guidance");
+    expect(document.querySelectorAll(".cr-nutrition-target-card").length).toBe(2);
+    expect(document.querySelector(".cr-nutrition-targets")?.textContent).toContain("30–35 kcal/kg/day");
+    expect(document.querySelector(".cr-nutrition-targets")?.textContent).toContain("1.5–2.0 g/kg/day");
     expect(document.body.textContent).toContain("Supplement recommendation");
     expect(document.body.textContent).toContain("Reviewed treatment guidance");
     expect(document.body.textContent).toContain("Reviewed condition guidance");
@@ -117,6 +120,17 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect(document.querySelector("a[download]")?.getAttribute("download")).toBe("NIQ-report-NIQ-12.pdf");
     await act(async () => { (document.querySelectorAll(".cr-preview-tab")[1] as HTMLButtonElement).click(); });
     expect(document.querySelector('[aria-label="Medical nutrition therapy report PDF preview"]')).not.toBeNull();
+  });
+});
+
+test("kidney guidance replaces fixed nutrition targets with an individualisation caution", async () => {
+  const caution = "Dietary recommendations should be individualized based on renal function, electrolyte status, fluid intake/output, and overall nutritional status, in consultation with the treating oncologist and/or oncology dietitian.";
+  const report: GeneratedReport = { ...readyReport, guidance: { sections: [...readyReport.guidance.sections, { id: "comorbidity_kidney_disease", kind: "comorbidity", title: "Kidney disease", text: caution }] } };
+  await renderWithResponse({ report, generation: { status: "READY" } }, () => {
+    expect(document.querySelector(".cr-renal-caution")?.textContent).toContain("Individualise nutrition targets");
+    expect(document.querySelector(".cr-renal-caution")?.textContent).toContain(caution);
+    expect(document.querySelector(".cr-nutrition-targets")).toBeNull();
+    expect(document.body.textContent).not.toContain("30–35 kcal/kg/day");
   });
 });
 

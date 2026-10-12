@@ -1,4 +1,4 @@
-import { Activity, BicepsFlexed, Brain, Calculator, CalendarDays, ChartNoAxesCombined, ClipboardList, Droplets, Gauge, HeartPulse, Leaf, Package, Ruler, Scale, ShieldCheck, Soup, Stethoscope, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
+import { Activity, BicepsFlexed, Brain, Calculator, CalendarDays, ChartNoAxesCombined, ClipboardList, Droplets, Gauge, HeartPulse, Leaf, Package, Ruler, Scale, ShieldCheck, Soup, Stethoscope, TriangleAlert, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
 import { reportFaceScanAdditionalMetricGroups, riskColorHex } from "@niq/application-contracts";
 import { useBranding } from "@/lib/branding-context";
 import { BrandMarks } from "@/components/BrandMarks";
@@ -108,6 +108,25 @@ function ProductPlan({ report }: { report: GeneratedReport }) {
   </section>;
 }
 
+function targetValue(text: string, label: "energy" | "protein") {
+  const match = new RegExp(`${label}[:\\s]*([0-9]+(?:\\.[0-9]+)?\\s*[–-]\\s*[0-9]+(?:\\.[0-9]+)?\\s*${label === "energy" ? "kcal" : "g"}\\s*\\/\\s*kg\\s*\\/\\s*day)`, "i").exec(text);
+  return match?.[1]?.replace(/\s+/g, " ") ?? null;
+}
+
+function nutritionTargets(report: GeneratedReport) {
+  const source = reportGuidance(report, "nutrition").map(item => item.text).join("\n");
+  return [
+    { label: "Energy target", value: targetValue(source, "energy"), icon: Activity },
+    { label: "Protein target", value: targetValue(source, "protein"), icon: BicepsFlexed },
+  ].filter((item): item is { label: string; value: string; icon: LucideIcon } => Boolean(item.value));
+}
+
+function renalIndividualizationGuidance(report: GeneratedReport) {
+  return reportGuidance(report, "comorbidity").find(section =>
+    (section.id === "comorbidity_kidney_disease" || /\b(kidney|renal)\b/i.test(section.title)) &&
+    /\bindividuali[sz]/i.test(section.text));
+}
+
 function WeightTrend({ report }: { report: GeneratedReport }) {
   const weights = cleanWeights(report);
   if (!weights.length) return null;
@@ -150,7 +169,9 @@ export function GeneratedReportPreview({ report }: { report: GeneratedReport }) 
   const clinicalFinding = report.narrative.keyFindings?.trim();
   const showClinicalFinding = Boolean(clinicalFinding && !isObservationOnlyFinding(clinicalFinding));
   const hasProductPlan = reportGuidance(report, "product").some(item => item.title.toLowerCase() === "product plan");
-  const hasNutritionGuidance = Boolean(report.narrative.nutritionAdvice?.trim() || report.narrative.treatmentAdvice?.trim() || hasProductPlan);
+  const renalGuidance = renalIndividualizationGuidance(report);
+  const targets = renalGuidance ? [] : nutritionTargets(report);
+  const hasNutritionPage = Boolean(report.narrative.nutritionAdvice?.trim() || report.narrative.treatmentAdvice?.trim() || hasProductPlan || targets.length || renalGuidance);
   const hasCareAdvice = Boolean(report.narrative.conditionAdvice?.trim() || report.narrative.effectsAdvice?.trim());
   const riskColor = riskColorHex(report.classification?.color);
   let page = 0;
@@ -195,8 +216,11 @@ export function GeneratedReportPreview({ report }: { report: GeneratedReport }) 
       {showClinicalFinding && <section className="cr-clinical-interpretation"><h3>Clinical interpretation</h3><p>{clinicalFinding}</p></section>}
       <WeightTrend report={report}/>
     </ReportSheet>}
-    {hasNutritionGuidance && <ReportSheet number={nextPage() + 1} title="Nutrition plan" icon={Utensils} report={report} compact>
-      <div className="cr-care-stack"><ReviewedAdvice title="Nutrition guidance" text={report.narrative.nutritionAdvice} icon={Soup}/>
+    {hasNutritionPage && <ReportSheet number={nextPage() + 1} title="Nutrition plan" icon={Utensils} report={report} compact>
+      <div className="cr-care-stack">
+      {targets.length > 0 && <section className="cr-nutrition-targets"><h3>Daily nutrition targets</h3><div className="cr-nutrition-target-grid">{targets.map(target => { const Icon = target.icon; return <div className="cr-nutrition-target-card" key={target.label}><Icon size={22} aria-hidden="true"/><span>{target.label}</span><strong>{target.value}</strong></div>; })}</div></section>}
+      {renalGuidance && <section className="cr-renal-caution"><div className="cr-advice-heading"><span className="cr-advice-icon"><TriangleAlert size={20} aria-hidden="true"/></span><h3>Individualise nutrition targets</h3></div><p>{renalGuidance.text}</p></section>}
+      <ReviewedAdvice title="Nutrition guidance" text={report.narrative.nutritionAdvice} icon={Soup}/>
       <ProductPlan report={report}/>
       <ReviewedAdvice title="During treatment" text={report.narrative.treatmentAdvice} icon={ShieldCheck}/></div>
     </ReportSheet>}
