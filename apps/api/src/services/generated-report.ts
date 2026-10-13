@@ -175,7 +175,7 @@ export function normalizeGuidance(content: ScoringReportContent, manifest: Asses
   return {sections,issues};
 }
 
-export function reportClinicalFacts(answers: FormAnswers, manifest: AssessmentFormManifest): NonNullable<GeneratedReport["clinicalFacts"]> {
+export function reportClinicalFacts(answers: FormAnswers, manifest: AssessmentFormManifest, assessmentDate?: string): NonNullable<GeneratedReport["clinicalFacts"]> {
   const facts: NonNullable<GeneratedReport["clinicalFacts"]> = [];
   const selected = (id: string) => {
     const answer = value(answers[id]);
@@ -188,7 +188,14 @@ export function reportClinicalFacts(answers: FormAnswers, manifest: AssessmentFo
   add("Diagnosis", selected("cancer_type") === "Other" ? value(answers.cancer_type_other) : selected("cancer_type"));
   add("Disease stage", selected("stage"));
   add("Treatment status", selected("treatment_status"));
-  add("Current treatment", selectedList("current_cancer_treatment"));
+  const plannedStart = value(answers.planned_treatment_start_date);
+  const treatmentIsPlanned = Boolean(plannedStart && assessmentDate && plannedStart > assessmentDate);
+  add(treatmentIsPlanned ? "Planned treatment" : "Current treatment", selectedList("current_cancer_treatment"));
+  if (treatmentIsPlanned && plannedStart) {
+    const date = new Date(`${plannedStart}T00:00:00Z`);
+    if (!Number.isNaN(date.valueOf()))
+      add("Planned treatment start", date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }));
+  }
   add("Drug class", selectedList("drug_classes"));
   add("Other conditions", selectedList("co_morbidities"));
   add("Diet", selected("diet_preference"));
@@ -464,7 +471,7 @@ export class GeneratedReportService {
         classification:{id:source.risk.id!,label:source.risk.label ?? generated.classification.label,score:source.reviewedScore,
           ...(source.risk.color ? {color:source.risk.color} : {})},
         metrics,weightHistory,decision,
-        clinicalFacts:reportClinicalFacts(frozen.answers,frozen.manifest),
+        clinicalFacts:reportClinicalFacts(frozen.answers,frozen.manifest,dateOnly(assessment.completedAt!)),
         productPlans:reportProductPlans(generated),
         productCatalog:reportProductCatalog(generated),
         narrative:normalizeNarrative(generated.narrative),

@@ -252,6 +252,11 @@ test("clinical background uses submitted answer labels and omits unanswered fiel
     { label: "Diagnosis", value: "Breast cancer" }, { label: "Disease stage", value: "Localised" },
     { label: "Current treatment", value: "Chemotherapy" }, { label: "Diet", value: "Vegetarian" },
   ]);
+  expect(reportClinicalFacts({ cancer_type: "cancer_breast", treatment_status: "treatment_status_newly_diagnosed",
+    current_cancer_treatment: ["chemotherapy"], planned_treatment_start_date: "2026-10-20" }, form, "2026-10-13")).toContainEqual(
+    { label: "Planned treatment", value: "Chemotherapy" });
+  expect(reportClinicalFacts({ current_cancer_treatment: ["chemotherapy"], planned_treatment_start_date: "2026-10-20" }, form, "2026-10-13")).toContainEqual(
+    { label: "Planned treatment start", value: "20 Oct 2026" });
 });
 
 test("selected product schedule retains rule instructions as structured report data", () => {
