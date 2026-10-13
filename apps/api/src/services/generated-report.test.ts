@@ -25,6 +25,15 @@ const manifest = { sections: [{ fields: [
   { id: "current_cancer_treatment", options: [{ id: "radiation", label: "Radiotherapy" }] },
 ] }] } as any;
 
+test("class and treatment candidates parse without a toxicity label and stay out of patient sections", () => {
+  const current = structuredClone(packet) as any;
+  current.guidance.possibleToxicities = [{ id: "candidate", classId: "taxanes", treatmentTypeId: "radiation",
+    nutritionalInterventions: "Consider soft foods if mouth discomfort occurs.", requiresDrugConfirmation: false }];
+  const parsed = scoringReportContentSchema.parse(current);
+  expect(parsed.guidance.possibleToxicities?.[0]).toMatchObject({ id: "candidate", requiresDrugConfirmation: false });
+  expect(normalizeGuidance(parsed, manifest).sections.some(section => section.id === "candidate")).toBe(false);
+});
+
 test("report-content request binds the clinician-reviewed score and result reference", async () => {
   let sent: any;
   const result = await requestScoringReportContent({ baseUrl: "http://scoring.test", credential: "private", requestId: "r1", timeoutMs: 1000,
