@@ -377,6 +377,13 @@
     break-after: auto;
     page-break-after: auto;
   }
+  /* Keep the page number anchored when a dense sheet uses the available page height. */
+  body.cr-print-document .cr-sheet-footer {
+    position: absolute;
+    right: 13mm;
+    bottom: 10mm;
+    left: 13mm;
+  }
   body.cr-print-document .cr-sheet-header,
   body.cr-print-document .cr-sheet-footer,
   body.cr-print-document .cr-advice-block,
