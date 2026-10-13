@@ -293,3 +293,45 @@
   .cr-preview-heading { flex-direction: column; gap: .1rem; }
   .cr-html-preview { padding: .65rem; }
 }
+
+/* The issued PDF prints the same report markup as the browser preview. */
+@page { size: A4; margin: 0; }
+
+@media print {
+  body.cr-print-document { width: 210mm; min-width: 0; margin: 0; background: #fff; }
+  body.cr-print-document .clinical-report {
+    display: block;
+    width: 210mm;
+    max-width: none;
+    margin: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.cr-print-document .cr-sheet {
+    width: 210mm;
+    height: 297mm;
+    min-height: 0;
+    padding: 12mm 13mm 10mm;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    break-after: page;
+    break-inside: avoid;
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+  body.cr-print-document .cr-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  body.cr-print-document .cr-sheet-header,
+  body.cr-print-document .cr-sheet-footer,
+  body.cr-print-document .cr-advice-block,
+  body.cr-print-document .cr-supplement,
+  body.cr-print-document .cr-metric-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  body.cr-print-document .cr-sheet-nutrition .cr-care-stack,
+  body.cr-print-document .cr-sheet-care .cr-care-grid { margin-block: 0; }
+}
