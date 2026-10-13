@@ -53,6 +53,11 @@ export function assertReportPdfDownloadable(issues: string[]) {
   if (issues.length) throw new ServiceError("NOT_FOUND", "A final report PDF is not available.");
 }
 
+export function assertReadyPdfRefresh(status: string, issues: string[]) {
+  if (status !== "READY") throw new ServiceError("CONFLICT", "Only a ready report PDF can be refreshed.");
+  if (issues.length) throw new ServiceError("CONFLICT", "Resolve report-generation issues before refreshing the PDF.");
+}
+
 export function cleanReportText(text: string): string {
   return text.replace(/;/g, ".").replace(/—/g, " - ")
     .replace(/[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Modifier}\uFE0F\u200D\u20E3]/gu, "")
@@ -102,12 +107,14 @@ export function assertGeneratedPdf(pdf: Buffer) {
 export function prepareNarrativeEdit(data: ReportData, input: { narrative: Partial<GeneratedNarrative>; issueResolution?: { explanation: string } }, clinicianName: string, now: Date) {
   const narrative = Object.fromEntries(Object.entries({ ...data.narrative, ...input.narrative })
     .map(([field, text]) => [field, cleanReportText(text)])) as GeneratedNarrative;
+  const narrativeEvidence = { ...data.narrativeEvidence };
+  for (const field of Object.keys(input.narrative) as Array<keyof GeneratedNarrative>) delete narrativeEvidence[field];
   if (input.issueResolution && !data.issues.length) throw new ServiceError("VALIDATION_ERROR", "There are no generation issues to resolve.");
   const resolution = input.issueResolution
     ? { originalIssues: data.issues, explanation: input.issueResolution.explanation, clinicianName, resolvedAt: now.toISOString() }
     : data.issueResolution;
   const omittedNarrativeFields = data.omittedNarrativeFields?.filter(field => !narrative[field]);
-  return { data: { ...data, narrative, omittedNarrativeFields, ...(input.issueResolution ? { issues: [], issueResolution: resolution } : {}) }, resolvedIssueCount: input.issueResolution ? data.issues.length : 0 };
+  return { data: { ...data, narrative, narrativeEvidence, omittedNarrativeFields, ...(input.issueResolution ? { issues: [], issueResolution: resolution } : {}) }, resolvedIssueCount: input.issueResolution ? data.issues.length : 0 };
 }
 
 export function normalizeNarrative(content: ScoringReportContent["narrative"]): GeneratedNarrative {
@@ -166,6 +173,52 @@ export function normalizeGuidance(content: ScoringReportContent, manifest: Asses
   // An unresolved product plan contributes no recommendation. Missing facts
   // do not trigger a second exchange with the patient or block other content.
   return {sections,issues};
+}
+
+export function reportClinicalFacts(answers: FormAnswers, manifest: AssessmentFormManifest): NonNullable<GeneratedReport["clinicalFacts"]> {
+  const facts: NonNullable<GeneratedReport["clinicalFacts"]> = [];
+  const selected = (id: string) => {
+    const answer = value(answers[id]);
+    return answer ? fieldLabel(manifest, id, answer) : undefined;
+  };
+  const selectedList = (id: string) => list(answers[id]).map(option => fieldLabel(manifest, id, option)).filter(nonempty).join(", ");
+  const add = (label: string, detail: string | undefined) => {
+    if (detail?.trim()) facts.push({ label, value: cleanReportText(detail) });
+  };
+  add("Diagnosis", selected("cancer_type") === "Other" ? value(answers.cancer_type_other) : selected("cancer_type"));
+  add("Disease stage", selected("stage"));
+  add("Treatment status", selected("treatment_status"));
+  add("Current treatment", selectedList("current_cancer_treatment"));
+  add("Drug class", selectedList("drug_classes"));
+  add("Other conditions", selectedList("co_morbidities"));
+  add("Diet", selected("diet_preference"));
+  add("Reported symptoms", selectedList("gastrointestinal_symptoms"));
+  return facts;
+}
+
+export function reportProductPlans(content: ScoringReportContent): NonNullable<GeneratedReport["productPlans"]> {
+  if (content.guidance.carePlan.products.status !== "selected") return [];
+  return content.guidance.carePlan.products.plans
+    .filter(plan => plan.items?.length)
+    .map(plan => ({ id: plan.id, duration: cleanReportText(plan.duration),
+      ...(plan.durationAmount ? { durationAmount: plan.durationAmount } : {}),
+      items: plan.items!.map(item => ({ productName: cleanReportText(item.productName),
+        ...(item.quantityPerDay ? { quantityPerDay: item.quantityPerDay } : {}),
+        ...(item.description ? { description: cleanReportText(item.description) } : {}),
+        ...(item.unit ? { unit: cleanReportText(item.unit) } : {}),
+        ...(item.timesPerDay ? { timesPerDay: item.timesPerDay } : {}),
+        ...(item.preparation ? { preparation: cleanReportText(item.preparation) } : {}),
+        ...(item.mealTiming ? { mealTiming: cleanReportText(item.mealTiming) } : {}),
+        ...(item.rationale ? { rationale: cleanReportText(item.rationale) } : {}),
+      })) }));
+}
+
+export function reportProductCatalog(content: ScoringReportContent): NonNullable<GeneratedReport["productCatalog"]> {
+  if (content.guidance.carePlan.products.status !== "selected") return [];
+  return (content.guidance.carePlan.products.catalog ?? []).map(product => ({
+    id: product.id, name: cleanReportText(product.name), description: cleanReportText(product.description),
+    aliases: product.aliases.map(cleanReportText),
+  })).filter(product => product.name && product.description);
 }
 
 export function reportToxicityAnswers(answers: FormAnswers): NonNullable<ReportFacts["assessmentAnswers"]> {
@@ -411,7 +464,11 @@ export class GeneratedReportService {
         classification:{id:source.risk.id!,label:source.risk.label ?? generated.classification.label,score:source.reviewedScore,
           ...(source.risk.color ? {color:source.risk.color} : {})},
         metrics,weightHistory,decision,
+        clinicalFacts:reportClinicalFacts(frozen.answers,frozen.manifest),
+        productPlans:reportProductPlans(generated),
+        productCatalog:reportProductCatalog(generated),
         narrative:normalizeNarrative(generated.narrative),
+        narrativeEvidence:Object.fromEntries(Object.entries(generated.narrative).map(([field, entry]) => [field, entry.evidenceIds])),
         omittedNarrativeFields:generated.omittedNarrativeFields ?? [],
         guidance:{sections:normalized.sections},
         issues:reportGenerationIssues(generated.status,[...generated.issues,...normalized.issues]),issueResolution:null,
@@ -627,6 +684,52 @@ export class GeneratedReportService {
         console.warn("Automatic report generation delayed",{reportId:row.id,error:error instanceof Error?error.message:String(error)});
       }
     }));
+  }
+  async refreshReadyPdf(actor:Principal,org:string,id:string,context:RequestContext) {
+    const assessment=await this.clinical(actor,org,id,"reports.manage");
+    const [row]=await this.service.db.select().from(generatedReports)
+      .where(and(eq(generatedReports.organizationId,org),eq(generatedReports.assessmentId,id),or(eq(generatedReports.status,"READY"),eq(generatedReports.status,"APPROVED"))))
+      .orderBy(desc(generatedReports.createdAt),desc(generatedReports.id)).limit(1);
+    if(!row?.content)throw new ServiceError("NOT_FOUND","A final report PDF is not available.");
+    const data=this.service.unseal<ReportData>(row.content);
+    assertReadyPdfRefresh(row.status,data.issues);
+    if(this.currentFingerprint(assessment,data.assessment.checksum,data.decision)!==row.sourceFingerprint)
+      throw new ServiceError("CONFLICT","The clinical review changed. Regenerate the report.");
+    const report=await this.dto(row,assessment);
+    if(report.status!=="READY")throw new ServiceError("CONFLICT","The report is stale. Regenerate it before refreshing the PDF.");
+    const [brand]=await this.service.db.select({displayName:organizations.displayName,logoObjectKey:organizations.logoObjectKey,
+      primaryColor:organizations.primaryColor,secondaryColor:organizations.secondaryColor}).from(organizations).where(eq(organizations.id,org));
+    if(!brand)throw new ServiceError("NOT_FOUND","Organisation not found.");
+    const brandingFingerprint=reportBrandingFingerprint(brand);
+    const [asset]=brand.logoObjectKey ? await this.service.db.select({content:organizationBrandAssets.content,mimeType:organizationBrandAssets.mimeType})
+      .from(organizationBrandAssets).where(and(eq(organizationBrandAssets.organizationId,org),eq(organizationBrandAssets.id,brand.logoObjectKey.replace(/^database:/,"")))) : [];
+    const pdf=Buffer.from(await renderGeneratedReportPdf(report,{name:brand.displayName,primaryColor:brand.primaryColor,secondaryColor:brand.secondaryColor,
+      logo:asset?{data:new Uint8Array(asset.content),mimeType:asset.mimeType}:null}));
+    assertGeneratedPdf(pdf);
+    const hash=createHash("sha256").update(pdf).digest("hex");
+    const key=patientDataKey(this.service.config.PATIENT_DATA_ENCRYPTION_KEY,this.service.config.SESSION_SECRET);
+    const saved=await this.service.db.transaction(async tx=>{
+      const currentAssessment=await this.service.authorize(actor,org,id,tx,true);
+      if(this.currentFingerprint(currentAssessment,data.assessment.checksum,data.decision)!==row.sourceFingerprint)
+        throw new ServiceError("CONFLICT","The clinical review changed during PDF refresh.");
+      const [currentBrand]=await tx.select({displayName:organizations.displayName,logoObjectKey:organizations.logoObjectKey,
+        primaryColor:organizations.primaryColor,secondaryColor:organizations.secondaryColor}).from(organizations).where(eq(organizations.id,org)).for("update");
+      if(!currentBrand || reportBrandingFingerprint(currentBrand)!==brandingFingerprint)
+        throw new ServiceError("CONFLICT","The organisation theme changed during PDF refresh.");
+      const [current]=await tx.select().from(generatedReports).where(and(eq(generatedReports.organizationId,org),eq(generatedReports.id,row.id))).for("update");
+      if(!current?.content || current.status!=="READY" || current.revision!==row.revision || sha(current.content)!==sha(row.content))
+        throw new ServiceError("CONFLICT","The report changed during PDF refresh. Reload it before trying again.");
+      const [previous]=await tx.select({sha256:generatedReportArtifacts.sha256}).from(generatedReportArtifacts)
+        .where(and(eq(generatedReportArtifacts.organizationId,org),eq(generatedReportArtifacts.reportId,row.id))).for("update");
+      await tx.insert(generatedReportArtifacts).values({reportId:row.id,organizationId:org,assessmentId:id,
+        revision:row.revision,sha256:hash,size:pdf.length,brandingFingerprint,encryptedPdf:encryptPatientBytes(pdf,key)})
+        .onConflictDoUpdate({target:generatedReportArtifacts.reportId,set:{revision:row.revision,sha256:hash,size:pdf.length,
+          brandingFingerprint,encryptedPdf:encryptPatientBytes(pdf,key),uploadedAt:new Date()}});
+      await this.service.audit(tx,actor,context,id,"GENERATED_REPORT_PDF_REFRESHED",{reportId:row.id,revision:row.revision,
+        previousSha256:previous?.sha256??null,sha256:hash,size:pdf.length});
+      return current;
+    });
+    return {report:await this.dto(saved,assessment)};
   }
   async downloadPdf(actor:Principal,org:string,id:string) {
     const assessment=await this.clinical(actor,org,id);

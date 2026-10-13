@@ -6,7 +6,10 @@ const guidanceText = z.string().max(12000);
 const narrative = z.object({ text: bounded, evidenceIds: z.array(z.string().max(200)).max(100) });
 const id = z.string().max(200);
 const productPlan = z.object({ id, stage: id, nutritionalStatus: bounded, products: guidanceText, dose: guidanceText, duration: guidanceText,
-  items: z.array(z.object({ productName: bounded, quantityPerDay: z.number().int().min(1).max(100).optional(), description: guidanceText.optional() })).max(20).optional() });
+  durationAmount: z.number().int().positive().optional(),
+  items: z.array(z.object({ productName: bounded, quantityPerDay: z.number().int().min(1).max(100).optional(), description: guidanceText.optional(),
+    unit: bounded.optional(), timesPerDay: z.number().int().positive().max(24).optional(), preparation: guidanceText.optional(),
+    mealTiming: guidanceText.optional(), rationale: guidanceText.optional() })).max(20).optional() });
 // Parse only selected guidance fields that the Application can display. Zod strips
 // unexpected Scoring fields before this packet can enter a patient report snapshot.
 const carePlan = z.object({
@@ -18,6 +21,7 @@ const carePlan = z.object({
     status: z.enum(["none", "selected", "clinician_choice_required", "facts_required"]),
     plans: z.array(productPlan).max(30),
     choices: z.array(productPlan).max(30).optional(),
+    catalog: z.array(z.object({ id, name: bounded, description: guidanceText, aliases: z.array(bounded).max(30) })).max(100).optional(),
     notes: z.array(z.object({ id, kind: id, label: bounded, guidance: guidanceText })).max(100),
     reason: bounded.optional(),
   }),
@@ -45,18 +49,21 @@ export const scoringReportContentSchema = z.object({
   guidance: selectedGuidance,
   narrative: z.object({
     overview: narrative, keyFindings: narrative, actionSummary: narrative, monitoringSummary: narrative,
+    overallSummary: narrative.optional(),
     nutritionAdvice: narrative.optional(), treatmentAdvice: narrative.optional(),
     conditionAdvice: narrative.optional(), effectsAdvice: narrative.optional(),
   }),
   issues: z.array(z.string().max(1000)).max(100),
   omittedNarrativeFields: z.array(z.enum([
-    "overview", "keyFindings", "actionSummary", "monitoringSummary",
+    "overview", "keyFindings", "actionSummary", "monitoringSummary", "overallSummary",
     "nutritionAdvice", "treatmentAdvice", "conditionAdvice", "effectsAdvice",
-  ])).max(8).optional(),
+  ])).max(9).optional(),
 }).superRefine((content, context) => {
   // In-flight v1 runs can finish after a deployment. Only the v2 response
   // requires the new reviewed passages.
   if (content.schemaVersion < 2) return;
+  if (content.schemaVersion >= 3 && !content.narrative.overallSummary)
+    context.addIssue({ code: "custom", path: ["narrative", "overallSummary"], message: "Reviewed overall summary is required" });
   for (const field of ["nutritionAdvice", "treatmentAdvice", "conditionAdvice", "effectsAdvice"] as const)
     if (!content.narrative[field]) context.addIssue({ code: "custom", path: ["narrative", field], message: "Reviewed care-plan passage is required" });
 });

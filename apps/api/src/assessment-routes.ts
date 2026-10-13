@@ -53,6 +53,10 @@ export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowSe
     const p=await generatedParts(c),file=await generatedReports.downloadPdf(p.actor,p.org,p.assessment);
     return new Response(new Uint8Array(file.pdf),{headers:{"Content-Type":"application/pdf","Content-Length":String(file.pdf.length),"Content-Disposition":"inline; filename=\"NIQ-clinical-report.pdf\"","ETag":'"'+file.sha256+'"',"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
   });
+  app.post(generated+"/refresh-pdf",async c=>{
+    const p=await generatedParts(c);
+    return c.json(await generatedReports.refreshReadyPdf(p.actor,p.org,p.assessment,{requestId:c.get("requestId")}));
+  });
   const revision=(c:any)=>parse(z.string().regex(/^\d+$/).transform(Number),c.req.query("revision"));
   app.delete(`${reports}/:reportId`,async c=>{const p=parts(c);return c.json(await service.reports.remove(p.actor,p.org,p.assessment,parse(id,c.req.param("reportId")),revision(c),p.context));});
   app.delete(`${reports}/:reportId/files/:fileId`,async c=>{const p=parts(c);return c.json(await service.reports.remove(p.actor,p.org,p.assessment,parse(id,c.req.param("reportId")),revision(c),p.context,parse(id,c.req.param("fileId"))));});

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { GeneratedReportService, REPORT_REVIEW_REQUIRED, assertGeneratedPdf, assertReportPdfDownloadable, assertReportReadyForApproval, assertReviewedArtifact, automaticReportCanFinalize, automaticRetryDelay, cleanReportText, finishWeightHistory, normalizeGuidance, normalizeNarrative, prepareNarrativeEdit, publicReportGeneration, reportBrandingFingerprint, reportGenerationIssues, reportNeedsClinicalReview, reportObservations, reportToxicityAnswers } from "./generated-report";
+import { GeneratedReportService, REPORT_REVIEW_REQUIRED, assertGeneratedPdf, assertReadyPdfRefresh, assertReportPdfDownloadable, assertReportReadyForApproval, assertReviewedArtifact, automaticReportCanFinalize, automaticRetryDelay, cleanReportText, finishWeightHistory, normalizeGuidance, normalizeNarrative, prepareNarrativeEdit, publicReportGeneration, reportBrandingFingerprint, reportClinicalFacts, reportGenerationIssues, reportNeedsClinicalReview, reportObservations, reportProductCatalog, reportProductPlans, reportToxicityAnswers } from "./generated-report";
 import { requestScoringReportContent, requestScoringToxicityOptions, scoringReportContentSchema } from "./scoring-report-content";
 import { approveGeneratedReportSchema, editGeneratedNarrativeSchema } from "../../../../packages/contracts/src/generated-report";
 
@@ -69,6 +69,22 @@ test("v2 care-plan passages are required, cleaned, and kept separate from older 
   expect(editGeneratedNarrativeSchema.safeParse({ revision: 1, narrative: { conditionAdvice: "Check blood pressure." } }).success).toBe(true);
 });
 
+test("v3 accepts the reviewed closing summary and keeps older reports readable", () => {
+  const current = structuredClone(packet) as any;
+  current.schemaVersion = 3;
+  for (const field of ["nutritionAdvice", "treatmentAdvice", "conditionAdvice", "effectsAdvice"])
+    current.narrative[field] = { text: "", evidenceIds: [] };
+  expect(scoringReportContentSchema.safeParse(current).success).toBe(false);
+  current.narrative.overallSummary = {
+    text: "High nutrition risk warrants early support. Monitor weight and intake with the care team.",
+    evidenceIds: ["fact:niq_risk", "rule:nutrition"],
+  };
+  const parsed = scoringReportContentSchema.parse(current);
+  expect(normalizeNarrative(parsed.narrative).overallSummary).toContain("Monitor weight and intake");
+  expect(scoringReportContentSchema.parse(packet).narrative.overallSummary).toBeUndefined();
+  expect(editGeneratedNarrativeSchema.safeParse({ revision: 1, narrative: { overallSummary: "Reviewed closing summary." } }).success).toBe(true);
+});
+
 test("automatic generation retries an in-progress Scoring run with bounded delay", async () => {
   expect([1,2,3,4,20].map(automaticRetryDelay)).toEqual([30_000,60_000,120_000,240_000,300_000]);
   await expect(requestScoringReportContent({ baseUrl: "http://scoring.test", credential: "private", requestId: "r1", timeoutMs: 1000,
@@ -92,6 +108,13 @@ test("Scoring review failures and local rule issues stay out of automatic PDF ge
   expect(publicReportGeneration("READY", null, [])).toEqual({ status: "READY", failureCode: null });
   expect(() => assertReportPdfDownloadable(["Legacy unresolved issue"])).toThrow("final report PDF is not available");
   expect(() => assertReportPdfDownloadable([])).not.toThrow();
+});
+
+test("PDF refresh is restricted to ready reports without unresolved issues", () => {
+  expect(() => assertReadyPdfRefresh("READY", [])).not.toThrow();
+  expect(() => assertReadyPdfRefresh("APPROVED", [])).toThrow("Only a ready report");
+  expect(() => assertReadyPdfRefresh("DRAFT", [])).toThrow("Only a ready report");
+  expect(() => assertReadyPdfRefresh("READY", ["Unsupported claim"])).toThrow("Resolve report-generation issues");
 });
 
 test("toxicity options request binds the reviewed result and only sends selected treatment IDs", async () => {
@@ -218,6 +241,33 @@ test("structured product quantities appear once with preparation and duration", 
   expect(normalizeGuidance(scoringReportContentSchema.parse(selected), manifest).sections).toEqual([]);
 });
 
+test("clinical background uses submitted answer labels and omits unanswered fields", () => {
+  const form = { sections: [{ fields: [
+    { id: "cancer_type", options: [{ id: "cancer_breast", label: "Breast cancer" }] },
+    { id: "stage", options: [{ id: "stage_local", label: "Localised" }] },
+    { id: "current_cancer_treatment", options: [{ id: "chemotherapy", label: "Chemotherapy" }] },
+    { id: "diet_preference", options: [{ id: "vegetarian", label: "Vegetarian" }] },
+  ] }] } as any;
+  expect(reportClinicalFacts({ cancer_type: "cancer_breast", stage: "stage_local", current_cancer_treatment: ["chemotherapy"], diet_preference: "vegetarian" }, form)).toEqual([
+    { label: "Diagnosis", value: "Breast cancer" }, { label: "Disease stage", value: "Localised" },
+    { label: "Current treatment", value: "Chemotherapy" }, { label: "Diet", value: "Vegetarian" },
+  ]);
+});
+
+test("selected product schedule retains rule instructions as structured report data", () => {
+  const selected = structuredClone(packet) as any;
+  selected.guidance.carePlan.products = { status: "selected", plans: [{ id: "plan", stage: "during_treatment", nutritionalStatus: "moderate",
+    products: "Invigour", dose: "1 daily", duration: "At least 3 months", durationAmount: 90,
+    items: [{ productName: "Invigour", quantityPerDay: 1, unit: "sachet", timesPerDay: 1,
+      preparation: "Mix with water", mealTiming: "after breakfast", rationale: "Supports intake" }],
+  }], catalog: [{ id: "product-1", name: "Invigour", description: "Nutrition supplement.", aliases: ["Es Invigour"] }], notes: [] };
+  const parsed = scoringReportContentSchema.parse(selected);
+  expect(reportProductPlans(parsed)).toEqual([{ id: "plan", duration: "At least 3 months", durationAmount: 90,
+    items: [{ productName: "Invigour", quantityPerDay: 1, unit: "sachet", timesPerDay: 1,
+      preparation: "Mix with water", mealTiming: "after breakfast", rationale: "Supports intake" }] }]);
+  expect(reportProductCatalog(parsed)).toEqual([{ id: "product-1", name: "Invigour", description: "Nutrition supplement.", aliases: ["Es Invigour"] }]);
+});
+
 test("a compound source topic is displayed using only the symptom actually reported", () => {
   const selected = structuredClone(packet) as any;
   selected.guidance.possibleToxicities = [];
@@ -229,11 +279,12 @@ test("a compound source topic is displayed using only the symptom actually repor
 });
 
 test("a clinician can resolve generation issues while omitting unsupported passages", () => {
-  const data = { narrative: { overview: "", keyFindings: "", actionSummary: "", monitoringSummary: "" }, issues: ["Unsupported claim"], issueResolution: null } as any;
+  const data = { narrative: { overview: "", keyFindings: "", actionSummary: "", monitoringSummary: "" }, narrativeEvidence: { overview: ["fact:old"] }, issues: ["Unsupported claim"], issueResolution: null } as any;
   const prepared = prepareNarrativeEdit(data, { narrative: { overview: "Corrected" }, issueResolution: { explanation: "I checked and removed the unsupported claim" } }, "Clinician", new Date("2026-10-11T00:00:00Z"));
   expect(prepared.resolvedIssueCount).toBe(1);
   expect(prepared.data.issues).toEqual([]);
   expect(prepared.data.narrative).toEqual({ overview: "Corrected", keyFindings: "", actionSummary: "", monitoringSummary: "" });
+  expect(prepared.data.narrativeEvidence?.overview).toBeUndefined();
   expect(prepared.data.issueResolution).toEqual({ originalIssues: ["Unsupported claim"], explanation: "I checked and removed the unsupported claim", clinicianName: "Clinician", resolvedAt: "2026-10-11T00:00:00.000Z" });
 });
 

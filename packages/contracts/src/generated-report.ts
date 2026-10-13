@@ -14,6 +14,7 @@ export const editGeneratedNarrativeSchema = z.object({
     keyFindings: z.string().trim().max(1800).optional(),
     actionSummary: z.string().trim().max(1800).optional(),
     monitoringSummary: z.string().trim().max(1800).optional(),
+    overallSummary: z.string().trim().max(1800).optional(),
     nutritionAdvice: z.string().trim().max(1800).optional(),
     treatmentAdvice: z.string().trim().max(1800).optional(),
     conditionAdvice: z.string().trim().max(1800).optional(),
@@ -35,6 +36,8 @@ export type GeneratedNarrative = {
   keyFindings: string;
   actionSummary: string;
   monitoringSummary: string;
+  /** Reviewed closing synthesis; older saved reports use a short fallback. */
+  overallSummary?: string;
   // Older saved reports predate reviewed care-plan passages.
   nutritionAdvice?: string;
   treatmentAdvice?: string;
@@ -51,6 +54,21 @@ export type GeneratedReportSection = {
   matchSource?: "assessment_answer" | "weight_change" | "clinician_confirmation" | "unknown";
   matchedAnswerLabels?: string[];
 };
+export type GeneratedReportProductPlan = {
+  id: string;
+  duration: string;
+  durationAmount?: number;
+  items: Array<{
+    productName: string;
+    quantityPerDay?: number;
+    description?: string;
+    unit?: string;
+    timesPerDay?: number;
+    preparation?: string;
+    mealTiming?: string;
+    rationale?: string;
+  }>;
+};
 export type GeneratedReport = {
   id: string;
   revision: number;
@@ -65,8 +83,15 @@ export type GeneratedReport = {
   classification: { id: string; label: string; score: number; color?: AssessmentRiskColor };
   metrics: Array<{ id: string; label: string; value: string; unit?: string; measuredAt?: string; source: "assessment" | "face_scan"; referenceRange?: string; outsideReferenceRange?: boolean }>;
   weightHistory: Array<{ date: string | null; kg: number; label?: string }>;
+  /** Display labels from the submitted assessment; absent on reports saved before this field existed. */
+  clinicalFacts?: Array<{ label: string; value: string }>;
+  /** Selected rule instructions, retained as data rather than parsed from report prose. */
+  productPlans?: GeneratedReportProductPlan[];
+  /** Verified product catalog descriptions, distinct from the case-specific schedule. */
+  productCatalog?: Array<{ id: string; name: string; description: string; aliases?: string[] }>;
   decision: { productStageChoice: "surgical" | "treatment_stage" | null; plannedTreatmentStartDate: string | null; confirmedToxicityIds?: string[] };
   narrative: GeneratedNarrative;
+  narrativeEvidence?: Partial<Record<keyof GeneratedNarrative, string[]>>;
   omittedNarrativeFields?: Array<keyof GeneratedNarrative>;
   guidance: { sections: GeneratedReportSection[] };
   issues: string[];
