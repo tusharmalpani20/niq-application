@@ -112,7 +112,8 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect(document.body.textContent).toContain("Reviewed effects guidance");
     const summary = document.querySelector('[aria-label="Report summary"]')!;
     expect(summary.textContent).toContain("High Risk");
-    expect(summary.textContent).toContain("27 NIQ points");
+    expect(summary.textContent).toContain("NIQ score");
+    expect(summary.textContent).toContain("27 points");
     expect(summary.querySelector('[aria-label="Overall clinical summary"]')?.textContent).toContain("High nutritional risk and treatment-related eating difficulty");
     expect(summary.textContent).not.toContain("Reviewed nutrition guidance");
     expect(summary.textContent).not.toContain("Reviewed action plan");
@@ -135,6 +136,9 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect(document.body.textContent).toContain("Body fat");
     expect(document.body.textContent).not.toContain("HbA1c");
     expect(document.querySelector('[aria-label="Vital IQ measurements"] .cr-section-intro')).toBeNull();
+    const reportPages = Array.from(document.querySelectorAll(".clinical-report > .cr-sheet"), sheet => sheet.getAttribute("aria-label"));
+    expect(reportPages.indexOf("Nutrition status")).toBeLessThan(reportPages.indexOf("Vital IQ measurements"));
+    expect(reportPages.at(-1)).toBe("Report summary");
     const patientOverview = document.querySelector('[aria-label="Patient overview"]')!;
     expect(patientOverview.querySelector(".cr-report-bmi")).not.toBeNull();
     expect(patientOverview.textContent).not.toContain("Reviewed patient overview");
@@ -167,7 +171,8 @@ test("assessment facts and structured rule schedule stay separate from the three
     expect(document.querySelector(".cr-clinical-interpretation")?.textContent).toContain("Reviewed patient overview");
     expect(intervention.textContent).toContain("1 sachet");
     expect(intervention.textContent).toContain("A nutrition supplement.");
-    expect(intervention.textContent).toContain("Once daily · after breakfast");
+    expect(intervention.textContent).toContain("Once daily");
+    expect(intervention.textContent).toContain("When to takeafter breakfast");
     expect(intervention.textContent).toContain("Mix in 150 ml water");
     expect(intervention.textContent).toContain("At least 3 months");
     expect(intervention.textContent).not.toContain("2 Protect");
@@ -255,6 +260,35 @@ test("clinical interpretation keeps care implications but omits a measurement re
   });
 });
 
+test("narrative emphasis renders safely and undated weight is shown as a comparison", async () => {
+  const report: GeneratedReport = {
+    ...readyReport,
+    weightHistory: [{ date: null, kg: 70, label: "Previous weight" }, { date: "2026-10-12", kg: 69 }],
+    narrative: {
+      ...readyReport.narrative,
+      overview: "The patient has **reduced intake** and should discuss <urgent> symptoms with the care team.",
+      nutritionAdvice: "Prioritise **energy dense meals**. Keep a regular eating schedule.",
+    },
+    clinicalFacts: [{ label: "Planned treatment", value: "Chemotherapy" }, { label: "Planned treatment start", value: "20 Oct 2026" }],
+  };
+  await renderWithResponse({ report, generation: { status: "READY" } }, () => {
+    const status = document.querySelector('[aria-label="Nutrition status"]')!;
+    expect(status.querySelector(".cr-weight-chart")).toBeNull();
+    expect(status.querySelector(".cr-weight-comparison")?.textContent).toContain("Previously reported");
+    expect(status.querySelector(".cr-weight-comparison")?.textContent).toContain("Most recent record");
+    expect(status.textContent).toContain("Weight comparison");
+    const interpretation = document.querySelector(".cr-clinical-interpretation")!;
+    expect(interpretation.querySelector("strong")?.textContent).toBe("reduced intake");
+    expect(interpretation.querySelector("strong")?.className).toBe("cr-narrative-emphasis");
+    expect(interpretation.textContent).toContain("<urgent>");
+    expect(interpretation.querySelector("urgent")).toBeNull();
+    expect(document.querySelector('[aria-label="Planned treatment"]')).not.toBeNull();
+    expect(document.querySelector('[aria-label="Planned treatment"]')?.textContent).toContain("Preparation for planned treatment");
+    expect(document.querySelector('[aria-label="Report summary"]')?.textContent).toContain("Planned treatment start");
+    expect(document.querySelector('[aria-label="Intervention"] .cr-narrative-emphasis')?.textContent).toBe("energy dense meals");
+  });
+});
+
 test("care guidance keeps approved sentences and uses matched clinical headings", async () => {
   const report: GeneratedReport = {
     ...readyReport,
@@ -270,12 +304,14 @@ test("care guidance keeps approved sentences and uses matched clinical headings"
     ] },
   };
   await renderWithResponse({ report, generation: { status: "READY" } }, () => {
+    const conditionPage = document.querySelector('[aria-label="Other health conditions"]')!;
     const care = document.querySelector('[aria-label="Recommendations"]')!;
-    expect(care.querySelectorAll(".cr-advice-block").length).toBe(4);
-    expect(care.textContent).toContain("Kidney disease");
+    expect(conditionPage.querySelectorAll(".cr-advice-block").length).toBe(1);
+    expect(care.querySelectorAll(".cr-advice-block").length).toBe(3);
+    expect(conditionPage.textContent).toContain("Kidney disease");
     expect(care.textContent).toContain("Nausea");
-    expect(Array.from(care.querySelectorAll(".cr-advice-block"))[0]?.querySelectorAll(".cr-advice-points li").length).toBe(2);
-    expect(care.textContent).toContain("1.2–1.5 g/kg/day");
+    expect(conditionPage.querySelectorAll(".cr-advice-points li").length).toBe(2);
+    expect(conditionPage.textContent).toContain("1.2–1.5 g/kg/day");
     expect(care.textContent).toContain("Call your care team if vomiting continues.");
     expect(care.textContent).not.toContain("Matched source guidance");
   });
@@ -297,7 +333,7 @@ test("action and monitoring advice remain in recommendations without other care 
   });
 });
 
-test("dense condition advice starts a new headed recommendations page", async () => {
+test("condition advice stays together on its own headed page", async () => {
   const conditionAdvice = Array.from({ length: 12 }, (_, index) => `Condition guidance step ${index + 1} stays with the care team.`).join(" ");
   const report: GeneratedReport = {
     ...readyReport,
@@ -306,9 +342,9 @@ test("dense condition advice starts a new headed recommendations page", async ()
   await renderWithResponse({ report, generation: { status: "READY" } }, () => {
     const conditionPage = document.querySelector('[aria-label="Other health conditions"]')!;
     const recommendations = document.querySelector('[aria-label="Recommendations"]')!;
-    expect(conditionPage.querySelectorAll(".cr-advice-points li").length).toBe(10);
-    expect(recommendations.textContent).toContain("(continued)");
-    expect(recommendations.querySelectorAll(".cr-advice-points li").length).toBeGreaterThan(4);
+    expect(conditionPage.querySelectorAll(".cr-advice-points li").length).toBe(12);
+    expect(recommendations.textContent).not.toContain("(continued)");
+    expect(recommendations.textContent).not.toContain("Condition guidance step");
     expect(recommendations.querySelector(".cr-sheet-header")).not.toBeNull();
     expect(recommendations.querySelector(".cr-sheet-footer")).not.toBeNull();
   });
