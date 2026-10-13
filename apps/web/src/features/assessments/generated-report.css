@@ -56,6 +56,13 @@
 .cr-feature-panel p { margin: .65rem 0 0; white-space: pre-wrap; font-size: .98rem; line-height: 1.6; }
 .cr-report-bmi { margin-top: 1.2rem; }
 .cr-overview-observations { margin-top: 1.25rem; }
+.cr-clinical-facts { margin-top: 1.2rem; padding: 1rem 1.1rem; border: 1px solid #dce9eb; border-radius: .85rem; background: #f8fbfb; }
+.cr-clinical-facts h3 { margin: 0 0 .7rem; color: var(--brand-ink, #177e83); font-size: .79rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.cr-clinical-facts dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; margin: 0; }
+.cr-clinical-facts dl > div { min-width: 0; padding: .62rem .75rem; border: 1px solid #e1ecee; border-radius: .55rem; background: #fff; }
+.cr-clinical-facts dt { display: flex; align-items: center; gap: .4rem; color: #607989; font-size: .72rem; }
+.cr-clinical-fact-icon { display: inline-grid; width: 1.4rem; height: 1.4rem; flex: 0 0 1.4rem; place-items: center; border-radius: .4rem; color: var(--brand-ink, #177e83); background: color-mix(in srgb, var(--brand-primary, #34b5b9) 12%, white); }
+.cr-clinical-facts dd { margin: .18rem 0 0; color: #173d4e; font-size: .85rem; font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
 .cr-overview-observations h3 { margin: 0; color: #173d4e; font-size: .95rem; }
 .cr-overview-observations .cr-metric-grid { grid-template-columns: repeat(3, minmax(0,1fr)); gap: .65rem; margin-top: .7rem; }
 .cr-overview-observations .cr-metric-card { min-height: 106px; padding: .75rem .9rem; }
@@ -111,9 +118,10 @@
 .cr-status-metric .cr-metric-icon svg { width: 16px; height: 16px; }
 .cr-status-metric > span:not(.cr-metric-icon) { color: #647e8a; font-size: .72rem; }
 .cr-status-metric strong { overflow-wrap: anywhere; color: #173d4e; font-size: .91rem; }
-.cr-clinical-interpretation { margin-top: 1.1rem; padding: .95rem 1.15rem; border-left: 3px solid var(--brand-primary, #34b5b9); border-radius: .4rem; background: #f7fbfb; }
-.cr-clinical-interpretation h3 { margin: 0 0 .35rem; color: #214757; font-size: .86rem; }
-.cr-clinical-interpretation p { margin: 0; color: #3b5c69; font-size: .87rem; line-height: 1.55; white-space: pre-wrap; }
+.cr-clinical-interpretation { margin-top: 1.1rem; padding: 1rem 1.15rem; border: 1px solid color-mix(in srgb, var(--brand-primary, #34b5b9) 28%, white); border-radius: .85rem; background: color-mix(in srgb, var(--brand-primary, #34b5b9) 7%, white); }
+.cr-clinical-interpretation h3 { margin: 0; color: #214757; font-size: 1rem; }
+.cr-clinical-interpretation p { margin: .7rem 0 0; color: #345463; font-size: .87rem; line-height: 1.55; white-space: pre-wrap; }
+.cr-clinical-interpretation p + p { margin-top: .55rem; padding-top: .55rem; border-top: 1px solid #dce9eb; }
 .cr-panel { margin-top: 1.2rem; padding: 1.25rem 1.4rem; }
 .cr-panel-title h3 { margin: 0; font-size: 1rem; }
 .cr-panel-title svg { color: var(--brand-primary, #239ca3); }
@@ -128,7 +136,7 @@
 .cr-single-weight strong { color: #123b4b; font-size: 1.5rem; }
 .cr-care-stack { display: grid; gap: 1rem; }
 .cr-sheet-nutrition .cr-sheet-content { display: flex; flex-direction: column; }
-.cr-sheet-nutrition .cr-care-stack { width: 100%; margin-block: auto; }
+.cr-sheet-nutrition .cr-care-stack { width: 100%; margin-block: 0; gap: 1.15rem; }
 .cr-sheet-nutrition-dense .cr-sheet-content { padding-block: .8rem 1rem; }
 .cr-sheet-nutrition-dense .cr-care-stack { gap: .65rem; }
 .cr-sheet-nutrition-dense .cr-advice-block, .cr-sheet-nutrition-dense .cr-supplement { padding: .7rem .85rem; }
@@ -149,7 +157,26 @@
 .cr-care-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; }
 .cr-status-actions { margin-top: 1.2rem; }
 .cr-sheet-care .cr-sheet-content { display: flex; flex-direction: column; }
-.cr-sheet-care .cr-care-grid { width: 100%; margin-block: auto; }
+.cr-sheet-care .cr-care-grid { width: 100%; grid-template-columns: 1fr; gap: .8rem; margin-block: 0; }
+.cr-sheet-care .cr-advice-block { display: grid; grid-template-columns: minmax(160px, .3fr) minmax(0, 1fr); align-items: start; gap: 1rem; padding: 1.1rem 1.2rem; }
+.cr-sheet-care .cr-advice-heading { align-items: flex-start; }
+.cr-sheet-care .cr-advice-points { margin-top: 0; }
+.cr-sheet-care .cr-advice-points li { padding: .55rem .65rem; font-size: .84rem; line-height: 1.45; }
+.cr-sheet-summary .cr-sheet-content { display: flex; flex-direction: column; justify-content: flex-start; gap: 1.4rem; padding-top: 8rem; }
+.cr-summary-hero { display: flex; align-items: stretch; gap: 1.2rem; padding: 1.15rem 1.3rem; border: 1px solid; border-radius: .85rem; background: #f8fbfb; }
+.cr-summary-hero > div:first-child { display: flex; min-width: 175px; flex-direction: column; justify-content: center; gap: .25rem; }
+.cr-summary-hero > div:first-child span, .cr-summary-hero small { color: #607989; font-size: .78rem; }
+.cr-summary-hero > div:first-child strong { font-size: 1.5rem; line-height: 1.15; }
+.cr-summary-facts { display: flex; min-width: 0; flex: 1; flex-wrap: wrap; align-content: center; gap: .55rem; }
+.cr-summary-facts p { display: flex; min-width: 0; flex: 1 1 125px; flex-direction: column; gap: .2rem; margin: 0; padding: .55rem .7rem; border: 1px solid #e1ecee; border-radius: .55rem; background: #fff; }
+.cr-summary-facts span { color: #607989; font-size: .7rem; }
+.cr-summary-facts strong { color: #173d4e; font-size: .82rem; line-height: 1.3; overflow-wrap: anywhere; }
+.cr-summary-brief { position: relative; display: flex; align-items: flex-start; gap: 1.1rem; padding: 1.8rem 2rem; border-left: 5px solid var(--brand-primary, #34b5b9); border-radius: .8rem; background: color-mix(in srgb, var(--brand-primary, #34b5b9) 7%, white); }
+.cr-summary-brief-icon { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border-radius: .7rem; color: var(--brand-ink, #177e83); background: #fff; }
+.cr-summary-brief > div { display: grid; gap: .8rem; }
+.cr-summary-brief p { max-width: 62ch; margin: 0; color: #254b5a; font-size: 1.06rem; line-height: 1.58; }
+.cr-sheet-nutrition:not(.cr-sheet-nutrition-dense) .cr-advice-block, .cr-sheet-nutrition:not(.cr-sheet-nutrition-dense) .cr-supplement { padding: 1.1rem 1.2rem; }
+.cr-sheet-nutrition:not(.cr-sheet-nutrition-dense) .cr-advice-points li { padding: .58rem .65rem; font-size: .84rem; line-height: 1.45; }
 .cr-advice-block, .cr-supplement { min-width: 0; padding: 1rem 1.1rem; border: 1px solid #dce9eb; border-radius: .85rem; background: #fff; }
 .cr-advice-action { background: color-mix(in srgb, var(--brand-primary, #34b5b9) 5%, white); }
 .cr-advice-heading { display: flex; align-items: center; gap: .75rem; }
@@ -165,6 +192,14 @@
 .cr-supplement-item { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .8rem; padding: .85rem 1rem; border: 1px solid #dce9eb; border-radius: .7rem; background: #fff; }
 .cr-supplement-item h4 { margin: 0; color: #173d4e; font-size: .97rem; }
 .cr-supplement-item p { margin: .25rem 0 0; color: #607989; font-size: .77rem; line-height: 1.4; }
+.cr-supplement-item-body { min-width: 0; width: 100%; }
+.cr-supplement-item-body p { display: flex; align-items: flex-start; gap: .35rem; }
+.cr-supplement-item-body .cr-supplement-description { margin: .4rem 0 .55rem; color: #506e7b; font-size: .78rem; line-height: 1.45; }
+.cr-supplement-item-body p svg { flex: none; margin-top: .1rem; color: var(--brand-ink, #177e83); }
+.cr-supplement-item-body .cr-supplement-dose { align-items: baseline; margin: .45rem 0; color: #214757; }
+.cr-supplement-dose strong { font-size: 1rem; }
+.cr-supplement-item-body .cr-supplement-rationale { padding-top: .4rem; border-top: 1px solid #e5eff0; }
+.cr-supplement-plan + .cr-supplement-plan { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #dce9eb; }
 .cr-supplement-quantity { display: flex; min-width: 55px; flex: none; flex-direction: column; align-items: center; padding: .45rem .55rem; border-radius: .55rem; color: var(--brand-ink, #177e83); background: color-mix(in srgb, var(--brand-primary, #34b5b9) 12%, white); }
 .cr-supplement-quantity strong { font-size: 1.35rem; line-height: 1.1; }
 .cr-supplement-quantity span { margin-top: .12rem; font-size: .61rem; font-weight: 700; }
@@ -239,6 +274,7 @@
 .cr-approval-bar .cr-private-note { margin: 0; font-size: .74rem; }
 .cr-approved-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; border-color: #b8e3cf; background: #f3fcf7; }
 .cr-approved-bar > div { display: flex; align-items: center; gap: .7rem; color: #207154; }
+.cr-approved-bar .cr-pdf-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
 .cr-approved-bar p { margin: .15rem 0 0; color: #58736a; font-size: .8rem; }
 .cr-download { padding: .55rem .85rem; border: 1px solid #8bd2b0; border-radius: .6rem; color: #1c684c; background: #fff; text-decoration: none; }
 .cr-download:hover { background: #eaf8ef; }
@@ -277,6 +313,7 @@
   .cr-overview-key { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .cr-overview-key .cr-metric-card { display: flex; min-height: 104px; flex-direction: column; }
   .cr-overview-observations .cr-metric-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .cr-clinical-facts dl { grid-template-columns: 1fr; }
   .cr-sheet-heading h2 { font-size: .96rem; }
   .cr-metric-grid { grid-template-columns: 1fr; }
   .cr-vital-scores { grid-template-columns: repeat(2, minmax(0,1fr)); }
@@ -287,6 +324,11 @@
   .cr-nutrition-target-grid { grid-template-columns: 1fr; }
   .cr-renal-caution p { margin-left: 0; }
   .cr-care-grid { grid-template-columns: 1fr; }
+  .cr-sheet-care .cr-advice-block { grid-template-columns: 1fr; }
+  .cr-sheet-care .cr-advice-points { margin-top: .65rem; }
+  .cr-summary-hero { flex-direction: column; }
+  .cr-sheet-summary .cr-sheet-content { padding-top: 2rem; }
+  .cr-summary-brief { flex-direction: column; padding: 1.25rem; }
   .cr-supplement-items { grid-template-columns: 1fr; }
   .cr-narrative-grid { grid-template-columns: 1fr; }
   .cr-generation-options { grid-template-columns: 1fr; }
@@ -309,16 +351,15 @@
   }
   body.cr-print-document .cr-sheet {
     width: 210mm;
-    height: 297mm;
-    min-height: 0;
+    min-height: 296mm;
+    height: auto;
     padding: 12mm 13mm 10mm;
     border: 0;
     border-radius: 0;
     box-shadow: none;
+    overflow: visible;
     break-after: page;
-    break-inside: avoid;
     page-break-after: always;
-    page-break-inside: avoid;
   }
   body.cr-print-document .cr-sheet:last-child {
     break-after: auto;
@@ -332,6 +373,28 @@
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  body.cr-print-document .cr-sheet-nutrition .cr-care-stack,
-  body.cr-print-document .cr-sheet-care .cr-care-grid { margin-block: 0; }
+  body.cr-print-document .cr-print-overflow .cr-care-stack,
+  body.cr-print-document .cr-print-overflow .cr-care-grid { margin-block: 0; }
+  body.cr-print-document .cr-sheet-vital .cr-sheet-content { padding-top: .9rem; padding-bottom: .8rem; }
+  body.cr-print-document .cr-sheet-vital .cr-vital-highlights,
+  body.cr-print-document .cr-sheet-vital .cr-vital-detail-grid { margin-top: .65rem; }
+  body.cr-print-document .cr-sheet-vital .cr-vital-detail dl > div { padding: .25rem 0; }
+  body.cr-print-document .cr-sheet-summary .cr-sheet-content { gap: 1.25rem; }
+  body.cr-print-document .cr-report-bmi section[aria-label="Body mass index"] > div:last-child {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* Long reviewed passages may continue onto another page; keep every sentence visible. */
+  body.cr-print-document .cr-print-overflow { min-height: 0; }
+  body.cr-print-document .cr-print-overflow .cr-sheet-content,
+  body.cr-print-document .cr-print-overflow .cr-care-stack,
+  body.cr-print-document .cr-print-overflow .cr-care-grid { display: block; }
+  body.cr-print-document .cr-print-overflow .cr-advice-block,
+  body.cr-print-document .cr-print-overflow .cr-supplement {
+    margin-bottom: 1rem;
+    break-inside: auto;
+    page-break-inside: auto;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+  body.cr-print-document .cr-print-overflow .cr-sheet-footer { display: none; }
 }

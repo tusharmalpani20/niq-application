@@ -1,8 +1,8 @@
-import { Activity, ArrowRight, BicepsFlexed, Brain, Calculator, CalendarDays, ChartNoAxesCombined, CircleDot, ClipboardList, Droplets, Gauge, HeartPulse, Leaf, Package, Ruler, Scale, ShieldCheck, Soup, Stethoscope, TriangleAlert, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
+import { Activity, ArrowRight, BicepsFlexed, Brain, Calculator, CalendarDays, ChartNoAxesCombined, CircleDot, ClipboardList, Clock3, Droplets, Gauge, HeartPulse, Leaf, Package, Ruler, Scale, ShieldCheck, Soup, Stethoscope, TriangleAlert, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
 import { reportFaceScanAdditionalMetricGroups, riskColorHex } from "@niq/application-contracts";
-import { useBranding } from "@/lib/branding-context";
-import type { TenantBranding } from "@/lib/branding";
-import { BrandMarks } from "@/components/BrandMarks";
+import { useBranding } from "../../lib/branding-context";
+import type { TenantBranding } from "../../lib/branding";
+import { BrandMarks } from "../../components/BrandMarks";
 import { AssessmentBmiCard } from "./AssessmentBmiCard";
 import type { GeneratedReport } from "./generated-report-api";
 import { cleanWeights, metricText, reportAge, reportDate, reportGuidance, weightChange } from "./generated-report-format";
@@ -90,6 +90,10 @@ function adviceSentences(text: string) {
   return Array.from(adviceSegmenter.segment(text), item => item.segment.trim()).filter(Boolean);
 }
 
+function summarySentences(text: string | undefined, count: number) {
+  return adviceSentences(text ?? "").slice(0, count);
+}
+
 function ReviewedAdvice({ title, text, icon: Icon, action = false, columns = false }: { title: string; text: string | undefined; icon: LucideIcon; action?: boolean; columns?: boolean }) {
   if (!text?.trim()) return null;
   const PointIcon = action ? ArrowRight : CircleDot;
@@ -102,6 +106,24 @@ function singleGuidanceTitle(report: GeneratedReport, type: "comorbidity" | "tox
 }
 
 function ProductPlan({ report }: { report: GeneratedReport }) {
+  const selected = report.productPlans?.filter(plan => plan.items.length) ?? [];
+  const descriptionFor = (name: string) => report.productCatalog?.find(product =>
+    [product.name, ...(product.aliases ?? [])].some(alias => alias.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase()))?.description;
+  if (selected.length) return <section className="cr-supplement"><div className="cr-advice-heading"><span className="cr-advice-icon"><Package size={20} aria-hidden="true"/></span><h3>Nutrition support recommendation</h3></div>
+    {selected.map(plan => <div className="cr-supplement-plan" key={plan.id}>
+      <div className="cr-supplement-items">{plan.items.map((item, index) => <div className="cr-supplement-item" key={`${plan.id}-${index}`}>
+        <div className="cr-supplement-item-body"><h4>{item.productName}</h4>
+          {descriptionFor(item.productName) && <p className="cr-supplement-description">{descriptionFor(item.productName)}</p>}
+          {item.quantityPerDay && <p className="cr-supplement-dose"><strong>{item.quantityPerDay} {item.unit || "per day"}</strong>{item.unit && <span>per day</span>}</p>}
+          {item.timesPerDay && <p><Clock3 size={14} aria-hidden="true"/>{item.timesPerDay === 1 ? "Once daily" : `${item.timesPerDay} times daily`}{item.mealTiming ? ` · ${item.mealTiming}` : ""}</p>}
+          {!item.timesPerDay && item.mealTiming && <p><Clock3 size={14} aria-hidden="true"/>{item.mealTiming}</p>}
+          {item.preparation && <p><Droplets size={14} aria-hidden="true"/>{item.preparation}</p>}
+          {!item.preparation && item.description && <p>{item.description}</p>}
+          {item.rationale && <p className="cr-supplement-rationale">{item.rationale}</p>}</div>
+      </div>)}</div>
+      {(plan.duration || plan.durationAmount) && <p className="cr-supplement-duration"><CalendarDays size={17} aria-hidden="true"/><span>Duration</span><strong>{plan.duration || `${plan.durationAmount} days`}</strong></p>}
+    </div>)}
+  </section>;
   const section = reportGuidance(report, "product").find(item => item.title.toLowerCase() === "product plan");
   if (!section) return null;
   const [dose, duration] = section.text.split("\n").map(part => part.trim()).filter(Boolean);
@@ -119,6 +141,25 @@ function ProductPlan({ report }: { report: GeneratedReport }) {
     </div>)}</div>
     {duration && <p className="cr-supplement-duration"><CalendarDays size={17} aria-hidden="true"/><span>Duration</span><strong>{duration}</strong></p>}
   </section>;
+}
+
+function ClinicalFacts({ report }: { report: GeneratedReport }) {
+  if (!report.clinicalFacts?.length) return null;
+  const iconFor = (label: string): LucideIcon => {
+    const normalized = label.toLowerCase();
+    if (normalized.includes("diagnosis")) return Stethoscope;
+    if (normalized.includes("stage")) return ChartNoAxesCombined;
+    if (normalized.includes("treatment")) return Activity;
+    if (normalized.includes("drug")) return Package;
+    if (normalized.includes("condition")) return ClipboardList;
+    if (normalized.includes("diet")) return Soup;
+    if (normalized.includes("symptom")) return HeartPulse;
+    return CircleDot;
+  };
+  return <section className="cr-clinical-facts"><h3>Clinical background</h3><dl>{report.clinicalFacts.map(fact => {
+    const Icon = iconFor(fact.label);
+    return <div key={fact.label}><dt><span className="cr-clinical-fact-icon" aria-hidden="true"><Icon size={15}/></span>{fact.label}</dt><dd>{fact.value}</dd></div>;
+  })}</dl></section>;
 }
 
 function targetValue(text: string, label: "energy" | "protein") {
@@ -191,13 +232,32 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
   const statusMetrics = assessmentMetrics.filter(metric => ["weight_loss_percent", "appetite_status", "fluid_intake", "functional_capacity", "protein_intake"].includes(metric.id));
   const clinicalFinding = report.narrative.keyFindings?.trim();
   const showClinicalFinding = Boolean(clinicalFinding && !isObservationOnlyFinding(clinicalFinding));
-  const hasProductPlan = reportGuidance(report, "product").some(item => item.title.toLowerCase() === "product plan");
+  const hasProductPlan = Boolean(report.productPlans?.some(plan => plan.items.length)) || reportGuidance(report, "product").some(item => item.title.toLowerCase() === "product plan");
   const renalGuidance = renalIndividualizationGuidance(report);
   const targets = renalGuidance ? [] : nutritionTargets(report);
   const hasNutritionPage = Boolean(report.narrative.nutritionAdvice?.trim() || report.narrative.treatmentAdvice?.trim() || hasProductPlan || targets.length || renalGuidance);
   const denseNutrition = (report.narrative.nutritionAdvice?.length ?? 0) + (report.narrative.treatmentAdvice?.length ?? 0) > 900;
-  const hasCareAdvice = Boolean(report.narrative.conditionAdvice?.trim() || report.narrative.effectsAdvice?.trim());
-  const showStatusActions = !hasCareAdvice && Boolean(report.narrative.actionSummary?.trim() || report.narrative.monitoringSummary?.trim());
+  const splitTreatmentPage = hasProductPlan && Boolean(report.narrative.treatmentAdvice?.trim());
+  const hasRecommendations = Boolean(report.narrative.conditionAdvice?.trim() || report.narrative.effectsAdvice?.trim() || report.narrative.actionSummary?.trim() || report.narrative.monitoringSummary?.trim());
+  const conditionSentences = adviceSentences(report.narrative.conditionAdvice ?? "");
+  const recommendationSentenceCount = conditionSentences.length + adviceSentences(report.narrative.effectsAdvice ?? "").length
+    + adviceSentences(report.narrative.actionSummary ?? "").length + adviceSentences(report.narrative.monitoringSummary ?? "").length;
+  const splitCarePage = (conditionSentences.length >= 7 || conditionSentences.length >= 4 && recommendationSentenceCount >= 13)
+    && Boolean(report.narrative.effectsAdvice?.trim() || report.narrative.actionSummary?.trim() || report.narrative.monitoringSummary?.trim());
+  const conditionBreak = conditionSentences.length >= 9
+    ? Math.min(conditionSentences.length - 2, Math.ceil(conditionSentences.length * .8))
+    : conditionSentences.length;
+  const conditionTitle = singleGuidanceTitle(report, "comorbidity", "Other health conditions");
+  const hasInterpretation = Boolean(report.narrative.overview?.trim() || showClinicalFinding);
+  // Saved reports predating the reviewed closing synthesis still get a short
+  // recap drawn only from their already-reviewed narrative passages.
+  const overallSummary = report.narrative.overallSummary?.trim() || [
+    showClinicalFinding ? clinicalFinding : report.narrative.overview,
+    report.narrative.nutritionAdvice,
+    report.narrative.actionSummary,
+    report.narrative.monitoringSummary,
+  ].flatMap(text => summarySentences(text, 1)).slice(0, 4).join(" ");
+  const summaryFacts = report.clinicalFacts?.filter(fact => /^(diagnosis|treatment status|current treatment)$/i.test(fact.label)).slice(0, 3) ?? [];
   const riskColor = riskColorHex(report.classification?.color);
   let page = 0;
   const nextPage = () => ++page;
@@ -213,6 +273,10 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
   const showBmiReference = Boolean(overviewMetric("bmi") && height && weight);
   const keyMetrics = assessmentMetrics.filter(metric => metric.id === "current_weight_kg" || metric.id === "height_cm");
   const otherMetrics = assessmentMetrics.filter(metric => !["current_weight_kg", "height_cm", ...(showBmiReference ? ["bmi"] : []), ...statusMetrics.map(item => item.id)].includes(metric.id));
+  const observationGroups = [...new Set(otherMetrics.map(metric => metric.label))].map(label => ({
+    label: label === "Reported dietary symptom" ? "Reported dietary symptoms" : label,
+    values: otherMetrics.filter(metric => metric.label === label).map(metricText).join(", "),
+  }));
   return <article className="clinical-report" aria-label="Generated clinical nutrition report">
     <section className="cr-sheet cr-cover" aria-label="Report cover">
       <div className="cr-cover-top"><BrandMarks className="cr-cover-brand" organizationLogoUrl={branding.logoUrl} organizationName={branding.displayName}/><span>Personalised clinical nutrition</span></div>
@@ -226,35 +290,45 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
         {keyMetrics.length > 0 && <div className="cr-overview-key">{keyMetrics.map(metric => <div className="cr-metric-card" key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.measuredAt && <small>{reportDate(metric.measuredAt)}</small>}</div>)}</div>}
       </div>
       {showBmiReference && <div className="cr-report-bmi"><AssessmentBmiCard answers={{ height_cm: height!, current_weight_kg: weight!, ...(age === null ? {} : {age}) }} showAnchor={false}/></div>}
-      {report.narrative.overview && <div className="cr-feature-panel"><span className="cr-kicker">Clinical overview</span><p>{report.narrative.overview}</p></div>}
-      {otherMetrics.length > 0 && <div className="cr-overview-observations"><h3>Assessment observations</h3><div className="cr-metric-grid">{otherMetrics.map(metric => <div className="cr-metric-card" key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.measuredAt && <small>{reportDate(metric.measuredAt)}</small>}</div>)}</div></div>}
+      <ClinicalFacts report={report}/>
     </ReportSheet>
-    {faceMetrics.length > 0 && <ReportSheet number={nextPage() + 1} title="Vital IQ measurements" icon={HeartPulse} report={report} branding={branding}>
+    {faceMetrics.length > 0 && <ReportSheet number={nextPage() + 1} title="Vital IQ measurements" icon={HeartPulse} report={report} branding={branding} className="cr-sheet-vital">
       {faceScores.length > 0 && <div className="cr-vital-scores">{faceScores.map(metric => <VitalScoreCard key={metric.id} metric={metric}/>)}</div>}
       {(faceVitals.length > 0 || bloodPressure) && <div className="cr-vital-highlights">{faceVitals.map(metric => <div className={`cr-vital-highlight${metric.outsideReferenceRange ? " cr-vital-outside" : ""}`} key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.outsideReferenceRange && metric.referenceRange && <small>Reference: {metric.referenceRange}</small>}</div>)}{bloodPressure && <div className={`cr-vital-highlight${faceMetric("systolic")?.outsideReferenceRange ? " cr-vital-outside" : ""}`}><MetricIcon id="systolic" label="Blood pressure"/><span>Blood pressure</span><strong>{bloodPressure} mmHg</strong>{faceMetric("systolic")?.outsideReferenceRange && faceMetric("systolic")?.referenceRange && <small>Reference: {faceMetric("systolic")!.referenceRange}</small>}</div>}</div>}
       {faceDetailGroups.length > 0 && <div className="cr-vital-detail-grid">{faceDetailGroups.map(group => { const Icon = group.id === "circulation" ? HeartPulse : group.id === "fitness" ? BicepsFlexed : ChartNoAxesCombined; return <section className="cr-vital-detail" key={group.id}><h3><Icon size={17} aria-hidden="true"/>{group.title}</h3><dl>{group.metrics.map(metric => <div key={metric.id}><dt><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span></dt><dd className={metric.outsideReferenceRange ? "cr-vital-outside-value" : undefined}>{metricText(metric)}{metric.outsideReferenceRange && metric.referenceRange && <small>Reference: {metric.referenceRange}</small>}</dd></div>)}</dl></section>; })}</div>}
     </ReportSheet>}
-    {(report.classification || report.weightHistory.length > 0 || statusMetrics.length > 0 || showClinicalFinding || showStatusActions) && <ReportSheet number={nextPage() + 1} title="Nutrition status and findings" icon={Activity} report={report} branding={branding} compact>
-      <div className={`cr-status-overview${statusMetrics.length ? "" : " cr-status-single"}`}>{report.classification && <div className="cr-score-card" style={{ borderColor: riskColor, backgroundColor: `color-mix(in srgb, ${riskColor} 10%, white)` }}><span>Nutrition risk</span><strong style={{ color: riskColor }}>{report.classification.score}</strong><span>NIQ points</span><b style={{ color: riskColor }}>{report.classification.label}</b></div>}
-        {statusMetrics.length > 0 && <section className="cr-status-evidence"><h3>Assessment indicators</h3><div className="cr-status-metrics">{statusMetrics.map(metric => <div className="cr-status-metric" key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong></div>)}</div></section>}
+    {(report.classification || report.weightHistory.length > 0 || statusMetrics.length > 0 || observationGroups.length > 0 || hasInterpretation) && <ReportSheet number={nextPage() + 1} title="Nutrition status" icon={Activity} report={report} branding={branding} compact>
+      <div className={`cr-status-overview${statusMetrics.length || observationGroups.length ? "" : " cr-status-single"}`}>{report.classification && <div className="cr-score-card" style={{ borderColor: riskColor, backgroundColor: `color-mix(in srgb, ${riskColor} 10%, white)` }}><strong style={{ color: riskColor }}>{report.classification.score}</strong><span>NIQ score</span><b style={{ color: riskColor }}>{report.classification.label}</b></div>}
+        {(statusMetrics.length > 0 || observationGroups.length > 0) && <section className="cr-status-evidence"><h3>Assessment indicators</h3><div className="cr-status-metrics">{statusMetrics.map(metric => <div className="cr-status-metric" key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong></div>)}{observationGroups.map(group => <div className="cr-status-metric" key={group.label}><span className="cr-metric-icon"><Stethoscope size={16} aria-hidden="true"/></span><span>{group.label}</span><strong>{group.values}</strong></div>)}</div></section>}
       </div>
-      {showClinicalFinding && <section className="cr-clinical-interpretation"><h3>Clinical interpretation</h3><p>{clinicalFinding}</p></section>}
       <WeightTrend report={report}/>
-      {showStatusActions && <div className="cr-care-grid cr-status-actions"><ReviewedAdvice title="What to do" text={report.narrative.actionSummary} icon={Utensils} action/><ReviewedAdvice title="What to monitor" text={report.narrative.monitoringSummary} icon={ChartNoAxesCombined} action/></div>}
+      {hasInterpretation && <section className="cr-clinical-interpretation"><div className="cr-advice-heading"><span className="cr-advice-icon"><ChartNoAxesCombined size={20} aria-hidden="true"/></span><h3>Interpretation</h3></div>{report.narrative.overview?.trim() && <p>{report.narrative.overview}</p>}{showClinicalFinding && clinicalFinding !== report.narrative.overview?.trim() && <p>{clinicalFinding}</p>}</section>}
     </ReportSheet>}
-    {hasNutritionPage && <ReportSheet number={nextPage() + 1} title="Nutrition plan" icon={Utensils} report={report} branding={branding} compact className={`cr-sheet-nutrition${denseNutrition ? " cr-sheet-nutrition-dense" : ""}`}>
+    {hasNutritionPage && <ReportSheet number={nextPage() + 1} title="Intervention" icon={Utensils} report={report} branding={branding} compact className={`cr-sheet-nutrition${denseNutrition ? " cr-sheet-nutrition-dense" : ""}`}>
       <div className="cr-care-stack">
       {targets.length > 0 && <section className="cr-nutrition-targets"><h3>Daily nutrition targets</h3><div className="cr-nutrition-target-grid">{targets.map(target => { const Icon = target.icon; return <div className="cr-nutrition-target-card" key={target.label}><Icon size={22} aria-hidden="true"/><span>{target.label}</span><strong>{target.value}</strong></div>; })}</div></section>}
       {renalGuidance && <section className="cr-renal-caution"><div className="cr-advice-heading"><span className="cr-advice-icon"><TriangleAlert size={20} aria-hidden="true"/></span><h3>Individualise nutrition targets</h3></div><p>{renalGuidance.text}</p></section>}
       <ReviewedAdvice title="Nutrition guidance" text={report.narrative.nutritionAdvice} icon={Soup} columns/>
       <ProductPlan report={report}/>
-      <ReviewedAdvice title="During treatment" text={report.narrative.treatmentAdvice} icon={ShieldCheck} columns/></div>
+      {!splitTreatmentPage && <ReviewedAdvice title="During treatment" text={report.narrative.treatmentAdvice} icon={ShieldCheck} columns/>}</div>
     </ReportSheet>}
-    {hasCareAdvice && <ReportSheet number={nextPage() + 1} title="Care and next steps" icon={ShieldCheck} report={report} branding={branding} compact className="cr-sheet-care">
-      <div className="cr-care-grid"><ReviewedAdvice title={singleGuidanceTitle(report, "comorbidity", "Other health conditions")} text={report.narrative.conditionAdvice} icon={HeartPulse}/>
+    {splitTreatmentPage && <ReportSheet number={nextPage() + 1} title="During treatment" icon={ShieldCheck} report={report} branding={branding} compact className="cr-sheet-care">
+      <div className="cr-care-grid"><ReviewedAdvice title="Treatment guidance" text={report.narrative.treatmentAdvice} icon={ShieldCheck}/></div>
+    </ReportSheet>}
+    {hasRecommendations && splitCarePage && <ReportSheet number={nextPage() + 1} title="Other health conditions" icon={HeartPulse} report={report} branding={branding} compact className="cr-sheet-care">
+      <div className="cr-care-grid"><ReviewedAdvice title={conditionTitle} text={conditionSentences.slice(0, conditionBreak).join(" ")} icon={HeartPulse}/></div>
+    </ReportSheet>}
+    {hasRecommendations && <ReportSheet number={nextPage() + 1} title="Recommendations" icon={ShieldCheck} report={report} branding={branding} compact className="cr-sheet-care">
+      <div className="cr-care-grid"><ReviewedAdvice title={splitCarePage ? `${conditionTitle} (continued)` : conditionTitle} text={splitCarePage ? conditionSentences.slice(conditionBreak).join(" ") : report.narrative.conditionAdvice} icon={HeartPulse}/>
       <ReviewedAdvice title={singleGuidanceTitle(report, "toxicity", "Treatment effects and nutrition")} text={report.narrative.effectsAdvice} icon={Droplets}/>
       <ReviewedAdvice title="What to do" text={report.narrative.actionSummary} icon={Utensils} action/>
       <ReviewedAdvice title="What to monitor" text={report.narrative.monitoringSummary} icon={ChartNoAxesCombined} action/></div>
     </ReportSheet>}
+    <ReportSheet number={nextPage() + 1} title="Report summary" icon={ClipboardList} report={report} branding={branding} compact className="cr-sheet-summary">
+      <div className="cr-summary-hero" style={{ borderColor: riskColor }}><div><span>Nutrition risk</span><strong style={{ color: riskColor }}>{report.classification.label}</strong><small>{report.classification.score} NIQ points</small></div>
+        {summaryFacts.length > 0 && <div className="cr-summary-facts">{summaryFacts.map(fact => <p key={fact.label}><span>{fact.label}</span><strong>{fact.value}</strong></p>)}</div>}
+      </div>
+      {overallSummary && <section className="cr-summary-brief" aria-label="Overall clinical summary"><span className="cr-summary-brief-icon"><HeartPulse size={23} aria-hidden="true"/></span><div>{adviceSentences(overallSummary).map((sentence, index) => <p key={index}>{sentence}</p>)}</div></section>}
+    </ReportSheet>
   </article>;
 }

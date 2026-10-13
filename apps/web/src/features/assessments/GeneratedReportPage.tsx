@@ -5,7 +5,7 @@ import { hasPermission, type AuthenticatedUser } from "@niq/application-contract
 import { Button } from "@/components/ui/button";
 import { GeneratedReportPdfPreview } from "./GeneratedReportPdfPreview";
 import { GeneratedReportPreview } from "./GeneratedReportPreview";
-import { generatedReportPdfUrl, getGeneratedReport, type GeneratedReportResponse } from "./generated-report-api";
+import { generatedReportPdfUrl, getGeneratedReport, refreshGeneratedReportPdf, type GeneratedReportResponse } from "./generated-report-api";
 import { reportDate } from "./generated-report-format";
 import "./generated-report.css";
 
@@ -17,6 +17,8 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
   const [preview, setPreview] = useState<"html" | "pdf">("html");
+  const [updatingPdf, setUpdatingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState("");
   const assessmentPath = `/assessments/${encodeURIComponent(assessmentId)}`;
 
   useEffect(() => {
@@ -55,9 +57,22 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
   const report = result?.report;
   const ready = generation?.status === "READY" && report?.status === "READY" && Boolean(report.artifact);
   const reviewRequired = generation?.status === "FAILED" && generation.failureCode === "REVIEW_REQUIRED";
-  const pdfUrl = generatedReportPdfUrl(user.organizationId, assessmentId);
+  const pdfUrl = `${generatedReportPdfUrl(user.organizationId, assessmentId)}?revision=${report?.artifact?.sha256 ?? "pending"}`;
   const statusLabel = loading && !result ? "Loading" : error ? "Status unavailable" : generation?.status === "QUEUED" ? "Queued" : generation?.status === "GENERATING" ? "Preparing" : reviewRequired ? "Clinical review required" : generation?.status === "FAILED" ? "Generation failed" : ready ? "Ready" : generation?.status === "READY" ? "Report unavailable" : "Not started";
   const refresh = () => setReload(current => current + 1);
+  const rebuildPdf = async () => {
+    setUpdatingPdf(true);
+    setPdfError("");
+    try {
+      const updated = await refreshGeneratedReportPdf(user.organizationId, assessmentId);
+      setResult(current => current ? { ...current, report: updated.report } : current);
+      setPreview("pdf");
+    } catch (cause) {
+      setPdfError(cause instanceof Error ? cause.message : "Could not rebuild the PDF.");
+    } finally {
+      setUpdatingPdf(false);
+    }
+  };
 
   return <div className="cr-workspace">
     <nav className="cr-back"><Link to={assessmentPath}><ArrowLeft size={17} aria-hidden="true"/>Back to assessment</Link></nav>
@@ -76,7 +91,8 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
       <div className="cr-message cr-error" role="alert"><p>The report is marked ready, but its saved PDF is unavailable. Refresh the status or contact your administrator.</p><Button variant="outline" onPress={refresh}><RotateCcw size={16} aria-hidden="true"/>Refresh status</Button></div>}
     {!error && ready && report && <>
       <div className="cr-report-meta"><span>Assessment {report.assessment.reference}</span><span>Generated {reportDate(report.generatedAt)}</span></div>
-      <div className="cr-approved-bar"><div><FileCheck2 size={24} aria-hidden="true"/><div><strong>Final report ready</strong><p>The PDF was saved after final clinical approval.</p></div></div><a className="cr-download" href={pdfUrl} download={`NIQ-report-${report.assessment.reference}.pdf`}><Download size={18} aria-hidden="true"/>Download PDF</a></div>
+      <div className="cr-approved-bar"><div><FileCheck2 size={24} aria-hidden="true"/><div><strong>Final report ready</strong><p>The PDF was saved after final clinical approval.</p></div></div><div className="cr-pdf-actions">{hasPermission(user.role, "reports.manage") && <Button variant="outline" isDisabled={updatingPdf} onPress={() => { void rebuildPdf(); }}>{updatingPdf ? <LoaderCircle className="cr-spin" size={16} aria-hidden="true"/> : <RotateCcw size={16} aria-hidden="true"/>}{updatingPdf ? "Updating PDF" : "Update PDF layout"}</Button>}<a className="cr-download" href={pdfUrl} download={`NIQ-report-${report.assessment.reference}.pdf`}><Download size={18} aria-hidden="true"/>Download PDF</a></div></div>
+      {pdfError && <div className="cr-message cr-error" role="alert"><p>{pdfError}</p></div>}
       <div className="cr-preview-heading"><div><h2>Report preview</h2><p>Review the layout in the browser, or view the saved PDF.</p></div></div>
       <div className="cr-preview-tabs" role="group" aria-label="Report preview format">
         <button type="button" className={`cr-preview-tab ${preview === "html" ? "cr-preview-tab-active" : ""}`} aria-pressed={preview === "html"} onClick={() => setPreview("html")}>HTML layout</button>
