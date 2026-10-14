@@ -211,6 +211,14 @@ test("report icons match assessment treatment choices and describe report sectio
     expect(iconFor("Planned treatment start")).toContain("lucide-calendar-days");
     expect(iconFor("Drug class")).toContain("lucide-pill");
     expect(iconFor("Diet")).toContain("lucide-sprout");
+    const summary = document.querySelector('[aria-label="Report summary"]')!;
+    expect(summary.querySelector(".cr-summary-hero .lucide-gauge")).not.toBeNull();
+    const summaryFacts = Array.from(summary.querySelectorAll(".cr-summary-facts p"));
+    const summaryIconFor = (label: string) => summaryFacts.find(fact => fact.textContent?.includes(label))?.querySelector("svg")?.getAttribute("class") ?? "";
+    expect(summaryIconFor("Diagnosis")).toContain("lucide-stethoscope");
+    expect(summaryIconFor("Treatment status")).toContain("lucide-clipboard-plus");
+    expect(summaryIconFor("Planned treatment")).toContain("lucide-flask-conical");
+    expect(summaryIconFor("Planned treatment start")).toContain("lucide-calendar-days");
     expect(overview.querySelector(".cr-metric-card .lucide-weight")?.getAttribute("style")).toContain("width: 22px");
     expect(document.querySelector('[aria-label="Nutrition status"] .cr-sheet-heading .lucide-gauge')).not.toBeNull();
     expect(document.querySelector(".cr-clinical-interpretation .lucide-file-search")).not.toBeNull();

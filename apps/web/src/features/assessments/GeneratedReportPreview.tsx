@@ -167,41 +167,42 @@ function ProductPlan({ report }: { report: GeneratedReport }) {
   </section>;
 }
 
+function clinicalFactIcon(label: string, value: string): LucideIcon {
+  const normalized = label.toLowerCase();
+  const answer = value.toLowerCase();
+  if (normalized.includes("diagnosis")) return Stethoscope;
+  if (normalized.includes("stage")) return ChartNoAxesCombined;
+  if (normalized.includes("treatment") && normalized.includes("start")) return CalendarDays;
+  if (normalized.includes("treatment status")) {
+    if (answer.includes("newly diagnosed")) return ClipboardPlus;
+    if (answer.includes("post")) return ClipboardCheck;
+    if (answer.includes("palliative")) return HandHeart;
+    return Stethoscope;
+  }
+  if (normalized.includes("treatment")) {
+    if (answer.includes("chemotherapy")) return FlaskConical;
+    if (answer.includes("immunotherapy")) return ShieldPlus;
+    if (answer.includes("radiation") || answer.includes("radiotherapy")) return Radiation;
+    if (answer.includes("targeted")) return Crosshair;
+    if (answer.includes("hormonal") || answer.includes("hormone")) return Droplets;
+    return Stethoscope;
+  }
+  if (normalized.includes("drug")) return Pill;
+  if (normalized.includes("condition")) return ClipboardList;
+  if (normalized.includes("diet")) {
+    if (answer.includes("non-vegetarian")) return Drumstick;
+    if (answer.includes("vegetarian")) return Sprout;
+    if (answer.includes("eggetarian")) return Egg;
+    return Leaf;
+  }
+  if (normalized.includes("symptom")) return HeartPulse;
+  return CircleDot;
+}
+
 function ClinicalFacts({ report }: { report: GeneratedReport }) {
   if (!report.clinicalFacts?.length) return null;
-  const iconFor = (label: string, value: string): LucideIcon => {
-    const normalized = label.toLowerCase();
-    const answer = value.toLowerCase();
-    if (normalized.includes("diagnosis")) return Stethoscope;
-    if (normalized.includes("stage")) return ChartNoAxesCombined;
-    if (normalized.includes("treatment") && normalized.includes("start")) return CalendarDays;
-    if (normalized.includes("treatment status")) {
-      if (answer.includes("newly diagnosed")) return ClipboardPlus;
-      if (answer.includes("post")) return ClipboardCheck;
-      if (answer.includes("palliative")) return HandHeart;
-      return Stethoscope;
-    }
-    if (normalized.includes("treatment")) {
-      if (answer.includes("chemotherapy")) return FlaskConical;
-      if (answer.includes("immunotherapy")) return ShieldPlus;
-      if (answer.includes("radiation") || answer.includes("radiotherapy")) return Radiation;
-      if (answer.includes("targeted")) return Crosshair;
-      if (answer.includes("hormonal") || answer.includes("hormone")) return Droplets;
-      return Stethoscope;
-    }
-    if (normalized.includes("drug")) return Pill;
-    if (normalized.includes("condition")) return ClipboardList;
-    if (normalized.includes("diet")) {
-      if (answer.includes("non-vegetarian")) return Drumstick;
-      if (answer.includes("vegetarian")) return Sprout;
-      if (answer.includes("eggetarian")) return Egg;
-      return Leaf;
-    }
-    if (normalized.includes("symptom")) return HeartPulse;
-    return CircleDot;
-  };
   return <section className="cr-clinical-facts"><h3>Clinical background</h3><dl>{report.clinicalFacts.map(fact => {
-    const Icon = iconFor(fact.label, fact.value);
+    const Icon = clinicalFactIcon(fact.label, fact.value);
     return <div key={fact.label}><dt><span className="cr-clinical-fact-icon" aria-hidden="true"><Icon size={15}/></span>{fact.label}</dt><dd>{fact.value}</dd></div>;
   })}</dl></section>;
 }
@@ -363,8 +364,11 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
       <ReviewedAdvice title="Monitoring plan" text={report.narrative.monitoringSummary} icon={ChartNoAxesCombined} action/></div>
     </ReportSheet>}
     <ReportSheet number={nextPage() + 1} title="Report summary" icon={ClipboardList} report={report} branding={branding} compact className="cr-sheet-summary">
-      <div className="cr-summary-hero" style={{ borderColor: riskColor }}><div><span>NIQ score</span><strong style={{ color: riskColor }}>{report.classification.score} <span>points</span></strong><small>{report.classification.label}</small></div>
-        {summaryFacts.length > 0 && <div className="cr-summary-facts">{summaryFacts.map(fact => <p key={fact.label}><span>{fact.label}</span><strong>{fact.value}</strong></p>)}</div>}
+      <div className="cr-summary-hero" style={{ borderColor: riskColor }}><div><span className="cr-summary-fact-label"><span className="cr-clinical-fact-icon" aria-hidden="true"><Gauge size={15}/></span>NIQ score</span><strong style={{ color: riskColor }}>{report.classification.score} <span>points</span></strong><small>{report.classification.label}</small></div>
+        {summaryFacts.length > 0 && <div className="cr-summary-facts">{summaryFacts.map(fact => {
+          const Icon = clinicalFactIcon(fact.label, fact.value);
+          return <p key={fact.label}><span className="cr-summary-fact-label"><span className="cr-clinical-fact-icon" aria-hidden="true"><Icon size={15}/></span>{fact.label}</span><strong>{fact.value}</strong></p>;
+        })}</div>}
       </div>
       {overallSummary && <section className="cr-summary-brief" aria-label="Overall clinical summary"><span className="cr-summary-brief-icon"><HeartPulse size={23} aria-hidden="true"/></span><div>{adviceSentences(overallSummary).map((sentence, index) => <p key={index}><NarrativeText text={sentence}/></p>)}</div></section>}
     </ReportSheet>
