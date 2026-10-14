@@ -15,7 +15,7 @@ describe("configuration", () => {
     expect(config.DEPLOYMENT_MODE).toBe("niq-hosted");
     expect(config.MFA_RESEND_COOLDOWN_SECONDS).toBe(30);
     expect(config.MFA_MAX_RESENDS).toBe(3);
-    expect(config.REPORT_GENERATION_TIMEOUT_MS).toBe(300_000);
+    expect(config.REPORT_GENERATION_TIMEOUT_MS).toBe(720_000);
   });
 
   test("refuses development OTP disclosure in production", () => {
