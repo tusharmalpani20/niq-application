@@ -260,10 +260,10 @@ test("clinical interpretation keeps care implications but omits a measurement re
   });
 });
 
-test("narrative emphasis renders safely and undated weight is shown as a comparison", async () => {
+test("narrative emphasis renders safely and an undated previous weight has a labeled comparison chart", async () => {
   const report: GeneratedReport = {
     ...readyReport,
-    weightHistory: [{ date: null, kg: 70, label: "Previous weight" }, { date: "2026-10-12", kg: 69 }],
+    weightHistory: [{ date: null, kg: 70, label: "Reported 1–2 months ago (exact date unknown)" }, { date: "2026-10-12", kg: 69 }],
     narrative: {
       ...readyReport.narrative,
       overview: "The patient has **reduced intake** and should discuss <urgent> symptoms with the care team.",
@@ -273,9 +273,11 @@ test("narrative emphasis renders safely and undated weight is shown as a compari
   };
   await renderWithResponse({ report, generation: { status: "READY" } }, () => {
     const status = document.querySelector('[aria-label="Nutrition status"]')!;
-    expect(status.querySelector(".cr-weight-chart")).toBeNull();
-    expect(status.querySelector(".cr-weight-comparison")?.textContent).toContain("Previously reported");
-    expect(status.querySelector(".cr-weight-comparison")?.textContent).toContain("Most recent record");
+    expect(status.querySelector(".cr-weight-chart")).not.toBeNull();
+    expect(status.querySelector(".cr-weight-chart polyline")?.getAttribute("stroke-dasharray")).toBe("8 6");
+    expect(status.querySelector(".cr-weight-comparison")?.textContent).toContain("Reported 1–2 months ago");
+    expect(status.querySelector(".cr-weight-comparison")?.textContent).toContain("12 Oct 2026");
+    expect(status.querySelector(".cr-weight-comparison-note")?.textContent).toContain("not a dated trend");
     expect(status.textContent).toContain("Weight comparison");
     const interpretation = document.querySelector(".cr-clinical-interpretation")!;
     expect(interpretation.querySelector("strong")?.textContent).toBe("reduced intake");

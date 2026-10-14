@@ -177,12 +177,15 @@ test("Scoring guidance boundary strips unknown proprietary fields and rejects ma
   expect(scoringReportContentSchema.safeParse({ ...packet, guidance: { ...packet.guidance, carePlan: { products: { status: "none" } } } }).success).toBe(false);
 });
 
-test("weight chart uses an undated previous weight only when no dated history exists", () => {
+test("weight history uses the questionnaire's 1–2 month answer for a first assessment, and prior assessments thereafter", () => {
   expect(finishWeightHistory([], { date: "2026-10-11", kg: 68 }, 85)).toEqual([
-    { date: null, kg: 85, label: "Previous weight (date not recorded)" }, { date: "2026-10-11", kg: 68 },
+    { date: null, kg: 85, label: "Reported 1–2 months ago (exact date unknown)" }, { date: "2026-10-11", kg: 68 },
   ]);
   expect(finishWeightHistory([{ date: "2026-03-01", kg: 81 }], { date: "2026-10-11", kg: 68 }, 85)).toEqual([
     { date: "2026-03-01", kg: 81 }, { date: "2026-10-11", kg: 68 },
+  ]);
+  expect(finishWeightHistory([], { date: "2026-10-11", kg: 68 }, 85, false)).toEqual([
+    { date: "2026-10-11", kg: 68 },
   ]);
 });
 
@@ -192,7 +195,6 @@ test("weight chart drops conflicting recent history when reported previous and c
     { date: "2026-10-05", kg: 48 },
     { date: "2026-06-07", kg: 48 },
   ], { date: "2026-10-13", kg: 62 }, 64)).toEqual([
-    { date: null, kg: 64, label: "Previous weight (date not recorded)" },
     { date: "2026-10-13", kg: 62 },
   ]);
 });

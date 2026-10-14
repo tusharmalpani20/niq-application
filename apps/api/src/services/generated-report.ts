@@ -64,7 +64,7 @@ export function cleanReportText(text: string): string {
     .replace(/[ \t]{2,}/g, " ").trim();
 }
 
-export function finishWeightHistory(priorMostRecentFirst: GeneratedReport["weightHistory"], current: GeneratedReport["weightHistory"][number] | null, previousKg: number | null): GeneratedReport["weightHistory"] {
+export function finishWeightHistory(priorMostRecentFirst: GeneratedReport["weightHistory"], current: GeneratedReport["weightHistory"][number] | null, previousKg: number | null, firstAssessment = priorMostRecentFirst.length === 0): GeneratedReport["weightHistory"] {
   // A recent recorded value that strongly conflicts with both the reported
   // previous weight and the current measurement should not drive a trend chart.
   const currentDay = current?.date ? Date.parse(current.date) : NaN;
@@ -76,8 +76,8 @@ export function finishWeightHistory(priorMostRecentFirst: GeneratedReport["weigh
   });
   const points = conflictingRecentRecord ? [] : [...priorMostRecentFirst];
   if (current) points.unshift(current);
-  if (points.length < 2 && previousKg && previousKg < 600 && previousKg !== current?.kg)
-    points.push({ date: null, kg: previousKg, label: "Previous weight (date not recorded)" });
+  if (firstAssessment && points.length < 2 && previousKg && previousKg < 600 && previousKg !== current?.kg)
+    points.push({ date: null, kg: previousKg, label: "Reported 1–2 months ago (exact date unknown)" });
   const unique = new Map(points.reverse().map(point => [point.date ?? "undated", point]));
   return [...unique.values()].slice(-6);
 }
@@ -381,7 +381,7 @@ export class GeneratedReportService {
       if (kg && kg < 600) points.push({date:dateOnly(candidate.completedAt),kg});
       if (points.length>=5) break;
     }
-    return finishWeightHistory(points,currentKg && currentKg<600?{date:dateOnly(row.completedAt!),kg:currentKg}:null,previousKg);
+    return finishWeightHistory(points,currentKg && currentKg<600?{date:dateOnly(row.completedAt!),kg:currentKg}:null,previousKg,prior.length===0);
   }
   async generate(actor:Principal,org:string,id:string,input:{requestKey:string;productStageChoice?:"surgical"|"treatment_stage";confirmedToxicityIds?:string[]},context:RequestContext, internal=false):Promise<{report:GeneratedReport}> {
     if (!internal && input.confirmedToxicityIds?.length && !hasPermission(actor.role,"reviews.complete"))
