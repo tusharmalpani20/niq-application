@@ -143,7 +143,12 @@ export const organizationSlugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)
 export const patientReferencePrefixSchema = z.string().trim().toUpperCase()
   .regex(/^[A-Z][A-Z0-9]{1,11}$/, "Use 2–12 letters or numbers, starting with a letter");
 export const patientReferenceSchema = z.string().trim().toUpperCase()
-  .regex(/^[A-Z][A-Z0-9]{1,11}-[1-9]\d{0,9}$/, "Use a patient prefix followed by a positive serial number");
+  .regex(/^[A-Z][A-Z0-9]{1,11}-\d{1,10}$/, "Use a patient prefix followed by a positive serial number")
+  .refine(reference => /[1-9]/.test(reference.slice(reference.lastIndexOf("-") + 1)), "Use a positive patient serial number")
+  .transform(reference => {
+    const separator = reference.lastIndexOf("-");
+    return `${reference.slice(0, separator)}-${Number(reference.slice(separator + 1))}`;
+  });
 
 export const organizationSchema = z.object({
   id: idSchema,
