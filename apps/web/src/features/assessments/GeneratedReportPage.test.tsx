@@ -191,6 +191,33 @@ test("assessment facts and structured rule schedule stay separate from the three
   });
 });
 
+test("report icons match assessment treatment choices and describe report sections", async () => {
+  const report: GeneratedReport = { ...readyReport,
+    clinicalFacts: [
+      { label: "Diagnosis", value: "Pancreatic cancer" },
+      { label: "Treatment status", value: "Newly Diagnosed" },
+      { label: "Planned treatment", value: "Chemotherapy (Cytotoxic)" },
+      { label: "Planned treatment start", value: "20 Oct 2026" },
+      { label: "Drug class", value: "Antimetabolites" },
+      { label: "Diet", value: "Vegetarian" },
+    ],
+  };
+  await renderWithResponse({ report, generation: { status: "READY" } }, () => {
+    const overview = document.querySelector('[aria-label="Patient overview"]')!;
+    const facts = Array.from(overview.querySelectorAll(".cr-clinical-facts dl > div"));
+    const iconFor = (label: string) => facts.find(fact => fact.textContent?.includes(label))?.querySelector("svg")?.getAttribute("class") ?? "";
+    expect(iconFor("Treatment status")).toContain("lucide-clipboard-plus");
+    expect(iconFor("Planned treatment")).toContain("lucide-flask-conical");
+    expect(iconFor("Planned treatment start")).toContain("lucide-calendar-days");
+    expect(iconFor("Drug class")).toContain("lucide-pill");
+    expect(iconFor("Diet")).toContain("lucide-sprout");
+    expect(overview.querySelector(".cr-metric-card .lucide-weight")?.getAttribute("style")).toContain("width: 22px");
+    expect(document.querySelector('[aria-label="Nutrition status"] .cr-sheet-heading .lucide-gauge')).not.toBeNull();
+    expect(document.querySelector(".cr-clinical-interpretation .lucide-file-search")).not.toBeNull();
+    expect(document.querySelector('[aria-label="Recommendations"] .cr-sheet-heading .lucide-list-checks')).not.toBeNull();
+  });
+});
+
 test("older reports get a brief closing recap from reviewed narrative", async () => {
   const report: GeneratedReport = { ...readyReport, narrative: {
     ...readyReport.narrative,
