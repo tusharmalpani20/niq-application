@@ -33,9 +33,7 @@ const selectedGuidance = z.object({
     matchedAnswerLabels: z.array(bounded).max(50).optional(),
   })).max(100),
   possibleToxicities: z.array(z.object({ id: z.string(), classId: z.string(), treatmentTypeId: z.string(),
-    // Historical responses may include the old topic label. It is never a
-    // confirmed patient effect or a condition for selecting candidate advice.
-    expectedToxicity: bounded.optional(), nutritionalInterventions: guidanceText,
+    expectedToxicity: bounded, summary: guidanceText, nutritionalInterventions: guidanceText,
     requiresDrugConfirmation: z.boolean().optional(),
   })).max(500).optional(),
   classGuidance: z.array(z.object({ id: z.string(), label: z.string(), guidance: bounded })).max(30).optional(),

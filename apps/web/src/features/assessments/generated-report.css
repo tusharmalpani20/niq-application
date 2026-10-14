@@ -191,6 +191,12 @@
 .cr-advice-points li { display: grid; min-width: 0; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: .4rem; padding: .32rem .15rem; color: #345463; font-size: .8rem; line-height: 1.45; overflow-wrap: anywhere; }
 .cr-advice-points li svg { margin-top: .1rem; color: var(--brand-ink, #177e83); }
 .cr-advice-action .cr-advice-points li { color: #254b5a; }
+.cr-possible-intro { margin: 0 0 1.1rem; padding: .85rem 1rem; border: 1px solid #d8e9ec; border-radius: .7rem; color: #345463; background: #f2f8f9; font-size: .84rem; line-height: 1.5; }
+.cr-possible-list { display: grid; gap: .85rem; }
+.cr-possible-effect { padding: 1rem 1.1rem; border: 1px solid #dce9eb; border-radius: .8rem; background: #fff; break-inside: avoid; page-break-inside: avoid; }
+.cr-possible-effect-heading { display: flex; align-items: center; gap: .7rem; }
+.cr-possible-effect-heading h3 { margin: .2rem 0 0; color: #173d4e; font-size: 1rem; }
+.cr-possible-effect p { margin: .8rem 0 0; color: #345463; font-size: .85rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cr-supplement { background: color-mix(in srgb, var(--brand-primary, #34b5b9) 5%, white); }
 .cr-supplement-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .75rem; margin-top: 1rem; }
 .cr-supplement-item { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .8rem; padding: .85rem 1rem; border: 1px solid #dce9eb; border-radius: .7rem; background: #fff; }

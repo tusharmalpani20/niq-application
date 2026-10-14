@@ -54,3 +54,15 @@ test("the PDF document uses the preview layout with embedded assets and omits Hb
   expect(html).toContain("data:image/png;base64,");
   expect(html).toContain("@page");
 });
+
+test("possible effect summaries appear in the PDF layout without raw source advice", async () => {
+  const withPossible = { ...report, guidance: { sections: [{
+    id: "possible-1", kind: "toxicity", title: "Mouth discomfort", certainty: "possible", drugClass: "Taxanes",
+    text: "If mouth discomfort occurs, discuss soft food choices with your care team.",
+  }] } } as GeneratedReport;
+  const html = await renderGeneratedReportHtml(withPossible, { name: "Example Clinic", primaryColor: "#138f94" });
+  expect(html).toContain("Possible treatment effects");
+  expect(html).toContain("They have not been reported as symptoms");
+  expect(html).toContain("If mouth discomfort occurs");
+  expect(html).toContain("cr-possible-effect");
+});

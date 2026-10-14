@@ -358,6 +358,30 @@ test("care guidance keeps approved sentences and uses matched clinical headings"
   });
 });
 
+test("all possible treatment effects have conditional summaries on separate numbered sheets", async () => {
+  const possible = Array.from({ length: 7 }, (_, index) => ({
+    id: `possible-${index}`, kind: "toxicity" as const, title: `Effect ${index + 1}`,
+    text: `If effect ${index + 1} occurs, discuss a suitable nutrition adjustment with your care team.`,
+    drugClass: "Taxanes", certainty: "possible" as const,
+  }));
+  const report: GeneratedReport = { ...readyReport, guidance: { sections: [
+    ...readyReport.guidance.sections,
+    { id: "reported", kind: "toxicity", title: "Reported nausea", text: "Confirmed advice.", certainty: "confirmed" },
+    ...possible,
+  ] } };
+  await renderWithResponse({ report, generation: { status: "READY" } }, () => {
+    const pages = document.querySelectorAll('[aria-label="Possible treatment effects"]');
+    expect(pages.length).toBe(3);
+    expect([...pages].flatMap(page => [...page.querySelectorAll(".cr-possible-effect h3")].map(title => title.textContent)))
+      .toEqual(possible.map(item => item.title));
+    expect([...pages].every(page => page.textContent?.includes("They have not been reported as symptoms"))).toBe(true);
+    expect([...pages].every(page => page.textContent?.includes("Possible effect · Taxanes"))).toBe(true);
+    expect(document.querySelector('[aria-label="Recommendations"]')?.textContent).toContain("Reported nausea");
+    expect(document.querySelector('[aria-label="Recommendations"]')?.textContent).not.toContain("Effect 1");
+    expect(document.querySelector('[aria-label="Report summary"] .cr-section-number')?.textContent).toBe("12");
+  });
+});
+
 test("action and monitoring advice remain in recommendations without other care advice", async () => {
   const report: GeneratedReport = {
     ...readyReport,

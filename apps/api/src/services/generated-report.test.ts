@@ -11,7 +11,7 @@ const packet = {
   narrative: Object.fromEntries(Object.keys(narrative).map(key => [key, { text: narrative[key as keyof typeof narrative], evidenceIds: ["fact:niq_risk"] }])),
   guidance: {
     nutritionInterventions: [], toxicityInterventions: [], possibleToxicities: [
-      { id: "nausea", classId: "taxanes", treatmentTypeId: "radiation", expectedToxicity: "Nausea", nutritionalInterventions: "Try small, frequent meals." },
+      { id: "nausea", classId: "taxanes", treatmentTypeId: "radiation", expectedToxicity: "Nausea", summary: "If nausea occurs, try small, frequent meals.", nutritionalInterventions: "Try small, frequent meals." },
     ], classGuidance: [],
     carePlan: { nutritionalStatus: "severely_malnourished", statusModifiers: [], treatmentGuidance: [], coMorbidities: [],
       products: { status: "clinician_choice_required", plans: [], choices: [
@@ -25,13 +25,32 @@ const manifest = { sections: [{ fields: [
   { id: "current_cancer_treatment", options: [{ id: "radiation", label: "Radiotherapy" }] },
 ] }] } as any;
 
-test("class and treatment candidates parse without a toxicity label and stay out of patient sections", () => {
+test("class and treatment candidates retain conditional summaries as possible effects", () => {
   const current = structuredClone(packet) as any;
   current.guidance.possibleToxicities = [{ id: "candidate", classId: "taxanes", treatmentTypeId: "radiation",
-    nutritionalInterventions: "Consider soft foods if mouth discomfort occurs.", requiresDrugConfirmation: false }];
+    expectedToxicity: "Mouth discomfort", summary: "If mouth discomfort occurs, consider soft foods.",
+    nutritionalInterventions: "Raw source advice that should not be shown.", requiresDrugConfirmation: false }];
   const parsed = scoringReportContentSchema.parse(current);
   expect(parsed.guidance.possibleToxicities?.[0]).toMatchObject({ id: "candidate", requiresDrugConfirmation: false });
-  expect(normalizeGuidance(parsed, manifest).sections.some(section => section.id === "candidate")).toBe(false);
+  expect(normalizeGuidance(parsed, manifest)).toMatchObject({ issues: [], sections: [{
+    id: "candidate", kind: "toxicity", title: "Mouth discomfort", text: "If mouth discomfort occurs, consider soft foods.",
+    drugClass: "Taxanes", certainty: "possible",
+  }] });
+  expect(normalizeGuidance(parsed, manifest).sections[0]?.text).not.toContain("Raw source advice");
+  current.guidance.possibleToxicities[0].requiresDrugConfirmation = true;
+  expect(normalizeGuidance(scoringReportContentSchema.parse(current), manifest).sections).toEqual([]);
+});
+
+test("a missing possible-effect summary requires review and is not displayed", () => {
+  const current = structuredClone(packet) as any;
+  current.guidance.possibleToxicities[0].summary = "";
+  const normalized = normalizeGuidance(scoringReportContentSchema.parse(current), manifest);
+  expect(normalized.sections).toEqual([]);
+  expect(normalized.issues).toEqual(["possibleToxicities:nausea:MISSING_SUMMARY"]);
+  current.guidance.possibleToxicities[0].expectedToxicity = "";
+  const missingLabel = normalizeGuidance(scoringReportContentSchema.parse(current), manifest);
+  expect(missingLabel.sections).toEqual([]);
+  expect(missingLabel.issues).toEqual(["possibleToxicities:nausea:MISSING_LABEL"]);
 });
 
 test("report-content request binds the clinician-reviewed score and result reference", async () => {
@@ -199,7 +218,7 @@ test("weight chart drops conflicting recent history when reported previous and c
   ]);
 });
 
-test("possible drug-class effects and an unresolved product stage are omitted", () => {
+test("possible drug-class effects are retained while an unresolved product stage is omitted", () => {
   const unresolved = structuredClone(packet) as any;
   unresolved.guidance.carePlan.products.plans = [
     { id: "unselected", stage: "surgical", nutritionalStatus: "severely_malnourished", products: "Liss WH", dose: "1 Liss WH", duration: "30 days" },
@@ -209,13 +228,14 @@ test("possible drug-class effects and an unresolved product stage are omitted", 
   ];
   const result = normalizeGuidance(scoringReportContentSchema.parse(unresolved), manifest);
   expect(result.issues).toEqual([]);
-  expect(result.sections.find(row=>row.id==="nausea")).toBeUndefined();
+  expect(result.sections.find(row=>row.id==="nausea")?.certainty).toBe("possible");
   expect(result.sections.find(row=>row.kind==="product")).toBeUndefined();
   expect(() => assertReportReadyForApproval(result.issues, 1, 1)).not.toThrow();
 });
 
 test("matched treatment, status, co-morbidity, product, and exception guidance enter display sections", () => {
   const selected = structuredClone(packet) as any;
+  selected.guidance.possibleToxicities = [];
   selected.guidance.carePlan.products = { status: "selected", plans: [
     { id: "plan", stage: "during_treatment", nutritionalStatus: "severely_malnourished", products: "Product A", dose: "One serving", duration: "Two weeks" },
   ], notes: [{ id: "exception", kind: "liver_nourish_once_daily", label: "Liver precaution", guidance: "Use once daily." }] };
@@ -231,6 +251,7 @@ test("matched treatment, status, co-morbidity, product, and exception guidance e
 
 test("structured product quantities appear once with preparation and duration", () => {
   const selected = structuredClone(packet) as any;
+  selected.guidance.possibleToxicities = [];
   selected.guidance.carePlan.products = { status: "selected", plans: [{
     id: "surgical", stage: "surgical", nutritionalStatus: "severely_malnourished",
     products: "Invigour + Liss WH", dose: "1 Invigour + 2 leveled scoops in 150ml water", duration: "30 days after surgery",
@@ -322,6 +343,7 @@ test("approval binds the reviewed PDF and current organisation branding", () => 
 test("report copy removes emojis, semicolons and em dashes", () => {
   expect(cleanReportText("Use Nourish; monitor intake — daily 🩺")).toBe("Use Nourish. monitor intake - daily");
   const selected = structuredClone(packet) as any;
+  selected.guidance.possibleToxicities = [];
   selected.guidance.carePlan.products = { status: "selected", plans: [], notes: [
     { id: "note", kind: "vegetarian", label: "Diet 🥗", guidance: "Use Invigour; avoid Liss WH — today." },
   ] };

@@ -147,6 +147,19 @@ export function normalizeGuidance(content: ScoringReportContent, manifest: Asses
       ...(matchedLabels.length ? {matchedAnswerLabels:matchedLabels} : {}),
       certainty: "confirmed" });
   }
+  for (const row of content.guidance.possibleToxicities ?? []) {
+    if (row.requiresDrugConfirmation) continue;
+    if (!nonempty(cleanReportText(row.expectedToxicity))) {
+      issues.push(`possibleToxicities:${row.id}:MISSING_LABEL`);
+      continue;
+    }
+    if (!nonempty(row.summary)) {
+      issues.push(`possibleToxicities:${row.id}:MISSING_SUMMARY`);
+      continue;
+    }
+    add({ id: row.id, kind: "toxicity", title: row.expectedToxicity,
+      text: row.summary, drugClass: classLabel(row.classId), certainty: "possible" });
+  }
   for (const row of content.guidance.classGuidance ?? [])
     add({ id: row.id, kind: "treatment", title: row.label, text: row.guidance });
   const plan = content.guidance.carePlan;

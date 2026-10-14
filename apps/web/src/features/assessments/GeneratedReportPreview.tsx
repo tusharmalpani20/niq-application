@@ -118,8 +118,28 @@ function ReviewedAdvice({ title, text, icon: Icon, action = false, columns = fal
 }
 
 function singleGuidanceTitle(report: GeneratedReport, type: "comorbidity" | "toxicity", fallback: string) {
-  const titles = [...new Set(reportGuidance(report, type).map(item => item.title.trim()).filter(Boolean))];
+  const titles = [...new Set(reportGuidance(report, type)
+    .filter(item => item.certainty !== "possible").map(item => item.title.trim()).filter(Boolean))];
   return titles.length === 1 ? titles[0]! : fallback;
+}
+
+function possibleEffectPages(report: GeneratedReport) {
+  const sections = reportGuidance(report, "toxicity").filter(item => item.certainty === "possible");
+  const pages: typeof sections[] = [];
+  let current: typeof sections = [];
+  let characters = 0;
+  for (const section of sections) {
+    const length = section.title.length + section.text.length;
+    if (current.length && (current.length >= 3 || characters + length > 900)) {
+      pages.push(current);
+      current = [];
+      characters = 0;
+    }
+    current.push(section);
+    characters += length;
+  }
+  if (current.length) pages.push(current);
+  return pages;
 }
 
 function singleNutritionTitle(report: GeneratedReport, fallback: string) {
@@ -286,6 +306,7 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
   const splitTreatmentPage = hasProductPlan && Boolean(report.narrative.treatmentAdvice?.trim());
   const hasConditionAdvice = Boolean(report.narrative.conditionAdvice?.trim());
   const hasRecommendations = Boolean(report.narrative.effectsAdvice?.trim() || report.narrative.actionSummary?.trim() || report.narrative.monitoringSummary?.trim());
+  const possiblePages = possibleEffectPages(report);
   const conditionTitle = singleGuidanceTitle(report, "comorbidity", "Condition-specific guidance");
   const hasInterpretation = Boolean(report.narrative.overview?.trim() || showClinicalFinding);
   // Saved reports predating the reviewed closing synthesis still get a short
@@ -358,6 +379,13 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
     {hasConditionAdvice && <ReportSheet number={nextPage() + 1} title="Other health conditions" icon={HeartPulse} report={report} branding={branding} compact className="cr-sheet-care">
       <div className="cr-care-grid"><ReviewedAdvice title={conditionTitle} text={report.narrative.conditionAdvice} icon={HeartPulse}/></div>
     </ReportSheet>}
+    {possiblePages.map((sections, index) => <ReportSheet key={index} number={nextPage() + 1} title="Possible treatment effects" icon={TriangleAlert} report={report} branding={branding} compact className="cr-sheet-possible-effects">
+      <p className="cr-possible-intro">These effects are possible with the matched treatment and drug class. They have not been reported as symptoms in this assessment.</p>
+      <div className="cr-possible-list">{sections.map(section => <section className="cr-possible-effect" key={section.id}>
+        <div className="cr-possible-effect-heading"><span className="cr-advice-icon"><TriangleAlert size={19} aria-hidden="true"/></span><div><span className="cr-guidance-type">Possible effect{section.drugClass ? ` · ${section.drugClass}` : ""}</span><h3>{section.title}</h3></div></div>
+        <p><NarrativeText text={section.text}/></p>
+      </section>)}</div>
+    </ReportSheet>)}
     {hasRecommendations && <ReportSheet number={nextPage() + 1} title="Recommendations" icon={ListChecks} report={report} branding={branding} compact className="cr-sheet-care">
       <div className="cr-care-grid"><ReviewedAdvice title={singleGuidanceTitle(report, "toxicity", "Reported symptom care")} text={report.narrative.effectsAdvice} icon={Droplets}/>
       <ReviewedAdvice title="Care actions" text={report.narrative.actionSummary} icon={ListChecks} action/>
