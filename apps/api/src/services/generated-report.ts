@@ -350,10 +350,23 @@ export class GeneratedReportService {
   }
   async read(actor: Principal, org: string, id: string): Promise<{report: GeneratedReport | null; generation: {status:"QUEUED"|"GENERATING"|"FAILED"|"READY";failureCode:string|null}|null}> {
     const assessment=await this.clinical(actor,org,id);
-    const row=await this.latest(org,id);
+    let row=await this.latest(org,id);
     if(!row) return {report:null,generation:null};
-    if(!row.requestKey.startsWith(AUTOMATIC_REPORT_KEY_PREFIX) && row.status!=="READY" && row.status!=="APPROVED")
-      return {report:null,generation:null};
+    // A legacy or locally started attempt is still a real generation attempt.
+    // Hiding it makes an assessment with a pending/failed report say Not started.
+    const legacyExpired = !row.requestKey.startsWith(AUTOMATIC_REPORT_KEY_PREFIX)
+      && ["QUEUED", "GENERATING"].includes(row.status)
+      && Date.now() - row.updatedAt.getTime() > this.service.config.REPORT_GENERATION_TIMEOUT_MS + 30_000;
+    if (legacyExpired) {
+      // Old manual attempts have no automatic worker. Fence expiry against a
+      // concurrent result save, then let the existing Regenerate action recover.
+      const [expired] = await this.service.db.update(generatedReports).set({status:"FAILED",
+        failureCode:"GENERATION_INTERRUPTED",leaseToken:null,nextAttemptAt:null,updatedAt:new Date()})
+        .where(and(eq(generatedReports.id,row.id),eq(generatedReports.organizationId,org),
+          eq(generatedReports.status,row.status),eq(generatedReports.updatedAt,row.updatedAt))).returning();
+      row = expired ?? await this.latest(org,id);
+      if (!row) return {report:null,generation:null};
+    }
     const issues=row.content ? this.service.unseal<ReportData>(row.content).issues : [];
     const generation=publicReportGeneration(row.status,row.failureCode,issues);
     const report=row.content && (generation.status==="READY" || row.status==="DRAFT" && generation.failureCode===REPORT_REVIEW_REQUIRED) ? await this.dto(row,assessment):null;

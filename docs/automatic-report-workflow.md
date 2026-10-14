@@ -11,7 +11,8 @@ packet and the reviewed score to NIQ Scoring. Scoring matches the pinned rules,
 runs a GPT-6.1 Sol manager that assigns GPT-6 Luna workers for writing, independent
 review, source coverage, conditional-effect summaries and highlighting. Both models
 request medium reasoning where supported. The manager reviews the assembled report
-and can request one bounded repair of the existing draft. Deterministic evidence
+after bounded writer revisions and source audits. It does not restart the full
+workflow after its final decision. Deterministic evidence
 checks remain mandatory. If the model workflow cannot approve the report, the worker
 uses the verified matched-rule fallback automatically. If no Products and doses rule is selected,
 the report also omits product exceptions. Missing assessment facts are omitted
@@ -43,7 +44,7 @@ is development-only and can be switched back to OpenRouter.
 Schema 4 reports provide separate `foodSafetyAdvice` and `redFlagsAdvice` passages.
 Food safety appears in Recommendations; urgent triggers, thresholds and contacts
 appear together in Red flags. Conditional antimetabolite cards share a single main
-heading and introduction. Supplement tables show name, numeric dose, timing,
+heading and introduction. Structured supplement cards show name, numeric dose, timing,
 preparation, duration and approved benefits. Product exclusions still control the
 selected plan but are not explained in patient-facing prose. Interpretation uses
 the exact frozen nutritional-status mapping and avoids repeating clinical facts.
@@ -62,3 +63,27 @@ API. Existing approved PDFs remain available with their stored appearance. The
 automatic job starts for assessments completed after this change. Previously
 completed assessments without an explicit treatment effect decision are not
 silently regenerated.
+
+## Wording and layout ownership
+
+Each instruction has one home. Nutrition targets belong in Intervention, reported
+symptom care in its own advice, condition guidance under named condition headings,
+routine monitoring in Monitoring, food handling in Food safety, and urgent contact triggers
+in Red flags. Source coverage examines these fields together and counts an equal
+risk/status target once. A conditional mention of kidney disease in another rule
+does not establish a matched kidney comorbidity. Reviewers must identify a concrete
+claim, omission or action ambiguity, rather than reject harmless wording differences. Conditional assessments for a possible effect may stay in its card, but must not be repeated in Monitoring.
+
+The manager reviews the initial draft, adjudicates worker concerns and source-audit gaps, and makes the final decision. Corrections return to the original writer context and only flagged fields change. A final rejection gets one bounded targeted repair with all approval checks repeated. Required clinical passages are never deleted to force a pass. Typography failure keeps verified text and uses exact-span deterministic emphasis.
+
+HTML sections flow continuously. PDF pagination uses the same content and a small
+repeating brand header, with physical page numbers from print margin boxes. Score and summary cards stay together during pagination. Condition
+headings use the internal `### Condition name` convention and render as headings,
+never bullets. Exact-span emphasis is applied after review, including possible-effect
+cards. Deterministic emphasis retains readable fallback advice when optional model
+highlight selections are incomplete. No new illustrations are part of this change.
+
+The rule fallback groups source headings, moves monitoring and urgent warnings to
+their assigned sections, and preserves the source thresholds and urgency. Ambiguous
+source quantities are never completed with an invented unit. Source conflicts may
+still prevent automatic finalization and leave a report eligible for regeneration.
