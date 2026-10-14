@@ -411,5 +411,12 @@
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
   }
+  /* A tall two-column grid cannot fragment reliably in Chromium's print layout. */
+  body.cr-print-document .cr-print-overflow.cr-sheet-care .cr-advice-block {
+    display: block;
+  }
+  body.cr-print-document .cr-print-overflow.cr-sheet-care .cr-advice-points {
+    margin-top: .8rem;
+  }
   body.cr-print-document .cr-print-overflow .cr-sheet-footer { display: none; }
 }
