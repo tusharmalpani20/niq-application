@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, BicepsFlexed, Brain, Calculator, CalendarDays, ChartNoAxesCombined, CircleAlert, CircleDot, ClipboardCheck, ClipboardList, ClipboardPlus, Crosshair, Droplets, Drumstick, Egg, FileSearch, Flame, FlaskConical, Gauge, HandHeart, HeartPulse, Leaf, ListChecks, Package, Pill, Radiation, Ruler, Scale, ShieldCheck, ShieldPlus, Soup, Sprout, Stethoscope, TriangleAlert, TrendingDown, Utensils, Weight, Wind, type LucideIcon } from "lucide-react";
+import { Activity, ArrowRight, BicepsFlexed, Brain, Calculator, CalendarDays, ChartNoAxesCombined, CircleAlert, CircleDot, ClipboardCheck, ClipboardList, ClipboardPlus, Crosshair, Droplets, Drumstick, Egg, FileSearch, Flame, FlaskConical, createLucideIcon, Gauge, HandHeart, HeartPulse, Leaf, ListChecks, Package, Pill, Radiation, Ruler, Scale, ShieldCheck, ShieldPlus, Soup, Sprout, Stethoscope, TriangleAlert, TrendingDown, Utensils, Weight, Wind, type LucideIcon } from "lucide-react";
 import { reportFaceScanAdditionalMetricGroups, riskColorHex } from "@niq/application-contracts";
 import { useBranding } from "../../lib/branding-context";
 import type { TenantBranding } from "../../lib/branding";
@@ -14,6 +14,11 @@ type ReportBranding = Required<TenantBranding>;
 type ReportSheetProps = { number: number; title: string; icon: LucideIcon; children: React.ReactNode; report: GeneratedReport; branding: ReportBranding; compact?: boolean; className?: string };
 type ReportMetric = GeneratedReport["metrics"][number];
 
+const WalkingPerson = createLucideIcon("WalkingPerson", [
+  ["circle", { cx: "14", cy: "4", r: "2", key: "head" }],
+  ["path", { d: "m7 21 4-7m5 7-3-8m-7-4 5-3 4 4 4 1m-8-5-1 6", key: "walk" }],
+]);
+
 const metricIcons: Record<string, LucideIcon> = {
   current_weight_kg: Weight,
   height_cm: Ruler,
@@ -21,7 +26,7 @@ const metricIcons: Record<string, LucideIcon> = {
   weight_loss_percent: TrendingDown,
   appetite_status: Soup,
   fluid_intake: Droplets,
-  functional_capacity: Activity,
+  functional_capacity: WalkingPerson,
   protein_intake: Utensils,
   wellness_score: HeartPulse,
   health_risk_score: ShieldCheck,
@@ -149,21 +154,16 @@ function ProductPlan({ report }: { report: GeneratedReport }) {
   const selected = report.productPlans?.filter(plan => plan.items.length) ?? [];
   const descriptionFor = (name: string) => report.productCatalog?.find(product =>
     [product.name, ...(product.aliases ?? [])].some(alias => alias.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase()))?.description;
-  if (selected.length) return <section className="cr-supplement"><div className="cr-advice-heading"><span className="cr-advice-icon"><Package size={20} aria-hidden="true"/></span><h3>Nutrition support recommendation</h3></div>
+  if (selected.length) return <section className="cr-supplement"><div className="cr-advice-heading"><span className="cr-advice-icon"><Package size={20} aria-hidden="true"/></span><h3>Nutritional Supplement Recommendations</h3></div>
     {selected.map(plan => <div className="cr-supplement-plan" key={plan.id}>
-      <div className="cr-supplement-items">{plan.items.map((item, index) => <div className="cr-supplement-item" key={`${plan.id}-${index}`}>
-        <div className="cr-supplement-item-body"><h4>{item.productName}</h4>
-          {descriptionFor(item.productName) && <p className="cr-supplement-description">{descriptionFor(item.productName)}</p>}
-          <dl className="cr-supplement-directions">
-            {item.quantityPerDay != null && <div><dt>Daily amount</dt><dd>{item.quantityPerDay} {item.unit ? `${item.unit} per day` : "per day"}</dd></div>}
-            {item.timesPerDay != null && <div><dt>Frequency</dt><dd>{item.timesPerDay === 1 ? "Once daily" : `${item.timesPerDay} times daily`}</dd></div>}
-            {item.preparation && <div><dt>Preparation</dt><dd>{item.preparation}</dd></div>}
-            {item.mealTiming && <div><dt>When to take</dt><dd>{item.mealTiming}</dd></div>}
-          </dl>
-          {!item.preparation && item.description && <p>{item.description}</p>}
-          {item.rationale && <p className="cr-supplement-rationale">{item.rationale}</p>}</div>
-      </div>)}</div>
-      {(plan.duration || plan.durationAmount) && <p className="cr-supplement-duration"><CalendarDays size={17} aria-hidden="true"/><span>Duration</span><strong>{plan.duration || `${plan.durationAmount} days`}</strong></p>}
+      <table className="cr-supplement-directions"><thead><tr><th>Name</th><th>Dose</th><th>Timing</th><th>Preparation</th><th>Duration</th><th>Key benefits</th></tr></thead><tbody>{plan.items.map((item, index) => <tr key={`${plan.id}-${index}`}>
+        <td>{item.productName}</td>
+        <td>{item.quantityPerDay ?? "—"}</td>
+        <td>{item.mealTiming || (item.timesPerDay != null ? (item.timesPerDay === 1 ? "Once daily" : `${item.timesPerDay} times daily`) : "—")}</td>
+        <td>{item.preparation || "—"}</td>
+        <td>{plan.duration || (plan.durationAmount ? `${plan.durationAmount} days` : "—")}</td>
+        <td>{descriptionFor(item.productName) || item.rationale || "—"}</td>
+      </tr>)}</tbody></table>
     </div>)}
   </section>;
   const section = reportGuidance(report, "product").find(item => item.title.toLowerCase() === "product plan");
@@ -177,10 +177,10 @@ function ProductPlan({ report }: { report: GeneratedReport }) {
     if (regular) return { name: regular[2]!.trim(), quantity: regular[1]!, detail: "per day" };
     return { name: part.trim(), quantity: "", detail: "" };
   });
-  return <section className="cr-supplement"><div className="cr-advice-heading"><span className="cr-advice-icon"><Package size={20} aria-hidden="true"/></span><h3>Supplement recommendation</h3></div>
-    <div className="cr-supplement-items">{products.map((product, index) => <div className="cr-supplement-item" key={`${product.name}-${index}`}>
-      <div><h4>{product.name}</h4>{product.detail && <p>{product.detail}</p>}</div>{product.quantity && <div className="cr-supplement-quantity"><strong>{product.quantity}</strong><span>Quantity</span></div>}
-    </div>)}</div>
+  return <section className="cr-supplement"><div className="cr-advice-heading"><span className="cr-advice-icon"><Package size={20} aria-hidden="true"/></span><h3>Nutritional Supplement Recommendations</h3></div>
+    <table className="cr-supplement-directions"><thead><tr><th>Name</th><th>Dose</th><th>Timing</th><th>Preparation</th><th>Duration</th><th>Key benefits</th></tr></thead><tbody>{products.map((product, index) => <tr key={`${product.name}-${index}`}>
+      <td>{product.name}</td><td>{product.quantity || "—"}</td><td>{product.detail || "—"}</td><td>—</td><td>{duration || "—"}</td><td>—</td>
+    </tr>)}</tbody></table>
     {duration && <p className="cr-supplement-duration"><CalendarDays size={17} aria-hidden="true"/><span>Duration</span><strong>{duration}</strong></p>}
   </section>;
 }
@@ -220,8 +220,9 @@ function clinicalFactIcon(label: string, value: string): LucideIcon {
 function ClinicalFacts({ report }: { report: GeneratedReport }) {
   if (!report.clinicalFacts?.length) return null;
   return <section className="cr-clinical-facts"><h3>Clinical background</h3><dl>{report.clinicalFacts.map(fact => {
-    const Icon = clinicalFactIcon(fact.label, fact.value);
-    return <div key={fact.label}><dt><span className="cr-clinical-fact-icon" aria-hidden="true"><Icon size={15}/></span>{fact.label}</dt><dd>{fact.value}</dd></div>;
+    const label = fact.label.toLowerCase() === "diet" ? "Diet Preference" : fact.label.toLowerCase() === "planned treatment start" ? "Treatment Start Date" : fact.label;
+    const Icon = clinicalFactIcon(label, fact.value);
+    return <div key={fact.label}><dt><span className="cr-clinical-fact-icon" aria-hidden="true"><Icon size={15}/></span>{label}</dt><dd>{fact.value}</dd></div>;
   })}</dl></section>;
 }
 
@@ -256,7 +257,7 @@ function WeightTrend({ report }: { report: GeneratedReport }) {
       <polygon points={`${points[0]!.x},132 ${points.map(item => `${item.x},${item.y}`).join(" ")} ${points[points.length - 1]!.x},132`} fill="var(--brand-primary, #34b5b9)" opacity=".08" />
       <polyline points={points.map(item => `${item.x},${item.y}`).join(" ")} fill="none" stroke="var(--brand-primary, #34b5b9)" strokeWidth="3.5" strokeLinejoin="round" strokeLinecap="round" strokeDasharray={priorComparison ? "8 6" : undefined} />
       {points.map((item, index) => <g key={`${item.date ?? "undated"}-${index}`}><circle cx={item.x} cy={item.y} r="6" fill="white" stroke="var(--brand-primary, #34b5b9)" strokeWidth="3"/><text x={item.x} y={item.y - 14} textAnchor="middle" className="cr-chart-value">{item.kg} kg</text></g>)}
-    </svg><div className="cr-chart-dates">{weights.map((item, index) => <span key={`${item.date ?? "undated"}-${index}`}>{item.label || reportDate(item.date)}</span>)}</div>{priorComparison && <p className="cr-weight-comparison-note">The earlier weight was reported as 1–2 months ago; its exact date was not recorded. The dashed line compares two values, not a dated trend.</p>}</> : <p className="cr-single-weight"><strong>{weights[0]!.kg} kg</strong><span>Recorded {weights[0]!.label || reportDate(weights[0]!.date)}</span></p>}
+    </svg><div className="cr-chart-dates">{weights.map((item, index) => <span key={`${item.date ?? "undated"}-${index}`}>{item.label || reportDate(item.date)}</span>)}</div>{priorComparison && <p className="cr-weight-comparison-note">The earlier weight was reported as 1 month ago; its exact date was not recorded. The dashed line compares two values, not a dated trend.</p>}</> : <p className="cr-single-weight"><strong>{weights[0]!.kg} kg</strong><span>Recorded {weights[0]!.label || reportDate(weights[0]!.date)}</span></p>}
   </section>;
 }
 
@@ -303,10 +304,12 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
   const denseNutrition = (report.narrative.nutritionAdvice?.length ?? 0) + (report.narrative.treatmentAdvice?.length ?? 0) > 900;
   const splitTreatmentPage = hasProductPlan && Boolean(report.narrative.treatmentAdvice?.trim());
   const hasConditionAdvice = Boolean(report.narrative.conditionAdvice?.trim());
-  const hasRecommendations = Boolean(report.narrative.effectsAdvice?.trim() || report.narrative.actionSummary?.trim() || report.narrative.monitoringSummary?.trim());
-  const possiblePages = possibleEffectPages(report);
+  const hasRecommendations = Boolean(report.narrative.effectsAdvice?.trim() || report.narrative.foodSafetyAdvice?.trim() || report.narrative.actionSummary?.trim() || report.narrative.monitoringSummary?.trim());
+  const possibleSections = reportGuidance(report, "toxicity").filter(item => item.certainty === "possible");
+  const antimetaboliteSections = possibleSections.filter(item => /antimetabolite/i.test(item.drugClass ?? ""));
+  const otherPossiblePages = possibleEffectPages(report).map(sections => sections.filter(item => !antimetaboliteSections.includes(item))).filter(sections => sections.length);
   const conditionTitle = singleGuidanceTitle(report, "comorbidity", "Condition-specific guidance");
-  const hasInterpretation = Boolean(report.narrative.overview?.trim() || showClinicalFinding);
+  const hasInterpretation = Boolean(report.narrative.overview?.trim() || showClinicalFinding || report.nutritionalStatus?.trim());
   // Saved reports predating the reviewed closing synthesis still get a short
   // recap drawn only from their already-reviewed narrative passages.
   const overallSummary = report.narrative.overallSummary?.trim() || [
@@ -315,8 +318,9 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
     report.narrative.actionSummary,
     report.narrative.monitoringSummary,
   ].flatMap(text => summarySentences(text, 1)).slice(0, 4).join(" ");
-  const plannedTreatment = report.clinicalFacts?.some(fact => /^planned treatment(?: start)?$/i.test(fact.label)) ?? false;
-  const summaryFacts = report.clinicalFacts?.filter(fact => /^(diagnosis|treatment status|current treatment|planned treatment|planned treatment start)$/i.test(fact.label)).slice(0, 4) ?? [];
+  const savedTreatmentDateIsFuture = Boolean(report.decision.plannedTreatmentStartDate && report.assessment.completedAt && report.decision.plannedTreatmentStartDate > report.assessment.completedAt.slice(0, 10));
+  const plannedTreatment = savedTreatmentDateIsFuture || (report.clinicalFacts?.some(fact => /^planned treatment$/i.test(fact.label)) ?? false);
+  const summaryFacts = report.clinicalFacts?.filter(fact => /^(diagnosis|treatment status|current treatment|planned treatment|treatment start date)$/i.test(fact.label)).slice(0, 4) ?? [];
   const riskColor = riskColorHex(report.classification?.color);
   let page = 0;
   const nextPage = () => ++page;
@@ -362,7 +366,7 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
         {(statusMetrics.length > 0 || observationGroups.length > 0) && <section className="cr-status-evidence"><h3>Assessment indicators</h3><div className="cr-status-metrics">{statusMetrics.map(metric => <div className="cr-status-metric" key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong></div>)}{observationGroups.map(group => <div className="cr-status-metric" key={group.label}><span className="cr-metric-icon"><Stethoscope size={16} aria-hidden="true"/></span><span>{group.label}</span><strong>{group.values}</strong></div>)}</div></section>}
       </div>
       <WeightTrend report={report}/>
-      {hasInterpretation && <section className="cr-clinical-interpretation"><div className="cr-advice-heading"><span className="cr-advice-icon"><FileSearch size={20} aria-hidden="true"/></span><h3>Nutritional interpretation</h3></div>{report.narrative.overview?.trim() && <p><NarrativeText text={report.narrative.overview}/></p>}{showClinicalFinding && clinicalFinding !== report.narrative.overview?.trim() && <p><NarrativeText text={clinicalFinding!}/></p>}</section>}
+      {hasInterpretation && <section className="cr-clinical-interpretation"><div className="cr-advice-heading"><span className="cr-advice-icon"><FileSearch size={20} aria-hidden="true"/></span><h3>Nutritional interpretation</h3></div>{report.nutritionalStatus?.trim() && <p><strong>Nutritional status:</strong> {report.nutritionalStatus}</p>}{report.narrative.overview?.trim() && <p><NarrativeText text={report.narrative.overview}/></p>}{showClinicalFinding && clinicalFinding !== report.narrative.overview?.trim() && <p><NarrativeText text={clinicalFinding!}/></p>}</section>}
     </ReportSheet>}
     {hasNutritionPage && <ReportSheet number={nextPage() + 1} title="Intervention" icon={Utensils} report={report} branding={branding} compact className={`cr-sheet-nutrition${denseNutrition ? " cr-sheet-nutrition-dense" : ""}`}>
       <div className="cr-care-stack">
@@ -378,15 +382,24 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
     {hasConditionAdvice && <ReportSheet number={nextPage() + 1} title="Other health conditions" icon={HeartPulse} report={report} branding={branding} compact className="cr-sheet-care">
       <div className="cr-care-grid"><ReviewedAdvice title={conditionTitle} text={report.narrative.conditionAdvice} icon={HeartPulse}/></div>
     </ReportSheet>}
-    {possiblePages.map((sections, index) => <ReportSheet key={index} number={nextPage() + 1} title="Possible treatment effects" icon={TriangleAlert} report={report} branding={branding} compact className="cr-sheet-possible-effects">
+    {antimetaboliteSections.length > 0 && <ReportSheet number={nextPage() + 1} title="Symptoms Associated with Antimetabolite Chemotherapy" icon={TriangleAlert} report={report} branding={branding} compact className="cr-sheet-possible-effects">
+      <p className="cr-possible-intro">The guidance in this report covers potential side effects associated with antimetabolite chemotherapy, including mouth sores, diarrhoea, hand-foot symptoms, nausea or vomiting, infection, dehydration, raised liver enzymes, fatigue or swelling, and anaemia. These are precautionary measures, not diagnoses. Not every patient will experience all these effects, and any symptoms that develop should be reviewed by the treating oncologist.</p>
+      <div className="cr-possible-list">{antimetaboliteSections.map(section => <section className="cr-possible-effect" key={section.id}>
+        <div className="cr-possible-effect-heading"><span className="cr-advice-icon"><TriangleAlert size={19} aria-hidden="true"/></span><div><h3>{section.title}</h3></div></div>
+        <p><NarrativeText text={section.text}/></p>
+      </section>)}</div>
+    </ReportSheet>}
+    {otherPossiblePages.map((sections, index) => <ReportSheet key={index} number={nextPage() + 1} title="Possible treatment effects" icon={TriangleAlert} report={report} branding={branding} compact className="cr-sheet-possible-effects">
       <p className="cr-possible-intro">These effects are possible with the matched treatment and drug class. They have not been reported as symptoms in this assessment.</p>
       <div className="cr-possible-list">{sections.map(section => <section className="cr-possible-effect" key={section.id}>
         <div className="cr-possible-effect-heading"><span className="cr-advice-icon"><TriangleAlert size={19} aria-hidden="true"/></span><div><span className="cr-guidance-type">Possible effect{section.drugClass ? ` · ${section.drugClass}` : ""}</span><h3>{section.title}</h3></div></div>
         <p><NarrativeText text={section.text}/></p>
       </section>)}</div>
     </ReportSheet>)}
+    {report.narrative.redFlagsAdvice?.trim() && <ReportSheet number={nextPage() + 1} title="Red flags" icon={TriangleAlert} report={report} branding={branding} compact className="cr-sheet-care"><div className="cr-care-grid"><ReviewedAdvice title="When to seek urgent help" text={report.narrative.redFlagsAdvice} icon={TriangleAlert}/></div></ReportSheet>}
     {hasRecommendations && <ReportSheet number={nextPage() + 1} title="Recommendations" icon={ListChecks} report={report} branding={branding} compact className="cr-sheet-care">
       <div className="cr-care-grid"><ReviewedAdvice title={singleGuidanceTitle(report, "toxicity", "Reported symptom care")} text={report.narrative.effectsAdvice} icon={Droplets}/>
+      <ReviewedAdvice title="Food safety" text={report.narrative.foodSafetyAdvice} icon={ShieldCheck}/>
       <ReviewedAdvice title="Care actions" text={report.narrative.actionSummary} icon={ListChecks} action/>
       <ReviewedAdvice title="Monitoring plan" text={report.narrative.monitoringSummary} icon={ChartNoAxesCombined} action/></div>
     </ReportSheet>}

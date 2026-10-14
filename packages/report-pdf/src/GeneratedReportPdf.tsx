@@ -14,7 +14,7 @@ export type PdfBrand = {
   partnerLogoDataUrl?: string | null;
 };
 type Metric = GeneratedReport["metrics"][number];
-type IconName = "person" | "heart" | "shield" | "weight" | "height" | "chart" | "drop" | "pulse" | "lungs" | "food" | "package" | "calendar" | "clipboard" | "check" | "alert";
+type IconName = "person" | "heart" | "shield" | "weight" | "height" | "chart" | "drop" | "pulse" | "lungs" | "food" | "package" | "calendar" | "clipboard" | "check" | "alert" | "walk";
 type Palette = { primary: string; secondary: string; ink: string; muted: string; soft: string; softSecondary: string; line: string; white: string };
 let fontsRegistered = false;
 
@@ -114,6 +114,7 @@ function Icon({ name, color, size = 21 }: { name: IconName; color: string; size?
     clipboard: <><Rect x="5" y="4" width="14" height="18" rx="2" {...common}/><Path d="M9 4V2h6v2M8 10h8M8 14h8M8 18h5" {...common}/></>,
     check: <><Circle cx="12" cy="12" r="9" {...common}/><Path d="m8 12 2.7 2.7L16 9" {...common}/></>,
     alert: <><Path d="M12 3 22 21H2L12 3Z" {...common}/><Path d="M12 9v5M12 18h.01" {...common}/></>,
+    walk: <><Circle cx="14" cy="4" r="2" {...common}/><Path d="m12 8-3 4 3 2 2-4 3 3 3 1M9 12l-2 5-3 3M12 14l-1 5 3 3" {...common}/></>,
   };
   return <Svg width={size} height={size} viewBox="0 0 24 24">{path[name]}</Svg>;
 }
@@ -136,7 +137,7 @@ function ReportPage({ report, brand, number, title, icon, children }: { report: 
   const theme = palette(brand);
   return <Page size="A4" style={styles.page} wrap>
     <View fixed style={[styles.header, { borderBottomColor: theme.line }]}>
-      <View style={{ flexDirection: "row", alignItems: "center" }}><Text style={[styles.headerNumber, { color: accessibleBrandInk(theme.primary, [theme.white]) }]}>{String(number).padStart(2, "0")}</Text><Text style={styles.headerTitle}>{title}</Text><View style={{ marginLeft: 8 }}><Icon name={icon} color={theme.primary} size={18}/></View></View>
+      <View style={{ flexDirection: "row", alignItems: "center", maxWidth: title.length > 30 ? "76%" : undefined }}><Text style={[styles.headerNumber, { color: accessibleBrandInk(theme.primary, [theme.white]) }]}>{String(number).padStart(2, "0")}</Text><Text style={[styles.headerTitle, title.length > 30 ? { fontSize: 10, maxWidth: 320 } : undefined]}>{title}</Text><View style={{ marginLeft: 8 }}><Icon name={icon} color={theme.primary} size={18}/></View></View>
       <PdfLogo brand={brand}/>
     </View>
     <View fixed style={[styles.footer, { borderTopColor: theme.line }]}><Text>{brand.name}  |  Clinical nutrition report</Text><Text render={({ pageNumber }) => `${report.assessment.reference} · ${String(pageNumber).padStart(2, "0")}`}/></View>
@@ -154,6 +155,7 @@ function MetricCard({ metric, theme, icon, width, compact = false }: { metric: M
 }
 
 function iconFor(label: string): IconName {
+  if (/functional capacity|daily activity/i.test(label)) return "walk";
   if (/weight|bmi/i.test(label)) return "weight";
   if (/height/i.test(label)) return "height";
   if (/heart|blood pressure/i.test(label)) return "heart";
@@ -246,9 +248,9 @@ function singleGuidanceTitle(report: GeneratedReport, type: "comorbidity" | "tox
   return titles.length === 1 ? titles[0]! : fallback;
 }
 
-function AdvicePanel({ title, text, icon, theme, columns = false, action = false, width, compact = false, tight = false, minHeight }: { title: string; text: string; icon: IconName; theme: Palette; columns?: boolean; action?: boolean; width?: "48.8%" | "100%"; compact?: boolean; tight?: boolean; minHeight?: number }) {
+function AdvicePanel({ title, text, icon, theme, columns = false, action = false, width, compact = false, tight = false, minHeight, allowWrap = false }: { title: string; text: string; icon: IconName; theme: Palette; columns?: boolean; action?: boolean; width?: "48.8%" | "100%"; compact?: boolean; tight?: boolean; minHeight?: number; allowWrap?: boolean }) {
   const sentences = adviceSentences(text);
-  return <View wrap={false} style={[styles.panel, { width: width ?? "100%", minHeight, borderColor: theme.line, backgroundColor: action ? theme.soft : theme.white, padding: tight ? 8 : compact ? 9 : 11, marginBottom: 0 }]}>
+  return <View wrap={allowWrap} style={[styles.panel, { width: width ?? "100%", minHeight, borderColor: theme.line, backgroundColor: action ? theme.soft : theme.white, padding: tight ? 8 : compact ? 9 : 11, marginBottom: 0 }]}>
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: tight ? 5 : compact ? 6 : 8 }}><Icon name={icon} color={theme.primary} size={17}/><Text style={[styles.subTitle, { marginBottom: 0, flex: 1 }]}>{title}</Text></View>
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: tight ? 3 : compact ? 5 : 7 }}>
       {sentences.map((sentence, index) => <View key={index} style={{ width: columns ? "48.8%" : "100%", flexDirection: "row", gap: 6, alignItems: "flex-start", padding: tight ? 3 : compact ? 4 : 5, borderRadius: 5, borderLeftWidth: 1.3, borderLeftColor: theme.primary, backgroundColor: action ? theme.white : theme.soft }}>
@@ -260,16 +262,25 @@ function AdvicePanel({ title, text, icon, theme, columns = false, action = false
 }
 
 function productParts(report: GeneratedReport) {
+  const selected = report.productPlans?.find(plan => plan.items.length);
+  if (selected) return { items: selected.items.map(item => ({
+    name: item.productName,
+    quantity: item.quantityPerDay == null ? "" : String(item.quantityPerDay),
+    detail: item.mealTiming || (item.timesPerDay == null ? "" : item.timesPerDay === 1 ? "Once daily" : `${item.timesPerDay} times daily`),
+    preparation: item.preparation || "—",
+    duration: selected.duration || (selected.durationAmount ? `${selected.durationAmount} days` : "—"),
+    benefits: report.productCatalog?.find(product => [product.name, ...(product.aliases ?? [])].some(alias => alias.trim().toLowerCase() === item.productName.trim().toLowerCase()))?.description || item.rationale || "—",
+  })), duration: selected.duration || (selected.durationAmount ? `${selected.durationAmount} days` : "—") };
   const section = reportGuidance(report, "product").find(item => item.title.toLowerCase() === "product plan");
   if (!section) return null;
   const [dose, duration] = section.text.split("\n").map(part => part.trim()).filter(Boolean);
   if (!dose) return null;
   const items = dose.split(/\s+\+\s+/).map(part => {
     const scoop = /^([^:]+):\s*(\d+(?:\.\d+)?)\s+(.+)$/.exec(part);
-    if (scoop) return { name: scoop[1]!.trim(), quantity: scoop[2]!, detail: scoop[3]!.trim() };
+    if (scoop) return { name: scoop[1]!.trim(), quantity: scoop[2]!, detail: scoop[3]!.trim(), preparation: "—", duration: duration || "—", benefits: "—" };
     const regular = /^(\d+(?:\.\d+)?)\s+(.+)$/.exec(part);
-    if (regular) return { name: regular[2]!.trim(), quantity: regular[1]!, detail: "per day" };
-    return { name: part.trim(), quantity: "", detail: "" };
+    if (regular) return { name: regular[2]!.trim(), quantity: regular[1]!, detail: "per day", preparation: "—", duration: duration || "—", benefits: "—" };
+    return { name: part.trim(), quantity: "", detail: "", preparation: "—", duration: duration || "—", benefits: "—" };
   });
   return { items, duration };
 }
@@ -317,15 +328,11 @@ function ProductPlan({ report, theme, compact = false }: { report: GeneratedRepo
   if (!plan) return null;
   const brandInk = accessibleBrandInk(theme.primary, [theme.soft]);
   return <View wrap={false} style={[styles.panel, { borderColor: theme.line, backgroundColor: theme.soft, padding: compact ? 8 : 11 }]}>
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 9, marginBottom: compact ? 5 : 9 }}><Icon name="package" color={theme.primary}/><Text style={[styles.subTitle, { marginBottom: 0 }]}>Supplement recommendation</Text></View>
-    <View style={styles.wrapRow}>{plan.items.map((item, index) => <View key={`${item.name}-${index}`} style={[styles.productCard, { borderColor: theme.line, backgroundColor: theme.white, flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: compact ? 48 : 62, padding: compact ? 7 : 10 }]}>
-      <View><Text style={[styles.productName, { marginBottom: 4 }]}>{item.name}</Text>{item.detail && <Text style={styles.muted}>{item.detail}</Text>}</View>
-      <View style={{ backgroundColor: theme.soft, borderRadius: 8, minWidth: 35, minHeight: 39, justifyContent: "center", alignItems: "center", padding: 4 }}>
-        {item.quantity && <Text style={[styles.productQuantity, { color: accessibleBrandInk(theme.primary, [theme.soft]) }]}>{item.quantity}</Text>}
-        {item.quantity && <Text style={{ color: brandInk, fontSize: 5.8, fontWeight: 700 }}>Quantity</Text>}
-      </View>
-    </View>)}</View>
-    {plan.duration && <View style={{ flexDirection: "row", gap: 7, alignItems: "center", marginTop: compact ? 5 : 9 }}><Icon name="calendar" color={theme.primary} size={17}/><Text style={styles.muted}>Duration</Text><Text style={[styles.body, { fontWeight: 700 }]}>{plan.duration}</Text></View>}
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 9, marginBottom: compact ? 5 : 9 }}><Icon name="package" color={theme.primary}/><Text style={[styles.subTitle, { marginBottom: 0 }]}>Nutritional Supplement Recommendations</Text></View>
+    <View style={{ borderWidth: 1, borderColor: theme.line, borderRadius: 7, overflow: "hidden", backgroundColor: theme.white }}>
+      <View style={{ flexDirection: "row", backgroundColor: theme.soft, padding: 5 }}>{["Name", "Dose", "Timing", "Preparation", "Duration", "Key benefits"].map((label, index) => <Text key={label} style={{ width: ["23%", "9%", "15%", "17%", "12%", "24%"][index], fontSize: 6.2, fontWeight: 700, color: brandInk }}>{label}</Text>)}</View>
+      {plan.items.map((item, index) => <View key={`${item.name}-${index}`} style={{ flexDirection: "row", padding: 5, borderTopWidth: index ? .5 : 0, borderTopColor: theme.line, alignItems: "flex-start" }}>{[item.name, item.quantity || "—", item.detail || "—", item.preparation, item.duration, item.benefits].map((value, column) => <Text key={column} style={{ width: ["23%", "9%", "15%", "17%", "12%", "24%"][column], fontSize: 6.2, lineHeight: 1.25, fontWeight: column === 0 ? 700 : 400 }}>{value}</Text>)}</View>)}
+    </View>
   </View>;
 }
 
@@ -388,13 +395,17 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
   const showClinicalFinding = Boolean(clinicalFinding && !isObservationOnlyFinding(clinicalFinding));
   const hasNutritionPage = Boolean(plan || report.narrative.nutritionAdvice || targets.length || renalGuidance || report.narrative.treatmentAdvice);
   const hasConsiderations = Boolean(report.narrative.conditionAdvice || report.narrative.effectsAdvice);
-  const hasNutritionFindings = Boolean(report.classification || showClinicalFinding || statusMetrics.length || (!hasNutritionPage && cleanWeights(report).length));
+  const hasNutritionFindings = Boolean(report.classification || report.nutritionalStatus || showClinicalFinding || statusMetrics.length || (!hasNutritionPage && cleanWeights(report).length));
   const hasFindings = Boolean(remainingDetails.length || hasNutritionFindings);
   const compactNutritionSummary = Boolean(report.classification && !remainingDetails.length && statusMetrics.length > 0 && statusMetrics.length <= 6);
   const findingsTitle = remainingDetails.length
     ? hasNutritionFindings ? "Vital IQ and nutrition findings" : "Vital IQ detailed measurements"
     : "Nutrition status and findings";
-  const hasActions = Boolean(report.narrative.actionSummary || report.narrative.monitoringSummary);
+  const hasActions = Boolean(report.narrative.actionSummary || report.narrative.monitoringSummary || report.narrative.foodSafetyAdvice);
+  const redFlags = report.narrative.redFlagsAdvice?.trim();
+  const possibleSections = reportGuidance(report, "toxicity").filter(section => section.certainty === "possible");
+  const antimetaboliteSections = possibleSections.filter(section => /antimetabolite/i.test(section.drugClass ?? ""));
+  const otherPossibleSections = possibleSections.filter(section => !antimetaboliteSections.includes(section));
   const actionOnly = hasActions && !hasConsiderations;
   const careWordCount = (text: string | undefined) => text?.trim().split(/\s+/).length ?? 0;
   const pairedCareAdvice = Boolean(report.narrative.conditionAdvice && report.narrative.effectsAdvice && careWordCount(report.narrative.conditionAdvice) <= 100 && careWordCount(report.narrative.effectsAdvice) <= 100);
@@ -439,6 +450,10 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
         {primaryMeasurements.length > 0 && <View style={{ width: "48.8%", justifyContent: "space-between" }}>{primaryMeasurements.map(metric => <View key={metric.id} style={[styles.panel, { minHeight: primaryMeasurements.length === 1 ? 174 : 82, marginBottom: 0, borderColor: theme.line, justifyContent: "center" }]}><Text style={styles.metricLabel}>{metric.label}</Text><Text style={[styles.metricValue, { color: theme.ink }]}>{metricText(metric)}</Text></View>)}</View>}
       </View>
       {bmiMetric && <BmiReferencePanel metric={bmiMetric} age={age} weight={measurementNumber("current_weight_kg")} height={measurementNumber("height_cm")} theme={theme}/>}
+      {report.clinicalFacts?.length ? <View style={[styles.panel, { borderColor: theme.line, marginTop: 10 }]}>
+        <Text style={[styles.subTitle, { marginBottom: 7 }]}>Clinical background</Text>
+        {report.clinicalFacts.map(fact => <View key={fact.label} style={{ flexDirection: "row", gap: 12, paddingVertical: 4, borderBottomWidth: .5, borderBottomColor: theme.line }}><Text style={[styles.muted, { width: "34%" }]}>{fact.label.toLowerCase() === "diet" ? "Diet Preference" : fact.label.toLowerCase() === "planned treatment start" ? "Treatment Start Date" : fact.label}</Text><Text style={{ flex: 1, fontWeight: 700 }}>{fact.value}</Text></View>)}
+      </View> : null}
       {report.narrative.overview && <NarrativePanel title="Clinical overview" text={report.narrative.overview} icon="clipboard" theme={theme}/>}
       {otherAssessmentMetrics.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Assessment observations</Text><View style={styles.wrapRow}>{otherAssessmentMetrics.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme}/>)}</View></>}
     </ReportPage>
@@ -483,6 +498,7 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
       </View>}
       {!compactNutritionSummary && statusMetrics.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Assessment indicators</Text><View style={[styles.wrapRow, { marginBottom: 11 }]}>{statusMetrics.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme}/>)}</View></>}
       {showClinicalFinding && clinicalFinding && <NarrativePanel title="Clinical interpretation" text={clinicalFinding} icon="clipboard" theme={theme} accent/>}
+      {report.nutritionalStatus && <NarrativePanel title="Nutritional status" text={report.nutritionalStatus} icon="clipboard" theme={theme} accent/>}
       <WeightGraphic report={report} theme={theme}/>
       {actionOnly && <View style={[styles.row, { flexWrap: "wrap", marginTop: 7 }]}>
         {report.narrative.actionSummary && <AdvicePanel title="What to do" text={report.narrative.actionSummary} icon="food" theme={theme} action width={careStepWidth} compact/>}
@@ -502,7 +518,17 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
       {report.narrative.treatmentAdvice && <AdvicePanel title="During treatment" text={report.narrative.treatmentAdvice} icon="shield" theme={theme} columns compact={denseNutrition} tight={veryDenseNutrition}/>}
     </ReportPage>}
 
-    {(hasConsiderations || (hasActions && !hasFindings)) && <ReportPage report={report} brand={brand} number={page++} title="Care and next steps" icon="heart">
+    {antimetaboliteSections.length > 0 && <ReportPage report={report} brand={brand} number={page++} title="Symptoms Associated with Antimetabolite Chemotherapy" icon="alert">
+      <Text style={[styles.body, { marginBottom: 11 }]}>The guidance in this report covers potential side effects associated with antimetabolite chemotherapy, including mouth sores, diarrhoea, hand-foot symptoms, nausea or vomiting, infection, dehydration, raised liver enzymes, fatigue or swelling, and anaemia. These are precautionary measures, not diagnoses. Not every patient will experience all these effects, and any symptoms that develop should be reviewed by the treating oncologist.</Text>
+      {antimetaboliteSections.map(section => <AdvicePanel key={section.id} title={section.title} text={section.text} icon="alert" theme={theme} compact allowWrap/>)}
+    </ReportPage>}
+    {otherPossibleSections.length > 0 && <ReportPage report={report} brand={brand} number={page++} title="Possible treatment effects" icon="alert">
+      <Text style={[styles.body, { marginBottom: 11 }]}>These effects are possible with the matched treatment and drug class. They have not been reported as symptoms in this assessment.</Text>
+      {otherPossibleSections.map(section => <AdvicePanel key={section.id} title={section.title} text={section.text} icon="alert" theme={theme} compact allowWrap/>)}
+    </ReportPage>}
+    {redFlags && <ReportPage report={report} brand={brand} number={page++} title="Red flags" icon="alert"><AdvicePanel title="When to seek urgent help" text={redFlags} icon="alert" theme={theme}/></ReportPage>}
+
+    {(hasConsiderations || (hasActions && (!hasFindings || Boolean(report.narrative.foodSafetyAdvice)))) && <ReportPage report={report} brand={brand} number={page++} title="Recommendations" icon="heart">
       <View style={{ marginTop: compactCare ? 117 : 0, gap: 10 }}>
         {pairedCareAdvice ? <View wrap={false} style={[styles.row, { alignItems: "stretch" }]}>
           <AdvicePanel title={singleGuidanceTitle(report, "comorbidity", "Other health conditions")} text={report.narrative.conditionAdvice!} icon="heart" theme={theme} width="48.8%" compact minHeight={compactCare ? 250 : undefined}/>
@@ -512,6 +538,7 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
           {report.narrative.effectsAdvice && <AdvicePanel title={singleGuidanceTitle(report, "toxicity", "Treatment effects and nutrition")} text={report.narrative.effectsAdvice} icon="drop" theme={theme} columns={denseCare} compact={denseCare}/>}
         </>}
         {hasActions && <View style={[styles.row, { flexWrap: "wrap" }]}>
+          {report.narrative.foodSafetyAdvice && <AdvicePanel title="Food safety" text={report.narrative.foodSafetyAdvice} icon="shield" theme={theme} compact/>}
           {report.narrative.actionSummary && <AdvicePanel title="What to do" text={report.narrative.actionSummary} icon="food" theme={theme} action width={careStepWidth} compact minHeight={compactCare ? 140 : undefined}/>}
           {report.narrative.monitoringSummary && <AdvicePanel title="What to monitor" text={report.narrative.monitoringSummary} icon="chart" theme={theme} action width={careStepWidth} compact minHeight={compactCare ? 140 : undefined}/>}
         </View>}
