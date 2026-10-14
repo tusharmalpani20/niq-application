@@ -7,6 +7,7 @@ import { AssessmentBmiCard } from "./AssessmentBmiCard";
 import type { GeneratedReport } from "./generated-report-api";
 import { cleanWeights, metricText, reportAge, reportDate, reportGuidance, weightChange } from "./generated-report-format";
 import { weightChartPoints } from "./generated-report-chart";
+import { formatGenderAnswer } from "./formatGenderAnswer";
 import "./generated-report.css";
 
 type ReportBranding = Required<TenantBranding>;
@@ -337,16 +338,17 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
   }));
   return <article className="clinical-report" aria-label="Generated clinical nutrition report">
     <section className="cr-sheet cr-cover" aria-label="Report cover">
-      <div className="cr-cover-top"><BrandMarks className="cr-cover-brand" organizationLogoUrl={branding.logoUrl} organizationName={branding.displayName}/><span>Personalised clinical nutrition</span></div>
+      <div className="cr-cover-top"><BrandMarks className="cr-cover-brand" organizationLogoUrl={branding.logoUrl} organizationName={branding.displayName}/></div>
       <div className="cr-cover-main"><div className="cr-cover-copy"><h1>Medical<br/><em>Nutrition</em><br/>Therapy Report</h1><p className="cr-cover-name">{report.patient.displayName}</p><p>{report.patient.reference} · {report.assessment.reference}</p>{report.assessment.completedAt && <p>Assessment: {reportDate(report.assessment.completedAt)}</p>}</div>
         <CoverArtwork/>
       </div>
       <footer className="cr-sheet-footer"><span>{branding.displayName}</span><span>01</span></footer>
     </section>
     <ReportSheet number={nextPage() + 1} title="Patient overview" icon={ClipboardList} report={report} branding={branding}>
-      <div className="cr-overview-head"><div className="cr-overview-hero"><div className="cr-avatar" aria-hidden="true">{report.patient.displayName.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase()).join("")}</div><div><h3>{report.patient.displayName}</h3><p>{[report.patient.reference, age === null ? null : `${age} years`, report.patient.gender].filter(Boolean).join(" · ")}</p>{report.assessment.completedAt && <p>Assessment completed {reportDate(report.assessment.completedAt)}</p>}</div></div>
+      <div className="cr-overview-head"><div className="cr-overview-hero"><div className="cr-avatar" aria-hidden="true">{report.patient.displayName.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase()).join("")}</div><div><h3>{report.patient.displayName}</h3><p>{[report.patient.reference, age === null ? null : `${age} years`, report.patient.gender ? formatGenderAnswer(report.patient.gender) : null].filter(Boolean).join(" · ")}</p>{report.assessment.completedAt && <p>Assessment completed {reportDate(report.assessment.completedAt)}</p>}</div></div>
         {keyMetrics.length > 0 && <div className="cr-overview-key">{keyMetrics.map(metric => <div className="cr-metric-card" key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong>{metric.measuredAt && <small>{reportDate(metric.measuredAt)}</small>}</div>)}</div>}
       </div>
+      {report.assessmentAnswerCoverage && <p className="cr-answer-coverage"><ClipboardCheck size={17} aria-hidden="true"/><span><strong>{report.assessmentAnswerCoverage.answered} of {report.assessmentAnswerCoverage.total}</strong> applicable assessment questions answered</span></p>}
       {showBmiReference && <div className="cr-report-bmi"><AssessmentBmiCard answers={{ height_cm: height!, current_weight_kg: weight!, ...(age === null ? {} : {age}) }} showAnchor={false}/></div>}
       <ClinicalFacts report={report}/>
     </ReportSheet>
@@ -389,7 +391,7 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
       <ReviewedAdvice title="Monitoring plan" text={report.narrative.monitoringSummary} icon={ChartNoAxesCombined} action/></div>
     </ReportSheet>}
     <ReportSheet number={nextPage() + 1} title="Report summary" icon={ClipboardList} report={report} branding={branding} compact className="cr-sheet-summary">
-      <div className="cr-summary-hero" style={{ borderColor: riskColor }}><div><span className="cr-summary-fact-label"><span className="cr-clinical-fact-icon" aria-hidden="true"><Gauge size={15}/></span>NIQ score</span><strong style={{ color: riskColor }}>{report.classification.score} <span>points</span></strong><small>{report.classification.label}</small></div>
+      <div className="cr-summary-hero" style={{ borderColor: riskColor }}><div className="cr-summary-score"><span className="cr-summary-fact-label"><span className="cr-clinical-fact-icon" aria-hidden="true"><Gauge size={15}/></span>NIQ score</span><div className="cr-summary-score-circle" style={{ borderColor: riskColor }} role="img" aria-label={`${report.classification.score} points, ${report.classification.label}`}><strong style={{ color: riskColor }}>{report.classification.score}</strong><span>points</span></div><small style={{ color: riskColor }}>{report.classification.label}</small></div>
         {summaryFacts.length > 0 && <div className="cr-summary-facts">{summaryFacts.map(fact => {
           const Icon = clinicalFactIcon(fact.label, fact.value);
           return <p key={fact.label}><span className="cr-summary-fact-label"><span className="cr-clinical-fact-icon" aria-hidden="true"><Icon size={15}/></span>{fact.label}</span><strong>{fact.value}</strong></p>;
