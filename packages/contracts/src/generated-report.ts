@@ -19,6 +19,8 @@ export const editGeneratedNarrativeSchema = z.object({
     treatmentAdvice: z.string().trim().max(1800).optional(),
     conditionAdvice: z.string().trim().max(1800).optional(),
     effectsAdvice: z.string().trim().max(1800).optional(),
+    redFlagsAdvice: z.string().trim().max(6000).optional(),
+    foodSafetyAdvice: z.string().trim().max(6000).optional(),
   }).strict(),
   issueResolution: z.object({explanation:z.string().trim().min(10).max(1000)}).strict().optional(),
 }).strict().refine(value=>Object.keys(value.narrative).length>0 || Boolean(value.issueResolution),"Edit wording or resolve an issue");
@@ -43,6 +45,10 @@ export type GeneratedNarrative = {
   treatmentAdvice?: string;
   conditionAdvice?: string;
   effectsAdvice?: string;
+  /** Consolidated, evidence-backed urgent contact instructions. */
+  redFlagsAdvice?: string;
+  /** Food safety instructions belong in Recommendations. */
+  foodSafetyAdvice?: string;
 };
 export type GeneratedReportSection = {
   id: string;
@@ -83,6 +89,8 @@ export type GeneratedReport = {
   /** Applicable, non-calculated questions in the submitted assessment. */
   assessmentAnswerCoverage?: { answered: number; total: number };
   classification: { id: string; label: string; score: number; color?: AssessmentRiskColor };
+  /** Exact nutritional status from the frozen care-plan risk mapping. */
+  nutritionalStatus?: string;
   metrics: Array<{ id: string; label: string; value: string; unit?: string; measuredAt?: string; source: "assessment" | "face_scan"; referenceRange?: string; outsideReferenceRange?: boolean }>;
   weightHistory: Array<{ date: string | null; kg: number; label?: string }>;
   /** Display labels from the submitted assessment; absent on reports saved before this field existed. */

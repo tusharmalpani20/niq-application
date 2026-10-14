@@ -25,8 +25,9 @@ export function cleanWeights(report: GeneratedReport) {
   const undated: Array<{ date: string | null; kg: number; label?: string }> = [];
   for (const item of report.weightHistory) {
     if (!Number.isFinite(item.kg) || item.kg <= 0) continue;
-    const label = "label" in item ? (item as { label?: string }).label : undefined;
-    if (item.date === null) { undated.push({ date: null, kg: item.kg, label: label || "Previously reported (date not recorded)" }); continue; }
+    const rawLabel = "label" in item ? (item as { label?: string }).label : undefined;
+    const label = rawLabel && /^(?:weight 1[–-]2 months ago|reported 1[–-]2 months ago(?: \(exact date unknown\))?)$/i.test(rawLabel.trim()) ? "Weight 1 Month Ago" : rawLabel;
+    if (item.date === null) { undated.push({ date: null, kg: item.kg, label: "Weight 1 Month Ago" }); continue; }
     if (!/^\d{4}-\d{2}-\d{2}/.test(item.date)) continue;
     byDate.set(item.date.slice(0, 10), { date: item.date.slice(0, 10), kg: item.kg, label });
   }

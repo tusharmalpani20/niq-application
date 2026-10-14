@@ -117,11 +117,12 @@ export function AssessmentFields({ section, answers, manifest, onChange, errors,
     if (field.id === "height_cm" || field.id === "current_weight_kg" || field.id === "previous_weight_kg") {
       const isHeight = field.id === "height_cm";
       const isPreviousWeight = field.id === "previous_weight_kg";
+      const fieldLabel = isPreviousWeight ? "Weight 1 Month Ago" : field.label;
       const unit = isHeight ? measurementUnits.height : measurementUnits.weight;
       return <div key={field.id} className="min-w-0 space-y-2">
-        <div className="flex min-h-9 items-center justify-between gap-2"><label htmlFor={id} className="block text-base font-medium">{field.label}{isPreviousWeight ? ` (${unit})` : ""}{required}</label>{reset}</div>
+        <div className="flex min-h-9 items-center justify-between gap-2"><label htmlFor={id} className="block text-base font-medium">{fieldLabel}{isPreviousWeight ? ` (${unit})` : ""}{required}</label>{reset}</div>
         {!isPreviousWeight && <div className="flex min-h-10 items-center"><AssessmentMeasurementUnitControl label={field.label} kind={isHeight ? "height" : "weight"} unit={unit} onUnitChange={next => onMeasurementUnitsChange?.({ ...measurementUnits, [isHeight ? "height" : "weight"]: next })} disabled={typeof value === "string"} /></div>}
-        <AssessmentMeasurementInput key={`${id}-${unit}`} id={id} label={field.label} kind={isHeight ? "height" : "weight"} value={value} unit={unit} showQuickValues={field.id !== "previous_weight_kg"} onChange={next => onChange(field.id, next)} disabled={readOnly} invalid={Boolean(error)} describedBy={error ? errorId : undefined} required={field.required} />
+        <AssessmentMeasurementInput key={`${id}-${unit}`} id={id} label={fieldLabel} kind={isHeight ? "height" : "weight"} value={value} unit={unit} showQuickValues={field.id !== "previous_weight_kg"} onChange={next => onChange(field.id, next)} disabled={readOnly} invalid={Boolean(error)} describedBy={error ? errorId : undefined} required={field.required} />
         {isPreviousWeight && <p className="text-xs text-muted-foreground">Uses the unit selected in Personal details</p>}
         {isHeight && heightSourceDate && <p className="text-xs text-muted-foreground">Height from assessment on {new Date(heightSourceDate).toLocaleDateString()}</p>}
         {errorMarkup}

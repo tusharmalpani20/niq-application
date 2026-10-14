@@ -50,18 +50,24 @@ export const scoringReportContentSchema = z.object({
     overallSummary: narrative.optional(),
     nutritionAdvice: narrative.optional(), treatmentAdvice: narrative.optional(),
     conditionAdvice: narrative.optional(), effectsAdvice: narrative.optional(),
+    redFlagsAdvice: narrative.optional(), foodSafetyAdvice: narrative.optional(),
   }),
   issues: z.array(z.string().max(1000)).max(100),
   omittedNarrativeFields: z.array(z.enum([
     "overview", "keyFindings", "actionSummary", "monitoringSummary", "overallSummary",
     "nutritionAdvice", "treatmentAdvice", "conditionAdvice", "effectsAdvice",
-  ])).max(9).optional(),
+    "redFlagsAdvice", "foodSafetyAdvice",
+  ])).max(11).optional(),
 }).superRefine((content, context) => {
   // In-flight v1 runs can finish after a deployment. Only the v2 response
   // requires the new reviewed passages.
   if (content.schemaVersion < 2) return;
   if (content.schemaVersion >= 3 && !content.narrative.overallSummary)
     context.addIssue({ code: "custom", path: ["narrative", "overallSummary"], message: "Reviewed overall summary is required" });
+  if (content.schemaVersion >= 4) {
+    for (const field of ["redFlagsAdvice", "foodSafetyAdvice"] as const)
+      if (!content.narrative[field]) context.addIssue({ code: "custom", path: ["narrative", field], message: "Consolidated recommendation passage is required" });
+  }
   for (const field of ["nutritionAdvice", "treatmentAdvice", "conditionAdvice", "effectsAdvice"] as const)
     if (!content.narrative[field]) context.addIssue({ code: "custom", path: ["narrative", field], message: "Reviewed care-plan passage is required" });
 });

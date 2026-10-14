@@ -77,8 +77,8 @@ export function finishWeightHistory(priorMostRecentFirst: GeneratedReport["weigh
   });
   const points = conflictingRecentRecord ? [] : [...priorMostRecentFirst];
   if (current) points.unshift(current);
-  if (firstAssessment && points.length < 2 && previousKg && previousKg < 600 && previousKg !== current?.kg)
-    points.push({ date: null, kg: previousKg, label: "Reported 1–2 months ago (exact date unknown)" });
+  if (firstAssessment && points.length < 2 && previousKg && previousKg < 600)
+    points.push({ date: null, kg: previousKg, label: "Weight 1 Month Ago" });
   const unique = new Map(points.reverse().map(point => [point.date ?? "undated", point]));
   return [...unique.values()].slice(-6);
 }
@@ -188,7 +188,7 @@ export function normalizeGuidance(content: ScoringReportContent, manifest: Asses
       }
       add({ id: row.id, kind: "product", title: "Product plan", text: [planText, row.duration].filter(nonempty).join("\n") });
     }
-    for (const row of products.notes) add({id:row.id,kind:"product",title:row.label,text:row.guidance});
+    // Resolved exclusion rules affect selection, not patient-facing prose.
   }
   // An unresolved product plan contributes no recommendation. Missing facts
   // do not trigger a second exchange with the patient or block other content.
@@ -211,14 +211,14 @@ export function reportClinicalFacts(answers: FormAnswers, manifest: AssessmentFo
   const plannedStart = value(answers.planned_treatment_start_date);
   const treatmentIsPlanned = Boolean(plannedStart && assessmentDate && plannedStart > assessmentDate);
   add(treatmentIsPlanned ? "Planned treatment" : "Current treatment", selectedList("current_cancer_treatment"));
-  if (treatmentIsPlanned && plannedStart) {
+  if (plannedStart) {
     const date = new Date(`${plannedStart}T00:00:00Z`);
     if (!Number.isNaN(date.valueOf()))
-      add("Planned treatment start", date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }));
+      add("Treatment Start Date", date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }));
   }
   add("Drug class", selectedList("drug_classes"));
   add("Other conditions", selectedList("co_morbidities"));
-  add("Diet", selected("diet_preference"));
+  add("Diet Preference", selected("diet_preference"));
   add("Reported symptoms", selectedList("gastrointestinal_symptoms"));
   return facts;
 }
@@ -514,6 +514,9 @@ export class GeneratedReportService {
         assessmentAnswerCoverage:{answered,total},
         classification:{id:source.risk.id!,label:source.risk.label ?? generated.classification.label,score:source.reviewedScore,
           ...(source.risk.color ? {color:source.risk.color} : {})},
+        ...(generated.guidance.carePlan.nutritionalStatus ? { nutritionalStatus:
+          ({ well_nourished: "Well nourished", moderately_nourished: "Moderately nourished", severely_malnourished: "Severely malnourished" } as Record<string, string>)[generated.guidance.carePlan.nutritionalStatus]
+            ?? generated.guidance.carePlan.nutritionalStatus } : {}),
         metrics,weightHistory,decision,
         clinicalFacts:reportClinicalFacts(frozen.answers,frozen.manifest,dateOnly(assessment.completedAt!)),
         productPlans:reportProductPlans(generated),
