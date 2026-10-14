@@ -16,6 +16,9 @@ export const getGeneratedReport = (organizationId: string, assessmentId: string,
 export const refreshGeneratedReportPdf = (organizationId: string, assessmentId: string) =>
   assessmentRequest<{ report: GeneratedReport }>(organizationId, `${reportPath(assessmentId)}/refresh-pdf`, "POST");
 
+export const regenerateGeneratedReport = (organizationId: string, assessmentId: string) =>
+  assessmentRequest<GeneratedReportResponse>(organizationId, `${reportPath(assessmentId)}/regenerate`, "POST");
+
 export function generatedReportPdfUrl(organizationId: string, assessmentId: string) {
   return `/api/v1/organizations/${encodeURIComponent(organizationId)}${reportPath(assessmentId)}/pdf`;
 }

@@ -82,8 +82,14 @@ export type ReportFacts = {
 };
 
 export class ScoringReportContentError extends Error {
-  constructor(readonly kind: "blocked" | "unavailable" | "invalid", readonly code: string) {
+  constructor(readonly kind: "blocked" | "unavailable" | "invalid", readonly code: string, readonly terminal = false) {
     super(`NIQ Scoring report content ${kind}: ${code}`);
+  }
+}
+
+export class ScoringReportContentPending extends Error {
+  constructor(readonly runId: string, readonly status: "QUEUED" | "PROCESSING") {
+    super(`NIQ Scoring report content job ${status.toLowerCase()}`);
   }
 }
 
@@ -124,23 +130,54 @@ export async function requestScoringToxicityOptions(input: AssessmentScoringTran
 export async function requestScoringReportContent(input: AssessmentScoringTransport & {
   assessmentReference: string; resultReference: string; idempotencyKey: string; facts: ReportFacts;
 }): Promise<ScoringReportContent> {
-  let response: Response;
-  try {
-    response = await (input.fetcher ?? fetch)(new URL("/v1/assessments/report-content", input.baseUrl), {
-      method: "POST", redirect: "error", headers: { authorization: `Bearer ${input.credential}`, "content-type": "application/json", "x-request-id": input.requestId },
-      body: JSON.stringify({ assessmentReference: input.assessmentReference, resultReference: input.resultReference, idempotencyKey: input.idempotencyKey, facts: input.facts }),
-      signal: AbortSignal.timeout(input.timeoutMs),
-    });
-  } catch { throw new ScoringReportContentError("unavailable", "TRANSPORT_FAILURE"); }
-  let body: unknown;
-  try { body = await response.json(); } catch { throw new ScoringReportContentError("unavailable", "INVALID_RESPONSE"); }
-  if (!response.ok) {
-    const code = z.object({ error: z.string().max(100) }).safeParse(body);
-    const errorCode = code.success ? code.data.error : "UPSTREAM_FAILURE";
-    throw new ScoringReportContentError(response.status === 503 || response.status >= 500 || errorCode === "REQUEST_IN_PROGRESS" ? "unavailable" : "blocked", errorCode);
+  const headers = { authorization: `Bearer ${input.credential}`, "content-type": "application/json", "x-request-id": input.requestId };
+  const timeoutMs = Math.min(input.timeoutMs, 15_000);
+  const request = async (path: string, init: RequestInit) => {
+    let response: Response;
+    try {
+      response = await (input.fetcher ?? fetch)(new URL(path, input.baseUrl), {
+        ...init, redirect: "error", headers, signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch { throw new ScoringReportContentError("unavailable", "TRANSPORT_FAILURE"); }
+    let body: unknown;
+    try { body = await response.json(); } catch { throw new ScoringReportContentError("unavailable", "INVALID_RESPONSE"); }
+    if (!response.ok) {
+      const parsed = z.object({ error: z.string().max(100) }).safeParse(body);
+      const code = parsed.success ? parsed.data.error : "UPSTREAM_FAILURE";
+      throw new ScoringReportContentError(response.status === 429 || response.status >= 500 || code === "REQUEST_IN_PROGRESS" ? "unavailable" : "blocked", code);
+    }
+    return { response, body };
+  };
+
+  // Re-submitting the same idempotency key recovers the durable Scoring job
+  // after an Application restart, without holding an HTTP request open for generation.
+  const submission = await request("/v1/assessments/report-content/jobs", {
+    method: "POST",
+    body: JSON.stringify({ assessmentReference: input.assessmentReference, resultReference: input.resultReference,
+      idempotencyKey: input.idempotencyKey, facts: input.facts }),
+  });
+  const submitted = z.object({ runId: z.string().min(1), status: z.enum(["QUEUED", "PROCESSING", "READY", "REVIEW_REQUIRED", "FAILED"]) }).safeParse(submission.body);
+  if (submission.response.status !== 202 || !submitted.success)
+    throw new ScoringReportContentError("invalid", "INVALID_RESPONSE");
+
+  const poll = await request(`/v1/assessments/report-content/jobs/${encodeURIComponent(submitted.data.runId)}`, { method: "GET" });
+  const job = z.object({ runId: z.string().min(1), status: z.enum(["QUEUED", "PROCESSING", "READY", "REVIEW_REQUIRED", "FAILED"]),
+    response: z.unknown().optional(), errorCode: z.string().max(100).nullable().optional() }).safeParse(poll.body);
+  if (!job.success || job.data.runId !== submitted.data.runId)
+    throw new ScoringReportContentError("invalid", "INVALID_RESPONSE");
+  if (job.data.status === "QUEUED" || job.data.status === "PROCESSING")
+    throw new ScoringReportContentPending(job.data.runId, job.data.status);
+  if (job.data.status === "FAILED") {
+    const code = job.data.errorCode ?? "REPORT_GENERATION_FAILED";
+    const kind = code.startsWith("FALLBACK_") ? "invalid" : code === "MODEL_PAYMENT_REQUIRED" || code.startsWith("MODEL_REQUEST_REJECTED_") ||
+      code === "MODEL_CONTENT_FILTER" || code === "MODEL_INVALID_PARAMETERS" || /^MODEL_HTTP_4(?!29)/.test(code) ? "blocked" : "unavailable";
+    // A failed durable Scoring job has already exhausted its own recovery path.
+    // Re-submitting its idempotency key would only read the same terminal result.
+    throw new ScoringReportContentError(kind, code, true);
   }
-  const parsed = scoringReportContentSchema.safeParse(body);
-  if (!parsed.success || parsed.data.assessmentReference !== input.assessmentReference || parsed.data.resultReference !== input.resultReference)
+  const parsed = scoringReportContentSchema.safeParse(job.data.response);
+  if (!parsed.success || parsed.data.status !== job.data.status || parsed.data.assessmentReference !== input.assessmentReference ||
+    parsed.data.resultReference !== input.resultReference)
     throw new ScoringReportContentError("invalid", "INVALID_RESPONSE");
   return parsed.data;
 }

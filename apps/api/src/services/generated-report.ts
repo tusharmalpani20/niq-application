@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq, isNull, lt, ne, or, lte, like, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
-import { assessFaceScanRange, formatAssessmentReference, hasPermission, reportBrandingPayload, reportFaceScanAdditionalMetricGroups, type AssessmentFormManifest, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
+import { assessFaceScanRange, formatAssessmentReference, getAssessmentAnswerCoverage, hasPermission, reportBrandingPayload, reportFaceScanAdditionalMetricGroups, type AssessmentFormManifest, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
 import type { GeneratedReport, GeneratedReportSection, GeneratedNarrative } from "../../../../packages/contracts/src/generated-report";
 import { assessmentScoreResultSchema, type AssessmentPatient } from "../../../../packages/contracts/src/assessment-workflow";
 import { assessmentFaceScans, assessmentSubmissions, assessments, generatedReportArtifacts, generatedReports, organizationBrandAssets, organizations } from "../db/schema";
@@ -9,10 +9,11 @@ import { decryptPatientBytes, encryptPatientBytes, patientDataKey } from "../sec
 import { reviewState } from "./clinical-review-state";
 import { ServiceError, type Principal, type RequestContext } from "./application";
 import type { AssessmentWorkflowService, StoredWorkflow, WorkflowRow } from "./assessment-workflow";
-import { requestScoringReportContent, requestScoringToxicityOptions, ScoringReportContentError, type ReportFacts, type ScoringReportContent } from "./scoring-report-content";
+import { requestScoringReportContent, requestScoringToxicityOptions, ScoringReportContentError, ScoringReportContentPending, type ReportFacts, type ScoringReportContent } from "./scoring-report-content";
 import { renderGeneratedReportPdf } from "./report-pdf";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
+const MAX_AUTOMATIC_REPORT_ATTEMPTS = 5;
 export const AUTOMATIC_REPORT_KEY_PREFIX = "auto-final-v1:";
 export const REPORT_REVIEW_REQUIRED = "REVIEW_REQUIRED";
 class AutomaticReportReviewRequired extends Error {
@@ -178,8 +179,14 @@ export function normalizeGuidance(content: ScoringReportContent, manifest: Asses
         : item.productName === "Liss WH" && item.description === "leveled scoops in 150ml water"
           ? `${item.productName}: ${item.quantityPerDay} ${item.description}`
           : `${item.quantityPerDay} ${item.productName}${item.description ? ` (${item.description})` : ""}`);
-      if (details?.some(detail => !detail)) continue;
-      add({ id: row.id, kind: "product", title: "Product plan", text: [details?.length ? details.join(" + ") : row.dose || row.products, row.duration].filter(nonempty).join("\n") });
+      // Use the approved plan text when structured quantities are incomplete;
+      // dropping the whole plan would omit a selected recommendation.
+      const planText = details?.length && details.every(nonempty) ? details.join(" + ") : nonempty(row.dose) ? row.dose : row.products;
+      if (!nonempty(planText)) {
+        issues.push(`productPlans:${row.id}:MISSING_GUIDANCE`);
+        continue;
+      }
+      add({ id: row.id, kind: "product", title: "Product plan", text: [planText, row.duration].filter(nonempty).join("\n") });
     }
     for (const row of products.notes) add({id:row.id,kind:"product",title:row.label,text:row.guidance});
   }
@@ -353,6 +360,28 @@ export class GeneratedReportService {
     return {report:report?.status==="APPROVED"?{...report,status:"READY"}:report,
       generation};
   }
+  async regenerate(actor: Principal, org: string, id: string, context: RequestContext) {
+    const assessment = await this.clinical(actor, org, id, "reports.manage");
+    const source = this.source(assessment);
+    const reportId = createEntityId();
+    await this.service.db.transaction(async tx => {
+      const current = await this.service.authorize(actor, org, id, tx, true);
+      const currentSource = this.source(current);
+      if (currentSource.submissionId !== source.submissionId || currentSource.scoreRevision !== source.scoreRevision)
+        throw new ServiceError("CONFLICT", "The approved assessment changed. Reload before regenerating the report.");
+      const [latest] = await tx.select().from(generatedReports)
+        .where(and(eq(generatedReports.organizationId, org), eq(generatedReports.assessmentId, id)))
+        .orderBy(desc(generatedReports.createdAt), desc(generatedReports.id)).limit(1).for("update");
+      if (!latest || !(latest.status === "FAILED" || latest.status === "DRAFT" && latest.failureCode === REPORT_REVIEW_REQUIRED))
+        throw new ServiceError("CONFLICT", "Regenerate is available after an automatic report attempt fails.");
+      await tx.insert(generatedReports).values({id:reportId, organizationId:org, assessmentId:id, patientId:current.patientId,
+        submissionId:currentSource.submissionId, requestKey:`${AUTOMATIC_REPORT_KEY_PREFIX}${currentSource.submissionId}:retry:${reportId}`,
+        sourceFingerprint:"", status:"QUEUED", attemptCount:0});
+      await this.service.audit(tx,actor,context,id,"GENERATED_REPORT_REGENERATE_REQUESTED",{reportId,previousReportId:latest.id,
+        submissionId:currentSource.submissionId,scoreRevision:currentSource.scoreRevision});
+    });
+    return this.read(actor,org,id);
+  }
   async toxicityOptions(actor: Principal, org: string, id: string, context: RequestContext) {
     if (!hasPermission(actor.role,"reviews.complete")) throw new ServiceError("FORBIDDEN","A clinician must confirm treatment effects.");
     const assessment = await this.clinical(actor,org,id,"reports.manage");
@@ -476,11 +505,13 @@ export class GeneratedReportService {
         throw new ScoringReportContentError("invalid","RULE_VERSION_MISMATCH");
       const patient=frozen.patient as AssessmentPatient;
       const normalized=normalizeGuidance(generated,frozen.manifest);
+      const { answered, total } = getAssessmentAnswerCoverage(frozen.manifest, frozen.answers);
       const data:ReportData={
         runId:generated.runId,model:generated.model,promptVersion:generated.promptVersion,generatedAt:new Date().toISOString(),
         patient:{displayName:patient.displayName,reference:patient.reference,dateOfBirth:patient.dateOfBirth,gender:patient.gender},
         assessment:{id,reference:formatAssessmentReference(assessment.serialNumber),completedAt:assessment.completedAt!.toISOString(),
           submissionId:source.submissionId,scoreRevision:source.scoreRevision,ruleVersionId:generated.ruleVersionId,checksum:generated.checksum},
+        assessmentAnswerCoverage:{answered,total},
         classification:{id:source.risk.id!,label:source.risk.label ?? generated.classification.label,score:source.reviewedScore,
           ...(source.risk.color ? {color:source.risk.color} : {})},
         metrics,weightHistory,decision,
@@ -510,8 +541,16 @@ export class GeneratedReportService {
       await this.service.audit(this.service.db,actor,context,id,"GENERATED_REPORT_CREATED",{reportId,runId:generated.runId,submissionId:source.submissionId,scoreRevision:source.scoreRevision,ruleChecksum:generated.checksum});
       return {report:await this.dto(saved,assessment)};
     } catch(error) {
-      const retryable=internal && (error instanceof ScoringReportContentError
-        ? error.kind==="unavailable" : claim.attemptCount!<5 && !(error instanceof ServiceError && error.code==="CONFLICT"));
+      if (error instanceof ScoringReportContentPending) {
+        // The Scoring job remains durable under reportId. Checking it again must
+        // not spend an Application retry or start a second model run.
+        await this.service.db.update(generatedReports).set({status:"QUEUED",failureCode:null,leaseToken:null,
+          attemptCount:sql`${generatedReports.attemptCount}-1`,nextAttemptAt:new Date(Date.now()+5_000),updatedAt:new Date()})
+          .where(and(eq(generatedReports.id,reportId),eq(generatedReports.status,"GENERATING"),eq(generatedReports.leaseToken,claim.leaseToken!)));
+        throw error;
+      }
+      const retryable=internal && claim.attemptCount!<MAX_AUTOMATIC_REPORT_ATTEMPTS && (error instanceof ScoringReportContentError
+        ? error.kind==="unavailable" && !error.terminal : !(error instanceof ServiceError && error.code==="CONFLICT"));
       await this.service.db.update(generatedReports).set({status:retryable?"QUEUED":"FAILED",failureCode:error instanceof ScoringReportContentError?error.code:"GENERATION_FAILED",leaseToken:null,
         nextAttemptAt:retryable ? new Date(Date.now()+automaticRetryDelay(claim.attemptCount!)) : null,updatedAt:new Date()})
         .where(and(eq(generatedReports.id,reportId),eq(generatedReports.status,"GENERATING"),eq(generatedReports.leaseToken,claim.leaseToken!)));
@@ -683,6 +722,12 @@ export class GeneratedReportService {
     await Promise.allSettled(rows.map(async row=>{
       const context={requestId:createEntityId()};
       try {
+        if ((row.status==="QUEUED" || row.status==="GENERATING") && row.attemptCount>=MAX_AUTOMATIC_REPORT_ATTEMPTS) {
+          await this.service.db.update(generatedReports).set({status:"FAILED",failureCode:"AUTOMATIC_RETRIES_EXHAUSTED",
+            leaseToken:null,nextAttemptAt:null,updatedAt:new Date()})
+            .where(and(eq(generatedReports.id,row.id),eq(generatedReports.status,row.status),eq(generatedReports.attemptCount,row.attemptCount)));
+          return;
+        }
         const [assessment]=await this.service.db.select().from(assessments).where(and(eq(assessments.organizationId,row.organizationId),eq(assessments.id,row.assessmentId)));
         if(!assessment)throw new ServiceError("NOT_FOUND","Assessment not found.");
         const actor=await this.automaticActor(assessment);
@@ -694,13 +739,13 @@ export class GeneratedReportService {
             await this.finalizeAutomatic(current,actor,context);
         }
       } catch(error) {
-        // Source failures before the first claim cannot be retried by generate.
-        // Record a terminal state instead of showing a queue that never moves.
+        // Source failures before a claim cannot be retried by generate. This
+        // also covers an expired generation lease after its source changed.
         const invalidSource=error instanceof ServiceError && (error.code==="NOT_FOUND" ||
           error.code==="CONFLICT" && !error.message.includes("in progress"));
-        if(row.status==="QUEUED" && invalidSource)
-          await this.service.db.update(generatedReports).set({status:"FAILED",failureCode:"APPROVAL_SOURCE_INVALID",nextAttemptAt:null,updatedAt:new Date()})
-            .where(and(eq(generatedReports.id,row.id),eq(generatedReports.status,"QUEUED"),eq(generatedReports.attemptCount,row.attemptCount)));
+        if((row.status==="QUEUED" || row.status==="GENERATING") && invalidSource)
+          await this.service.db.update(generatedReports).set({status:"FAILED",failureCode:"APPROVAL_SOURCE_INVALID",leaseToken:null,nextAttemptAt:null,updatedAt:new Date()})
+            .where(and(eq(generatedReports.id,row.id),eq(generatedReports.status,row.status),eq(generatedReports.attemptCount,row.attemptCount)));
         console.warn("Automatic report generation delayed",{reportId:row.id,error:error instanceof Error?error.message:String(error)});
       }
     }));

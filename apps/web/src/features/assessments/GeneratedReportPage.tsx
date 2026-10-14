@@ -5,7 +5,7 @@ import { hasPermission, type AuthenticatedUser } from "@niq/application-contract
 import { Button } from "@/components/ui/button";
 import { GeneratedReportPdfPreview } from "./GeneratedReportPdfPreview";
 import { GeneratedReportPreview } from "./GeneratedReportPreview";
-import { generatedReportPdfUrl, getGeneratedReport, refreshGeneratedReportPdf, type GeneratedReportResponse } from "./generated-report-api";
+import { generatedReportPdfUrl, getGeneratedReport, refreshGeneratedReportPdf, regenerateGeneratedReport, type GeneratedReportResponse } from "./generated-report-api";
 import { reportDate } from "./generated-report-format";
 import "./generated-report.css";
 
@@ -19,6 +19,8 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
   const [preview, setPreview] = useState<"html" | "pdf">("html");
   const [updatingPdf, setUpdatingPdf] = useState(false);
   const [pdfError, setPdfError] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState("");
   const assessmentPath = `/assessments/${encodeURIComponent(assessmentId)}`;
 
   useEffect(() => {
@@ -58,8 +60,21 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
   const ready = generation?.status === "READY" && report?.status === "READY" && Boolean(report.artifact);
   const reviewRequired = generation?.status === "FAILED" && generation.failureCode === "REVIEW_REQUIRED";
   const pdfUrl = `${generatedReportPdfUrl(user.organizationId, assessmentId)}?revision=${report?.artifact?.sha256 ?? "pending"}`;
-  const statusLabel = loading && !result ? "Loading" : error ? "Status unavailable" : generation?.status === "QUEUED" ? "Queued" : generation?.status === "GENERATING" ? "Preparing" : reviewRequired ? "Clinical review required" : generation?.status === "FAILED" ? "Generation failed" : ready ? "Ready" : generation?.status === "READY" ? "Report unavailable" : "Not started";
+  const statusLabel = loading && !result ? "Loading" : error ? "Status unavailable" : generation?.status === "QUEUED" ? "Queued" : generation?.status === "GENERATING" ? "Preparing" : reviewRequired ? "Automatic checks failed" : generation?.status === "FAILED" ? "Generation failed" : ready ? "Ready" : generation?.status === "READY" ? "Report unavailable" : "Not started";
   const refresh = () => setReload(current => current + 1);
+  const regenerate = async () => {
+    setRegenerating(true);
+    setRegenerateError("");
+    try {
+      const next = await regenerateGeneratedReport(user.organizationId, assessmentId);
+      setResult(next);
+      setReload(current => current + 1);
+    } catch (cause) {
+      setRegenerateError(cause instanceof Error ? cause.message : "Could not restart report generation.");
+    } finally {
+      setRegenerating(false);
+    }
+  };
   const rebuildPdf = async () => {
     setUpdatingPdf(true);
     setPdfError("");
@@ -81,14 +96,12 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
     {loading && !result && <p role="status" className="cr-empty"><LoaderCircle className="cr-spin" size={20} aria-hidden="true"/>Loading report status</p>}
     {!loading && !error && (generation?.status === "QUEUED" || generation?.status === "GENERATING") &&
       <section className="cr-empty" role="status"><LoaderCircle className="cr-spin" size={35} aria-hidden="true"/><h2>{generation.status === "QUEUED" ? "Report queued" : "Preparing report"}</h2><p>The saved assessment is being turned into a clinical report and PDF. This page updates automatically.</p></section>}
-    {!loading && !error && reviewRequired &&
-      <section className="cr-empty" role="alert"><h2>Clinical review required</h2><p>A clinician must review and approve this report before a PDF can be issued.</p></section>}
-    {!loading && !error && generation?.status === "FAILED" && !reviewRequired &&
-      <section className="cr-empty" role="alert"><h2>Report generation could not finish</h2><p>The assessment remains approved. The report is not available yet. Please contact your administrator if this does not resolve.</p><Button variant="outline" onPress={refresh}><RotateCcw size={16} aria-hidden="true"/>Check status again</Button></section>}
+    {!loading && !error && generation?.status === "FAILED" &&
+      <section className="cr-empty" role="alert"><h2>{reviewRequired ? "Report did not pass automatic checks" : "Report generation could not finish"}</h2><p>The assessment remains approved. A new report attempt can be started without changing the assessment.</p>{hasPermission(user.role, "reports.manage") && <Button variant="outline" isDisabled={regenerating} onPress={() => { void regenerate(); }}>{regenerating ? <LoaderCircle className="cr-spin" size={16} aria-hidden="true"/> : <RotateCcw size={16} aria-hidden="true"/>}{regenerating ? "Restarting report" : "Regenerate report"}</Button>}{regenerateError && <p className="cr-regenerate-error">{regenerateError}</p>}</section>}
     {!loading && !error && !generation &&
       <section className="cr-empty"><FileCheck2 size={35} aria-hidden="true"/><h2>Report not started</h2><p>Complete the final clinical review to start report and PDF generation.</p><Link to={assessmentPath}>Return to assessment</Link></section>}
     {!loading && !error && generation?.status === "READY" && !ready &&
-      <div className="cr-message cr-error" role="alert"><p>The report is marked ready, but its saved PDF is unavailable. Refresh the status or contact your administrator.</p><Button variant="outline" onPress={refresh}><RotateCcw size={16} aria-hidden="true"/>Refresh status</Button></div>}
+      <div className="cr-message cr-error" role="alert"><p>The report content is ready, but its saved PDF is unavailable.</p>{hasPermission(user.role, "reports.manage") && <Button variant="outline" isDisabled={updatingPdf} onPress={() => { void rebuildPdf(); }}>{updatingPdf ? <LoaderCircle className="cr-spin" size={16} aria-hidden="true"/> : <RotateCcw size={16} aria-hidden="true"/>}{updatingPdf ? "Rebuilding PDF" : "Rebuild PDF"}</Button>}<Button variant="outline" onPress={refresh}>Refresh status</Button>{pdfError && <p>{pdfError}</p>}</div>}
     {!error && ready && report && <>
       <div className="cr-report-meta"><span>Assessment {report.assessment.reference}</span><span>Generated {reportDate(report.generatedAt)}</span></div>
       <div className="cr-approved-bar"><div><FileCheck2 size={24} aria-hidden="true"/><div><strong>Final report ready</strong><p>The PDF was saved after final clinical approval.</p></div></div><div className="cr-pdf-actions">{hasPermission(user.role, "reports.manage") && <Button variant="outline" isDisabled={updatingPdf} onPress={() => { void rebuildPdf(); }}>{updatingPdf ? <LoaderCircle className="cr-spin" size={16} aria-hidden="true"/> : <RotateCcw size={16} aria-hidden="true"/>}{updatingPdf ? "Updating PDF" : "Update PDF layout"}</Button>}<a className="cr-download" href={pdfUrl} download={`NIQ-report-${report.assessment.reference}.pdf`}><Download size={18} aria-hidden="true"/>Download PDF</a></div></div>

@@ -49,6 +49,7 @@ export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowSe
     return {actor,org,assessment};
   };
   app.get(generated,async c=>{const p=await generatedParts(c);return c.json(await generatedReports.read(p.actor,p.org,p.assessment));});
+  app.post(generated+"/regenerate",async c=>{const p=await generatedParts(c);return c.json(await generatedReports.regenerate(p.actor,p.org,p.assessment,{requestId:c.get("requestId")}),202);});
   app.get(generated+"/pdf",async c=>{
     const p=await generatedParts(c),file=await generatedReports.downloadPdf(p.actor,p.org,p.assessment);
     return new Response(new Uint8Array(file.pdf),{headers:{"Content-Type":"application/pdf","Content-Length":String(file.pdf.length),"Content-Disposition":"inline; filename=\"NIQ-clinical-report.pdf\"","ETag":'"'+file.sha256+'"',"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
