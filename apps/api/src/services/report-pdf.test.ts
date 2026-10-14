@@ -52,6 +52,8 @@ test("the PDF document uses the preview layout with embedded assets and omits Hb
   expect(html).toContain("Heart rate");
   expect(html).not.toContain("HbA1c");
   expect(html).toContain("data:image/png;base64,");
+  expect(html).toContain("data:image/webp;base64,");
+  expect(html).not.toContain('class="cr-section-number"');
   expect(html).toContain("@page");
 });
 

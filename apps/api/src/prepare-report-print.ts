@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "../../../");
@@ -19,3 +19,4 @@ for (const fileName of new Set(Array.from(css.matchAll(/url\(\/assets\/([^)]*\.w
 if (css.includes("url(/assets/")) throw new Error("Report CSS contains unresolved assets");
 await mkdir(apiAssets, { recursive: true });
 await writeFile(resolve(apiAssets, "report-print.css"), css);
+await copyFile(resolve(root, "apps/web/public/report-cover-food.webp"), resolve(apiAssets, "report-cover-food.webp"));

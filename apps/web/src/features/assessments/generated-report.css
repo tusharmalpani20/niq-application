@@ -5,9 +5,8 @@
 .cr-sheet-header, .cr-sheet-footer, .cr-panel-title, .cr-cover-top, .cr-status-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .cr-sheet-header { min-height: 66px; padding-bottom: 1.3rem; border-bottom: 1px solid #dce9ec; }
 .cr-sheet-heading { display: flex; align-items: center; gap: .55rem; min-width: 0; color: #10354a; }
-.cr-section-number { color: var(--brand-ink, #177e83); font-size: 1.25rem; font-weight: 700; }
 .cr-sheet-heading svg { color: var(--brand-primary, #239ca3); }
-.cr-sheet-heading h2 { margin: 0; font-size: 1.15rem; line-height: 1.25; }
+.cr-sheet-heading h2 { margin: 0; font-size: 1.15rem; font-weight: 750; line-height: 1.25; }
 .cr-report-brand, .cr-cover-brand { display: inline-flex; flex: none; align-items: center; justify-content: flex-end; gap: .5rem; }
 .cr-report-brand { width: 205px; min-height: 44px; }
 .cr-report-brand .brand-marks-organization-logo, .cr-cover-brand .brand-marks-organization-logo { width: 100%; height: 50px; object-fit: contain; object-position: right center; }
@@ -17,29 +16,25 @@
 .cr-report-brand .brand-marks-partner-caption { font-size: .52rem; }
 .cr-sheet-content { flex: 1; padding: 1.7rem 0 2rem; }
 .cr-sheet-footer { margin-top: auto; padding-top: 1rem; border-top: 1px solid #dce9ec; color: #6d8390; font-size: .72rem; }
-.cr-cover { background: linear-gradient(155deg, #fff 0%, color-mix(in srgb, var(--brand-primary, #34b5b9) 3%, white) 69%, color-mix(in srgb, var(--brand-primary, #34b5b9) 13%, white) 100%); }
-.cr-cover-top { z-index: 1; color: #708591; font-size: .78rem; }
-.cr-cover-brand { width: 245px; min-height: 58px; justify-content: flex-start; }
-.cr-cover-brand .brand-marks-application-logo { width: 80px; height: 50px; }
-.cr-cover-brand .brand-marks-partner-logo { width: 125px; height: 42px; }
-.cr-cover-brand .brand-marks-partner-caption { font-size: .6rem; }
-.cr-cover-main { position: relative; display: flex; flex: 1; align-items: center; }
-.cr-cover-copy { position: relative; z-index: 1; width: 64%; }
+.cr-cover { background: linear-gradient(160deg, #fff 0%, #eef8f8 100%); }
+.cr-cover-top { z-index: 1; flex-direction: column; justify-content: center; gap: .55rem; color: #48717e; font-size: .8rem; letter-spacing: .045em; text-align: center; }
+.cr-cover-brand { width: auto; min-height: 72px; justify-content: center; gap: .8rem; }
+.cr-cover-brand .brand-marks-organization-logo { height: 64px; object-position: center; }
+.cr-cover-brand .brand-marks-application-logo { width: 104px; height: 64px; }
+.cr-cover-brand .brand-marks-partner { padding-left: .8rem; }
+.cr-cover-brand .brand-marks-partner-logo { width: 153px; height: 52px; }
+.cr-cover-brand .brand-marks-partner-caption { font-size: .68rem; }
+.cr-cover-main { position: relative; display: flex; flex: 1; align-items: center; min-height: 0; margin: 1.8rem -2.3rem 1.3rem; padding: 3.8rem 2.3rem; overflow: hidden; background: linear-gradient(145deg, #087eae 0%, #126183 68%, #104b68 100%); }
+.cr-cover-main::before { position: absolute; top: -24%; left: -15%; width: 60%; aspect-ratio: 1; border: 1px solid #ffffff30; border-radius: 50%; background: #ffffff0c; content: ""; }
+.cr-cover-main::after { position: absolute; right: -11%; bottom: -45%; width: 65%; aspect-ratio: 1; border-radius: 50%; background: #33bdba25; content: ""; }
+.cr-cover-copy { position: relative; z-index: 1; width: 60%; color: #fff; }
 .cr-kicker, .cr-guidance-type { display: block; color: var(--brand-ink, #177e83); font-size: .72rem; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
-.cr-cover h1 { margin: 0 0 2rem; color: #18384a; font-size: clamp(2.6rem, 5vw, 4.2rem); font-weight: 600; letter-spacing: -.045em; line-height: 1.07; }
-.cr-cover h1 em { color: var(--brand-ink, #177e83); font-style: normal; }
-.cr-cover-copy p { margin: .45rem 0; font-size: .95rem; }
-.cr-cover-copy .cr-cover-name { font-size: 1.2rem; font-weight: 700; }
-.cr-cover-art { position: absolute; top: 50%; right: 0; display: grid; width: min(42%, 330px); aspect-ratio: 1; place-items: center; transform: translateY(-50%); }
-.cr-cover-art-rings { position: relative; display: grid; width: 76%; aspect-ratio: 1; place-items: center; border: 18px solid color-mix(in srgb, var(--brand-primary, #34b5b9) 18%, white); border-radius: 50%; background: color-mix(in srgb, var(--brand-primary, #34b5b9) 7%, white); }
-.cr-cover-art-rings::before { position: absolute; inset: -39px; border: 1px dashed color-mix(in srgb, var(--brand-primary, #34b5b9) 42%, white); border-radius: 50%; content: ""; }
-.cr-cover-art-core { display: grid; width: 65%; aspect-ratio: 1; place-items: center; border-radius: 50%; background: #fff; box-shadow: 0 9px 32px #15344714; color: var(--brand-ink, #177e83); }
-.cr-cover-art-core svg { width: 48%; height: 48%; }
-.cr-cover-art-badge { position: absolute; display: grid; width: 58px; height: 58px; place-items: center; border: 1px solid color-mix(in srgb, var(--brand-primary, #34b5b9) 24%, white); border-radius: 17px; background: #fff; box-shadow: 0 9px 26px #15344716; color: var(--brand-ink, #177e83); }
-.cr-cover-art-badge svg { width: 27px; height: 27px; }
-.cr-cover-art-badge-heart { top: 3%; right: 8%; }
-.cr-cover-art-badge-food { top: 42%; left: 0; }
-.cr-cover-art-badge-water { right: 7%; bottom: 2%; }
+.cr-cover h1 { margin: 0 0 2.4rem; color: #fff; font-size: clamp(2.6rem, 5vw, 4.2rem); font-weight: 700; letter-spacing: -.045em; line-height: 1.07; }
+.cr-cover h1 em { color: #aff0dc; font-style: normal; }
+.cr-cover-copy p { margin: .45rem 0; color: #e8f8fc; font-size: .95rem; }
+.cr-cover-copy .cr-cover-name { color: #fff; font-size: 1.2rem; font-weight: 700; }
+.cr-cover-art { position: absolute; z-index: 1; top: 42%; right: 2%; width: min(44%, 370px); aspect-ratio: 1; transform: translateY(-50%); }
+.cr-cover-art img { display: block; width: 100%; height: 100%; border: 8px solid #fff; border-radius: 50%; object-fit: cover; box-shadow: 0 18px 32px #06394f66; }
 .cr-section-intro { margin: 0 0 1.5rem; color: #607989; font-size: .89rem; line-height: 1.55; }
 .cr-overview-hero, .cr-feature-panel, .cr-panel { border: 1px solid #dce9eb; border-radius: .9rem; background: #f8fbfb; }
 .cr-overview-head { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: .9rem; }
@@ -312,16 +307,16 @@
   .cr-sheet { min-height: 0; padding: 1.2rem 1rem; border-radius: .7rem; }
   .cr-sheet-compact { min-height: 0; }
   .cr-cover { min-height: 620px; }
-  .cr-cover-art { right: -1rem; width: 54%; opacity: .35; }
-  .cr-cover-art-rings { border-width: 12px; }
-  .cr-cover-art-rings::before { inset: -25px; }
-  .cr-cover-art-badge { width: 40px; height: 40px; border-radius: 12px; }
-  .cr-cover-art-badge svg { width: 20px; height: 20px; }
-  .cr-cover-copy { width: 85%; }
+  .cr-cover-main { margin: 1.2rem -1rem .8rem; padding: 2rem 1rem; }
+  .cr-cover-art { top: 22%; right: -1rem; width: 48%; opacity: .7; }
+  .cr-cover-copy { width: 100%; padding-top: 7rem; }
+  .cr-cover h1 { font-size: clamp(2.25rem, 9vw, 3rem); }
   .cr-sheet-header { flex-wrap: wrap; align-items: flex-start; }
   .cr-report-brand { width: 100%; justify-content: flex-start; }
   .cr-report-brand .brand-marks-organization-logo { object-position: left center; }
-  .cr-cover-top { flex-wrap: wrap; }
+  .cr-cover-brand .brand-marks-application-logo { width: 78px; height: 50px; }
+  .cr-cover-brand .brand-marks-partner-logo { width: 116px; height: 40px; }
+  .cr-cover-brand .brand-marks-partner-caption { font-size: .55rem; }
   .cr-overview-head { grid-template-columns: 1fr; }
   .cr-overview-hero { min-height: 180px; }
   .cr-overview-key { grid-template-columns: repeat(2, minmax(0,1fr)); }

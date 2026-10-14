@@ -69,16 +69,13 @@ function VitalScoreCard({ metric }: { metric: ReportMetric }) {
 
 function CoverArtwork() {
   return <div className="cr-cover-art" aria-hidden="true">
-    <div className="cr-cover-art-rings"><div className="cr-cover-art-core"><Leaf strokeWidth={1.4}/></div></div>
-    <span className="cr-cover-art-badge cr-cover-art-badge-heart"><HeartPulse strokeWidth={1.8}/></span>
-    <span className="cr-cover-art-badge cr-cover-art-badge-food"><Utensils strokeWidth={1.8}/></span>
-    <span className="cr-cover-art-badge cr-cover-art-badge-water"><Droplets strokeWidth={1.8}/></span>
+    <img src="/report-cover-food.webp" alt="" />
   </div>;
 }
 
 function ReportSheet({ number, title, icon: Icon, children, report, branding, compact = false, className = "" }: ReportSheetProps) {
   return <section className={`cr-sheet${compact ? " cr-sheet-compact" : ""}${className ? ` ${className}` : ""}`} aria-label={title}>
-    <header className="cr-sheet-header"><div className="cr-sheet-heading"><span className="cr-section-number">{String(number).padStart(2, "0")}</span><Icon size={21} aria-hidden="true"/><h2>{title}</h2></div><BrandMarks className="cr-report-brand" organizationLogoUrl={branding.logoUrl} organizationName={branding.displayName}/></header>
+    <header className="cr-sheet-header"><div className="cr-sheet-heading"><Icon size={21} aria-hidden="true"/><h2>{title}</h2></div><BrandMarks className="cr-report-brand" organizationLogoUrl={branding.logoUrl} organizationName={branding.displayName}/></header>
     <div className="cr-sheet-content">{children}</div>
     <footer className="cr-sheet-footer"><span>{branding.displayName} · Clinical nutrition report</span><span>{report.assessment.reference} · {String(number).padStart(2, "0")}</span></footer>
   </section>;

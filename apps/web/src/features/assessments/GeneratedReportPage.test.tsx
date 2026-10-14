@@ -378,7 +378,8 @@ test("all possible treatment effects have conditional summaries on separate numb
     expect([...pages].every(page => page.textContent?.includes("Possible effect · Taxanes"))).toBe(true);
     expect(document.querySelector('[aria-label="Recommendations"]')?.textContent).toContain("Reported nausea");
     expect(document.querySelector('[aria-label="Recommendations"]')?.textContent).not.toContain("Effect 1");
-    expect(document.querySelector('[aria-label="Report summary"] .cr-section-number')?.textContent).toBe("12");
+    expect(document.querySelectorAll(".clinical-report .cr-section-number")).toHaveLength(0);
+    expect(document.querySelector('[aria-label="Report summary"] .cr-sheet-heading h2')?.textContent).toBe("Report summary");
   });
 });
 

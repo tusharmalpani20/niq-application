@@ -31,6 +31,11 @@ async function pngDataUrl(name: string): Promise<string> {
   return `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`;
 }
 
+async function webpDataUrl(name: string): Promise<string> {
+  const bytes = await Bun.file(assetPath(name)).arrayBuffer();
+  return `data:image/webp;base64,${Buffer.from(bytes).toString("base64")}`;
+}
+
 async function logoDataUrl(logo: ReportPdfBrand["logo"]): Promise<string | null> {
   if (!logo || !["image/png", "image/jpeg", "image/webp"].includes(logo.mimeType)) return null;
   try {
@@ -44,10 +49,11 @@ async function logoDataUrl(logo: ReportPdfBrand["logo"]): Promise<string | null>
 }
 
 export async function renderGeneratedReportHtml(report: GeneratedReport, brand: ReportPdfBrand): Promise<string> {
-  const [css, applicationLogo, partnerLogo, customLogo] = await Promise.all([
+  const [css, applicationLogo, partnerLogo, coverPhoto, customLogo] = await Promise.all([
     Bun.file(assetPath("report-print.css")).text(),
     pngDataUrl("nutra-iq-logo.png"),
     pngDataUrl("eioms-logo.png"),
+    webpDataUrl("report-cover-food.webp"),
     logoDataUrl(brand.logo),
   ]);
   if (!safeColor.test(brand.primaryColor) || brand.secondaryColor && !safeColor.test(brand.secondaryColor)) {
@@ -62,7 +68,8 @@ export async function renderGeneratedReportHtml(report: GeneratedReport, brand: 
   // The app's report component is the single layout used by both preview and PDF.
   const markup = renderToStaticMarkup(createElement(GeneratedReportPreview, { report, branding }))
     .replaceAll('"/nutra-iq-logo.png"', `"${applicationLogo}"`)
-    .replaceAll('"/eioms-logo.png"', `"${partnerLogo}"`);
+    .replaceAll('"/eioms-logo.png"', `"${partnerLogo}"`)
+    .replaceAll('"/report-cover-food.webp"', `"${coverPhoto}"`);
   const ink = accessibleBrandInk(brand.primaryColor, ["#f6f8fb", "#eef2f6", "#ffffff"]);
   return `<!doctype html><html lang="en" style="--brand-primary:${brand.primaryColor};--brand-secondary:${branding.secondaryColor};--brand-ink:${ink}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Medical Nutrition Therapy Report</title><style>${css}</style></head><body class="cr-print-document">${markup}</body></html>`;
 }
