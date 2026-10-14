@@ -81,8 +81,8 @@ function CoverArtwork() {
 
 function ReportSheet({ number, title, icon: Icon, children, report, branding, compact = false, className = "" }: ReportSheetProps) {
   return <section className={`cr-sheet${compact ? " cr-sheet-compact" : ""}${className ? ` ${className}` : ""}`} aria-label={title}>
-    <header className="cr-sheet-header"><div className="cr-sheet-heading"><Icon size={21} aria-hidden="true"/><h2>{title}</h2></div><BrandMarks className="cr-report-brand" organizationLogoUrl={branding.logoUrl} organizationName={branding.displayName}/></header>
-    <div className="cr-sheet-content">{children}</div>
+    <header className="cr-sheet-header"><BrandMarks className="cr-report-brand" organizationLogoUrl={branding.logoUrl} organizationName={branding.displayName}/></header>
+    <div className="cr-sheet-content"><div className="cr-content-title"><Icon size={21} aria-hidden="true"/><h2>{title}</h2></div>{children}</div>
     <footer className="cr-sheet-footer"><span>{branding.displayName} · Clinical nutrition report</span><span>{report.assessment.reference} · {String(number).padStart(2, "0")}</span></footer>
   </section>;
 }
@@ -106,6 +106,27 @@ function summarySentences(text: string | undefined, count: number) {
   return adviceSentences(text ?? "").slice(0, count);
 }
 
+function interpretationParagraphs(values: Array<string | undefined>) {
+  const seenFirstLines = new Set<string>();
+  const paragraphs = values.filter((value): value is string => Boolean(value?.trim()));
+  const status = paragraphs.find(value => /^(?:Well nourished|Moderately nourished|Severely malnourished)$/i.test(value.trim()));
+  const rendered = status && paragraphs.some(value => value !== status && value.replace(/\*\*/g, "").toLocaleLowerCase().includes(status.toLocaleLowerCase()))
+    ? paragraphs.filter(value => value !== status) : paragraphs;
+  return rendered.flatMap(value => {
+    const text = value.trim();
+    if (!text) return [];
+    const sentences = adviceSentences(text);
+    const first = (sentences[0] ?? text).replace(/\*\*/g, "").replace(/^\s*(?:your\s+)?(?:nutritional status|clinical interpretation)\s*(?::|is|was recorded as)\s*/i, "").trim();
+    const key = first.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    if (key && seenFirstLines.has(key)) {
+      const remaining = sentences.slice(1).join(" ").trim();
+      return remaining ? [remaining] : [];
+    }
+    if (key) seenFirstLines.add(key);
+    return [text];
+  });
+}
+
 // Render authored markdown as React text nodes so saved content cannot become HTML.
 function NarrativeText({ text }: { text: string }) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
@@ -114,10 +135,35 @@ function NarrativeText({ text }: { text: string }) {
     : part)}</>;
 }
 
+type AdviceGroup = { heading?: string; text: string };
+const legacyConditionHeading = /^(?:diabetes|thyroid(?: disease| disorder)?|kidney disease|chronic kidney disease|renal disease|hypertension|high blood pressure|cardiovascular disease|heart disease|dyslipidaemia|dyslipidemia|liver disease|celiac disease|coeliac disease|reflux|gastroesophageal reflux|gout|osteoporosis|anaemia|anemia)(?:\s+(?:management|care|guidance|considerations?))?$/i;
+
+function adviceGroups(text: string): AdviceGroup[] {
+  const groups: AdviceGroup[] = [];
+  let current: AdviceGroup = { text: "" };
+  const flush = () => { if (current.text.trim()) groups.push({ ...current, text: current.text.trim() }); };
+  for (const line of text.split(/\r?\n/)) {
+    const markdown = /^\s*#{2,3}\s+(.+?)\s*$/.exec(line);
+    const legacy = /^\s*([^:\n]{2,48}):\s*(.*)$/.exec(line);
+    const standaloneLegacy = /^\s*([^:\n]{2,48})\s*$/.exec(line);
+    const heading = markdown?.[1]?.trim()
+      ?? (legacy && legacyConditionHeading.test(legacy[1]!.trim()) ? legacy[1]!.trim() : null)
+      ?? (standaloneLegacy && legacyConditionHeading.test(standaloneLegacy[1]!.trim()) ? standaloneLegacy[1]!.trim() : null);
+    if (heading) {
+      flush();
+      current = { heading, text: legacy?.[2]?.trim() ?? "" };
+      continue;
+    }
+    current.text += `${current.text ? "\n" : ""}${line.trim().replace(/^[-*•]\s+/, "")}`;
+  }
+  flush();
+  return groups.length ? groups : [{ text }];
+}
+
 function ReviewedAdvice({ title, text, icon: Icon, action = false, columns = false }: { title: string; text: string | undefined; icon: LucideIcon; action?: boolean; columns?: boolean }) {
   if (!text?.trim()) return null;
   const PointIcon = action ? ArrowRight : CircleDot;
-  return <section className={`cr-advice-block${action ? " cr-advice-action" : ""}${columns ? " cr-advice-columns" : ""}`}><div className="cr-advice-heading"><span className="cr-advice-icon"><Icon size={20} aria-hidden="true"/></span><h3>{title}</h3></div><ul className="cr-advice-points">{adviceSentences(text).map((sentence, index) => <li key={index}><PointIcon size={15} aria-hidden="true"/><span><NarrativeText text={sentence}/></span></li>)}</ul></section>;
+  return <section className={`cr-advice-block${action ? " cr-advice-action" : ""}${columns ? " cr-advice-columns" : ""}`}><div className="cr-advice-heading"><span className="cr-advice-icon"><Icon size={20} aria-hidden="true"/></span><h3>{title}</h3></div>{adviceGroups(text).map((group, groupIndex) => <div className="cr-advice-group" key={groupIndex}>{group.heading && <h4>{group.heading}</h4>}<ul className="cr-advice-points">{adviceSentences(group.text).map((sentence, index) => <li key={index}><PointIcon size={15} aria-hidden="true"/><span><NarrativeText text={sentence}/></span></li>)}</ul></div>)}</section>;
 }
 
 function singleGuidanceTitle(report: GeneratedReport, type: "comorbidity" | "toxicity", fallback: string) {
@@ -145,25 +191,22 @@ function possibleEffectPages(report: GeneratedReport) {
   return pages;
 }
 
-function singleNutritionTitle(report: GeneratedReport, fallback: string) {
-  const titles = [...new Set(reportGuidance(report, "nutrition").map(item => item.title.trim()).filter(title => !/^(matched rule|nutrition guidance)$/i.test(title)))];
-  return titles.length === 1 ? titles[0]! : fallback;
-}
-
 function ProductPlan({ report }: { report: GeneratedReport }) {
   const selected = report.productPlans?.filter(plan => plan.items.length) ?? [];
   const descriptionFor = (name: string) => report.productCatalog?.find(product =>
     [product.name, ...(product.aliases ?? [])].some(alias => alias.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase()))?.description;
+  const readableDuration = (duration: string) => duration.replace(/\b\d{4}-\d{2}-\d{2}\b/g, date => reportDate(date));
   if (selected.length) return <section className="cr-supplement"><div className="cr-advice-heading"><span className="cr-advice-icon"><Package size={20} aria-hidden="true"/></span><h3>Nutritional Supplement Recommendations</h3></div>
     {selected.map(plan => <div className="cr-supplement-plan" key={plan.id}>
-      <table className="cr-supplement-directions"><thead><tr><th>Name</th><th>Dose</th><th>Timing</th><th>Preparation</th><th>Duration</th><th>Key benefits</th></tr></thead><tbody>{plan.items.map((item, index) => <tr key={`${plan.id}-${index}`}>
-        <td>{item.productName}</td>
-        <td>{item.quantityPerDay ?? "—"}</td>
-        <td>{item.mealTiming || (item.timesPerDay != null ? (item.timesPerDay === 1 ? "Once daily" : `${item.timesPerDay} times daily`) : "—")}</td>
-        <td>{item.preparation || "—"}</td>
-        <td>{plan.duration || (plan.durationAmount ? `${plan.durationAmount} days` : "—")}</td>
-        <td>{descriptionFor(item.productName) || item.rationale || "—"}</td>
-      </tr>)}</tbody></table>
+      <div className="cr-supplement-cards">{plan.items.map((item, index) => <article className="cr-supplement-card" key={`${plan.id}-${index}`}>
+        <h4>{item.productName}</h4><dl>
+          <div><dt>Dose</dt><dd>{item.quantityPerDay ?? "—"}</dd></div>
+          <div><dt>Timing</dt><dd>{item.mealTiming || (item.timesPerDay != null ? (item.timesPerDay === 1 ? "Once daily" : `${item.timesPerDay} times daily`) : "—")}</dd></div>
+          <div><dt>Preparation</dt><dd>{item.preparation || "—"}</dd></div>
+          <div><dt>Duration</dt><dd>{readableDuration(plan.duration || (plan.durationAmount ? `${plan.durationAmount} days` : "—"))}</dd></div>
+          <div className="cr-supplement-benefits"><dt>Key benefits</dt><dd>{descriptionFor(item.productName) || item.rationale || "—"}</dd></div>
+        </dl>
+      </article>)}</div>
     </div>)}
   </section>;
   const section = reportGuidance(report, "product").find(item => item.title.toLowerCase() === "product plan");
@@ -178,10 +221,10 @@ function ProductPlan({ report }: { report: GeneratedReport }) {
     return { name: part.trim(), quantity: "", detail: "" };
   });
   return <section className="cr-supplement"><div className="cr-advice-heading"><span className="cr-advice-icon"><Package size={20} aria-hidden="true"/></span><h3>Nutritional Supplement Recommendations</h3></div>
-    <table className="cr-supplement-directions"><thead><tr><th>Name</th><th>Dose</th><th>Timing</th><th>Preparation</th><th>Duration</th><th>Key benefits</th></tr></thead><tbody>{products.map((product, index) => <tr key={`${product.name}-${index}`}>
-      <td>{product.name}</td><td>{product.quantity || "—"}</td><td>{product.detail || "—"}</td><td>—</td><td>{duration || "—"}</td><td>—</td>
-    </tr>)}</tbody></table>
-    {duration && <p className="cr-supplement-duration"><CalendarDays size={17} aria-hidden="true"/><span>Duration</span><strong>{duration}</strong></p>}
+    <div className="cr-supplement-cards">{products.map((product, index) => <article className="cr-supplement-card" key={`${product.name}-${index}`}><h4>{product.name}</h4><dl>
+      <div><dt>Dose</dt><dd>{product.quantity || "—"}</dd></div><div><dt>Timing</dt><dd>{product.detail || "—"}</dd></div><div><dt>Preparation</dt><dd>—</dd></div><div><dt>Duration</dt><dd>{readableDuration(duration || "—")}</dd></div><div className="cr-supplement-benefits"><dt>Key benefits</dt><dd>—</dd></div>
+    </dl></article>)}</div>
+    {duration && <p className="cr-supplement-duration"><CalendarDays size={17} aria-hidden="true"/><span>Duration</span><strong>{readableDuration(duration)}</strong></p>}
   </section>;
 }
 
@@ -257,7 +300,7 @@ function WeightTrend({ report }: { report: GeneratedReport }) {
       <polygon points={`${points[0]!.x},132 ${points.map(item => `${item.x},${item.y}`).join(" ")} ${points[points.length - 1]!.x},132`} fill="var(--brand-primary, #34b5b9)" opacity=".08" />
       <polyline points={points.map(item => `${item.x},${item.y}`).join(" ")} fill="none" stroke="var(--brand-primary, #34b5b9)" strokeWidth="3.5" strokeLinejoin="round" strokeLinecap="round" strokeDasharray={priorComparison ? "8 6" : undefined} />
       {points.map((item, index) => <g key={`${item.date ?? "undated"}-${index}`}><circle cx={item.x} cy={item.y} r="6" fill="white" stroke="var(--brand-primary, #34b5b9)" strokeWidth="3"/><text x={item.x} y={item.y - 14} textAnchor="middle" className="cr-chart-value">{item.kg} kg</text></g>)}
-    </svg><div className="cr-chart-dates">{weights.map((item, index) => <span key={`${item.date ?? "undated"}-${index}`}>{item.label || reportDate(item.date)}</span>)}</div>{priorComparison && <p className="cr-weight-comparison-note">The earlier weight was reported as 1 month ago; its exact date was not recorded. The dashed line compares two values, not a dated trend.</p>}</> : <p className="cr-single-weight"><strong>{weights[0]!.kg} kg</strong><span>Recorded {weights[0]!.label || reportDate(weights[0]!.date)}</span></p>}
+    </svg><div className="cr-chart-dates">{weights.map((item, index) => <span key={`${item.date ?? "undated"}-${index}`}>{item.label || reportDate(item.date)}</span>)}</div></> : <p className="cr-single-weight"><strong>{weights[0]!.kg} kg</strong><span>Recorded {weights[0]!.label || reportDate(weights[0]!.date)}</span></p>}
   </section>;
 }
 
@@ -366,13 +409,13 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
         {(statusMetrics.length > 0 || observationGroups.length > 0) && <section className="cr-status-evidence"><h3>Assessment indicators</h3><div className="cr-status-metrics">{statusMetrics.map(metric => <div className="cr-status-metric" key={metric.id}><MetricIcon id={metric.id} label={metric.label}/><span>{metric.label}</span><strong>{metricText(metric)}</strong></div>)}{observationGroups.map(group => <div className="cr-status-metric" key={group.label}><span className="cr-metric-icon"><Stethoscope size={16} aria-hidden="true"/></span><span>{group.label}</span><strong>{group.values}</strong></div>)}</div></section>}
       </div>
       <WeightTrend report={report}/>
-      {hasInterpretation && <section className="cr-clinical-interpretation"><div className="cr-advice-heading"><span className="cr-advice-icon"><FileSearch size={20} aria-hidden="true"/></span><h3>Nutritional interpretation</h3></div>{report.nutritionalStatus?.trim() && <p><strong>Nutritional status:</strong> {report.nutritionalStatus}</p>}{report.narrative.overview?.trim() && <p><NarrativeText text={report.narrative.overview}/></p>}{showClinicalFinding && clinicalFinding !== report.narrative.overview?.trim() && <p><NarrativeText text={clinicalFinding!}/></p>}</section>}
+      {hasInterpretation && <section className="cr-clinical-interpretation"><div className="cr-advice-heading"><span className="cr-advice-icon"><FileSearch size={20} aria-hidden="true"/></span><h3>Nutritional interpretation</h3></div>{interpretationParagraphs([report.nutritionalStatus?.trim(), showClinicalFinding ? clinicalFinding : report.narrative.overview]).map((paragraph, index) => <p key={index}><NarrativeText text={paragraph}/></p>)}</section>}
     </ReportSheet>}
     {hasNutritionPage && <ReportSheet number={nextPage() + 1} title="Intervention" icon={Utensils} report={report} branding={branding} compact className={`cr-sheet-nutrition${denseNutrition ? " cr-sheet-nutrition-dense" : ""}`}>
       <div className="cr-care-stack">
       {targets.length > 0 && <section className="cr-nutrition-targets"><h3>Daily nutrition targets</h3><div className="cr-nutrition-target-grid">{targets.map(target => { const Icon = target.icon; return <div className="cr-nutrition-target-card" key={target.label}><Icon size={22} aria-hidden="true"/><span>{target.label}</span><strong>{target.value}</strong></div>; })}</div></section>}
       {renalGuidance && <section className="cr-renal-caution"><div className="cr-advice-heading"><span className="cr-advice-icon"><TriangleAlert size={20} aria-hidden="true"/></span><h3>Individualise nutrition targets</h3></div><p><NarrativeText text={renalGuidance.text}/></p></section>}
-      <ReviewedAdvice title={singleNutritionTitle(report, "Nutrition guidance")} text={report.narrative.nutritionAdvice} icon={CircleAlert} columns/>
+      <ReviewedAdvice title="Nutrition guidance" text={report.narrative.nutritionAdvice} icon={CircleAlert} columns/>
       <ProductPlan report={report}/>
       {!splitTreatmentPage && <ReviewedAdvice title={plannedTreatment ? "Preparation for planned treatment" : "During treatment"} text={report.narrative.treatmentAdvice} icon={ShieldCheck} columns/>}</div>
     </ReportSheet>}

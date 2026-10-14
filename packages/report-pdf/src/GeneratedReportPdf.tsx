@@ -133,16 +133,12 @@ function PdfLogo({ brand, cover = false }: { brand: PdfBrand; cover?: boolean })
   </View>;
 }
 
-function ReportPage({ report, brand, number, title, icon, children }: { report: GeneratedReport; brand: PdfBrand; number: number; title: string; icon: IconName; children: ReactNode }) {
+function ReportPage({ report, brand, number: _number, title, icon, children }: { report: GeneratedReport; brand: PdfBrand; number: number; title: string; icon: IconName; children: ReactNode }) {
   const theme = palette(brand);
-  return <Page size="A4" style={styles.page} wrap>
-    <View fixed style={[styles.header, { borderBottomColor: theme.line }]}>
-      <View style={{ flexDirection: "row", alignItems: "center", maxWidth: title.length > 30 ? "76%" : undefined }}><Text style={[styles.headerNumber, { color: accessibleBrandInk(theme.primary, [theme.white]) }]}>{String(number).padStart(2, "0")}</Text><Text style={[styles.headerTitle, title.length > 30 ? { fontSize: 10, maxWidth: 320 } : undefined]}>{title}</Text><View style={{ marginLeft: 8 }}><Icon name={icon} color={theme.primary} size={18}/></View></View>
-      <PdfLogo brand={brand}/>
-    </View>
-    <View fixed style={[styles.footer, { borderTopColor: theme.line }]}><Text>{brand.name}  |  Clinical nutrition report</Text><Text render={({ pageNumber }) => `${report.assessment.reference} · ${String(pageNumber).padStart(2, "0")}`}/></View>
+  return <View style={{ marginBottom: 17 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 7, paddingBottom: 6, marginBottom: 10, borderBottomWidth: .7, borderBottomColor: theme.line }}><Icon name={icon} color={theme.primary} size={16}/><Text style={{ fontSize: 13, fontWeight: 700 }}>{title}</Text></View>
     {children}
-  </Page>;
+  </View>;
 }
 
 function MetricCard({ metric, theme, icon, width, compact = false }: { metric: Metric; theme: Palette; icon?: IconName; width?: string; compact?: boolean }) {
@@ -233,14 +229,74 @@ function BmiReferencePanel({ metric, age, weight, height, theme }: { metric: Met
 function NarrativePanel({ title, text, icon, theme, soft = false, accent = false, width }: { title: string; text: string; icon: IconName; theme: Palette; soft?: boolean; accent?: boolean; width?: "48.8%" }) {
   return <View wrap={false} style={[styles.panel, { borderColor: theme.line, borderLeftWidth: accent ? 3 : 1, borderLeftColor: accent ? theme.primary : theme.line, backgroundColor: soft ? theme.soft : theme.white }, width ? { width } : undefined]}>
     <View style={{ flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 9 }}><Icon name={icon} color={theme.primary} size={20}/><Text style={[styles.subTitle, { marginBottom: 0 }]}>{title}</Text></View>
-    <Text style={styles.body} hyphenationCallback={word => [word]}>{text}</Text>
+    <Text style={styles.body} hyphenationCallback={word => [word]}>{narrativeParts(text)}</Text>
   </View>;
+}
+
+function narrativeParts(text: string): ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) => part.startsWith("**") && part.endsWith("**")
+    ? <Text key={index} style={{ fontWeight: 700 }}>{part.slice(2, -2)}</Text>
+    : part);
 }
 
 const adviceSegmenter = new Intl.Segmenter("en", { granularity: "sentence" });
 
 function adviceSentences(text: string) {
-  return Array.from(adviceSegmenter.segment(text), item => item.segment.trim()).filter(Boolean);
+  const highlights: string[] = [];
+  const protectedText = text.replace(/\*\*[^*]+\*\*/g, match => {
+    const token = `NARRATIVEHIGHLIGHT${highlights.length}TOKEN`;
+    highlights.push(match);
+    return token;
+  });
+  return Array.from(adviceSegmenter.segment(protectedText), item => item.segment.trim())
+    .filter(Boolean)
+    .map(sentence => sentence.replace(/NARRATIVEHIGHLIGHT(\d+)TOKEN/g, (_, index: string) => highlights[Number(index)] ?? ""));
+}
+
+type AdviceGroup = { heading?: string; text: string };
+const legacyConditionHeading = /^(?:diabetes|thyroid(?: disease| disorder)?|kidney disease|chronic kidney disease|renal disease|hypertension|high blood pressure|cardiovascular disease|heart disease|dyslipidaemia|dyslipidemia|liver disease|celiac disease|coeliac disease|reflux|gastroesophageal reflux|gout|osteoporosis|anaemia|anemia)(?:\s+(?:management|care|guidance|considerations?))?$/i;
+
+function adviceGroups(text: string): AdviceGroup[] {
+  const groups: AdviceGroup[] = [];
+  let current: AdviceGroup = { text: "" };
+  const flush = () => { if (current.text.trim()) groups.push({ ...current, text: current.text.trim() }); };
+  for (const line of text.split(/\r?\n/)) {
+    const markdown = /^\s*#{2,3}\s+(.+?)\s*$/.exec(line);
+    const legacy = /^\s*([^:\n]{2,48}):\s*(.*)$/.exec(line);
+    const standaloneLegacy = /^\s*([^:\n]{2,48})\s*$/.exec(line);
+    const heading = markdown?.[1]?.trim()
+      ?? (legacy && legacyConditionHeading.test(legacy[1]!.trim()) ? legacy[1]!.trim() : null)
+      ?? (standaloneLegacy && legacyConditionHeading.test(standaloneLegacy[1]!.trim()) ? standaloneLegacy[1]!.trim() : null);
+    if (heading) {
+      flush();
+      current = { heading, text: legacy?.[2]?.trim() ?? "" };
+      continue;
+    }
+    current.text += `${current.text ? "\n" : ""}${line.trim().replace(/^[-*•]\s+/, "")}`;
+  }
+  flush();
+  return groups.length ? groups : [{ text }];
+}
+
+function interpretationParagraphs(values: Array<string | undefined>) {
+  const seenFirstLines = new Set<string>();
+  const paragraphs = values.filter((value): value is string => Boolean(value?.trim()));
+  const status = paragraphs.find(value => /^(?:Well nourished|Moderately nourished|Severely malnourished)$/i.test(value.trim()));
+  const rendered = status && paragraphs.some(value => value !== status && value.replace(/\*\*/g, "").toLocaleLowerCase().includes(status.toLocaleLowerCase()))
+    ? paragraphs.filter(value => value !== status) : paragraphs;
+  return rendered.flatMap(value => {
+    const text = value.trim();
+    if (!text) return [];
+    const sentences = adviceSentences(text);
+    const first = (sentences[0] ?? text).replace(/\*\*/g, "").replace(/^\s*(?:your\s+)?(?:nutritional status|clinical interpretation)\s*(?::|is|was recorded as)\s*/i, "").trim();
+    const key = first.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    if (key && seenFirstLines.has(key)) {
+      const remaining = sentences.slice(1).join(" ").trim();
+      return remaining ? [remaining] : [];
+    }
+    if (key) seenFirstLines.add(key);
+    return [text];
+  });
 }
 
 function singleGuidanceTitle(report: GeneratedReport, type: "comorbidity" | "toxicity", fallback: string) {
@@ -248,32 +304,35 @@ function singleGuidanceTitle(report: GeneratedReport, type: "comorbidity" | "tox
   return titles.length === 1 ? titles[0]! : fallback;
 }
 
-function AdvicePanel({ title, text, icon, theme, columns = false, action = false, width, compact = false, tight = false, minHeight, allowWrap = false }: { title: string; text: string; icon: IconName; theme: Palette; columns?: boolean; action?: boolean; width?: "48.8%" | "100%"; compact?: boolean; tight?: boolean; minHeight?: number; allowWrap?: boolean }) {
-  const sentences = adviceSentences(text);
+function AdvicePanel({ title, text, icon, theme, columns: _columns = false, action = false, width, compact = false, tight = false, minHeight, allowWrap = false }: { title: string; text: string; icon: IconName; theme: Palette; columns?: boolean; action?: boolean; width?: "48.8%" | "100%"; compact?: boolean; tight?: boolean; minHeight?: number; allowWrap?: boolean }) {
+  const groups = adviceGroups(text);
   return <View wrap={allowWrap} style={[styles.panel, { width: width ?? "100%", minHeight, borderColor: theme.line, backgroundColor: action ? theme.soft : theme.white, padding: tight ? 8 : compact ? 9 : 11, marginBottom: 0 }]}>
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: tight ? 5 : compact ? 6 : 8 }}><Icon name={icon} color={theme.primary} size={17}/><Text style={[styles.subTitle, { marginBottom: 0, flex: 1 }]}>{title}</Text></View>
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: tight ? 3 : compact ? 5 : 7 }}>
-      {sentences.map((sentence, index) => <View key={index} style={{ width: columns ? "48.8%" : "100%", flexDirection: "row", gap: 6, alignItems: "flex-start", padding: tight ? 3 : compact ? 4 : 5, borderRadius: 5, borderLeftWidth: 1.3, borderLeftColor: theme.primary, backgroundColor: action ? theme.white : theme.soft }}>
+    {groups.map((group, groupIndex) => <View key={groupIndex} style={{ marginTop: groupIndex ? 6 : 0 }}>
+      {group.heading && <Text style={{ fontSize: 9.2, fontWeight: 700, marginBottom: 3, color: theme.ink }}>{group.heading}</Text>}
+      {adviceSentences(group.text).map((sentence, index) => <View key={index} style={{ width: "100%", flexDirection: "row", gap: 6, alignItems: "flex-start", padding: tight ? 3 : compact ? 4 : 5, borderRadius: 5, borderLeftWidth: 1.3, borderLeftColor: theme.primary, backgroundColor: action ? theme.white : theme.soft }}>
         {action ? <Text style={{ width: 10, color: theme.primary, fontSize: 11, lineHeight: 1 }}>›</Text> : <View style={{ width: 9, height: 9, borderRadius: 5, marginTop: 2, borderWidth: 1.2, borderColor: theme.primary, backgroundColor: theme.white, alignItems: "center", justifyContent: "center" }}><View style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: theme.primary }}/></View>}
-        <Text style={{ flex: 1, fontSize: tight ? 7.4 : compact ? 8.7 : 9.2, lineHeight: tight ? 1.22 : 1.3 }} hyphenationCallback={word => [word]}>{sentence}</Text>
+        <Text style={{ flex: 1, fontSize: tight ? 7.4 : compact ? 8.7 : 9.2, lineHeight: tight ? 1.22 : 1.3 }} hyphenationCallback={word => [word]}>{narrativeParts(sentence)}</Text>
       </View>)}
-    </View>
+    </View>)}
   </View>;
 }
 
 function productParts(report: GeneratedReport) {
   const selected = report.productPlans?.find(plan => plan.items.length);
+  const readableDuration = (duration: string) => duration.replace(/\b\d{4}-\d{2}-\d{2}\b/g, date => reportDate(date));
   if (selected) return { items: selected.items.map(item => ({
     name: item.productName,
     quantity: item.quantityPerDay == null ? "" : String(item.quantityPerDay),
     detail: item.mealTiming || (item.timesPerDay == null ? "" : item.timesPerDay === 1 ? "Once daily" : `${item.timesPerDay} times daily`),
     preparation: item.preparation || "—",
-    duration: selected.duration || (selected.durationAmount ? `${selected.durationAmount} days` : "—"),
+    duration: readableDuration(selected.duration || (selected.durationAmount ? `${selected.durationAmount} days` : "—")),
     benefits: report.productCatalog?.find(product => [product.name, ...(product.aliases ?? [])].some(alias => alias.trim().toLowerCase() === item.productName.trim().toLowerCase()))?.description || item.rationale || "—",
-  })), duration: selected.duration || (selected.durationAmount ? `${selected.durationAmount} days` : "—") };
+  })), duration: readableDuration(selected.duration || (selected.durationAmount ? `${selected.durationAmount} days` : "—")) };
   const section = reportGuidance(report, "product").find(item => item.title.toLowerCase() === "product plan");
   if (!section) return null;
-  const [dose, duration] = section.text.split("\n").map(part => part.trim()).filter(Boolean);
+  const [dose, rawDuration] = section.text.split("\n").map(part => part.trim()).filter(Boolean);
+  const duration = rawDuration ? readableDuration(rawDuration) : rawDuration;
   if (!dose) return null;
   const items = dose.split(/\s+\+\s+/).map(part => {
     const scoop = /^([^:]+):\s*(\d+(?:\.\d+)?)\s+(.+)$/.exec(part);
@@ -327,12 +386,15 @@ function ProductPlan({ report, theme, compact = false }: { report: GeneratedRepo
   const plan = productParts(report);
   if (!plan) return null;
   const brandInk = accessibleBrandInk(theme.primary, [theme.soft]);
-  return <View wrap={false} style={[styles.panel, { borderColor: theme.line, backgroundColor: theme.soft, padding: compact ? 8 : 11 }]}>
+  return <View style={[styles.panel, { borderColor: theme.line, backgroundColor: theme.soft, padding: compact ? 8 : 11 }]}>
     <View style={{ flexDirection: "row", alignItems: "center", gap: 9, marginBottom: compact ? 5 : 9 }}><Icon name="package" color={theme.primary}/><Text style={[styles.subTitle, { marginBottom: 0 }]}>Nutritional Supplement Recommendations</Text></View>
-    <View style={{ borderWidth: 1, borderColor: theme.line, borderRadius: 7, overflow: "hidden", backgroundColor: theme.white }}>
-      <View style={{ flexDirection: "row", backgroundColor: theme.soft, padding: 5 }}>{["Name", "Dose", "Timing", "Preparation", "Duration", "Key benefits"].map((label, index) => <Text key={label} style={{ width: ["23%", "9%", "15%", "17%", "12%", "24%"][index], fontSize: 6.2, fontWeight: 700, color: brandInk }}>{label}</Text>)}</View>
-      {plan.items.map((item, index) => <View key={`${item.name}-${index}`} style={{ flexDirection: "row", padding: 5, borderTopWidth: index ? .5 : 0, borderTopColor: theme.line, alignItems: "flex-start" }}>{[item.name, item.quantity || "—", item.detail || "—", item.preparation, item.duration, item.benefits].map((value, column) => <Text key={column} style={{ width: ["23%", "9%", "15%", "17%", "12%", "24%"][column], fontSize: 6.2, lineHeight: 1.25, fontWeight: column === 0 ? 700 : 400 }}>{value}</Text>)}</View>)}
-    </View>
+    {plan.items.map((item, index) => <View key={`${item.name}-${index}`} style={{ padding: 8, marginBottom: 6, borderWidth: .7, borderColor: theme.line, borderRadius: 7, backgroundColor: theme.white }}>
+      <Text style={{ fontSize: 9.5, fontWeight: 700, marginBottom: 5 }}>{item.name}</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 5 }}>
+        {[["Dose", item.quantity || "—"], ["Timing", item.detail || "—"], ["Preparation", item.preparation], ["Duration", item.duration]].map(([label, value]) => <View key={label} style={{ width: "48%" }}><Text style={{ fontSize: 6.5, fontWeight: 700, color: brandInk }}>{label}</Text><Text style={{ fontSize: 7.5 }}>{value}</Text></View>)}
+        <View style={{ width: "100%", paddingTop: 4, borderTopWidth: .5, borderTopColor: theme.line }}><Text style={{ fontSize: 6.5, fontWeight: 700, color: brandInk }}>Key benefits</Text><Text style={{ fontSize: 7.5, lineHeight: 1.3 }}>{item.benefits}</Text></View>
+      </View>
+    </View>)}
   </View>;
 }
 
@@ -407,14 +469,10 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
   const antimetaboliteSections = possibleSections.filter(section => /antimetabolite/i.test(section.drugClass ?? ""));
   const otherPossibleSections = possibleSections.filter(section => !antimetaboliteSections.includes(section));
   const actionOnly = hasActions && !hasConsiderations;
-  const careWordCount = (text: string | undefined) => text?.trim().split(/\s+/).length ?? 0;
-  const pairedCareAdvice = Boolean(report.narrative.conditionAdvice && report.narrative.effectsAdvice && careWordCount(report.narrative.conditionAdvice) <= 100 && careWordCount(report.narrative.effectsAdvice) <= 100);
-  const careStepWidth = report.narrative.actionSummary && report.narrative.monitoringSummary &&
-    report.narrative.actionSummary.length + report.narrative.monitoringSummary.length < 420 ? "48.8%" : "100%";
+  const careStepWidth = "100%" as const;
   const denseNutrition = (report.narrative.nutritionAdvice?.length ?? 0) + (report.narrative.treatmentAdvice?.length ?? 0) > 900;
   const veryDenseNutrition = (report.narrative.nutritionAdvice?.length ?? 0) + (report.narrative.treatmentAdvice?.length ?? 0) > 1600;
   const denseCare = (report.narrative.conditionAdvice?.length ?? 0) + (report.narrative.effectsAdvice?.length ?? 0) > 1200;
-  const compactCare = pairedCareAdvice && careStepWidth === "48.8%";
   let page = 2;
   return <Document title={`Medical nutrition therapy report - ${report.assessment.reference}`} author={brand.name} subject="Clinical nutrition assessment">
     <Page size="A4" style={styles.cover}>
@@ -441,6 +499,9 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
       <View fixed style={[styles.footer, { borderTopColor: theme.line }]}><Text>{brand.name}</Text><Text>01</Text></View>
     </Page>
 
+    <Page size="A4" style={styles.page} wrap>
+    <View fixed style={[styles.header, { borderBottomColor: theme.line }]}><Text style={{ color: accessibleBrandInk(theme.primary, [theme.white]), fontSize: 10, fontWeight: 700 }}>Clinical nutrition report</Text><PdfLogo brand={brand}/></View>
+    <View fixed style={[styles.footer, { borderTopColor: theme.line }]}><Text>{brand.name}  |  {report.assessment.reference}</Text><Text render={({ pageNumber }) => String(pageNumber).padStart(2, "0")}/></View>
     <ReportPage report={report} brand={brand} number={page++} title="Patient overview" icon="person">
       <View style={[styles.row, { alignItems: "stretch", marginBottom: 11 }]}>
         <View style={[styles.softPanel, { width: primaryMeasurements.length ? "48.8%" : "100%", minHeight: 174, marginBottom: 0, backgroundColor: theme.soft, alignItems: "center", justifyContent: "center", padding: 15 }]}>
@@ -497,8 +558,7 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
         </View>}
       </View>}
       {!compactNutritionSummary && statusMetrics.length > 0 && <><Text style={[styles.sectionLabel, { color: brandInk }]}>Assessment indicators</Text><View style={[styles.wrapRow, { marginBottom: 11 }]}>{statusMetrics.map(metric => <MetricCard key={metric.id} metric={metric} theme={theme}/>)}</View></>}
-      {showClinicalFinding && clinicalFinding && <NarrativePanel title="Clinical interpretation" text={clinicalFinding} icon="clipboard" theme={theme} accent/>}
-      {report.nutritionalStatus && <NarrativePanel title="Nutritional status" text={report.nutritionalStatus} icon="clipboard" theme={theme} accent/>}
+      {(showClinicalFinding || report.nutritionalStatus) && <NarrativePanel title="Nutritional interpretation" text={interpretationParagraphs([report.nutritionalStatus, clinicalFinding && showClinicalFinding ? clinicalFinding : report.narrative.overview]).join("\n\n")} icon="clipboard" theme={theme} accent/>}
       <WeightGraphic report={report} theme={theme}/>
       {actionOnly && <View style={[styles.row, { flexWrap: "wrap", marginTop: 7 }]}>
         {report.narrative.actionSummary && <AdvicePanel title="What to do" text={report.narrative.actionSummary} icon="food" theme={theme} action width={careStepWidth} compact/>}
@@ -529,20 +589,16 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
     {redFlags && <ReportPage report={report} brand={brand} number={page++} title="Red flags" icon="alert"><AdvicePanel title="When to seek urgent help" text={redFlags} icon="alert" theme={theme}/></ReportPage>}
 
     {(hasConsiderations || (hasActions && (!hasFindings || Boolean(report.narrative.foodSafetyAdvice)))) && <ReportPage report={report} brand={brand} number={page++} title="Recommendations" icon="heart">
-      <View style={{ marginTop: compactCare ? 117 : 0, gap: 10 }}>
-        {pairedCareAdvice ? <View wrap={false} style={[styles.row, { alignItems: "stretch" }]}>
-          <AdvicePanel title={singleGuidanceTitle(report, "comorbidity", "Other health conditions")} text={report.narrative.conditionAdvice!} icon="heart" theme={theme} width="48.8%" compact minHeight={compactCare ? 250 : undefined}/>
-          <AdvicePanel title={singleGuidanceTitle(report, "toxicity", "Treatment effects and nutrition")} text={report.narrative.effectsAdvice!} icon="drop" theme={theme} width="48.8%" compact minHeight={compactCare ? 250 : undefined}/>
-        </View> : <>
-          {report.narrative.conditionAdvice && <AdvicePanel title={singleGuidanceTitle(report, "comorbidity", "Other health conditions")} text={report.narrative.conditionAdvice} icon="heart" theme={theme} columns={denseCare} compact={denseCare}/>}
-          {report.narrative.effectsAdvice && <AdvicePanel title={singleGuidanceTitle(report, "toxicity", "Treatment effects and nutrition")} text={report.narrative.effectsAdvice} icon="drop" theme={theme} columns={denseCare} compact={denseCare}/>}
-        </>}
+      <View style={{ gap: 10 }}>
+        {report.narrative.conditionAdvice && <AdvicePanel title={singleGuidanceTitle(report, "comorbidity", "Other health conditions")} text={report.narrative.conditionAdvice} icon="heart" theme={theme} compact={denseCare}/>}
+        {report.narrative.effectsAdvice && <AdvicePanel title={singleGuidanceTitle(report, "toxicity", "Treatment effects and nutrition")} text={report.narrative.effectsAdvice} icon="drop" theme={theme} compact={denseCare}/>}
         {hasActions && <View style={[styles.row, { flexWrap: "wrap" }]}>
           {report.narrative.foodSafetyAdvice && <AdvicePanel title="Food safety" text={report.narrative.foodSafetyAdvice} icon="shield" theme={theme} compact/>}
-          {report.narrative.actionSummary && <AdvicePanel title="What to do" text={report.narrative.actionSummary} icon="food" theme={theme} action width={careStepWidth} compact minHeight={compactCare ? 140 : undefined}/>}
-          {report.narrative.monitoringSummary && <AdvicePanel title="What to monitor" text={report.narrative.monitoringSummary} icon="chart" theme={theme} action width={careStepWidth} compact minHeight={compactCare ? 140 : undefined}/>}
+          {report.narrative.actionSummary && <AdvicePanel title="What to do" text={report.narrative.actionSummary} icon="food" theme={theme} action width={careStepWidth} compact/>}
+          {report.narrative.monitoringSummary && <AdvicePanel title="What to monitor" text={report.narrative.monitoringSummary} icon="chart" theme={theme} action width={careStepWidth} compact/>}
         </View>}
       </View>
     </ReportPage>}
-  </Document>;
+    </Page>
+    </Document>;
 }

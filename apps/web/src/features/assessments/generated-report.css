@@ -1,9 +1,15 @@
-.clinical-report { display: grid; gap: 1.5rem; width: min(100%, 850px); margin: 0 auto; color: #173044; font-family: Outfit Variable, Outfit, sans-serif; }
-.cr-sheet { position: relative; display: flex; min-height: 1030px; flex-direction: column; overflow: hidden; padding: 2rem 2.3rem 1.4rem; border: 1px solid #d7e5e8; border-radius: 1rem; background: #fff; box-shadow: 0 16px 50px #15344712; }
-.cr-sheet-compact { min-height: 620px; }
+.clinical-report { display: flex; flex-direction: column; width: min(100%, 850px); margin: 0 auto; color: #173044; font-family: Outfit Variable, Outfit, sans-serif; }
+.cr-sheet { position: relative; display: flex; flex-direction: column; overflow: hidden; padding: 1.5rem 2.3rem; border: 1px solid #d7e5e8; border-bottom: 0; background: #fff; }
+.cr-sheet-compact { min-height: 0; }
+.cr-sheet:not(.cr-cover) + .cr-sheet:not(.cr-cover) { border-top: 1px solid #e7eff0; }
+.cr-sheet:last-child { border-bottom: 1px solid #d7e5e8; }
+.cr-sheet:not(:nth-child(2)) .cr-sheet-header { display: none; }
 .cr-sheet::before { position: absolute; top: 0; left: 0; width: 100%; height: 6px; background: var(--brand-primary, #34b5b9); content: ""; }
 .cr-sheet-header, .cr-sheet-footer, .cr-panel-title, .cr-cover-top, .cr-status-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.cr-sheet-header { min-height: 66px; padding-bottom: 1.3rem; border-bottom: 1px solid #dce9ec; }
+.cr-sheet-header { min-height: 0; justify-content: flex-end; padding-bottom: .6rem; }
+.cr-content-title { display: flex; align-items: center; gap: .55rem; margin: 0 0 1.15rem; color: #10354a; }
+.cr-content-title svg { flex: none; color: var(--brand-primary, #239ca3); }
+.cr-content-title h2 { margin: 0; font-size: 1.15rem; font-weight: 750; line-height: 1.25; }
 .cr-sheet-heading { display: flex; align-items: center; gap: .55rem; min-width: 0; color: #10354a; }
 .cr-sheet-heading svg { color: var(--brand-primary, #239ca3); }
 .cr-sheet-heading h2 { margin: 0; font-size: 1.15rem; font-weight: 750; line-height: 1.25; }
@@ -14,9 +20,9 @@
 .cr-report-brand .brand-marks-partner, .cr-cover-brand .brand-marks-partner { gap: .05rem; padding-left: .5rem; border-color: #dce9ec; }
 .cr-report-brand .brand-marks-partner-logo { width: 105px; height: 35px; }
 .cr-report-brand .brand-marks-partner-caption { font-size: .52rem; }
-.cr-sheet-content { flex: 1; padding: 1.7rem 0 2rem; }
-.cr-sheet-footer { margin-top: auto; padding-top: 1rem; border-top: 1px solid #dce9ec; color: #6d8390; font-size: .72rem; }
-.cr-cover { background: var(--brand-primary, #34b5b9); }
+.cr-sheet-content { padding: .5rem 0 1.5rem; }
+.cr-sheet-footer { display: none; }
+.cr-cover { min-height: 1030px; background: var(--brand-primary, #34b5b9); }
 .cr-cover::before { background: var(--brand-primary, #34b5b9); }
 .cr-cover-top { position: absolute; z-index: 3; top: 4rem; left: 2.7rem; justify-content: flex-start; color: #fff; }
 .cr-cover-brand { width: auto; min-height: 68px; justify-content: flex-start; gap: .75rem; }
@@ -189,7 +195,10 @@
 .cr-advice-heading h3 { margin: 0; color: #173d4e; font-size: 1rem; }
 .cr-advice-icon { display: grid; width: 38px; height: 38px; flex: none; place-items: center; border-radius: .65rem; color: var(--brand-ink, #177e83); background: color-mix(in srgb, var(--brand-primary, #34b5b9) 12%, white); }
 .cr-advice-points { display: grid; gap: .4rem; margin: .75rem 0 0; padding: 0; list-style: none; }
-.cr-advice-columns .cr-advice-points { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cr-advice-group + .cr-advice-group { margin-top: .85rem; padding-top: .75rem; border-top: 1px solid #e5eff0; }
+.cr-advice-group h4 { margin: .4rem 0 .2rem; color: #214757; font-size: .88rem; }
+.cr-advice-group .cr-advice-points { margin-top: .35rem; }
+.cr-advice-columns .cr-advice-points { grid-template-columns: 1fr; }
 .cr-advice-points li { display: grid; min-width: 0; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: .4rem; padding: .32rem .15rem; color: #345463; font-size: .8rem; line-height: 1.45; overflow-wrap: anywhere; }
 .cr-advice-points li svg { margin-top: .1rem; color: var(--brand-ink, #177e83); }
 .cr-advice-action .cr-advice-points li { color: #254b5a; }
@@ -212,6 +221,14 @@
 .cr-supplement-directions th, .cr-supplement-directions td { padding: .4rem .35rem; border: 1px solid #e0ebed; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
 .cr-supplement-directions th { color: #607989; background: #f3f8f8; font-size: .66rem; }
 .cr-supplement-directions td { color: #173d4e; font-size: .72rem; font-weight: 600; line-height: 1.35; }
+.cr-supplement-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .7rem; margin-top: .65rem; }
+.cr-supplement-card { min-width: 0; padding: .8rem; border: 1px solid #dce9eb; border-radius: .7rem; background: #fff; }
+.cr-supplement-card h4 { margin: 0 0 .55rem; color: #173d4e; font-size: .95rem; }
+.cr-supplement-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem .7rem; margin: 0; }
+.cr-supplement-card dl > div { min-width: 0; }
+.cr-supplement-card dt { color: #607989; font-size: .65rem; font-weight: 700; }
+.cr-supplement-card dd { margin: .1rem 0 0; color: #173d4e; font-size: .76rem; line-height: 1.35; overflow-wrap: anywhere; }
+.cr-supplement-card .cr-supplement-benefits { grid-column: 1 / -1; padding-top: .4rem; border-top: 1px solid #e5eff0; }
 .cr-supplement-item-body .cr-supplement-dose { align-items: baseline; margin: .45rem 0; color: #214757; }
 .cr-supplement-dose strong { font-size: 1rem; }
 .cr-supplement-item-body .cr-supplement-rationale { padding-top: .4rem; border-top: 1px solid #e5eff0; }
@@ -312,7 +329,7 @@
 
 @media screen and (max-width: 650px) {
   .clinical-report { gap: .8rem; }
-  .cr-sheet { min-height: 0; padding: 1.2rem 1rem; border-radius: .7rem; }
+  .cr-sheet { min-height: 0; padding: 1.2rem 1rem; }
   .cr-sheet-compact { min-height: 0; }
   .cr-cover { min-height: 720px; }
   .cr-cover-top { top: 1.5rem; left: 1.4rem; }
@@ -356,7 +373,8 @@
 }
 
 /* The issued PDF prints the same report markup as the browser preview. */
-@page { size: A4; margin: 0; }
+@page { size: A4; margin: 15mm 0; }
+@page:first { margin: 0; }
 
 @media print {
   body.cr-print-document { width: 210mm; min-width: 0; margin: 0; background: #fff; }
@@ -369,28 +387,28 @@
     print-color-adjust: exact;
   }
   body.cr-print-document .cr-sheet {
+    display: block;
     width: 210mm;
-    min-height: 296mm;
+    min-height: 0;
     height: auto;
-    padding: 12mm 13mm 10mm;
+    padding: 7mm 13mm 3mm;
     border: 0;
     border-radius: 0;
     box-shadow: none;
     overflow: visible;
-    break-after: page;
-    page-break-after: always;
-  }
-  body.cr-print-document .cr-sheet:last-child {
     break-after: auto;
     page-break-after: auto;
   }
-  /* Keep the page number anchored when a dense sheet uses the available page height. */
-  body.cr-print-document .cr-sheet-footer {
-    position: absolute;
-    right: 13mm;
-    bottom: 10mm;
-    left: 13mm;
-  }
+  body.cr-print-document .cr-sheet-header { display: none; min-height: 0; padding: 0 0 3mm; border: 0; }
+  body.cr-print-document .cr-sheet-content { padding-top: 0; }
+  body.cr-print-document .cr-report-brand { width: 35mm; min-height: 8mm; }
+  body.cr-print-document .cr-report-brand .brand-marks-organization-logo { height: 8mm; }
+  body.cr-print-document .cr-sheet-footer { display: none; }
+  body.cr-print-document .cr-content-title { margin-bottom: 4mm; }
+  body.cr-print-document .cr-content-title,
+  body.cr-print-document .cr-clinical-facts h3,
+  body.cr-print-document .cr-advice-heading { break-after: avoid; page-break-after: avoid; }
+  body.cr-print-document .cr-clinical-facts { break-inside: avoid; page-break-inside: avoid; }
   body.cr-print-document .cr-sheet-header,
   body.cr-print-document .cr-sheet-footer,
   body.cr-print-document .cr-advice-block,
@@ -405,21 +423,35 @@
   body.cr-print-document .cr-sheet-vital .cr-vital-highlights,
   body.cr-print-document .cr-sheet-vital .cr-vital-detail-grid { margin-top: .65rem; }
   body.cr-print-document .cr-sheet-vital .cr-vital-detail dl > div { padding: .25rem 0; }
-  body.cr-print-document .cr-sheet-summary .cr-sheet-content { gap: 1.25rem; }
+  body.cr-print-document .cr-sheet-summary .cr-sheet-content { display:block;padding-top:0; }
+  body.cr-print-document .cr-summary-hero,
+  body.cr-print-document .cr-summary-brief { break-inside:avoid;page-break-inside:avoid;margin-bottom:1.25rem; }
   body.cr-print-document .cr-report-bmi section[aria-label="Body mass index"] > div:last-child {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  body.cr-print-document .cr-overview-hero { gap:.5rem;padding:.75rem; }
+  body.cr-print-document .cr-overview-hero h3 { font-size:1.15rem; }
+  body.cr-print-document .cr-avatar { width:48px;height:48px; }
+  body.cr-print-document .cr-overview-key .cr-metric-card { min-height:80px;padding:.6rem .85rem; }
+  body.cr-print-document .cr-report-bmi { margin-top:.8rem; }
+  body.cr-print-document .cr-report-bmi section[aria-label="Body mass index"] { padding:12px; }
+  body.cr-print-document .cr-report-bmi section[aria-label="Body mass index"] > div:last-child { margin-top:8px;padding-top:8px; }
+  body.cr-print-document .cr-clinical-facts { margin-top:.8rem;padding:.8rem; }
+  body.cr-print-document .cr-clinical-facts dl > div { padding:.5rem .65rem; }
   /* Long reviewed passages may continue onto another page; keep every sentence visible. */
   body.cr-print-document .cr-print-overflow { min-height: 0; }
   body.cr-print-document .cr-print-overflow .cr-sheet-content,
   body.cr-print-document .cr-print-overflow .cr-care-stack,
   body.cr-print-document .cr-print-overflow .cr-care-grid,
   body.cr-print-document .cr-print-overflow .cr-possible-list { display: block; }
+  body.cr-print-document .cr-advice-points { display: block; }
+  body.cr-print-document .cr-advice-points li { margin-bottom: 1.5mm; }
   body.cr-print-document .cr-print-overflow .cr-possible-effect {
     margin-bottom: 4mm;
-    break-inside: auto;
-    page-break-inside: auto;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
+  body.cr-print-document .cr-possible-effect.cr-print-fragment { break-inside: auto; page-break-inside: auto; }
   body.cr-print-document .cr-possible-effect-heading { break-after: avoid; }
   /* Advice must start below its page heading instead of moving the whole
      card onto the next page and leaving the heading on an empty page. */
@@ -454,5 +486,7 @@
   body.cr-print-document .cr-print-overflow.cr-sheet-care .cr-advice-points {
     margin-top: .8rem;
   }
-  body.cr-print-document .cr-print-overflow .cr-sheet-footer { display: none; }
+  body.cr-print-document .cr-cover { min-height: 297mm; height: 297mm; padding: 0; break-after: page; page-break-after: always; }
+  body.cr-print-document .cr-cover .cr-sheet-footer { display: none; }
+  body.cr-print-document .cr-advice-columns .cr-advice-points { grid-template-columns: 1fr; }
 }
