@@ -137,7 +137,8 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect(document.body.textContent).not.toContain("HbA1c");
     expect(document.querySelector('[aria-label="Vital IQ measurements"] .cr-section-intro')).toBeNull();
     const reportPages = Array.from(document.querySelectorAll(".clinical-report > .cr-sheet"), sheet => sheet.getAttribute("aria-label"));
-    expect(reportPages.indexOf("Nutrition status")).toBeLessThan(reportPages.indexOf("Vital IQ measurements"));
+    expect(reportPages.indexOf("Patient overview")).toBeLessThan(reportPages.indexOf("Vital IQ measurements"));
+    expect(reportPages.indexOf("Vital IQ measurements")).toBeLessThan(reportPages.indexOf("Nutrition status"));
     expect(reportPages.at(-1)).toBe("Report summary");
     const patientOverview = document.querySelector('[aria-label="Patient overview"]')!;
     expect(patientOverview.querySelector(".cr-report-bmi")).not.toBeNull();
