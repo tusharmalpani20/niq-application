@@ -82,7 +82,7 @@ const readyReport: GeneratedReport = {
     ],
     weightHistory: [],
     decision: { productStageChoice: null, plannedTreatmentStartDate: null },
-    narrative: { overview: "Reviewed patient overview", keyFindings: "Current weight is 62 kg and blood pressure is 131/84 mmHg.", actionSummary: "Reviewed action plan", monitoringSummary: "Reviewed monitoring plan", overallSummary: "High nutritional risk and treatment-related eating difficulty call for early nutrition support. Follow the reviewed nutrition plan and monitor intake, weight and symptoms with the care team.", nutritionAdvice: "Reviewed nutrition guidance", treatmentAdvice: "Reviewed treatment guidance", conditionAdvice: "Reviewed condition guidance", effectsAdvice: "Reviewed effects guidance" },
+    narrative: { overview: "Reviewed patient overview", keyFindings: "Current weight is 62 kg and blood pressure is 131/84 mmHg.", actionSummary: "Reviewed action plan", monitoringSummary: "**Track weight and intake.** Reviewed monitoring plan", overallSummary: "High nutritional risk and treatment-related eating difficulty call for early nutrition support. Follow the reviewed nutrition plan and monitor intake, weight and symptoms with the care team.", nutritionAdvice: "Reviewed nutrition guidance", treatmentAdvice: "Reviewed treatment guidance", conditionAdvice: "Reviewed condition guidance. **Have TSH checked after a dose change.** Report new symptoms.", effectsAdvice: "Reviewed effects guidance" },
     guidance: { sections: [
       { id: "nutrition-1", kind: "nutrition", title: "Matched rule", text: "Energy: 30–35 kcal/kg/day\nProtein: 1.5–2.0 g/kg/day\nRaw rule wording for internal guidance" },
       { id: "product-1", kind: "product", title: "Product plan", text: "1 Invigour + 2 Protect\nAt least 90 days during treatment" },
@@ -109,6 +109,9 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect(document.querySelector('[aria-label="During treatment"]')?.textContent).toContain("Reviewed treatment guidance");
     expect(document.querySelector('[aria-label="Intervention"]')?.textContent).not.toContain("Reviewed treatment guidance");
     expect(document.body.textContent).toContain("Reviewed condition guidance");
+    expect(document.querySelector('[aria-label="Other health conditions"] .cr-narrative-emphasis')?.textContent).toBe("Have TSH checked after a dose change.");
+    expect(document.querySelector('[aria-label="Recommendations"] .cr-narrative-emphasis')?.textContent).toBe("Track weight and intake.");
+    expect(document.body.textContent).not.toContain("**");
     expect(document.body.textContent).toContain("Reviewed effects guidance");
     const summary = document.querySelector('[aria-label="Report summary"]')!;
     expect(summary.textContent).toContain("High Risk");

@@ -87,7 +87,16 @@ function ReportSheet({ number, title, icon: Icon, children, report, branding, co
 const adviceSegmenter = new Intl.Segmenter("en", { granularity: "sentence" });
 
 function adviceSentences(text: string) {
-  return Array.from(adviceSegmenter.segment(text), item => item.segment.trim()).filter(Boolean);
+  // Keep punctuation inside an emphasized phrase from splitting its ** markers.
+  const highlights: string[] = [];
+  const protectedText = text.replace(/\*\*[^*]+\*\*/g, match => {
+    const token = `NARRATIVEHIGHLIGHT${highlights.length}TOKEN`;
+    highlights.push(match);
+    return token;
+  });
+  return Array.from(adviceSegmenter.segment(protectedText), item => item.segment.trim())
+    .filter(Boolean)
+    .map(sentence => sentence.replace(/NARRATIVEHIGHLIGHT(\d+)TOKEN/g, (_, index: string) => highlights[Number(index)] ?? ""));
 }
 
 function summarySentences(text: string | undefined, count: number) {
