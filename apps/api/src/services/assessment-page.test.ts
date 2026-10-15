@@ -20,7 +20,7 @@ describe.skipIf(process.env.ASSESSMENT_PAGE_TEST !== "1")("assessment page again
     await client`create temporary table facility_memberships (organization_id text, organization_membership_id text, facility_id text)`;
     await client`create temporary table facilities (id text, organization_id text, name text)`;
     await client`create temporary table patients (id text, organization_id text, home_facility_id text, reference_prefix text, serial_number int, is_archived boolean, encrypted_profile bytea)`;
-    await client`create temporary table assessments (id text, organization_id text, patient_id text, facility_id text, serial_number int, status text, created_by_membership_id text, current_owner_membership_id text, clinical_review jsonb, current_submission_id text, created_at timestamptz, updated_at timestamptz, completed_at timestamptz)`;
+    await client`create temporary table assessments (id text, organization_id text, patient_id text, facility_id text, serial_number int, status text, created_by_membership_id text, current_owner_membership_id text, clinical_review jsonb, current_submission_id text, created_at timestamptz, updated_at timestamptz, completed_at timestamptz, final_risk_category text)`;
     await client`create temporary table assessment_priorities (organization_id text, assessment_id text, membership_id text)`;
     await client`insert into facilities values ('f1','org','Central'),('f2','org','North')`;
     await client`insert into facility_memberships values ('org','member-a','f1')`;
@@ -30,7 +30,7 @@ describe.skipIf(process.env.ASSESSMENT_PAGE_TEST !== "1")("assessment page again
     const high = seal({ finalSnapshot: { score: { risk: { status: "ORIGINAL", classification: { id: "high" } } } } });
     const low = seal({ finalSnapshot: { score: { risk: { status: "ORIGINAL", classification: { id: "low" } } } } });
     const correction = seal({ correctionPerson: { membershipId: "member-a" } });
-    await client`insert into assessments values
+    await client`insert into assessments (id, organization_id, patient_id, facility_id, serial_number, status, created_by_membership_id, current_owner_membership_id, clinical_review, current_submission_id, created_at, updated_at, completed_at) values
       ('owned','org','p1','f1',1,'DRAFT','member-a','member-a',null,null,'2026-10-04', '2026-10-04',null),
       ('legacy','org','p2','f1',2,'DRAFT','member-b',null,${correction}::jsonb,null,'2026-10-05','2026-10-05',null),
       ('hidden','org','p1','f1',3,'DRAFT','member-b','member-b',null,null,'2026-10-06','2026-10-06',null),

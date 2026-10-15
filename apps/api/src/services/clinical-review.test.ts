@@ -81,7 +81,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   const [row]=await db.select().from(t.assessments).where(eq(t.assessments.id,id));expect(row!.currentSubmissionId).toBeNull();expect(workflow.unseal<any>(row!.workflow).answers.item).toBe("original");
   expect(()=>workflow.editable(row!,row!.revision,creator)).toThrow();expect(()=>workflow.editable(row!,row!.revision,colleague)).not.toThrow();
   const submission=createEntityId();await db.insert(t.assessmentSubmissions).values({id:submission,organizationId:org,assessmentId:id,revision:row!.revision,snapshot:row!.workflow!,idempotencyKey:submission,status:"SUCCEEDED",result:workflow.seal({...result,resultReference:"new-result"})});await db.update(t.assessments).set({status:"SCORED",currentSubmissionId:submission}).where(eq(t.assessments.id,id));
-  expect((await scores.read(colleague,org,id)).revision).toBe(0);expect((await reviews.read(colleague,org,id)).state).toBe("AWAITING_RESUBMISSION");await expect(command(creator,id,"RESEND")).rejects.toMatchObject({code:"FORBIDDEN"});
+  expect((await scores.read(colleague,org,id)).revision).toBe(0);expect((await reviews.read(colleague,org,id)).state).toBe("AWAITING_RESUBMISSION");await expect(command(creator,id,"RESEND")).rejects.toMatchObject({code:"NOT_FOUND"});
   const resent=await command(colleague,id,"RESEND");expect(resent.assignee?.membershipId).toBe(nurse.membershipId);expect(resent.correctionPerson).toBeNull();
   expect(await db.select().from(t.assessmentSubmissions).where(eq(t.assessmentSubmissions.assessmentId,id))).toHaveLength(2);
  });
@@ -136,7 +136,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   await db.update(t.users).set({status:"SUSPENDED"}).where(eq(t.users.id,nurse.userId));await expect(command(admin,id,"REASSIGN_CORRECTION",{assigneeId:nurse.membershipId,reason:"Assign"})).rejects.toMatchObject({code:"VALIDATION_ERROR"});await db.update(t.users).set({status:"ACTIVE"}).where(eq(t.users.id,nurse.userId));
   const changed=await command(admin,id,"REASSIGN_CORRECTION",{assigneeId:colleague.membershipId,reason:"Cover absence"});expect(changed.correctionPerson?.membershipId).toBe(colleague.membershipId);
  });
- test("admin creator sends but cannot score review and support cannot read queue",async()=>{const id=await assessment(admin);await command(admin,id,"SEND");await expect(command(admin,id,"CLAIM")).rejects.toMatchObject({code:"FORBIDDEN"});await expect(reviews.queue(support,org,{page:1,pageSize:25})).rejects.toMatchObject({code:"FORBIDDEN"});expect((await reviews.eligible(admin,org,id)).some(r=>r.membershipId===admin.membershipId)).toBe(false);});
+ test("admin creator cannot submit or score review and support cannot read queue",async()=>{const id=await assessment(admin);await expect(command(admin,id,"SEND")).rejects.toMatchObject({code:"FORBIDDEN"});await expect(command(admin,id,"CLAIM")).rejects.toMatchObject({code:"FORBIDDEN"});await expect(reviews.queue(support,org,{page:1,pageSize:25})).rejects.toMatchObject({code:"FORBIDDEN"});expect((await reviews.eligible(admin,org,id)).some(r=>r.membershipId===admin.membershipId)).toBe(false);});
  test("queue contains only active clinical reviews across correction and completion",async()=>{
   const beforeReview=await assessment();
   await command(creator,beforeReview,"RETURN_TO_DRAFT",{assigneeId:creator.membershipId,reason:"Correct before review"});

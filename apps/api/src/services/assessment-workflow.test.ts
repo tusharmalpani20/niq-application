@@ -100,7 +100,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
    await db.insert(tables.patients).values({...patientRow!,id:secondPatient,organizationId:secondOrg,homeFacilityId:null});
    const [definition]=await db.select().from(tables.questionnaireDefinitions).where(eq(tables.questionnaireDefinitions.id,base!.questionnaireDefinitionId));
    const secondDefinition=createEntityId();await db.insert(tables.questionnaireDefinitions).values({...definition!,id:secondDefinition,organizationId:secondOrg,scopeKey:secondOrg});
-   const [second]=await db.insert(tables.assessments).values({...base!,id:createEntityId(),organizationId:secondOrg,patientId:secondPatient,facilityId:null,createdByMembershipId:secondMember,questionnaireDefinitionId:secondDefinition,questionnaireScopeKey:secondOrg}).returning();
+   const [second]=await db.insert(tables.assessments).values({...base!,id:createEntityId(),organizationId:secondOrg,patientId:secondPatient,facilityId:null,createdByMembershipId:secondMember,currentOwnerMembershipId:secondMember,questionnaireDefinitionId:secondDefinition,questionnaireScopeKey:secondOrg}).returning();
    expect(second!.serialNumber).toBe(1);
    // Aborted transactions do not consume serials.
    const [before]=await db.select().from(tables.organizations).where(eq(tables.organizations.id,org));
@@ -178,7 +178,8 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   try {
    const prepared=await service.initialize(actor,org,{patientId:patient,requestKey:`infant-assessment-${createEntityId()}`},context);
    const infantId=prepared.assessmentId!;
-   const record=await service.read(actor,org,infantId);
+   let record=await service.read(actor,org,infantId);
+   record=await service.save(actor,org,infantId,{revision:record.revision,answers:{...record.answers,height_cm:50,current_weight_kg:3.5}},context);
    const enabledWorkflow=new AssessmentWorkflowService({db,applicationService:service.applicationService,config:{...service.config,FACE_SCAN_ENABLED:true},fetcher:async()=>{throw new Error("Scoring transport unavailable");}});
    const sections=[...record.manifest.sections.map(section=>section.id),"face-scan","attachments"];
    const submitted=await enabledWorkflow.submit(actor,org,infantId,{revision:record.revision,reviewToken:record.reviewToken,attestation:{statementVersion:1,reviewedSectionIds:sections,confirmed:true}},context);
@@ -292,7 +293,7 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   expect((await scans.row(org,scanAssessment,first.id)).active).toBe(false);
   const [before]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,scanAssessment));
   await db.update(tables.assessments).set({status:"COMPLETED"}).where(eq(tables.assessments.id,scanAssessment));
-  await expect(scans.mutate(actor,org,scanAssessment,first.id,"signal",{schemaVersion:1,raw_intensity:[{r:1,g:2,b:3}],ppg_time:[0],average_fps:30})).rejects.toMatchObject({code:"CONFLICT"});
+  await expect(scans.mutate(actor,org,scanAssessment,first.id,"signal",{schemaVersion:1,raw_intensity:[{r:1,g:2,b:3}],ppg_time:[0],average_fps:30})).rejects.toMatchObject({code:"FORBIDDEN"});
   remote={...remote,state:"COMPLETED",updatedAt:new Date().toISOString(),completedAt:new Date().toISOString(),result:null};
   expect((await scans.get(actor,org,scanAssessment,first.id)).state).toBe("RECONCILIATION_REQUIRED");
   remote={...remote,state:"COMPLETED",updatedAt:new Date().toISOString(),completedAt:new Date().toISOString(),failureCode:"SCORE_MAPPING_UNAVAILABLE",result:{schemaVersion:1,providerScanId:"provider-scan",wellnessScore:60,healthRiskScore:null,vitals:{heartRate:70,oxygenSaturation:null,respiratoryRate:null,systolic:null,diastolic:null},physiologicalScore:null,mentalWellbeingScore:null}};
@@ -407,8 +408,8 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
    const resent=await act("RESEND");expect(resent.state).toBe("IN_REVIEW");expect(resent.assignee?.membershipId).toBe(actor.membershipId);
   }
   const [unchanged]=await db.select().from(tables.assessmentSubmissions).where(eq(tables.assessmentSubmissions.id,originalPointer!));expect(unchanged!.snapshot).toEqual(originalSnapshot);expect(unchanged!.result).toEqual(originalResult);
-  const completed=await act("COMPLETE",{remark:"Reviewed both correction cycles"});expect(completed.state).toBe("COMPLETED");
-  await expect(service.save(actor,org,assessment,{revision:scored.revision,answers:scored.answers},context)).rejects.toMatchObject({code:"CONFLICT"});
+  const completed=await act("COMPLETE",{remark:"Reviewed both correction cycles",confirmedToxicityIds:[]});expect(completed.state).toBe("COMPLETED");
+  await expect(service.save(actor,org,assessment,{revision:scored.revision,answers:scored.answers},context)).rejects.toMatchObject({code:"FORBIDDEN"});
   const history=await db.select().from(tables.assessmentHistory).where(eq(tables.assessmentHistory.assessmentId,assessment));
   expect(history.filter(h=>h.kind==="SCORING_SUBMITTED")).toHaveLength(3);expect(history.filter(h=>h.kind==="DRAFT_SAVED")).toHaveLength(3);
   expect(history.filter(h=>h.kind==="RETURN_TO_DRAFT")).toHaveLength(2);

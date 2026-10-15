@@ -35,10 +35,10 @@ describe.skipIf(process.env.PATIENT_PAGE_TEST !== "1")("patient page against Pos
       await client`insert into patients values (${id}, 'org', ${facility}, 'PAT', ${serial}, null, ${gender}, ${profile}, ${mrn}, false, ${created}::timestamptz, ${created}::timestamptz)`;
     }
     await client`insert into assessments values
-      ('a1','org','p1','f1','COMPLETED',null,'member',null,'2026-09-05'),
-      ('a2','org','p1','f1','COMPLETED',null,'member',null,'2026-09-07'),
-      ('a3','org','p2','f1','COMPLETED',null,'member',null,'2026-09-06'),
-      ('a4','org','p4','f2','COMPLETED',null,'member',null,'2026-09-09')`;
+      ('a1','org','p1','f1','COMPLETED',null,'member',null,'2026-09-05T00:00:00Z'),
+      ('a2','org','p1','f1','COMPLETED',null,'member',null,'2026-09-07T00:00:00Z'),
+      ('a3','org','p2','f1','COMPLETED',null,'member',null,'2026-09-06T00:00:00Z'),
+      ('a4','org','p4','f2','COMPLETED',null,'member',null,'2026-09-09T00:00:00Z')`;
   });
   afterAll(async () => { await client.end(); });
 
