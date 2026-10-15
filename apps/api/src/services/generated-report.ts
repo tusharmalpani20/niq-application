@@ -46,7 +46,9 @@ export function automaticReportCanFinalize(status: string, failureCode: string |
 }
 
 export function publicReportGeneration(status: string, failureCode: string | null, issues: string[]): { status: "QUEUED" | "GENERATING" | "FAILED" | "READY"; failureCode: string | null } {
-  if (failureCode === REPORT_REVIEW_REQUIRED || issues.length) return { status: "FAILED", failureCode: REPORT_REVIEW_REQUIRED };
+  if (failureCode === REPORT_REVIEW_REQUIRED) return { status: "FAILED", failureCode: REPORT_REVIEW_REQUIRED };
+  if (status === "FAILED") return { status: "FAILED", failureCode };
+  if (issues.length) return { status: "FAILED", failureCode: REPORT_REVIEW_REQUIRED };
   return { status: status === "READY" || status === "APPROVED" ? "READY" : status === "FAILED" ? "FAILED" : status === "QUEUED" ? "QUEUED" : "GENERATING", failureCode };
 }
 
@@ -367,9 +369,22 @@ export class GeneratedReportService {
       row = expired ?? await this.latest(org,id);
       if (!row) return {report:null,generation:null};
     }
-    const issues=row.content ? this.service.unseal<ReportData>(row.content).issues : [];
-    const generation=publicReportGeneration(row.status,row.failureCode,issues);
-    const report=row.content && (generation.status==="READY" || row.status==="DRAFT" && generation.failureCode===REPORT_REVIEW_REQUIRED) ? await this.dto(row,assessment):null;
+    let issues=row.content ? this.service.unseal<ReportData>(row.content).issues : [];
+    if(issues.length && ["READY","APPROVED"].includes(row.status)) {
+      // Quarantine a legacy artifact with unresolved issues and schedule a new
+      // checked generation. Its old PDF must not be treated as approved text.
+      const [quarantined]=await this.service.db.update(generatedReports).set({status:"DRAFT",failureCode:REPORT_REVIEW_REQUIRED,
+        leaseToken:null,nextAttemptAt:null,updatedAt:new Date()})
+        .where(and(eq(generatedReports.id,row.id),eq(generatedReports.status,row.status),eq(generatedReports.revision,row.revision),eq(generatedReports.updatedAt,row.updatedAt))).returning();
+      row=quarantined??await this.latest(org,id);
+      if(!row)return {report:null,generation:null};
+      issues=row.content ? this.service.unseal<ReportData>(row.content).issues : [];
+    }
+    // Report-content review is a worker state, not a request for human action.
+    // Keep clients polling while the successor is being reserved.
+    const awaitingRecovery=row.failureCode===REPORT_REVIEW_REQUIRED && ["DRAFT","FAILED"].includes(row.status);
+    const generation=awaitingRecovery ? {status:"QUEUED" as const,failureCode:null} : publicReportGeneration(row.status,row.failureCode,issues);
+    const report=row.content && generation.status==="READY" ? await this.dto(row,assessment):null;
     return {report:report?.status==="APPROVED"?{...report,status:"READY"}:report,
       generation};
   }
@@ -725,15 +740,61 @@ export class GeneratedReportService {
       throw error;
     }
   }
+  private async recoverReviewRequired(row:ReportRow, actor:Principal, context:RequestContext) {
+    // A Scoring run is terminal once it returns REVIEW_REQUIRED. Start a new
+    // report row (and therefore a new Scoring idempotency key) while retaining
+    // the cumulative automatic generation budget from the reviewed attempt.
+    await this.service.db.transaction(async tx=>{
+      const [assessment]=await tx.select().from(assessments)
+        .where(and(eq(assessments.organizationId,row.organizationId),eq(assessments.id,row.assessmentId))).for("update");
+      if(!assessment) throw new ServiceError("NOT_FOUND","Assessment not found.");
+      const [latest]=await tx.select().from(generatedReports)
+        .where(and(eq(generatedReports.organizationId,row.organizationId),eq(generatedReports.assessmentId,row.assessmentId)))
+        .orderBy(desc(generatedReports.createdAt),desc(generatedReports.id)).limit(1).for("update");
+      if(!latest || latest.id!==row.id || !["DRAFT","FAILED"].includes(latest.status) || latest.failureCode!==REPORT_REVIEW_REQUIRED) return;
+      if(latest.attemptCount>=MAX_AUTOMATIC_REPORT_ATTEMPTS) {
+        await tx.update(generatedReports).set({status:"FAILED",failureCode:"AUTOMATIC_REVIEW_RECOVERY_EXHAUSTED",
+          leaseToken:null,nextAttemptAt:null,updatedAt:new Date()})
+          .where(and(eq(generatedReports.id,latest.id),eq(generatedReports.status,latest.status),eq(generatedReports.failureCode,REPORT_REVIEW_REQUIRED)));
+        return;
+      }
+      // Validate that the approved frozen source is still available and valid
+      // before reserving a successor. generate() repeats this before Scoring.
+      const source=this.source(assessment);
+      const previousData=latest.content ? this.service.unseal<ReportData>(latest.content) : null;
+      if(previousData && latest.sourceFingerprint && this.currentFingerprint(assessment,previousData.assessment.checksum,previousData.decision)!==latest.sourceFingerprint) {
+        await tx.update(generatedReports).set({status:"FAILED",failureCode:"APPROVAL_SOURCE_INVALID",leaseToken:null,nextAttemptAt:null,updatedAt:new Date()})
+          .where(and(eq(generatedReports.id,latest.id),eq(generatedReports.status,latest.status)));
+        return;
+      }
+      const requestKey=`${AUTOMATIC_REPORT_KEY_PREFIX}${source.submissionId}:recovery:${latest.id}`;
+      const [existing]=await tx.select({id:generatedReports.id}).from(generatedReports)
+        .where(and(eq(generatedReports.organizationId,row.organizationId),eq(generatedReports.assessmentId,row.assessmentId),eq(generatedReports.requestKey,requestKey))).limit(1);
+      if(existing) return;
+      await tx.insert(generatedReports).values({id:createEntityId(),organizationId:row.organizationId,assessmentId:row.assessmentId,
+        patientId:assessment.patientId,submissionId:source.submissionId,requestKey,sourceFingerprint:"",status:"QUEUED",
+        attemptCount:latest.attemptCount,createdAt:new Date(Math.max(Date.now(),latest.createdAt.getTime()+1))});
+      await this.service.audit(tx,actor,context,row.assessmentId,"GENERATED_REPORT_RECOVERY_REQUESTED",{
+        previousReportId:latest.id,submissionId:source.submissionId,attemptCount:latest.attemptCount});
+    });
+  }
   async processDue(limit=3) {
     const now=new Date();
     const expired=new Date(Date.now()-this.service.config.REPORT_GENERATION_TIMEOUT_MS-30_000);
-    const rows=await this.service.db.select().from(generatedReports).where(and(like(generatedReports.requestKey,`${AUTOMATIC_REPORT_KEY_PREFIX}%`),or(
+    const latestReview = sql`not exists (select 1 from generated_reports newer where newer.organization_id = ${generatedReports.organizationId}
+      and newer.assessment_id = ${generatedReports.assessmentId}
+      and (newer.created_at > ${generatedReports.createdAt} or (newer.created_at = ${generatedReports.createdAt} and newer.id > ${generatedReports.id})))`;
+    const reviewRecoveryDue=and(or(eq(generatedReports.status,"DRAFT"),eq(generatedReports.status,"FAILED")),
+      eq(generatedReports.failureCode,REPORT_REVIEW_REQUIRED),latestReview,
+      or(isNull(generatedReports.nextAttemptAt),lte(generatedReports.nextAttemptAt,now)));
+    const rows=await this.service.db.select().from(generatedReports).where(and(or(
+      like(generatedReports.requestKey,`${AUTOMATIC_REPORT_KEY_PREFIX}%`),reviewRecoveryDue),or(
       and(eq(generatedReports.status,"QUEUED"),or(isNull(generatedReports.nextAttemptAt),lte(generatedReports.nextAttemptAt,now))),
       and(eq(generatedReports.status,"GENERATING"),lte(generatedReports.updatedAt,expired)),
       and(eq(generatedReports.status,"DRAFT"),or(isNull(generatedReports.failureCode),ne(generatedReports.failureCode,REPORT_REVIEW_REQUIRED)),
         or(isNull(generatedReports.nextAttemptAt),lte(generatedReports.nextAttemptAt,now))),
       and(eq(generatedReports.status,"FAILED"),ne(generatedReports.failureCode,REPORT_REVIEW_REQUIRED),lte(generatedReports.nextAttemptAt,now)),
+      reviewRecoveryDue,
     ))).orderBy(generatedReports.createdAt).limit(limit);
     await Promise.allSettled(rows.map(async row=>{
       const context={requestId:createEntityId()};
@@ -747,8 +808,15 @@ export class GeneratedReportService {
         const [assessment]=await this.service.db.select().from(assessments).where(and(eq(assessments.organizationId,row.organizationId),eq(assessments.id,row.assessmentId)));
         if(!assessment)throw new ServiceError("NOT_FOUND","Assessment not found.");
         const actor=await this.automaticActor(assessment);
+        if((row.status==="DRAFT" || row.status==="FAILED") && row.failureCode===REPORT_REVIEW_REQUIRED)
+          return await this.recoverReviewRequired(row,actor,context);
         if(row.status==="DRAFT")return await this.finalizeAutomatic(row,actor,context);
-        const {report}=await this.generate(actor,row.organizationId,row.assessmentId,{requestKey:row.requestKey},context,true);
+        const recoveryPredecessorId=row.requestKey.match(/:recovery:([A-Za-z0-9]+)$/)?.[1];
+        const [predecessor]=recoveryPredecessorId ? await this.service.db.select().from(generatedReports)
+          .where(and(eq(generatedReports.organizationId,row.organizationId),eq(generatedReports.assessmentId,row.assessmentId),eq(generatedReports.id,recoveryPredecessorId))).limit(1) : [];
+        const predecessorDecision=predecessor?.content ? this.service.unseal<ReportData>(predecessor.content).decision : undefined;
+        const {report}=await this.generate(actor,row.organizationId,row.assessmentId,{requestKey:row.requestKey,
+          ...(predecessorDecision?.productStageChoice ? {productStageChoice:predecessorDecision.productStageChoice} : {})},context,true);
         if(report.status==="DRAFT") {
           const [current]=await this.service.db.select().from(generatedReports).where(eq(generatedReports.id,report.id));
           if(current && automaticReportCanFinalize(current.status,current.failureCode,report.issues))
@@ -759,9 +827,17 @@ export class GeneratedReportService {
         // also covers an expired generation lease after its source changed.
         const invalidSource=error instanceof ServiceError && (error.code==="NOT_FOUND" ||
           error.code==="CONFLICT" && !error.message.includes("in progress"));
-        if((row.status==="QUEUED" || row.status==="GENERATING") && invalidSource)
+        if((row.status==="QUEUED" || row.status==="GENERATING" || row.failureCode===REPORT_REVIEW_REQUIRED) && invalidSource)
           await this.service.db.update(generatedReports).set({status:"FAILED",failureCode:"APPROVAL_SOURCE_INVALID",leaseToken:null,nextAttemptAt:null,updatedAt:new Date()})
             .where(and(eq(generatedReports.id,row.id),eq(generatedReports.status,row.status),eq(generatedReports.attemptCount,row.attemptCount)));
+        if(row.failureCode===REPORT_REVIEW_REQUIRED && !invalidSource) {
+          const attempts=row.attemptCount+1;
+          await this.service.db.update(generatedReports).set({attemptCount:attempts,
+            status:attempts>=MAX_AUTOMATIC_REPORT_ATTEMPTS?"FAILED":row.status,
+            failureCode:attempts>=MAX_AUTOMATIC_REPORT_ATTEMPTS?"AUTOMATIC_REVIEW_RECOVERY_FAILED":REPORT_REVIEW_REQUIRED,
+            leaseToken:null,nextAttemptAt:attempts>=MAX_AUTOMATIC_REPORT_ATTEMPTS?null:new Date(Date.now()+automaticRetryDelay(attempts)),updatedAt:new Date()})
+            .where(and(eq(generatedReports.id,row.id),eq(generatedReports.status,row.status),eq(generatedReports.failureCode,REPORT_REVIEW_REQUIRED),eq(generatedReports.attemptCount,row.attemptCount)));
+        }
         console.warn("Automatic report generation delayed",{reportId:row.id,error:error instanceof Error?error.message:String(error)});
       }
     }));

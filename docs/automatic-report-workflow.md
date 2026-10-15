@@ -34,6 +34,22 @@ the saved PDF and offers the same bytes for download.
 
 The worker retries temporary Scoring failures and recovers interrupted jobs from
 the database. Permanent validation failures appear as a failed report status.
+When generated text is marked `REVIEW_REQUIRED`, the worker preserves that
+historical review and queues a successor generation from the same frozen,
+clinically approved assessment source. Each successor uses a fresh Scoring
+idempotency key; an in-progress Scoring job keeps its original key while it is
+polled. Recovery only advances the latest report for the assessment and carries
+the automatic attempt ceiling forward, so older flagged reviews are not
+regenerated after a newer report exists. Flagged text and issues are never
+cleared into a ready report. A clean generation still requires the existing
+final clinical assessment approval. Report validation and PDF finalization then
+run automatically without a second human review. Legacy Scoring jobs marked
+`REVIEW_REQUIRED` are also reclaimed automatically and rebuilt from verified rules
+under a separate recovery key. Synchronous report requests use the same verified
+fallback policy. Exhausted recovery or an invalid approved source is a technical
+failure, never permission to publish flagged text. The status endpoint presents
+recoverable reviews as queued so the client keeps polling, and quarantines legacy
+ready artifacts with unresolved issues before scheduling recovery.
 The report remains tied to the approved submission, reviewed score revision, and
 pinned rule checksum. The clinical approval is recorded in assessment history.
 The generated text itself receives automated evidence review, not a second human
