@@ -211,8 +211,8 @@ function possibleEffectPages(report: GeneratedReport) {
 
 function ProductPlan({ report }: { report: GeneratedReport }) {
   const selected = report.productPlans?.filter(plan => plan.items.length) ?? [];
-  const benefitsFor = (name: string, rationale?: string) => {
-    const benefits = productBenefits(report, name, rationale);
+  const benefitsFor = (name: string) => {
+    const benefits = productBenefits(report, name);
     return benefits.length ? <ul>{benefits.map((benefit, index) => <li key={index}>{benefit}</li>)}</ul> : "—";
   };
   const readableDuration = (duration: string) => duration.replace(/\b\d{4}-\d{2}-\d{2}\b/g, date => reportDate(date));
@@ -224,7 +224,7 @@ function ProductPlan({ report }: { report: GeneratedReport }) {
           <div><dt>Timing</dt><dd>{item.mealTiming || (item.timesPerDay != null ? (item.timesPerDay === 1 ? "Once daily" : `${item.timesPerDay} times daily`) : "—")}</dd></div>
           <div><dt>Preparation</dt><dd>{item.preparation || "—"}</dd></div>
           <div><dt>Duration</dt><dd>{readableDuration(plan.duration || (plan.durationAmount ? `${plan.durationAmount} days` : "—"))}</dd></div>
-          <div className="cr-supplement-benefits"><dt>Key benefits</dt><dd>{benefitsFor(item.productName, item.rationale)}</dd></div>
+          <div className="cr-supplement-benefits"><dt>Key benefits</dt><dd>{benefitsFor(item.productName)}</dd></div>
         </dl>
       </article>)}</div>
     </div>)}

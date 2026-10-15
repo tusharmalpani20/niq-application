@@ -180,9 +180,7 @@ export function normalizeGuidance(content: ScoringReportContent, manifest: Asses
       // The structured items carry the product names and quantities. Showing the
       // legacy product summary as well would repeat every name in the report.
       const details = row.items?.map(item => item.quantityPerDay === undefined ? ""
-        : item.productName === "Liss WH" && item.description === "leveled scoops in 150ml water"
-          ? `${item.productName}: ${item.quantityPerDay} ${item.description}`
-          : `${item.quantityPerDay} ${item.productName}${item.description ? ` (${item.description})` : ""}`);
+        : `${item.quantityPerDay}${item.unit ? ` ${item.unit}` : ""} ${item.productName}${item.preparation ? ` (${item.preparation})` : ""}`);
       // Use the approved plan text when structured quantities are incomplete;
       // dropping the whole plan would omit a selected recommendation.
       const planText = details?.length && details.every(nonempty) ? details.join(" + ") : nonempty(row.dose) ? row.dose : row.products;
@@ -237,12 +235,10 @@ export function reportProductPlans(content: ScoringReportContent): NonNullable<G
       ...(plan.durationAmount ? { durationAmount: plan.durationAmount } : {}),
       items: plan.items!.map(item => ({ productName: cleanReportText(item.productName),
         ...(item.quantityPerDay ? { quantityPerDay: item.quantityPerDay } : {}),
-        ...(item.description ? { description: cleanReportText(item.description) } : {}),
         ...(item.unit ? { unit: cleanReportText(item.unit) } : {}),
         ...(item.timesPerDay ? { timesPerDay: item.timesPerDay } : {}),
         ...(item.preparation ? { preparation: cleanReportText(item.preparation) } : {}),
         ...(item.mealTiming ? { mealTiming: cleanReportText(item.mealTiming) } : {}),
-        ...(item.rationale ? { rationale: cleanReportText(item.rationale) } : {}),
       })) }));
 }
 

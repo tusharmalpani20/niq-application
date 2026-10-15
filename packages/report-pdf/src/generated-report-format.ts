@@ -20,13 +20,12 @@ export const reportAge = (birth: string | null, at: string | null) => {
 
 export const metricText = (metric: GeneratedReport["metrics"][number]) => `${assessmentOptionDisplayLabel(metric.id, metric.value)}${metric.unit ? ` ${metric.unit}` : ""}`;
 
-/** New snapshots use explicit benefit bullets; old reports retain their saved description. */
-export function productBenefits(report: GeneratedReport, name: string, rationale?: string): string[] {
+/** Benefits belong to the product catalog, not an individual dosage plan. */
+export function productBenefits(report: GeneratedReport, name: string): string[] {
   const product = report.productCatalog?.find(product => [product.name, ...(product.aliases ?? [])]
     .some(alias => alias.trim().toLowerCase() === name.trim().toLowerCase()));
   if (product?.benefits !== undefined) return product.benefits.map(text => text.trim()).filter(Boolean);
-  const legacy = product?.description || rationale;
-  return legacy ? [legacy] : [];
+  return product?.description ? [product.description] : [];
 }
 
 export function cleanWeights(report: GeneratedReport) {

@@ -327,7 +327,7 @@ function productParts(report: GeneratedReport) {
     detail: item.mealTiming || (item.timesPerDay == null ? "" : item.timesPerDay === 1 ? "Once daily" : `${item.timesPerDay} times daily`),
     preparation: item.preparation || "—",
     duration: readableDuration(selected.duration || (selected.durationAmount ? `${selected.durationAmount} days` : "—")),
-    benefits: productBenefits(report, item.productName, item.rationale),
+    benefits: productBenefits(report, item.productName),
   })), duration: readableDuration(selected.duration || (selected.durationAmount ? `${selected.durationAmount} days` : "—")) };
   const section = reportGuidance(report, "product").find(item => item.title.toLowerCase() === "product plan");
   if (!section) return null;

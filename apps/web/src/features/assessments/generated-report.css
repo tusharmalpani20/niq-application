@@ -230,7 +230,6 @@
 .cr-supplement-card .cr-supplement-benefits { grid-column: 1 / -1; padding-top: .4rem; border-top: 1px solid #e5eff0; }
 .cr-supplement-item-body .cr-supplement-dose { align-items: baseline; margin: .45rem 0; color: #214757; }
 .cr-supplement-dose strong { font-size: 1rem; }
-.cr-supplement-item-body .cr-supplement-rationale { padding-top: .4rem; border-top: 1px solid #e5eff0; }
 .cr-supplement-plan + .cr-supplement-plan { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #dce9eb; }
 .cr-supplement-quantity { display: flex; min-width: 55px; flex: none; flex-direction: column; align-items: center; padding: .45rem .55rem; border-radius: .55rem; color: var(--brand-ink, #177e83); background: color-mix(in srgb, var(--brand-primary, #34b5b9) 12%, white); }
 .cr-supplement-quantity strong { font-size: 1.35rem; line-height: 1.1; }

@@ -67,12 +67,10 @@ export type GeneratedReportProductPlan = {
   items: Array<{
     productName: string;
     quantityPerDay?: number;
-    description?: string;
     unit?: string;
     timesPerDay?: number;
     preparation?: string;
     mealTiming?: string;
-    rationale?: string;
   }>;
 };
 export type GeneratedReport = {

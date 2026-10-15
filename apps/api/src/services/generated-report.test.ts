@@ -260,11 +260,11 @@ test("structured product quantities appear once with preparation and duration", 
   selected.guidance.carePlan.products = { status: "selected", plans: [{
     id: "surgical", stage: "surgical", nutritionalStatus: "severely_malnourished",
     products: "Invigour + Liss WH", dose: "1 Invigour + 2 leveled scoops in 150ml water", duration: "30 days after surgery",
-    items: [{ productName: "Invigour", quantityPerDay: 1 }, { productName: "Liss WH", quantityPerDay: 2, description: "leveled scoops in 150ml water" }],
+    items: [{ productName: "Invigour", quantityPerDay: 1 }, { productName: "Liss WH", quantityPerDay: 2, unit: "leveled scoops", preparation: "Mix in 150ml water" }],
   }], notes: [] };
   const parsed = scoringReportContentSchema.parse(selected);
   expect(parsed.guidance.carePlan.products.plans[0]?.items).toHaveLength(2);
-  expect(normalizeGuidance(parsed, manifest).sections[0]?.text).toBe("1 Invigour + Liss WH: 2 leveled scoops in 150ml water\n30 days after surgery");
+  expect(normalizeGuidance(parsed, manifest).sections[0]?.text).toBe("1 Invigour + 2 leveled scoops Liss WH (Mix in 150ml water)\n30 days after surgery");
   selected.guidance.carePlan.products.plans[0].items[1].quantityPerDay = undefined;
   expect(normalizeGuidance(scoringReportContentSchema.parse(selected), manifest).sections).toMatchObject([{ id: "surgical", kind: "product", text: "1 Invigour + 2 leveled scoops in 150ml water\n30 days after surgery" }]);
 });
@@ -292,12 +292,12 @@ test("selected product schedule retains rule instructions as structured report d
   selected.guidance.carePlan.products = { status: "selected", plans: [{ id: "plan", stage: "during_treatment", nutritionalStatus: "moderate",
     products: "Invigour", dose: "1 daily", duration: "At least 3 months", durationAmount: 90,
     items: [{ productName: "Invigour", quantityPerDay: 1, unit: "sachet", timesPerDay: 1,
-      preparation: "Mix with water", mealTiming: "after breakfast", rationale: "Supports intake" }],
+      preparation: "Mix with water", mealTiming: "after breakfast" }],
   }], catalog: [{ id: "product-1", name: "Invigour", description: "Nutrition supplement.", aliases: ["Es Invigour"] }], notes: [] };
   const parsed = scoringReportContentSchema.parse(selected);
   expect(reportProductPlans(parsed)).toEqual([{ id: "plan", duration: "At least 3 months", durationAmount: 90,
     items: [{ productName: "Invigour", quantityPerDay: 1, unit: "sachet", timesPerDay: 1,
-      preparation: "Mix with water", mealTiming: "after breakfast", rationale: "Supports intake" }] }]);
+      preparation: "Mix with water", mealTiming: "after breakfast" }] }]);
   expect(reportProductCatalog(parsed)).toEqual([{ id: "product-1", name: "Invigour", description: "Nutrition supplement.", aliases: ["Es Invigour"] }]);
 });
 

@@ -7,9 +7,9 @@ const narrative = z.object({ text: bounded, evidenceIds: z.array(z.string().max(
 const id = z.string().max(200);
 const productPlan = z.object({ id, stage: id, nutritionalStatus: bounded, products: guidanceText, dose: guidanceText, duration: guidanceText,
   durationAmount: z.number().int().positive().optional(),
-  items: z.array(z.object({ productName: bounded, quantityPerDay: z.number().int().min(1).max(100).optional(), description: guidanceText.optional(),
+  items: z.array(z.object({ productName: bounded, quantityPerDay: z.number().int().min(1).max(100).optional(),
     unit: bounded.optional(), timesPerDay: z.number().int().positive().max(24).optional(), preparation: guidanceText.optional(),
-    mealTiming: guidanceText.optional(), rationale: guidanceText.optional() })).max(20).optional() });
+    mealTiming: guidanceText.optional() })).max(20).optional() });
 // Parse only selected guidance fields that the Application can display. Zod strips
 // unexpected Scoring fields before this packet can enter a patient report snapshot.
 const carePlan = z.object({
