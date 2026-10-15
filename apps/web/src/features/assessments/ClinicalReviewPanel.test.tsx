@@ -64,7 +64,7 @@ test("transfer does not silently select someone and needs an eligible recipient"
 }));
 test("completion sends both revisions and a replay key with the required remark",async()=>harness(async({click,type,posts,changed})=>{
  await click("Complete review");await type("Review finished");await click("Approve and generate report");
- expect(posts).toHaveLength(1);expect(posts[0]).toMatchObject({action:"COMPLETE",expectedRevision:4,expectedScoreRevision:2,remark:"Review finished",confirmedToxicityIds:[]});expect((posts[0] as any).requestKey).toHaveLength(36);expect(changed()).toBe(1);
+ expect(posts).toHaveLength(1);expect(posts[0]).toMatchObject({action:"COMPLETE",expectedRevision:4,expectedScoreRevision:2,remark:"Review finished",confirmedToxicityIds:[],deferPdf:false});expect((posts[0] as any).requestKey).toHaveLength(36);expect(changed()).toBe(1);
 }));
 test("completion sends only clinician-selected additional treatment effects",async()=>harness(async({click,type,posts})=>{
  await click("Complete review");
@@ -179,3 +179,14 @@ test("scoring confirmations and clinical decisions share one dated history", asy
   expect(events?.[1]?.textContent).toContain("by Example Doc");
   expect(document.body.textContent).not.toContain("Submission verification history");
 }, {review:{...review,history:[{id:"return",action:"RETURN_TO_DRAFT",revision:2,cycle:2,actor:review.assignee!,assignee:review.assignee!,createdAt:"2026-09-24T00:00:00Z",reason:"Correct answers"}]},attestations:[{submissionId:"submission",cycle:1,revision:1,confirmedAt:"2026-09-23T00:00:00Z",actorMembershipId:"doctor",actorDisplayName:"Example Doc",statementVersion:1,reviewedSectionIds:["personal_details"]}]}));
+
+
+test("clinician can opt into HTML review before PDF generation",async()=>harness(async({click,type,posts})=>{
+ await click("Complete review");
+ const hold=[...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(input=>input.closest("label")?.textContent?.includes("Review the HTML report"))!;
+ expect(hold.checked).toBe(false);
+ await act(async()=>{hold.click();});
+ expect(document.body.textContent).toContain("You can request the PDF after reviewing it");
+ await type("Review HTML before issuing PDF");await click("Approve and generate report");
+ expect(posts[0]).toMatchObject({action:"COMPLETE",deferPdf:true});
+}));

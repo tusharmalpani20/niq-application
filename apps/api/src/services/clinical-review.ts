@@ -213,7 +213,7 @@ export class ClinicalReviewService {
     // The report job is committed with final clinical approval. A server worker
     // can finish it even when the approving browser has closed.
     await tx.insert(generatedReports).values({id:createEntityId(),organizationId:org,assessmentId:id,patientId:row.patientId,
-     submissionId:row.currentSubmissionId!,requestKey:`${AUTOMATIC_REPORT_KEY_PREFIX}${row.currentSubmissionId}`,
+     submissionId:row.currentSubmissionId!,requestKey:`${AUTOMATIC_REPORT_KEY_PREFIX}${row.currentSubmissionId}${input.deferPdf ? ":html-review" : ""}`,
      sourceFingerprint:"",status:"QUEUED",nextAttemptAt:now});
    }
    await this.service.audit(tx,actor,context,id,`CLINICAL_REVIEW_${input.action}`,{cycle,revision:s.revision,assigneeId:s.assignee?.membershipId??null,correctionPersonId:s.correctionPerson?.membershipId??null,currentOwnerMembershipId});

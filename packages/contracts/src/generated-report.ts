@@ -97,7 +97,7 @@ export type GeneratedReport = {
   /** Selected rule instructions, retained as data rather than parsed from report prose. */
   productPlans?: GeneratedReportProductPlan[];
   /** Verified product catalog descriptions, distinct from the case-specific schedule. */
-  productCatalog?: Array<{ id: string; name: string; description: string; benefits?: string[]; aliases?: string[] }>;
+  productCatalog?: Array<{ id: string; name: string; description: string; benefits?: string[]; imageDataUrl?: string | null; aliases?: string[] }>;
   decision: { productStageChoice: "surgical" | "treatment_stage" | null; plannedTreatmentStartDate: string | null; confirmedToxicityIds?: string[] };
   narrative: GeneratedNarrative;
   narrativeEvidence?: Partial<Record<keyof GeneratedNarrative, string[]>>;

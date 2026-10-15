@@ -388,125 +388,25 @@
   .cr-html-preview { padding: .65rem; }
 }
 
-/* The issued PDF prints the same report markup as the browser preview. */
-@page { size: A4; margin: 20mm 0 15mm; }
-@page:first { margin: 0; }
-
+/* PDF sheets use the same header/footer and card styles as the live report. */
+@page { size: A4; margin: 0; }
 @media print {
-  body.cr-print-document { width: 210mm; min-width: 0; margin: 0; background: #fff; }
-  body.cr-print-document .clinical-report {
-    display: block;
-    width: 210mm;
-    max-width: none;
-    margin: 0;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  body.cr-print-document .cr-sheet {
-    display: block;
-    width: 210mm;
-    min-height: 0;
-    height: auto;
-    padding: 7mm 13mm 3mm;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-    overflow: visible;
-    break-after: auto;
-    page-break-after: auto;
-  }
-  /* Screen section edges must not create another line below the print header. */
-  body.cr-print-document .cr-sheet:not(.cr-cover) + .cr-sheet:not(.cr-cover) { border-top: 0; }
-  body.cr-print-document .cr-sheet-header { display: none; min-height: 0; padding: 0 0 3mm; border: 0; }
-  body.cr-print-document .cr-sheet-content { padding-top: 0; }
-  body.cr-print-document .cr-report-brand { width: 35mm; min-height: 8mm; }
-  body.cr-print-document .cr-report-brand .brand-marks-organization-logo { height: 8mm; }
-  body.cr-print-document .cr-sheet-footer { display: none; }
-  body.cr-print-document .cr-content-title { margin-bottom: 4mm; }
-  body.cr-print-document .cr-content-title,
-  body.cr-print-document .cr-clinical-facts h3,
-  body.cr-print-document .cr-advice-heading { break-after: avoid; page-break-after: avoid; }
-  body.cr-print-document .cr-clinical-facts { break-inside: avoid; page-break-inside: avoid; }
-  body.cr-print-document .cr-sheet-header,
-  body.cr-print-document .cr-sheet-footer,
-  body.cr-print-document .cr-advice-block,
-  body.cr-print-document .cr-supplement,
-  body.cr-print-document .cr-metric-card {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  body.cr-print-document .cr-print-overflow .cr-care-stack,
-  body.cr-print-document .cr-print-overflow .cr-care-grid { margin-block: 0; }
-  body.cr-print-document .cr-sheet-vital .cr-sheet-content { padding-top: .9rem; padding-bottom: .8rem; }
-  body.cr-print-document .cr-sheet-vital .cr-vital-highlights,
-  body.cr-print-document .cr-sheet-vital .cr-vital-detail-grid { margin-top: .65rem; }
-  body.cr-print-document .cr-sheet-vital .cr-vital-detail dl > div { padding: .25rem 0; }
-  body.cr-print-document .cr-sheet-summary .cr-sheet-content { display:block;padding-top:0; }
-  body.cr-print-document .cr-summary-hero,
-  body.cr-print-document .cr-summary-brief { break-inside:avoid;page-break-inside:avoid;margin-bottom:1.25rem; }
-  body.cr-print-document .cr-report-bmi section[aria-label="Body mass index"] > div:last-child {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  body.cr-print-document .cr-overview-hero { gap:.5rem;padding:.75rem; }
-  body.cr-print-document .cr-overview-hero h3 { font-size:1.15rem; }
-  body.cr-print-document .cr-avatar { width:48px;height:48px; }
-  body.cr-print-document .cr-overview-key .cr-metric-card { min-height:80px;padding:.6rem .85rem; }
-  body.cr-print-document .cr-report-bmi { margin-top:.8rem; }
-  body.cr-print-document .cr-report-bmi section[aria-label="Body mass index"] { padding:12px; }
-  body.cr-print-document .cr-report-bmi section[aria-label="Body mass index"] > div:last-child { margin-top:8px;padding-top:8px; }
-  body.cr-print-document .cr-clinical-facts { margin-top:.8rem;padding:.8rem; }
-  body.cr-print-document .cr-clinical-facts dl > div { padding:.5rem .65rem; }
-  /* Long reviewed passages may continue onto another page; keep every sentence visible. */
-  body.cr-print-document .cr-print-overflow { min-height: 0; }
-  body.cr-print-document .cr-print-overflow .cr-sheet-content,
-  body.cr-print-document .cr-print-overflow .cr-care-stack,
-  body.cr-print-document .cr-print-overflow .cr-care-grid,
-  body.cr-print-document .cr-print-overflow .cr-possible-list { display: block; }
-  body.cr-print-document .cr-advice-points { display: block; }
-  body.cr-print-document .cr-advice-points li { margin-bottom: 1.5mm; }
-  body.cr-print-document .cr-print-overflow .cr-possible-effect {
-    margin-bottom: 4mm;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  body.cr-print-document .cr-possible-effect.cr-print-fragment { break-inside: auto; page-break-inside: auto; }
-  body.cr-print-document .cr-possible-effect-heading { break-after: avoid; }
-  /* Advice must start below its page heading instead of moving the whole
-     card onto the next page and leaving the heading on an empty page. */
-  body.cr-print-document .cr-sheet-care,
-  body.cr-print-document .cr-sheet-care .cr-sheet-content,
-  body.cr-print-document .cr-sheet-care .cr-care-grid { display: block; }
-  body.cr-print-document .cr-sheet-care .cr-advice-block {
-    display: block;
-    margin-bottom: 1rem;
-    break-inside: auto;
-    page-break-inside: auto;
-  }
-  body.cr-print-document .cr-sheet-care .cr-advice-heading { break-after: avoid; }
-  body.cr-print-document .cr-sheet-care .cr-advice-points { display: block; margin-top: .8rem; }
-  body.cr-print-document .cr-sheet-care .cr-advice-points li {
-    margin-bottom: .35rem;
-    padding-block: .35rem;
-    line-height: 1.35;
-  }
-  body.cr-print-document .cr-print-overflow .cr-advice-block,
-  body.cr-print-document .cr-print-overflow .cr-supplement {
-    margin-bottom: 1rem;
-    break-inside: auto;
-    page-break-inside: auto;
-    -webkit-box-decoration-break: clone;
-    box-decoration-break: clone;
-  }
-  /* A tall two-column grid cannot fragment reliably in Chromium's print layout. */
-  body.cr-print-document .cr-print-overflow.cr-sheet-care .cr-advice-block {
-    display: block;
-  }
-  body.cr-print-document .cr-print-overflow.cr-sheet-care .cr-advice-points {
-    margin-top: .8rem;
-  }
-  body.cr-print-document .cr-cover { min-height: 297mm; height: 297mm; padding: 0; break-after: page; page-break-after: always; }
-  body.cr-print-document .cr-cover .cr-sheet-footer { display: none; }
-  body.cr-print-document .cr-advice-columns .cr-advice-points { grid-template-columns: 1fr; }
+  html, body.cr-print-document { width: 210mm; margin: 0; padding: 0; background: #fff; }
+  body.cr-print-document .clinical-report { display: block; width: 210mm; max-width: none; margin: 0; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  body.cr-print-document .cr-sheet { display: flex; flex-direction: column; width: 210mm; height: 297mm; min-height: 297mm; padding: 7mm 10mm; margin: 0; border: 1px solid #d7e5e8; border-radius: 1rem; box-shadow: none; overflow: hidden; break-after: page; }
+  body.cr-print-document .cr-sheet:last-child { break-after: auto; }
+  body.cr-print-document .cr-sheet-content { flex: 1; min-height: 0; padding: .5rem 0 1.5rem; }
+  body.cr-print-document .cr-sheet-header { display: flex; flex: none; min-height: 56px; justify-content: space-between; padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid #dce5e8; }
+  body.cr-print-document .cr-sheet-heading h2 { font-size: 1.3rem; font-weight: 700; line-height: 1.35; }
+  body.cr-print-document .cr-content-title { display: none; }
+  body.cr-print-document .cr-sheet-footer { display: flex; flex: none; margin-top: auto; padding-top: 1rem; border-top: 1px solid #e5eff0; color: #607989; font-size: .7rem; }
+  body.cr-print-document .cr-cover { padding: 0; }
+  body.cr-print-document .cr-cover .cr-sheet-footer { color: #fff; border-color: #ffffff80; }
+  body.cr-print-document .cr-care-stack, body.cr-print-document .cr-care-grid, body.cr-print-document .cr-possible-list { display: block; margin: 0; }
+  body.cr-print-document .cr-sheet-content > * + * { margin-top: 1rem; }
+  body.cr-print-document .cr-sheet-care .cr-advice-block { display: block; }
+  body.cr-print-document .cr-recommendation-directions { grid-template-columns: minmax(0,.65fr) minmax(0,.95fr) minmax(0,1.6fr); }
+  body.cr-print-document .cr-recommendation-duration { grid-column: auto; border-top: 0; }
 }
 
 .cr-change-neutral { color: #526b78; background: #edf2f4; }
@@ -514,5 +414,109 @@
 .cr-weight-chart-wrap .cr-weight-chart { min-width: 540px; }
 .cr-chart-axis { fill: #607989; font-family: Outfit Variable, Outfit, sans-serif; font-size: 9px; }
 
+/* Shared reading hierarchy for HTML and PDF. */
+@media screen, print {
+  :is(.cr-html-preview, .cr-print-document) .cr-sheet:not(.cr-cover) { min-height: 0; }
+  :is(.cr-html-preview, .cr-print-document) .cr-sheet-heading h2 { font-size: 1.3rem; font-weight: 700; line-height: 1.35; }
+  :is(.cr-html-preview, .cr-print-document) .cr-advice-heading h3,
+  :is(.cr-html-preview, .cr-print-document) .cr-nutrition-targets h3,
+  :is(.cr-html-preview, .cr-print-document) .cr-clinical-interpretation h3,
+  :is(.cr-html-preview, .cr-print-document) .cr-possible-effect-heading h3 { font-size: 1rem; font-weight: 600; line-height: 1.4; letter-spacing: normal; text-transform: none; }
+  :is(.cr-html-preview, .cr-print-document) .cr-advice-group h4 { font-size: .9rem; font-weight: 600; }
+  :is(.cr-html-preview, .cr-print-document) .cr-care-grid { grid-template-columns: minmax(0, 1fr); }
+  :is(.cr-html-preview, .cr-print-document) .cr-advice-block,
+  :is(.cr-html-preview, .cr-print-document) .cr-advice-action,
+  :is(.cr-html-preview, .cr-print-document) .cr-supplement,
+  :is(.cr-html-preview, .cr-print-document) .cr-possible-effect { padding: 1.1rem 1.2rem; background: #fff; }
+  :is(.cr-html-preview, .cr-print-document) .cr-advice-icon { width: 34px; height: 34px; border-radius: .55rem; }
+  :is(.cr-html-preview, .cr-print-document) .cr-advice-points { display: grid; grid-template-columns: 1fr; gap: .6rem; margin-top: .85rem; }
+  :is(.cr-html-preview, .cr-print-document) .cr-advice-points li { margin: 0; padding: .25rem .1rem; font-size: .86rem; font-weight: 400; line-height: 1.6; }
+  :is(.cr-html-preview, .cr-print-document) .cr-advice-action .cr-advice-points li { color: #345463; }
+  :is(.cr-html-preview, .cr-print-document) .cr-possible-effect p,
+  :is(.cr-html-preview, .cr-print-document) .cr-clinical-interpretation p { font-size: .86rem; line-height: 1.65; }
+  :is(.cr-html-preview, .cr-print-document) .cr-narrative-emphasis { color: #173d4e; font-weight: 650; }
+  :is(.cr-html-preview, .cr-print-document) .cr-possible-intro { padding: 0 0 1rem; border: 0; border-bottom: 1px solid #dce5e8; border-radius: 0; background: transparent; }
+  :is(.cr-html-preview, .cr-print-document) .cr-sheet-summary .cr-summary-brief { padding: 1.3rem 1.5rem; }
+  :is(.cr-html-preview, .cr-print-document) .cr-summary-brief p { font-size: .95rem; line-height: 1.65; }
+  :is(.cr-html-preview, .cr-print-document) .cr-sheet-red-flags .cr-advice-block { border-left: 3px solid #c28b33; }
+  :is(.cr-html-preview, .cr-print-document) .cr-effect-status { margin: .6rem 0; color: #607989; font-size: .75rem; }
+  :is(.cr-html-preview, .cr-print-document) .cr-possible-effect a { color: var(--brand-ink, #177e83); text-underline-offset: .15em; }
+  :is(.cr-html-preview, .cr-print-document) #cr-reported-symptom-care { scroll-margin-top: 110px; }
+}
+
+/* Keep product benefits and administration readable without a stack of nested cards. */
+.cr-recommendation-list { display: grid; gap: 1rem; margin-top: 1rem; }
+.cr-recommendation-card { min-width: 0; overflow: hidden; border: 1px solid #dce9eb; border-radius: .8rem; background: #fff; }
+.cr-recommendation-overview { display: flex; align-items: center; gap: 1.4rem; padding: 1.25rem; }
+.cr-recommendation-summary { min-width: 0; flex: 1; }
+.cr-recommendation-summary h4 { margin: 0; color: #173d4e; font-size: 1.25rem; font-weight: 650; line-height: 1.35; }
+.cr-recommendation-image { flex: none; width: 140px; height: 155px; object-fit: contain; }
+.cr-recommendation-benefits { margin-top: .8rem; }
+.cr-recommendation-benefits h5 { margin: 0 0 .55rem; color: #58727e; font-size: .76rem; font-weight: 500; }
+.cr-recommendation-benefits ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem 1.1rem; margin: 0; padding: 0; list-style: none; }
+.cr-recommendation-benefits li { display: grid; grid-template-columns: 14px minmax(0, 1fr); align-items: start; gap: .45rem; color: #345463; font-size: .84rem; line-height: 1.55; }
+.cr-recommendation-benefits li svg { margin-top: .2rem; color: var(--brand-ink, #177e83); }
+.cr-recommendation-directions { display: grid; grid-template-columns: minmax(0, .65fr) minmax(0, .95fr) minmax(0, 1.6fr); margin: 0; padding: 0 1.25rem 1.1rem; gap: 0 1.2rem; background: #f5fafb; border-top: 1px solid #e5eff0; }
+.cr-recommendation-directions > div { min-width: 0; padding: .9rem 0; }
+.cr-recommendation-directions dt { display: flex; align-items: center; gap: .45rem; margin-bottom: .4rem; color: #58727e; font-size: .76rem; font-weight: 500; }
+.cr-recommendation-directions dt svg { flex: none; color: var(--brand-ink, #177e83); }
+.cr-recommendation-directions dd { margin: 0; color: #173d4e; font-size: .86rem; line-height: 1.55; overflow-wrap: anywhere; }
+.cr-recommendation-quantity dd { font-size: 1.3rem; font-weight: 650; line-height: 1.3; }
+.cr-recommendation-preparation { grid-column: 1 / -1; border-top: 1px solid #dce9eb; padding-bottom: 0 !important; }
+@media (max-width: 700px) {
+  .cr-recommendation-image { width: 110px; height: 140px; }
+  .cr-recommendation-benefits ul { grid-template-columns: minmax(0, 1fr); gap: .45rem; }
+  .cr-recommendation-directions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cr-recommendation-duration { grid-column: 1 / -1; border-top: 1px solid #dce9eb; }
+}
+@media (max-width: 480px) {
+  .cr-recommendation-overview { gap: .9rem; padding: 1rem; align-items: flex-start; }
+  .cr-recommendation-image { width: 80px; height: 105px; }
+  .cr-recommendation-summary h4 { font-size: 1.1rem; }
+  .cr-recommendation-directions { padding-inline: 1rem; }
+}
+
 .cr-supplement-benefits dd ul { margin: 0; padding-left: 1.1rem; list-style: disc; }
 .cr-supplement-benefits dd li + li { margin-top: .25rem; }
+
+#cr-food-safety, #cr-red-flags { scroll-margin-top: 110px; }
+.cr-effect-related a { color: var(--brand-ink, #177e83); text-underline-offset: .15em; }
+
+@media print {
+  body.cr-print-document .cr-clinical-interpretation,
+  body.cr-print-document .cr-recommendation-card,
+  body.cr-print-document .cr-recommendations {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}
+
+/* A section can span pages, but its cards and individual advice points stay whole.
+   Only the PDF renderer marks containers that cannot fit on a physical page. */
+@media print {
+  body.cr-print-document .cr-advice-block,
+  body.cr-print-document .cr-advice-group,
+  body.cr-print-document .cr-advice-points li,
+  body.cr-print-document .cr-possible-effect,
+  body.cr-print-document .cr-weight-panel,
+  body.cr-print-document .cr-status-overview,
+  body.cr-print-document .cr-vital-detail,
+  body.cr-print-document .cr-vital-detail dl > div,
+  body.cr-print-document .cr-clinical-facts dl > div,
+  body.cr-print-document .cr-recommendation-overview,
+  body.cr-print-document .cr-recommendation-directions > div {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  body.cr-print-document .cr-print-fragment {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+  body.cr-print-document .cr-content-title,
+  body.cr-print-document .cr-advice-heading,
+  body.cr-print-document .cr-possible-effect-heading,
+  body.cr-print-document .cr-advice-group h4 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+}

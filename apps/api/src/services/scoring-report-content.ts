@@ -12,6 +12,8 @@ const productPlan = z.object({ id, stage: id, nutritionalStatus: bounded, produc
     mealTiming: guidanceText.optional() })).max(20).optional() });
 // Parse only selected guidance fields that the Application can display. Zod strips
 // unexpected Scoring fields before this packet can enter a patient report snapshot.
+const reportProductImage = z.string().max(Math.ceil(5 * 1024 * 1024 / 3) * 4 + 40)
+  .regex(/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/);
 const carePlan = z.object({
   nutritionalStatus: bounded.nullable(),
   statusModifiers: z.array(z.object({ id, classId: id, treatmentTypeId: id, nutritionalStatus: bounded, riskEmphasis: guidanceText, actions: guidanceText })).max(200),
@@ -21,7 +23,7 @@ const carePlan = z.object({
     status: z.enum(["none", "selected", "clinician_choice_required", "facts_required"]),
     plans: z.array(productPlan).max(30),
     choices: z.array(productPlan).max(30).optional(),
-    catalog: z.array(z.object({ id, name: bounded, description: guidanceText.nullable(), benefits: z.array(guidanceText).max(50).optional(), aliases: z.array(bounded).max(30) })).max(100).optional(),
+    catalog: z.array(z.object({ id, name: bounded, description: guidanceText.nullable(), benefits: z.array(guidanceText).max(50).optional(), imageDataUrl: reportProductImage.nullable().optional(), aliases: z.array(bounded).max(30) })).max(100).optional(),
     notes: z.array(z.object({ id, kind: id, label: bounded, guidance: guidanceText })).max(100),
     reason: bounded.optional(),
   }),
@@ -76,7 +78,7 @@ export type ScoringReportContent = z.infer<typeof scoringReportContentSchema>;
 export type ReportFacts = {
   treatmentTypeIds: string[]; drugClassIds: string[]; confirmedToxicityIds: string[];
   assessmentAnswers?: {
-    gastrointestinal_symptoms?: string[]; dietary_symptoms?: string[]; appetite_status?: string;
+    gastrointestinal_symptoms?: string[]; dietary_symptoms?: string[]; appetite_status?: string; functional_capacity?: string;
     previous_weight_kg?: number; current_weight_kg?: number;
   };
   coMorbidityIds?: string[]; cancerTypeId?: string; treatmentStatusId?: string;

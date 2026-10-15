@@ -104,13 +104,18 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect(document.querySelectorAll(".cr-nutrition-target-card").length).toBe(2);
     expect(document.querySelector(".cr-nutrition-targets")?.textContent).toContain("30–35 kcal/kg/day");
     expect(document.querySelector(".cr-nutrition-targets")?.textContent).toContain("1.5–2.0 g/kg/day");
-    expect(document.body.textContent).toContain("Nutritional Supplement Recommendations");
+    expect(document.body.textContent).toContain("Nutritional supplement recommendations");
     expect(document.body.textContent).toContain("Reviewed treatment guidance");
     expect(document.querySelector('[aria-label="During treatment"]')).toBeNull();
     expect(document.querySelector('[aria-label="Intervention"]')?.textContent).toContain("Reviewed treatment guidance");
     expect(document.body.textContent).toContain("Reviewed condition guidance");
-    expect(document.querySelector('[aria-label="Other health conditions (Co-morbidities)"] .cr-narrative-emphasis')?.textContent).toBe("Have TSH checked after a dose change.");
-    expect(document.querySelector('[aria-label="Recommendations"] .cr-narrative-emphasis')?.textContent).toBe("Track weight and intake.");
+    const conditionCard = document.querySelector('[aria-label="Other health conditions (Co-morbidities)"]')!;
+    const recommendationsCard = document.querySelector('[aria-label="Recommendations"]')!;
+    expect(conditionCard.textContent).toContain("Have TSH checked after a dose change.");
+    expect(recommendationsCard.textContent).toContain("Track weight and intake.");
+    // Legacy sentence-wide bold must not make every instruction compete for attention.
+    expect([...conditionCard.querySelectorAll(".cr-narrative-emphasis")].every(mark => mark.textContent !== "Have TSH checked after a dose change.")).toBe(true);
+    expect([...recommendationsCard.querySelectorAll(".cr-narrative-emphasis")].every(mark => mark.textContent !== "Track weight and intake.")).toBe(true);
     expect(document.body.textContent).not.toContain("**");
     expect(document.body.textContent).toContain("Reviewed effects guidance");
     const summary = document.querySelector('[aria-label="Report summary"]')!;
@@ -151,7 +156,12 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect((document.querySelector(".cr-score-card strong") as HTMLElement)?.style.color).toBe("rgb(220, 61, 80)");
     expect(document.querySelector("a[download]")?.getAttribute("download")).toBe("NIQ-report-NIQ-12.pdf");
     await act(async () => { (document.querySelectorAll(".cr-preview-tab")[1] as HTMLButtonElement).click(); });
-    expect(document.querySelector('[aria-label="Medical nutrition therapy report PDF preview"]')).not.toBeNull();
+    expect(document.querySelectorAll(".cr-preview-tab")[1]?.getAttribute("aria-pressed")).toBe("true");
+    expect(document.querySelector(".cr-html-preview")).toBeNull();
+    // This fixture returns JSON for every request, including the PDF URL. The
+    // preview may already have reached its expected invalid-PDF fallback.
+    expect(Boolean(document.querySelector('[aria-label="Medical nutrition therapy report PDF preview"]'))
+      || document.body.textContent?.includes("PDF preview unavailable. Use Download PDF")).toBe(true);
   });
 });
 
@@ -174,10 +184,10 @@ test("assessment facts and structured rule schedule stay separate from the three
     expect(Array.from(factIcons).every(icon => icon.getAttribute("aria-hidden") === "true")).toBe(true);
     expect(overview.textContent).not.toContain("Reviewed patient overview");
     expect(document.querySelector(".cr-clinical-interpretation")?.textContent).toContain("Reviewed patient overview");
-    expect(intervention.querySelectorAll(".cr-supplement-card")).toHaveLength(1);
-    expect(intervention.querySelector(".cr-supplement-card")?.textContent).toContain("Dose1");
+    expect(intervention.querySelectorAll(".cr-recommendation-card")).toHaveLength(1);
+    expect(intervention.querySelector(".cr-recommendation-quantity dd")?.textContent).toBe("1 sachet");
     expect(intervention.textContent).toContain("A nutrition supplement.");
-    expect(intervention.textContent).toContain("Timingafter breakfast");
+    expect(intervention.querySelector(".cr-recommendation-timing dd")?.textContent).toBe("Once daily · after breakfast");
     expect(intervention.textContent).toContain("Mix in 150 ml water");
     expect(intervention.textContent).toContain("At least 3 months");
     expect(intervention.textContent).not.toContain("2 Protect");
@@ -414,5 +424,55 @@ test("condition advice stays together in its own report section", async () => {
     expect(recommendations.textContent).not.toContain("Condition guidance step");
     expect(recommendations.querySelector(".cr-sheet-header")).not.toBeNull();
     expect(recommendations.querySelector(".cr-sheet-footer")).not.toBeNull();
+  });
+});
+
+
+test("held HTML can be reviewed without a PDF and only generates one on request", async () => {
+  const held = { ...readyReport, status: "DRAFT", approvedAt: null, artifact: null };
+  let pdfRequests = 0;
+  const fetcher = async (url: RequestInfo | URL) => {
+    if (String(url).endsWith("/refresh-pdf")) { pdfRequests++; return Response.json({ report: readyReport }); }
+    return Response.json({ report: held, generation: {status:"READY",failureCode:null} });
+  };
+  await renderWithResponse(fetcher, async () => {
+    expect(document.body.textContent).toContain("HTML ready for review");
+    expect(document.body.textContent).toContain("PDF generation is paused");
+    expect(document.querySelector(".clinical-report")).not.toBeNull();
+    expect(document.querySelector(".cr-download")).toBeNull();
+    expect(document.querySelector<HTMLButtonElement>('[aria-label="Report preview format"] button:last-child')?.disabled).toBe(true);
+    expect(pdfRequests).toBe(0);
+    const generate = [...document.querySelectorAll("button")].find(button => button.textContent === "Generate PDF")!;
+    await act(async () => { generate.click(); await new Promise(resolve => setTimeout(resolve,0)); });
+    expect(pdfRequests).toBe(1);
+    expect(document.querySelector(".cr-download")).not.toBeNull();
+  });
+});
+
+test("HTML supplement cards show the saved product master image through its existing alias", async () => {
+  const image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
+  const report = { ...readyReport,
+    productPlans:[{id:"plan",duration:"15 days before treatment",items:[{productName:"Invigour",quantityPerDay:1}]}],
+    productCatalog:[{id:"product",name:"Es Invigour",description:"Nutrition support",aliases:["Invigour"],imageDataUrl:image}],
+  };
+  await renderWithResponse({report,generation:{status:"READY"}}, () => {
+    const savedImage = document.querySelector<HTMLImageElement>(".cr-recommendation-image");
+    expect(savedImage?.getAttribute("src")).toBe(image);
+    expect(savedImage?.alt).toBe("Invigour");
+  });
+});
+
+test("fallback mouth reference displays the sourced reported care once, not placeholder text", async () => {
+  const report: GeneratedReport = { ...readyReport,
+    narrative: { ...readyReport.narrative, effectsAdvice: "Choose soft, moist foods. Avoid spicy foods." },
+    narrativeEvidence: { effectsAdvice: ["fact:assessment_dietary_symptoms_dietary_symptoms_mouth_sores", "rule:toxicity:mouth"] },
+    guidance: { sections: [{ id:"mouth", kind:"toxicity", certainty:"possible", title:"Mucositis / mouth blisters", text:"A related symptom was reported separately.", drugClass:"Antimetabolites" }] },
+  };
+  await renderWithResponse({report,generation:{status:"READY"}}, () => {
+    const mouth = document.querySelector(".cr-possible-effect")!;
+    expect(mouth.textContent).toContain("Choose soft, moist foods.");
+    expect(mouth.textContent).toContain("Patient-reported mouth symptoms");
+    expect(document.body.textContent).not.toContain("A related symptom was reported separately");
+    expect(document.querySelectorAll("#cr-reported-symptom-care").length).toBe(0);
   });
 });

@@ -144,6 +144,7 @@ export function ClinicalReviewCommandDialog({ action, review, organizationId, as
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(needsRecipient);
   const [effectOptions, setEffectOptions] = useState<ReportToxicityOption[]>([]);
+  const [deferPdf, setDeferPdf] = useState(false);
   const [confirmedToxicityIds, setConfirmedToxicityIds] = useState<string[]>([]);
   const [effectsLoading, setEffectsLoading] = useState(action === "COMPLETE");
   const [effectsError, setEffectsError] = useState("");
@@ -184,13 +185,13 @@ export function ClinicalReviewCommandDialog({ action, review, organizationId, as
     }).finally(() => { if (!controller.signal.aborted) setEffectsLoading(false); });
     return () => controller.abort();
   }, [action, organizationId, assessmentId, review.scoreRevision, effectsRetry]);
-  const { requestClose, confirmation } = useUnsavedFormClose({ subject: "review", isDirty: () => !!note || recipient !== initialRecipient.current || confirmedToxicityIds.length > 0, isBusy: () => inFlight.current, onClose });
+  const { requestClose, confirmation } = useUnsavedFormClose({ subject: "review", isDirty: () => !!note || recipient !== initialRecipient.current || confirmedToxicityIds.length > 0 || deferPdf, isBusy: () => inFlight.current, onClose });
   async function submit() {
     if (inFlight.current || blocked || loading || effectsLoading || effectsError || conflict || !review.allowedActions.includes(action)) return;
     if (needsNote && !note.trim()) { setError(action === "COMPLETE" ? "Enter a final review note." : "Enter a reason."); return; }
     if (needsRecipient && !recipients.some(item => item.membershipId === recipient)) { setError("Choose an eligible person."); return; }
     const body = { action, expectedRevision: review.revision, expectedScoreRevision: review.scoreRevision,
-      ...(needsRecipient ? { assigneeId: recipient! } : {}), ...(needsNote ? action === "COMPLETE" ? { remark: note.trim(), confirmedToxicityIds } : { reason: note.trim() } : {}) };
+      ...(needsRecipient ? { assigneeId: recipient! } : {}), ...(needsNote ? action === "COMPLETE" ? { remark: note.trim(), confirmedToxicityIds, deferPdf } : { reason: note.trim() } : {}) };
     const fingerprint = JSON.stringify(body);
     if (request.current?.fingerprint !== fingerprint) request.current = { fingerprint, key: crypto.randomUUID() };
     inFlight.current = true; setBusy(true); onBusyChange(true); setError("");
@@ -210,8 +211,9 @@ export function ClinicalReviewCommandDialog({ action, review, organizationId, as
       <div className="form-fields facility-dialog-fields min-h-0 overflow-y-auto">
         {action === "COMPLETE" ? <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 text-sm">
           <p className="font-semibold text-foreground">Check the assessment and NIQ score before approving.</p>
-          <p className="mt-1 text-muted-foreground">Approval closes this review and starts automatic report and PDF generation. The review cannot be reopened afterward.</p>
+          <p className="mt-1 text-muted-foreground">{deferPdf ? "Approval closes this review and generates the HTML report. You can request the PDF after reviewing it. The review cannot be reopened afterward." : "Approval closes this review and starts automatic report and PDF generation. The review cannot be reopened afterward."}</p>
         </div> : <p className="text-sm text-muted-foreground">{action === "RETURN_TO_DRAFT" ? reopeningBeforeReview(review) ? "Reopen this scored assessment for corrections and a new score. Existing submitted answers, results and adjustments stay in history." : "Return this assessment for corrections and a new score. Existing submitted answers, results and adjustments stay in history." : action === "RELEASE" ? "Release ownership so another eligible clinician can claim the review. Saved work stays in history." : action === "RESEND" ? (previouslySent(review) ? "Resend this scored assessment for clinical review." : "Send this scored assessment for clinical review.") : action === "SEND" ? "Send this scored assessment for clinical review." : action === "CLAIM" ? "You will become responsible for this clinical review." : "The selected person will become responsible immediately. This change is recorded in review history."}</p>}
+        {action === "COMPLETE" && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={deferPdf} disabled={busy || conflict} onChange={event => setDeferPdf(event.target.checked)} /><span>Review the HTML report before generating the PDF</span></label>}
         {action === "COMPLETE" && <ReportToxicityPicker options={effectOptions} selectedIds={confirmedToxicityIds} loading={effectsLoading} error={effectsError} disabled={busy || conflict} onToggle={(id, selected) => setConfirmedToxicityIds(ids => selected ? [...ids, id] : ids.filter(item => item !== id))} onRetry={() => setEffectsRetry(value => value + 1)} />}
         {needsRecipient && <div className="grid gap-2"><label htmlFor="clinical-review-recipient">{action === "TRANSFER" ? "Reviewer" : action === "TRANSFER_OWNER" ? "New owner" : "Assign corrections to"} *</label><SearchCombobox id="clinical-review-recipient" label={action === "TRANSFER" ? "Reviewer" : action === "TRANSFER_OWNER" ? "New owner" : "Assign corrections to"} value={recipient} onChange={setRecipient} options={recipients.map(item => ({ id: item.membershipId, label: `${item.displayName} · ${membershipRoleLabels[item.role]}` }))} required disabled={busy || loading || conflict} placeholder="Search or select a person…" />{loading ? <p role="status" className="text-sm">Loading eligible people…</p> : !recipients.length && <p className="text-sm">No eligible people are available. An administrator needs to check clinical roles and facility access.</p>}</div>}
         {needsNote && <label className="grid gap-2"><span>{action === "COMPLETE" ? "Final review note" : "Reason"} *</span>{action === "COMPLETE" && <span className="text-xs font-normal text-muted-foreground">Summarise what you checked or record any relevant limitation. This note is saved in the review history.</span>}<Textarea className="font-normal" value={note} onChange={event => setNote(event.target.value)} required maxLength={4000} disabled={busy || conflict} /></label>}

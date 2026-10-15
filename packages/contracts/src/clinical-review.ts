@@ -14,7 +14,7 @@ export const clinicalReviewActionSchema = z.discriminatedUnion("action", [
  z.object({...base,action:z.literal("RETURN_TO_DRAFT"),assigneeId:recipient,reason}).strict(),
  z.object({...base,action:z.literal("REASSIGN_CORRECTION"),assigneeId:recipient,reason}).strict(),
  z.object({...base,action:z.literal("RESEND")}).strict(),
- z.object({...base,action:z.literal("COMPLETE"),remark:reason,confirmedToxicityIds}).strict(),
+ z.object({...base,action:z.literal("COMPLETE"),remark:reason,confirmedToxicityIds,deferPdf:z.boolean().optional()}).strict(),
 ]);
 export type ClinicalReviewAction = z.infer<typeof clinicalReviewActionSchema>;
 export type ClinicalReviewer = {membershipId:string;displayName:string;role:MembershipRole};

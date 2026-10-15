@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { GeneratedReportService, REPORT_REVIEW_REQUIRED, assertGeneratedPdf, assertReadyPdfRefresh, assertReportPdfDownloadable, assertReportReadyForApproval, assertReviewedArtifact, automaticReportCanFinalize, automaticRetryDelay, cleanReportText, finishWeightHistory, normalizeGuidance, normalizeNarrative, prepareNarrativeEdit, publicReportGeneration, reportBrandingFingerprint, reportClinicalFacts, reportGenerationIssues, reportNeedsClinicalReview, reportObservations, reportProductCatalog, reportProductPlans, reportToxicityAnswers } from "./generated-report";
+import { GeneratedReportService, REPORT_REVIEW_REQUIRED, assertGeneratedPdf, assertReadyPdfRefresh, assertReportPdfDownloadable, assertReportReadyForApproval, assertReviewedArtifact, automaticReportCanFinalize, automaticRetryDelay, cleanReportText, finishWeightHistory, normalizeGuidance, normalizeNarrative, prepareNarrativeEdit, publicReportGeneration, preserveReportPdfHold, reportDefersPdf, reportBrandingFingerprint, reportClinicalFacts, reportGenerationIssues, reportNeedsClinicalReview, reportObservations, reportProductCatalog, reportProductPlans, reportToxicityAnswers } from "./generated-report";
 import { requestScoringReportContent, requestScoringToxicityOptions, scoringReportContentSchema } from "./scoring-report-content";
 import { approveGeneratedReportSchema, editGeneratedNarrativeSchema } from "../../../../packages/contracts/src/generated-report";
 
@@ -385,4 +385,36 @@ describe("source binding", () => {
     changed.status = "DRAFT";
     expect((service as any).currentFingerprint(changed, "a".repeat(64))).toBeNull();
   });
+});
+
+
+test("HTML review holds survive retries and expose only checked drafts without issuing a PDF", () => {
+  const held = "auto-final-v1:submission:html-review";
+  expect(reportDefersPdf(held)).toBe(true);
+  expect(reportDefersPdf("auto-final-v1:submission")).toBe(false);
+  for (const continuation of ["retry", "recovery"]) {
+    const next = preserveReportPdfHold(`auto-final-v1:submission:${continuation}:report`, held);
+    expect(reportDefersPdf(next)).toBe(true);
+    expect(preserveReportPdfHold(next, held)).toBe(next);
+    expect(publicReportGeneration("DRAFT", null, [], next)).toEqual({status:"READY",failureCode:null});
+  }
+  expect(publicReportGeneration("DRAFT", null, [])).toEqual({status:"GENERATING",failureCode:null});
+  expect(publicReportGeneration("DRAFT", null, ["Unsafe content"], held).status).toBe("FAILED");
+  expect(publicReportGeneration("DRAFT", REPORT_REVIEW_REQUIRED, [], held).status).toBe("FAILED");
+  expect(publicReportGeneration("QUEUED", null, [], held).status).toBe("QUEUED");
+});
+
+
+test("selected product images survive the authenticated transport boundary and report snapshot", () => {
+  const image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
+  const current = structuredClone(packet) as any;
+  current.guidance.carePlan.products = {status:"selected",plans:[],notes:[],catalog:[{
+    id:"product-1",name:"Es Invigour",description:null,benefits:[],aliases:[],imageDataUrl:image,
+  }]};
+  const parsed = scoringReportContentSchema.parse(current);
+  expect(reportProductCatalog(parsed)).toEqual([{id:"product-1",name:"Es Invigour",description:"",benefits:[],aliases:[],imageDataUrl:image}]);
+  current.guidance.carePlan.products.catalog[0].imageDataUrl = "data:image/svg+xml;base64,PHN2Zz4=";
+  expect(scoringReportContentSchema.safeParse(current).success).toBe(false);
+  current.guidance.carePlan.products.catalog[0].imageDataUrl = "https://example.com/product.png";
+  expect(scoringReportContentSchema.safeParse(current).success).toBe(false);
 });

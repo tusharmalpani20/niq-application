@@ -15,6 +15,9 @@ import { renderGeneratedReportPdf } from "./report-pdf";
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const MAX_AUTOMATIC_REPORT_ATTEMPTS = 5;
 export const AUTOMATIC_REPORT_KEY_PREFIX = "auto-final-v1:";
+// Stored in the durable request key so retries retain the clinician's PDF hold.
+export const reportDefersPdf = (requestKey: string) => /(?:^|:)html-review(?:$|:)/.test(requestKey);
+export const preserveReportPdfHold = (requestKey: string, previousKey: string) => reportDefersPdf(previousKey) && !reportDefersPdf(requestKey) ? `${requestKey}:html-review` : requestKey;
 export const REPORT_REVIEW_REQUIRED = "REVIEW_REQUIRED";
 class AutomaticReportReviewRequired extends Error {
   constructor() { super("Generated content requires clinical review before a PDF can be issued."); }
@@ -47,11 +50,11 @@ export function automaticReportCanFinalize(status: string, failureCode: string |
   return status === "DRAFT" && failureCode !== REPORT_REVIEW_REQUIRED && issues.length === 0;
 }
 
-export function publicReportGeneration(status: string, failureCode: string | null, issues: string[]): { status: "QUEUED" | "GENERATING" | "FAILED" | "READY"; failureCode: string | null } {
+export function publicReportGeneration(status: string, failureCode: string | null, issues: string[], requestKey = ""): { status: "QUEUED" | "GENERATING" | "FAILED" | "READY"; failureCode: string | null } {
   if (failureCode === REPORT_REVIEW_REQUIRED) return { status: "FAILED", failureCode: REPORT_REVIEW_REQUIRED };
   if (status === "FAILED") return { status: "FAILED", failureCode };
   if (issues.length) return { status: "FAILED", failureCode: REPORT_REVIEW_REQUIRED };
-  return { status: status === "READY" || status === "APPROVED" ? "READY" : status === "FAILED" ? "FAILED" : status === "QUEUED" ? "QUEUED" : "GENERATING", failureCode };
+  return { status: status === "READY" || status === "APPROVED" || status === "DRAFT" && reportDefersPdf(requestKey) ? "READY" : status === "FAILED" ? "FAILED" : status === "QUEUED" ? "QUEUED" : "GENERATING", failureCode };
 }
 
 export function assertReportPdfDownloadable(issues: string[]) {
@@ -247,20 +250,23 @@ export function reportProductCatalog(content: ScoringReportContent): NonNullable
   return (content.guidance.carePlan.products.catalog ?? []).map(product => ({
     id: product.id, name: cleanReportText(product.name), description: cleanReportText(product.description ?? ""),
     aliases: product.aliases.map(cleanReportText),
+    ...(product.imageDataUrl ? { imageDataUrl: product.imageDataUrl } : {}),
     ...(product.benefits ? { benefits: product.benefits.map(cleanReportText).filter(nonempty) } : {}),
-  })).filter(product => product.name && (product.description || product.benefits?.length));
+  })).filter(product => product.name && (product.description || product.benefits?.length || product.imageDataUrl));
 }
 
 export function reportToxicityAnswers(answers: FormAnswers): NonNullable<ReportFacts["assessmentAnswers"]> {
   const gastrointestinal = list(answers.gastrointestinal_symptoms);
   const dietary = list(answers.dietary_symptoms);
   const appetite = value(answers.appetite_status);
+  const functionalCapacity = value(answers.functional_capacity);
   const previous = positive(answers.previous_weight_kg);
   const current = positive(answers.current_weight_kg);
   return {
     ...(gastrointestinal.length ? { gastrointestinal_symptoms: gastrointestinal } : {}),
     ...(dietary.length ? { dietary_symptoms: dietary } : {}),
     ...(appetite ? { appetite_status: appetite } : {}),
+    ...(functionalCapacity ? { functional_capacity: functionalCapacity } : {}),
     ...(previous !== null ? { previous_weight_kg: previous } : {}),
     ...(current !== null ? { current_weight_kg: current } : {}),
   };
@@ -390,7 +396,7 @@ export class GeneratedReportService {
     // Report-content review is a worker state, not a request for human action.
     // Keep clients polling while the successor is being reserved.
     const awaitingRecovery=row.failureCode===REPORT_REVIEW_REQUIRED && ["DRAFT","FAILED"].includes(row.status);
-    const generation=awaitingRecovery ? {status:"QUEUED" as const,failureCode:null} : publicReportGeneration(row.status,row.failureCode,issues);
+    const generation=awaitingRecovery ? {status:"QUEUED" as const,failureCode:null} : publicReportGeneration(row.status,row.failureCode,issues,row.requestKey);
     const report=row.content && generation.status==="READY" ? await this.chartView(await this.dto(row,assessment),actor,assessment):null;
     return {report:report?.status==="APPROVED"?{...report,status:"READY"}:report,
       generation};
@@ -410,7 +416,7 @@ export class GeneratedReportService {
       if (!latest || !(latest.status === "FAILED" || latest.status === "DRAFT" && latest.failureCode === REPORT_REVIEW_REQUIRED))
         throw new ServiceError("CONFLICT", "Regenerate is available after an automatic report attempt fails.");
       await tx.insert(generatedReports).values({id:reportId, organizationId:org, assessmentId:id, patientId:current.patientId,
-        submissionId:currentSource.submissionId, requestKey:`${AUTOMATIC_REPORT_KEY_PREFIX}${currentSource.submissionId}:retry:${reportId}`,
+        submissionId:currentSource.submissionId, requestKey:preserveReportPdfHold(`${AUTOMATIC_REPORT_KEY_PREFIX}${currentSource.submissionId}:retry:${reportId}`,latest.requestKey),
         sourceFingerprint:"", status:"QUEUED", attemptCount:0});
       await this.service.audit(tx,actor,context,id,"GENERATED_REPORT_REGENERATE_REQUESTED",{reportId,previousReportId:latest.id,
         submissionId:currentSource.submissionId,scoreRevision:currentSource.scoreRevision});
@@ -697,7 +703,8 @@ export class GeneratedReportService {
     return {organizationId:assessment.organizationId,membershipId:completion.actor.membershipId,
       displayName:completion.actor.displayName,role:completion.actor.role,userId:"",email:"",platformRole:"USER"};
   }
-  private async finalizeAutomatic(row:ReportRow, actor:Principal, context:RequestContext) {
+  private async finalizeAutomatic(row:ReportRow, actor:Principal, context:RequestContext, explicitlyRequested = false) {
+    if (reportDefersPdf(row.requestKey) && !explicitlyRequested) return;
     const leaseToken=createEntityId();
     const leaseUntil=new Date(Date.now()+Math.max(this.service.config.REPORT_GENERATION_TIMEOUT_MS,120_000));
     const claimed=await this.service.db.transaction(async tx=>{
@@ -792,7 +799,7 @@ export class GeneratedReportService {
           .where(and(eq(generatedReports.id,latest.id),eq(generatedReports.status,latest.status)));
         return;
       }
-      const requestKey=`${AUTOMATIC_REPORT_KEY_PREFIX}${source.submissionId}:recovery:${latest.id}`;
+      const requestKey=preserveReportPdfHold(`${AUTOMATIC_REPORT_KEY_PREFIX}${source.submissionId}:recovery:${latest.id}`,latest.requestKey);
       const [existing]=await tx.select({id:generatedReports.id}).from(generatedReports)
         .where(and(eq(generatedReports.organizationId,row.organizationId),eq(generatedReports.assessmentId,row.assessmentId),eq(generatedReports.requestKey,requestKey))).limit(1);
       if(existing) return;
@@ -816,7 +823,7 @@ export class GeneratedReportService {
       like(generatedReports.requestKey,`${AUTOMATIC_REPORT_KEY_PREFIX}%`),reviewRecoveryDue),or(
       and(eq(generatedReports.status,"QUEUED"),or(isNull(generatedReports.nextAttemptAt),lte(generatedReports.nextAttemptAt,now))),
       and(eq(generatedReports.status,"GENERATING"),lte(generatedReports.updatedAt,expired)),
-      and(eq(generatedReports.status,"DRAFT"),or(isNull(generatedReports.failureCode),ne(generatedReports.failureCode,REPORT_REVIEW_REQUIRED)),
+      and(eq(generatedReports.status,"DRAFT"),sql`${generatedReports.requestKey} not like ${"%:html-review%"}`,or(isNull(generatedReports.failureCode),ne(generatedReports.failureCode,REPORT_REVIEW_REQUIRED)),
         or(isNull(generatedReports.nextAttemptAt),lte(generatedReports.nextAttemptAt,now))),
       and(eq(generatedReports.status,"FAILED"),ne(generatedReports.failureCode,REPORT_REVIEW_REQUIRED),lte(generatedReports.nextAttemptAt,now)),
       reviewRecoveryDue,
@@ -836,7 +843,7 @@ export class GeneratedReportService {
         if((row.status==="DRAFT" || row.status==="FAILED") && row.failureCode===REPORT_REVIEW_REQUIRED)
           return await this.recoverReviewRequired(row,actor,context);
         if(row.status==="DRAFT")return await this.finalizeAutomatic(row,actor,context);
-        const recoveryPredecessorId=row.requestKey.match(/:recovery:([A-Za-z0-9]+)$/)?.[1];
+        const recoveryPredecessorId=row.requestKey.match(/:recovery:([A-Za-z0-9]+)(?::html-review)?$/)?.[1];
         const [predecessor]=recoveryPredecessorId ? await this.service.db.select().from(generatedReports)
           .where(and(eq(generatedReports.organizationId,row.organizationId),eq(generatedReports.assessmentId,row.assessmentId),eq(generatedReports.id,recoveryPredecessorId))).limit(1) : [];
         const predecessorDecision=predecessor?.content ? this.service.unseal<ReportData>(predecessor.content).decision : undefined;
@@ -844,7 +851,7 @@ export class GeneratedReportService {
           ...(predecessorDecision?.productStageChoice ? {productStageChoice:predecessorDecision.productStageChoice} : {})},context,true);
         if(report.status==="DRAFT") {
           const [current]=await this.service.db.select().from(generatedReports).where(eq(generatedReports.id,report.id));
-          if(current && automaticReportCanFinalize(current.status,current.failureCode,report.issues))
+          if(current && !reportDefersPdf(current.requestKey) && automaticReportCanFinalize(current.status,current.failureCode,report.issues))
             await this.finalizeAutomatic(current,actor,context);
         }
       } catch(error) {
@@ -869,6 +876,16 @@ export class GeneratedReportService {
   }
   async refreshReadyPdf(actor:Principal,org:string,id:string,context:RequestContext) {
     const assessment=await this.clinical(actor,org,id,"reports.manage");
+    const held = await this.latest(org,id);
+    if (held?.status === "DRAFT" && reportDefersPdf(held.requestKey)) {
+      if (!held.content || !automaticReportCanFinalize(held.status,held.failureCode,this.service.unseal<ReportData>(held.content).issues))
+        throw new ServiceError("CONFLICT","The report must pass automatic checks before generating its PDF.");
+      await this.finalizeAutomatic(held,actor,context,true);
+      const fresh = await this.latest(org,id);
+      if (!fresh || fresh.id !== held.id || fresh.status !== "READY")
+        throw new ServiceError("CONFLICT","PDF generation could not finish. Refresh the report and try again.");
+      return {report:await this.chartView(await this.dto(fresh,assessment),actor,assessment)};
+    }
     const [row]=await this.service.db.select().from(generatedReports)
       .where(and(eq(generatedReports.organizationId,org),eq(generatedReports.assessmentId,id),or(eq(generatedReports.status,"READY"),eq(generatedReports.status,"APPROVED"))))
       .orderBy(desc(generatedReports.createdAt),desc(generatedReports.id)).limit(1);

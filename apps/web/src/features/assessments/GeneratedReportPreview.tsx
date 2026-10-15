@@ -1,13 +1,15 @@
-import { Activity, ArrowRight, BicepsFlexed, Brain, Calculator, CalendarDays, ChartNoAxesCombined, CircleAlert, CircleDot, ClipboardCheck, ClipboardList, ClipboardPlus, Crosshair, Droplets, Drumstick, Egg, FileSearch, Flame, FlaskConical, createLucideIcon, Gauge, HandHeart, HeartPulse, Leaf, ListChecks, Package, Pill, Radiation, Ruler, Scale, ShieldCheck, ShieldPlus, Soup, Sprout, Stethoscope, TriangleAlert, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
+import { Activity, BicepsFlexed, Brain, Calculator, CalendarDays, ChartNoAxesCombined, CircleDot, ClipboardCheck, ClipboardList, ClipboardPlus, Crosshair, Droplets, Drumstick, Egg, FileSearch, Flame, FlaskConical, createLucideIcon, Gauge, HandHeart, HeartPulse, Leaf, ListChecks, Package, Pill, Radiation, Ruler, Scale, ShieldCheck, ShieldPlus, Soup, Sprout, Stethoscope, TriangleAlert, TrendingDown, Utensils, Wind, type LucideIcon } from "lucide-react";
 import { reportFaceScanAdditionalMetricGroups, riskColorHex } from "@niq/application-contracts";
 import { useBranding } from "../../lib/branding-context";
 import type { TenantBranding } from "../../lib/branding";
 import { BrandMarks } from "../../components/BrandMarks";
 import { AssessmentBmiCard } from "./AssessmentBmiCard";
 import type { GeneratedReport } from "./generated-report-api";
-import { metricText, productBenefits, reportAge, reportDate, reportGuidance } from "./generated-report-format";
+import { metricText, reportAge, reportDate, reportGuidance } from "./generated-report-format";
 import { WeightTrend } from "./GeneratedReportWeightTrend";
+import { ProductRecommendationCards } from "./ProductRecommendationCards";
 import { formatGenderAnswer } from "./formatGenderAnswer";
+import { readableClosingSummary, isSymptomCareReference, patientReportedCare, readableReportEmphasis, withoutRepeatedTargets } from "./report-readability";
 import "./generated-report.css";
 
 type ReportBranding = Required<TenantBranding>;
@@ -146,8 +148,8 @@ function interpretationParagraphs(values: Array<string | undefined>) {
 }
 
 // Render authored markdown as React text nodes so saved content cannot become HTML.
-function NarrativeText({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+function NarrativeText({ text, formatted = false }: { text: string; formatted?: boolean }) {
+  const parts = (formatted ? text : readableReportEmphasis(text)).split(/(\*\*[^*]+\*\*)/g);
   return <>{parts.map((part, index) => part.startsWith("**") && part.endsWith("**")
     ? <strong className="cr-narrative-emphasis" key={index}>{part.slice(2, -2)}</strong>
     : part)}</>;
@@ -178,10 +180,10 @@ function adviceGroups(text: string): AdviceGroup[] {
   return groups.length ? groups : [{ text }];
 }
 
-function ReviewedAdvice({ title, text, icon: Icon, action = false, columns = false }: { title: string; text: string | undefined; icon: LucideIcon; action?: boolean; columns?: boolean }) {
+function ReviewedAdvice({ title, text, icon: Icon, action = false, columns = false, id }: { title: string; text: string | undefined; icon: LucideIcon; action?: boolean; columns?: boolean; id?: string }) {
   if (!text?.trim()) return null;
-  const PointIcon = action ? ArrowRight : CircleDot;
-  return <section className={`cr-advice-block${action ? " cr-advice-action" : ""}${columns ? " cr-advice-columns" : ""}`}><div className="cr-advice-heading"><span className="cr-advice-icon"><Icon size={20} aria-hidden="true"/></span><h3>{title}</h3></div>{adviceGroups(text).map((group, groupIndex) => <div className="cr-advice-group" key={groupIndex}>{group.heading && <h4>{group.heading}</h4>}<ul className="cr-advice-points">{adviceSentences(group.text).map((sentence, index) => <li key={index}><PointIcon size={15} aria-hidden="true"/><span><NarrativeText text={sentence}/></span></li>)}</ul></div>)}</section>;
+  const PointIcon = CircleDot;
+  return <section id={id} className={`cr-advice-block${action ? " cr-advice-action" : ""}${columns ? " cr-advice-columns" : ""}`}><div className="cr-advice-heading"><span className="cr-advice-icon"><Icon size={20} aria-hidden="true"/></span><h3>{title}</h3></div>{adviceGroups(readableReportEmphasis(text)).map((group, groupIndex) => <div className="cr-advice-group" key={groupIndex}>{group.heading && <h4>{group.heading}</h4>}<ul className="cr-advice-points">{adviceSentences(group.text).map((sentence, index) => <li key={index}><PointIcon size={15} aria-hidden="true"/><span><NarrativeText text={sentence} formatted/></span></li>)}</ul></div>)}</section>;
 }
 
 function singleGuidanceTitle(report: GeneratedReport, type: "comorbidity" | "toxicity", fallback: string) {
@@ -211,24 +213,8 @@ function possibleEffectPages(report: GeneratedReport) {
 
 function ProductPlan({ report }: { report: GeneratedReport }) {
   const selected = report.productPlans?.filter(plan => plan.items.length) ?? [];
-  const benefitsFor = (name: string) => {
-    const benefits = productBenefits(report, name);
-    return benefits.length ? <ul>{benefits.map((benefit, index) => <li key={index}>{benefit}</li>)}</ul> : "—";
-  };
   const readableDuration = (duration: string) => duration.replace(/\b\d{4}-\d{2}-\d{2}\b/g, date => reportDate(date));
-  if (selected.length) return <section className="cr-supplement"><div className="cr-advice-heading"><span className="cr-advice-icon"><Package size={20} aria-hidden="true"/></span><h3>Nutritional Supplement Recommendations</h3></div>
-    {selected.map(plan => <div className="cr-supplement-plan" key={plan.id}>
-      <div className="cr-supplement-cards">{plan.items.map((item, index) => <article className="cr-supplement-card" key={`${plan.id}-${index}`}>
-        <h4>{item.productName}</h4><dl>
-          <div><dt>Dose</dt><dd>{item.quantityPerDay ?? "—"}</dd></div>
-          <div><dt>Timing</dt><dd>{item.mealTiming || (item.timesPerDay != null ? (item.timesPerDay === 1 ? "Once daily" : `${item.timesPerDay} times daily`) : "—")}</dd></div>
-          <div><dt>Preparation</dt><dd>{item.preparation || "—"}</dd></div>
-          <div><dt>Duration</dt><dd>{readableDuration(plan.duration || (plan.durationAmount ? `${plan.durationAmount} days` : "—"))}</dd></div>
-          <div className="cr-supplement-benefits"><dt>Key benefits</dt><dd>{benefitsFor(item.productName)}</dd></div>
-        </dl>
-      </article>)}</div>
-    </div>)}
-  </section>;
+  if (selected.length) return <ProductRecommendationCards report={report} plans={selected}/>;
   const section = reportGuidance(report, "product").find(item => item.title.toLowerCase() === "product plan");
   if (!section) return null;
   const [dose, duration] = section.text.split("\n").map(part => part.trim()).filter(Boolean);
@@ -240,7 +226,7 @@ function ProductPlan({ report }: { report: GeneratedReport }) {
     if (regular) return { name: regular[2]!.trim(), quantity: regular[1]!, detail: "per day" };
     return { name: part.trim(), quantity: "", detail: "" };
   });
-  return <section className="cr-supplement"><div className="cr-advice-heading"><span className="cr-advice-icon"><Package size={20} aria-hidden="true"/></span><h3>Nutritional Supplement Recommendations</h3></div>
+  return <section className="cr-supplement"><div className="cr-advice-heading"><span className="cr-advice-icon"><Package size={20} aria-hidden="true"/></span><h3>Nutritional supplement recommendations</h3></div>
     <div className="cr-supplement-cards">{products.map((product, index) => <article className="cr-supplement-card" key={`${product.name}-${index}`}><h4>{product.name}</h4><dl>
       <div><dt>Dose</dt><dd>{product.quantity || "—"}</dd></div><div><dt>Timing</dt><dd>{product.detail || "—"}</dd></div><div><dt>Preparation</dt><dd>—</dd></div><div><dt>Duration</dt><dd>{readableDuration(duration || "—")}</dd></div><div className="cr-supplement-benefits"><dt>Key benefits</dt><dd>—</dd></div>
     </dl></article>)}</div>
@@ -362,6 +348,34 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
   const antimetaboliteSections = possibleSections.filter(item => /antimetabolite/i.test(item.drugClass ?? ""));
   const otherPossiblePages = possibleEffectPages(report).map(sections => sections.filter(item => !antimetaboliteSections.includes(item))).filter(sections => sections.length);
   const conditionTitle = singleGuidanceTitle(report, "comorbidity", "Condition-specific guidance");
+  // A single mouth-symptom care passage can live beside its possible-effect explanation.
+  // Keep multi-condition passages in Recommendations rather than implying a shared diagnosis.
+  const reportedCare = patientReportedCare(report.narrative.effectsAdvice);
+  const careGroups = adviceGroups(reportedCare ?? "");
+  const reportedSymptomEvidence = (report.narrativeEvidence?.effectsAdvice ?? []).filter(id => /^fact:(?:assessment_(?:gastrointestinal_symptoms|dietary_symptoms)_|clinician_toxicity_)/.test(id));
+  const recordedMouthOnly = report.clinicalFacts?.some(fact => /^(?:Patient reported symptoms|Reported symptoms)$/i.test(fact.label) && /^(?:Mouth Ulcers\s*\/\s*Mucositis|Mouth sores|Mouth ulcers|Mucositis)$/i.test(fact.value.trim())) ?? false;
+  const mouthCareEvidence = recordedMouthOnly || reportedSymptomEvidence.length > 0 && reportedSymptomEvidence.every(id => /mouth|mucositis/i.test(id));
+  const moveMouthCare = careGroups.length === 1 && (mouthCareEvidence || /(?:mouth|mucositis)[^.\n]*(?:recorded|reported)|(?:recorded|reported)[^.\n]*(?:mouth|mucositis)/i.test(careGroups[0]?.text ?? ""))
+    && !/\b(?:diarrh(?:ea|oea)|vomiting|constipation|hand.foot|edema|ana?emia)\b/i.test(careGroups[0]?.text ?? "")
+    && possibleSections.filter(section => isSymptomCareReference(section.text)).length === 1
+    && possibleSections.some(section => isSymptomCareReference(section.text) && /mouth|mucositis/i.test(section.title));
+  const showRecommendations = hasRecommendations && (!moveMouthCare || Boolean(report.narrative.foodSafetyAdvice?.trim() || report.narrative.actionSummary?.trim() || report.narrative.monitoringSummary?.trim()));
+  const possibleEffectBody = (section: GeneratedReport["guidance"]["sections"][number]) => {
+    if (/myelosuppression|infection risk/i.test(section.title) && /^Adequate protein and energy\.?$/i.test(section.text.replaceAll("**", "").trim())) return <>
+      <ul className="cr-advice-points"><li><CircleDot size={15} aria-hidden="true"/><span>Support your nutrition by meeting the energy and protein targets in your nutrition plan.</span></li></ul>
+      <p className="cr-effect-related">Also follow the <a href="#cr-food-safety">Food safety guidance</a> and check <a href="#cr-red-flags">Red flags</a> for when to contact your care team.</p>
+    </>;
+    if (!isSymptomCareReference(section.text)) return <ul className="cr-advice-points">{
+      adviceSentences(readableReportEmphasis(section.text)).map((sentence, index) =>
+        <li key={index}><CircleDot size={15} aria-hidden="true"/><span><NarrativeText text={sentence} formatted/></span></li>)
+    }</ul>;
+    if (moveMouthCare && /mouth|mucositis/i.test(section.title)) return <>
+      <p className="cr-effect-status">Patient-reported mouth symptoms</p>
+      <ul className="cr-advice-points">{adviceSentences(readableReportEmphasis(reportedCare ?? "")).map((sentence, index) =>
+        <li key={index}><CircleDot size={15} aria-hidden="true"/><span><NarrativeText text={sentence} formatted/></span></li>)}</ul>
+    </>;
+    return <p><a href="#cr-reported-symptom-care">Read the reported symptom care guidance</a>.</p>;
+  };
   const hasInterpretation = Boolean(report.narrative.overview?.trim() || showClinicalFinding || report.nutritionalStatus?.trim());
   // Saved reports predating the reviewed closing synthesis still get a short
   // recap drawn only from their already-reviewed narrative passages.
@@ -425,37 +439,37 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
       </div>
       {completionPercentage !== null && <p className="cr-answer-coverage"><ClipboardCheck size={17} aria-hidden="true"/><span>This report is based on an assessment that was <strong>{completionPercentage}% complete</strong>.</span></p>}
       <WeightTrend report={report}/>
-      {hasInterpretation && <section className="cr-clinical-interpretation"><div className="cr-advice-heading"><span className="cr-advice-icon"><FileSearch size={20} aria-hidden="true"/></span><h3>Nutritional interpretation</h3></div>{interpretationParagraphs([report.nutritionalStatus?.trim(), showClinicalFinding ? clinicalFinding : report.narrative.overview]).map((paragraph, index) => <p key={index}><NarrativeText text={paragraph}/></p>)}</section>}
+      {hasInterpretation && <section className="cr-clinical-interpretation"><div className="cr-advice-heading"><span className="cr-advice-icon"><FileSearch size={20} aria-hidden="true"/></span><h3>Nutritional interpretation</h3></div><ul className="cr-advice-points">{interpretationParagraphs([report.nutritionalStatus?.trim(), showClinicalFinding ? clinicalFinding : report.narrative.overview]).flatMap(paragraph => adviceSentences(readableReportEmphasis(paragraph))).map((point, index) => <li key={index}><CircleDot size={15} aria-hidden="true"/><span><NarrativeText text={point} formatted/></span></li>)}</ul></section>}
     </ReportSheet>}
     {hasNutritionPage && <ReportSheet number={nextPage() + 1} title="Intervention" icon={Utensils} report={report} branding={branding} compact className={`cr-sheet-nutrition${denseNutrition ? " cr-sheet-nutrition-dense" : ""}`}>
       <div className="cr-care-stack">
       {targets.length > 0 && <section className="cr-nutrition-targets"><h3>Daily nutrition targets</h3><div className="cr-nutrition-target-grid">{targets.map(target => { const Icon = target.icon; return <div className="cr-nutrition-target-card" key={target.label}><Icon size={22} aria-hidden="true"/><span>{target.label}</span><strong>{target.value}</strong></div>; })}</div></section>}
       {renalGuidance && <section className="cr-renal-caution"><div className="cr-advice-heading"><span className="cr-advice-icon"><TriangleAlert size={20} aria-hidden="true"/></span><h3>Individualise nutrition targets</h3></div><p><NarrativeText text={renalGuidance.text}/></p></section>}
-      <ReviewedAdvice title="Nutrition guidance" text={report.narrative.nutritionAdvice} icon={CircleAlert} columns/>
+      <ReviewedAdvice title="Nutrition guidance" text={withoutRepeatedTargets(report.narrative.nutritionAdvice, targets)} icon={Utensils} columns/>
       <ReviewedAdvice title={plannedTreatment ? "Preparation for treatment" : "During treatment"} text={report.narrative.treatmentAdvice} icon={ShieldCheck} columns/>
       <ProductPlan report={report}/></div>
     </ReportSheet>}
     {hasConditionAdvice && <ReportSheet number={nextPage() + 1} title="Other health conditions (Co-morbidities)" icon={HeartPulse} report={report} branding={branding} compact className="cr-sheet-care">
       <div className="cr-care-grid"><ReviewedAdvice title={conditionTitle} text={report.narrative.conditionAdvice} icon={HeartPulse}/></div>
     </ReportSheet>}
-    {antimetaboliteSections.length > 0 && <ReportSheet number={nextPage() + 1} title="Symptoms Associated with Antimetabolite Chemotherapy" icon={TriangleAlert} report={report} branding={branding} compact className="cr-sheet-possible-effects">
+    {antimetaboliteSections.length > 0 && <ReportSheet number={nextPage() + 1} title="Possible effects of antimetabolite chemotherapy" icon={TriangleAlert} report={report} branding={branding} compact className="cr-sheet-possible-effects">
       <p className="cr-possible-intro">The guidance in this report covers potential side effects associated with antimetabolite chemotherapy, including mouth sores, diarrhoea, hand-foot symptoms, nausea or vomiting, infection, dehydration, raised liver enzymes, fatigue or swelling, and anaemia. These are precautionary measures, not diagnoses. Not every patient will experience all these effects, and any symptoms that develop should be reviewed by the treating oncologist.</p>
       <div className="cr-possible-list">{antimetaboliteSections.map(section => <section className="cr-possible-effect" key={section.id}>
         <div className="cr-possible-effect-heading"><span className="cr-advice-icon"><TriangleAlert size={19} aria-hidden="true"/></span><div><h3>{section.title}</h3></div></div>
-        <p><NarrativeText text={section.text}/></p>
+        {possibleEffectBody(section)}
       </section>)}</div>
     </ReportSheet>}
     {otherPossiblePages.map((sections, index) => <ReportSheet key={index} number={nextPage() + 1} title="Possible treatment effects" icon={TriangleAlert} report={report} branding={branding} compact className="cr-sheet-possible-effects">
       <p className="cr-possible-intro">These effects are possible with the matched treatment and drug class. They have not been reported as symptoms in this assessment.</p>
       <div className="cr-possible-list">{sections.map(section => <section className="cr-possible-effect" key={section.id}>
         <div className="cr-possible-effect-heading"><span className="cr-advice-icon"><TriangleAlert size={19} aria-hidden="true"/></span><div><span className="cr-guidance-type">Possible effect{section.drugClass ? ` · ${section.drugClass}` : ""}</span><h3>{section.title}</h3></div></div>
-        <p><NarrativeText text={section.text}/></p>
+        {possibleEffectBody(section)}
       </section>)}</div>
     </ReportSheet>)}
-    {report.narrative.redFlagsAdvice?.trim() && <ReportSheet number={nextPage() + 1} title="Red flags" icon={TriangleAlert} report={report} branding={branding} compact className="cr-sheet-care"><div className="cr-care-grid"><ReviewedAdvice title="When to seek urgent help" text={report.narrative.redFlagsAdvice} icon={TriangleAlert}/></div></ReportSheet>}
-    {hasRecommendations && <ReportSheet number={nextPage() + 1} title="Recommendations" icon={ListChecks} report={report} branding={branding} compact className="cr-sheet-care">
-      <div className="cr-care-grid"><ReviewedAdvice title={singleGuidanceTitle(report, "toxicity", "Reported symptom care")} text={report.narrative.effectsAdvice} icon={Droplets}/>
-      <ReviewedAdvice title="Food safety" text={report.narrative.foodSafetyAdvice} icon={ShieldCheck}/>
+    {report.narrative.redFlagsAdvice?.trim() && <ReportSheet number={nextPage() + 1} title="Red flags" icon={TriangleAlert} report={report} branding={branding} compact className="cr-sheet-care cr-sheet-red-flags"><div className="cr-care-grid"><ReviewedAdvice id="cr-red-flags" title="When to seek urgent help" text={report.narrative.redFlagsAdvice} icon={TriangleAlert}/></div></ReportSheet>}
+    {showRecommendations && <ReportSheet number={nextPage() + 1} title="Recommendations" icon={ListChecks} report={report} branding={branding} compact className="cr-sheet-care">
+      <div className="cr-care-grid">{!moveMouthCare && <ReviewedAdvice id="cr-reported-symptom-care" title={singleGuidanceTitle(report, "toxicity", "Reported symptom care")} text={reportedCare} icon={Droplets}/>}
+      <ReviewedAdvice id="cr-food-safety" title="Food safety" text={report.narrative.foodSafetyAdvice} icon={ShieldCheck}/>
       <ReviewedAdvice title="Care actions" text={report.narrative.actionSummary} icon={ListChecks} action/>
       <ReviewedAdvice title="Monitoring plan" text={report.narrative.monitoringSummary} icon={ChartNoAxesCombined} action/></div>
     </ReportSheet>}
@@ -466,7 +480,7 @@ function GeneratedReportPreviewContent({ report, branding }: { report: Generated
           return <p key={fact.label}><span className="cr-summary-fact-label"><span className="cr-clinical-fact-icon" aria-hidden="true"><Icon size={15}/></span>{fact.label}</span><strong>{fact.value}</strong></p>;
         })}</div>}
       </div>
-      {overallSummary && <section className="cr-summary-brief" aria-label="Overall clinical summary"><span className="cr-summary-brief-icon"><HeartPulse size={23} aria-hidden="true"/></span><div>{adviceSentences(overallSummary).map((sentence, index) => <p key={index}><NarrativeText text={sentence}/></p>)}</div></section>}
+      {overallSummary && <section className="cr-summary-brief" aria-label="Overall clinical summary"><span className="cr-summary-brief-icon"><HeartPulse size={23} aria-hidden="true"/></span><div>{adviceSentences(readableReportEmphasis(readableClosingSummary(overallSummary, report.productCatalog?.flatMap(product => product.benefits ?? []) ?? []))).map((sentence, index) => <p key={index}><NarrativeText text={sentence} formatted/></p>)}</div></section>}
     </ReportSheet>
   </article>;
 }
