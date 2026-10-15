@@ -81,12 +81,12 @@ export async function renderGeneratedReportHtml(report: GeneratedReport, brand: 
   const pageFurniture = `@media print {
     html:root { background:#fff !important; }
     @page {
-      @top-left { content:url("${headerImage}");margin-left:13mm;width:65mm; }
-      @top-right { content:"Clinical nutrition report";margin-right:13mm;font:8px Arial;color:#607989; }
+      @top-left { content:url("${headerImage}");margin-left:13mm;margin-bottom:4mm;vertical-align:middle;width:92mm;border-bottom:.5pt solid #dce5e8; }
+      @top-right { content:"Clinical nutrition report";margin-right:13mm;margin-bottom:4mm;vertical-align:middle;width:92mm;font:8px Arial;color:#607989;border-bottom:.5pt solid #dce5e8; }
       @bottom-left { content:${cssString(`${brand.name} · ${report.assessment.reference}`)};margin-left:13mm;font:8px Arial;color:#607989; }
       @bottom-right { content:"Page " counter(page) " of " counter(pages);margin-right:13mm;font:8px Arial;color:#607989; }
     }
-    @page:first { @top-left {content:none;background-image:none;} @top-right {content:none;} @bottom-left {content:none;} @bottom-right {content:none;} }
+    @page:first { @top-left {content:none;background-image:none;border:0;} @top-right {content:none;border:0;} @bottom-left {content:none;} @bottom-right {content:none;} }
   }`;
   return `<!doctype html><html lang="en" style="--brand-primary:${brand.primaryColor};--brand-secondary:${branding.secondaryColor};--brand-ink:${ink}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Medical Nutrition Therapy Report</title><style>${css}${pageFurniture}</style></head><body class="cr-print-document">${markup}</body></html>`;
 }
@@ -108,19 +108,19 @@ export async function renderGeneratedReportPdf(report: GeneratedReport, brand: R
     });
     await page.emulateMedia({ media: "print" });
     await page.evaluate(() => {
-      const pageHeight = 297 / 25.4 * 96;
-      for (const sheet of document.querySelectorAll<HTMLElement>(".cr-sheet")) {
+      const pageHeight = (297 - 20 - 15) / 25.4 * 96;
+      for (const sheet of document.querySelectorAll<HTMLElement>(".cr-sheet:not(.cr-cover)")) {
         if (sheet.getBoundingClientRect().height > pageHeight + 1) sheet.classList.add("cr-print-overflow");
       }
       for (const card of document.querySelectorAll<HTMLElement>(".cr-possible-effect")) {
-        if (card.getBoundingClientRect().height > pageHeight - 30 / 25.4 * 96)
+        if (card.getBoundingClientRect().height > pageHeight)
           card.classList.add("cr-print-fragment");
       }
     });
     // Chromium numbers physical pages, including continuations. Section counts
     // must not serve as page numbers when a report flows across page boundaries.
     const bytes = await page.pdf({ format: "A4", preferCSSPageSize: true, printBackground: true,
-      displayHeaderFooter: false, margin: { top: "15mm", right: 0, bottom: "15mm", left: 0 },
+      displayHeaderFooter: false, margin: { top: "20mm", right: 0, bottom: "15mm", left: 0 },
     });
     if (bytes.length < 8 || Buffer.from(bytes.subarray(0, 5)).toString() !== "%PDF-") {
       throw new Error("Report PDF rendering did not produce a valid document");

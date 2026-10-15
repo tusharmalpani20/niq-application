@@ -8,6 +8,7 @@ const report = {
   assessment: { id: "assessment-1", reference: "A-1", completedAt: "2026-10-12T12:00:00Z" },
   patient: { displayName: "Example Patient", reference: "P-1", dateOfBirth: "1980-01-01", gender: "FEMALE" },
   classification: { id: "moderate", label: "Moderate risk", score: 25 },
+  decision: { plannedTreatmentStartDate: null },
   metrics: [],
   weightHistory: [],
   narrative: { overview: "Verified assessment overview.", keyFindings: "", actionSummary: "", monitoringSummary: "" },
@@ -67,4 +68,34 @@ test("possible effect summaries appear in the PDF layout without raw source advi
   expect(html).toContain("They have not been reported as symptoms");
   expect(html).toContain("If mouth discomfort occurs");
   expect(html).toContain("cr-possible-effect");
+});
+
+test("fully emphasized warning sentences remain separate report bullets", async () => {
+  const current = { ...report, narrative: { ...report.narrative,
+    redFlagsAdvice: "**Contact your doctor for fever.** **Call for breathlessness.**",
+  } } as GeneratedReport;
+  const html = await renderGeneratedReportHtml(current, { name: "Example Clinic", primaryColor: "#138f94" });
+  const warningList = html.match(/When to seek urgent help[\s\S]*?<ul[^>]*>([\s\S]*?)<\/ul>/)?.[1] ?? "";
+  expect(warningList.match(/<li\b/g)).toHaveLength(2);
+  expect(warningList.match(/class="cr-narrative-emphasis"/g)).toHaveLength(2);
+});
+
+test("print removes section-edge dividers while preserving content card borders", async () => {
+  const { chromium } = await import("playwright-core");
+  const browser = await chromium.launch({ executablePath: process.env.REPORT_CHROMIUM_PATH || "/usr/bin/chromium", headless: true,
+    args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(await renderGeneratedReportHtml(report, { name: "Example Clinic", primaryColor: "#138f94" }));
+    await page.emulateMedia({ media: "print" });
+    const borders = await page.evaluate(() => ({
+      sections: Array.from(document.querySelectorAll(".cr-sheet:not(.cr-cover)")).map(section => getComputedStyle(section).borderTopWidth),
+      cards: Array.from(document.querySelectorAll(".cr-overview-hero, .cr-clinical-interpretation")).map(card => getComputedStyle(card).borderTopWidth),
+      bars: Array.from(document.querySelectorAll(".cr-sheet:not(.cr-cover)")).map(section => getComputedStyle(section, "::before").content),
+    }));
+    expect(borders.sections.length).toBeGreaterThan(1);
+    expect(borders.sections.every(width => width === "0px")).toBe(true);
+    expect(borders.cards.some(width => width !== "0px")).toBe(true);
+    expect(borders.bars.every(content => content === "none")).toBe(true);
+  } finally { await browser.close(); }
 });

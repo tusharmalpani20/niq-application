@@ -4,9 +4,9 @@
 .cr-sheet:not(.cr-cover) + .cr-sheet:not(.cr-cover) { border-top: 1px solid #e7eff0; }
 .cr-sheet:last-child { border-bottom: 1px solid #d7e5e8; }
 .cr-sheet:not(:nth-child(2)) .cr-sheet-header { display: none; }
-.cr-sheet::before { position: absolute; top: 0; left: 0; width: 100%; height: 6px; background: var(--brand-primary, #34b5b9); content: ""; }
+.cr-sheet:not(.cr-cover)::before { content: none; }
 .cr-sheet-header, .cr-sheet-footer, .cr-panel-title, .cr-cover-top, .cr-status-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.cr-sheet-header { min-height: 0; justify-content: flex-end; padding-bottom: .6rem; }
+.cr-sheet-header { min-height: 0; justify-content: flex-end; padding-bottom: .6rem; margin-bottom: 1rem; border-bottom: 1px solid #dce5e8; }
 .cr-content-title { display: flex; align-items: center; gap: .55rem; margin: 0 0 1.15rem; color: #10354a; }
 .cr-content-title svg { flex: none; color: var(--brand-primary, #239ca3); }
 .cr-content-title h2 { margin: 0; font-size: 1.15rem; font-weight: 750; line-height: 1.25; }
@@ -373,7 +373,7 @@
 }
 
 /* The issued PDF prints the same report markup as the browser preview. */
-@page { size: A4; margin: 15mm 0; }
+@page { size: A4; margin: 20mm 0 15mm; }
 @page:first { margin: 0; }
 
 @media print {
@@ -399,6 +399,8 @@
     break-after: auto;
     page-break-after: auto;
   }
+  /* Screen section edges must not create another line below the print header. */
+  body.cr-print-document .cr-sheet:not(.cr-cover) + .cr-sheet:not(.cr-cover) { border-top: 0; }
   body.cr-print-document .cr-sheet-header { display: none; min-height: 0; padding: 0 0 3mm; border: 0; }
   body.cr-print-document .cr-sheet-content { padding-top: 0; }
   body.cr-print-document .cr-report-brand { width: 35mm; min-height: 8mm; }

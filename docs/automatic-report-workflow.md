@@ -103,3 +103,23 @@ The rule fallback groups source headings, moves monitoring and urgent warnings t
 their assigned sections, and preserves the source thresholds and urgency. Ambiguous
 source quantities are never completed with an invented unit. Source conflicts may
 still prevent automatic finalization and leave a report eligible for regeneration.
+
+## Section highlighting and print header
+
+After independent clinical review, each unflagged section enters its own bounded
+highlighting call. The editor assesses every sentence point and returns exact spans
+without rewriting approved wording. There is no section-wide highlight quota.
+Warnings preserve complete triggers, alternatives, thresholds, units, recipients
+and urgency. Changed wording invalidates that section's cached selections. Possible
+effect cards use the same editor after their coverage audit. All calls are recorded
+as highlighter usage, using the worker model and reasoning configuration.
+
+Invalid selections receive one repair, then safe deterministic emphasis. Formatting
+failures cannot require manual review or discard approved text. Outstanding calls
+settle before the generation worker releases its lease. Full-sentence emphasis keeps
+its sentence boundary in the HTML renderer, preserving separate bullets.
+
+Non-cover PDF pages reserve 20 mm above content and 15 mm below it. A single subtle
+inset divider sits beneath the repeating logos and report label, with 4 mm of clear
+space before continuation content. Card borders remain intact. The cover omits the
+repeating header. HTML retains continuous sections without thick teal bars.

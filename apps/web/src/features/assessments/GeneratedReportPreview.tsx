@@ -95,11 +95,15 @@ function adviceSentences(text: string) {
   const protectedText = text.replace(/\*\*[^*]+\*\*/g, match => {
     const token = `NARRATIVEHIGHLIGHT${highlights.length}TOKEN`;
     highlights.push(match);
-    return token;
+    // Retain sentence boundaries when the terminal punctuation is inside bold.
+    return /[.!?]\*\*$/u.test(match) ? `${token}.` : token;
   });
   return Array.from(adviceSegmenter.segment(protectedText), item => item.segment.trim())
     .filter(Boolean)
-    .map(sentence => sentence.replace(/NARRATIVEHIGHLIGHT(\d+)TOKEN/g, (_, index: string) => highlights[Number(index)] ?? ""));
+    .map(sentence => sentence.replace(/NARRATIVEHIGHLIGHT(\d+)TOKEN(\.)?/g, (_, index: string, dot: string | undefined) => {
+      const marked = highlights[Number(index)] ?? "";
+      return marked + (/[.!?]\*\*$/u.test(marked) ? "" : dot ?? "");
+    }));
 }
 
 function summarySentences(text: string | undefined, count: number) {
