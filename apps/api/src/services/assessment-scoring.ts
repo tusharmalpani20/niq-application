@@ -5,6 +5,7 @@ const id = z.string().min(1).max(200);
 const option = z.object({ id, label: z.string(), help: z.string() }).strict();
 export const assessmentScoringQuestionnaireSchema = z.object({
   formatVersion: z.literal(2), profile: z.literal("NIQ_FINAL_ASSESSMENT"),
+  preConditioningStartPolicy: z.enum(["date_window", "relative_guidance"]).optional(),
   drugClassConfig: z.object({
     classes: z.array(z.object({ id, label: z.string().min(1) }).strict()).max(200),
     suggestions: z.array(z.object({ cancerTypeId: id.nullable(), treatmentTypeId: id, classId: id }).strict()).max(2000),

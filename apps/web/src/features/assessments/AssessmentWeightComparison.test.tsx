@@ -13,7 +13,7 @@ test("weight comparison explains gain, loss and unchanged measurements", () => {
   expect(render(66, 66)).toContain("0 kg (0%)");
 });
 test("missing or invalid measurements are not presented as zero change", () => {
-  expect(render(null, 70)).toContain("Enter weight from 1–2 months ago to see the change.");
+  expect(render(null, 70)).toContain("Enter weight from 1 month ago to see the change.");
   expect(render(66, null)).toContain("Enter current weight in Personal details to see the change.");
   expect(render(0, 70)).not.toContain("kg gain");
 });

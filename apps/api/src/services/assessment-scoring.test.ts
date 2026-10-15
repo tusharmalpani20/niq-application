@@ -32,6 +32,12 @@ describe("assessment scoring transport", () => {
     } });
     expect(started).toEqual(binding);
   });
+  test("accepts and retains the public before-treatment guidance policy", async () => {
+    const body = { ...binding, questionnaire: { ...binding.questionnaire, preConditioningStartPolicy: "relative_guidance" } };
+    const started = await requestAssessmentScoringStart({ ...transport, assessmentReference: binding.assessmentReference, fetcher: async () => Response.json(body) });
+    expect(started.questionnaire.preConditioningStartPolicy).toBe("relative_guidance");
+    await expect(requestAssessmentScoringStart({ ...transport, assessmentReference: binding.assessmentReference, fetcher: async () => Response.json({ ...body, questionnaire: { ...body.questionnaire, preConditioningStartPolicy: "unexpected" } }) })).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+  });
   test("rejects wrong profiles, leaked internal metadata and rebound starts", async () => {
     for (const body of [{ ...binding, questionnaire: { ...binding.questionnaire, formatVersion: 1 } }, { ...binding, questionnaire: { ...binding.questionnaire, scoring: {} } }, { ...binding, bindingId: "another" }])
       await expect(requestAssessmentScoringStart({ ...transport, assessmentReference: binding.assessmentReference, expectedBinding: binding, fetcher: async () => Response.json(body) })).rejects.toMatchObject({ kind: "uncertain" });

@@ -69,7 +69,7 @@ test("None is removable and weight uses a bounded numeric input", () => {
 test("previous weight follows the current weight unit without a second unit control", () => {
   const previous: FormField = { ...field, id: "previous_weight_kg", label: "Weight 1–2 months ago", kind: "number" };
   const html = renderToStaticMarkup(<AssessmentFields section={{ id: "dietary_details", title: "Dietary details", fields: [previous] }} answers={{ previous_weight_kg: 50 }} onChange={() => {}} errors={{}} readOnly={false} measurementUnits={{ height: "cm", weight: "lb" }} />);
-  expect(html).toContain("Weight 1–2 months ago (lb)");
+  expect(html).toContain("Weight 1 Month Ago (lb)");
   expect(html).toContain('value="110.23"');
   expect(html).not.toContain('aria-label="Weight 1–2 months ago unit"');
 });
