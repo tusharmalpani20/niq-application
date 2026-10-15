@@ -55,14 +55,20 @@ test("a missing possible-effect summary requires review and is not displayed", (
 
 test("report-content request binds the clinician-reviewed score and result reference", async () => {
   let sent: any;
+  let calls = 0;
   const result = await requestScoringReportContent({ baseUrl: "http://scoring.test", credential: "private", requestId: "r1", timeoutMs: 1000,
     assessmentReference: packet.assessmentReference, resultReference: packet.resultReference, idempotencyKey: "request-1234567890",
     facts: { reviewedScore: 28, reviewedRiskCategoryId: "high", treatmentTypeIds: [], drugClassIds: [], confirmedToxicityIds: [], observations: [] },
-    fetcher: async (_url: RequestInfo | URL, init?: RequestInit) => { sent = JSON.parse(String(init?.body)); return Response.json(packet); },
+    fetcher: async (_url: RequestInfo | URL, init?: RequestInit) => {
+      calls++;
+      if (init?.method === "POST") { sent = JSON.parse(String(init.body)); return Response.json({ runId: "run-1", status: "QUEUED" }, { status: 202 }); }
+      return Response.json({ runId: "run-1", status: "READY", response: packet });
+    },
   } as any);
   expect(sent.resultReference).toBe("reviewed-result-2");
   expect(sent.facts.reviewedScore).toBe(28);
   expect(result.checksum).toBe("a".repeat(64));
+  expect(calls).toBe(2);
   await expect(requestScoringReportContent({ baseUrl: "http://scoring.test", credential: "private", requestId: "r2", timeoutMs: 1000,
     assessmentReference: packet.assessmentReference, resultReference: "wrong-result", idempotencyKey: "request-1234567891",
     facts: sent.facts, fetcher: async () => Response.json(packet),
@@ -198,7 +204,7 @@ test("Scoring guidance boundary strips unknown proprietary fields and rejects ma
 
 test("weight history uses the questionnaire's 1–2 month answer for a first assessment, and prior assessments thereafter", () => {
   expect(finishWeightHistory([], { date: "2026-10-11", kg: 68 }, 85)).toEqual([
-    { date: null, kg: 85, label: "Reported 1–2 months ago (exact date unknown)" }, { date: "2026-10-11", kg: 68 },
+    { date: null, kg: 85, label: "Weight 1 Month Ago" }, { date: "2026-10-11", kg: 68 },
   ]);
   expect(finishWeightHistory([{ date: "2026-03-01", kg: 81 }], { date: "2026-10-11", kg: 68 }, 85)).toEqual([
     { date: "2026-03-01", kg: 81 }, { date: "2026-10-11", kg: 68 },
@@ -233,7 +239,7 @@ test("possible drug-class effects are retained while an unresolved product stage
   expect(() => assertReportReadyForApproval(result.issues, 1, 1)).not.toThrow();
 });
 
-test("matched treatment, status, co-morbidity, product, and exception guidance enter display sections", () => {
+test("matched treatment, status, co-morbidity, and selected product guidance enter display sections", () => {
   const selected = structuredClone(packet) as any;
   selected.guidance.possibleToxicities = [];
   selected.guidance.carePlan.products = { status: "selected", plans: [
@@ -244,9 +250,8 @@ test("matched treatment, status, co-morbidity, product, and exception guidance e
   selected.guidance.carePlan.coMorbidities = [{ id: "co-morbidity", conditionId: "liver", label: "Liver support", guidance: "Ask the clinical team." }];
   const result = normalizeGuidance(scoringReportContentSchema.parse(selected), manifest);
   expect(result.issues).toEqual([]);
-  expect(result.sections.map(row => row.id)).toEqual(["radiation-rule", "modifier", "co-morbidity", "plan", "exception"]);
+  expect(result.sections.map(row => row.id)).toEqual(["radiation-rule", "modifier", "co-morbidity", "plan"]);
   expect(result.sections.find(row => row.id === "radiation-rule")?.title).toBe("Radiotherapy guidance");
-  expect(result.sections.find(row => row.id === "exception")?.text).toBe("Use once daily.");
 });
 
 test("structured product quantities appear once with preparation and duration", () => {
@@ -261,7 +266,7 @@ test("structured product quantities appear once with preparation and duration", 
   expect(parsed.guidance.carePlan.products.plans[0]?.items).toHaveLength(2);
   expect(normalizeGuidance(parsed, manifest).sections[0]?.text).toBe("1 Invigour + Liss WH: 2 leveled scoops in 150ml water\n30 days after surgery");
   selected.guidance.carePlan.products.plans[0].items[1].quantityPerDay = undefined;
-  expect(normalizeGuidance(scoringReportContentSchema.parse(selected), manifest).sections).toEqual([]);
+  expect(normalizeGuidance(scoringReportContentSchema.parse(selected), manifest).sections).toMatchObject([{ id: "surgical", kind: "product", text: "1 Invigour + 2 leveled scoops in 150ml water\n30 days after surgery" }]);
 });
 
 test("clinical background uses submitted answer labels and omits unanswered fields", () => {
@@ -273,13 +278,13 @@ test("clinical background uses submitted answer labels and omits unanswered fiel
   ] }] } as any;
   expect(reportClinicalFacts({ cancer_type: "cancer_breast", stage: "stage_local", current_cancer_treatment: ["chemotherapy"], diet_preference: "vegetarian" }, form)).toEqual([
     { label: "Diagnosis", value: "Breast cancer" }, { label: "Disease stage", value: "Localised" },
-    { label: "Current treatment", value: "Chemotherapy" }, { label: "Diet", value: "Vegetarian" },
+    { label: "Current treatment", value: "Chemotherapy" }, { label: "Diet Preference", value: "Vegetarian" },
   ]);
   expect(reportClinicalFacts({ cancer_type: "cancer_breast", treatment_status: "treatment_status_newly_diagnosed",
     current_cancer_treatment: ["chemotherapy"], planned_treatment_start_date: "2026-10-20" }, form, "2026-10-13")).toContainEqual(
     { label: "Planned treatment", value: "Chemotherapy" });
   expect(reportClinicalFacts({ current_cancer_treatment: ["chemotherapy"], planned_treatment_start_date: "2026-10-20" }, form, "2026-10-13")).toContainEqual(
-    { label: "Planned treatment start", value: "20 Oct 2026" });
+    { label: "Treatment Start Date", value: "20 Oct 2026" });
 });
 
 test("selected product schedule retains rule instructions as structured report data", () => {
@@ -344,11 +349,11 @@ test("report copy removes emojis, semicolons and em dashes", () => {
   expect(cleanReportText("Use Nourish; monitor intake — daily 🩺")).toBe("Use Nourish. monitor intake - daily");
   const selected = structuredClone(packet) as any;
   selected.guidance.possibleToxicities = [];
-  selected.guidance.carePlan.products = { status: "selected", plans: [], notes: [
+  selected.guidance.carePlan.products = { status: "selected", plans: [{ id: "plan", stage: "during_treatment", nutritionalStatus: "moderate", products: "Product", dose: "1", duration: "1 day" }], notes: [
     { id: "note", kind: "vegetarian", label: "Diet 🥗", guidance: "Use Invigour; avoid Liss WH — today." },
   ] };
   expect(normalizeGuidance(scoringReportContentSchema.parse(selected), manifest).sections).toMatchObject([
-    { title: "Diet", text: "Use Invigour. avoid Liss WH - today." },
+    { title: "Product plan", text: "1\n1 day" },
   ]);
   const edited = prepareNarrativeEdit({ narrative, issues: [], issueResolution: null } as any,
     { narrative: { overview: "Review; keep going — today 🩺" } }, "Clinician", new Date());
