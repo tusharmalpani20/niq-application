@@ -80,6 +80,18 @@ test("fully emphasized warning sentences remain separate report bullets", async 
   expect(warningList.match(/class="cr-narrative-emphasis"/g)).toHaveLength(2);
 });
 
+test("reviewed advice keeps explicit newline points separate without terminal punctuation", async () => {
+  const current = { ...report, narrative: { ...report.narrative,
+    redFlagsAdvice: "**Contact your doctor for fever.**\nCall for breathlessness\nSeek urgent help for chest pain",
+  } } as GeneratedReport;
+  const html = await renderGeneratedReportHtml(current, { name: "Example Clinic", primaryColor: "#138f94" });
+  const warningList = html.match(/When to seek urgent help[\s\S]*?<ul[^>]*>([\s\S]*?)<\/ul>/)?.[1] ?? "";
+  expect(warningList.match(/<li\b/g)).toHaveLength(3);
+  expect(warningList).toContain("Contact your doctor for fever.");
+  expect(warningList).toContain("Call for breathlessness");
+  expect(warningList).toContain("Seek urgent help for chest pain");
+});
+
 test("print removes section-edge dividers while preserving content card borders", async () => {
   const { chromium } = await import("playwright-core");
   const browser = await chromium.launch({ executablePath: process.env.REPORT_CHROMIUM_PATH || "/usr/bin/chromium", headless: true,

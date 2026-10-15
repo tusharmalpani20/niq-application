@@ -98,7 +98,10 @@ function adviceSentences(text: string) {
     // Retain sentence boundaries when the terminal punctuation is inside bold.
     return /[.!?]\*\*$/u.test(match) ? `${token}.` : token;
   });
-  return Array.from(adviceSegmenter.segment(protectedText), item => item.segment.trim())
+  // Explicit line breaks in reviewed advice separate points even when a line
+  // has no terminal punctuation. Segment each line independently so a missing
+  // full stop cannot merge adjacent recommendations into one bullet.
+  return protectedText.split(/\r?\n/).flatMap(line => Array.from(adviceSegmenter.segment(line), item => item.segment.trim()))
     .filter(Boolean)
     .map(sentence => sentence.replace(/NARRATIVEHIGHLIGHT(\d+)TOKEN(\.)?/g, (_, index: string, dot: string | undefined) => {
       const marked = highlights[Number(index)] ?? "";
