@@ -3,7 +3,6 @@
 .cr-sheet-compact { min-height: 0; }
 .cr-sheet:not(.cr-cover) + .cr-sheet:not(.cr-cover) { border-top: 1px solid #e7eff0; }
 .cr-sheet:last-child { border-bottom: 1px solid #d7e5e8; }
-.cr-sheet:not(:nth-child(2)) .cr-sheet-header { display: none; }
 .cr-sheet:not(.cr-cover)::before { content: none; }
 .cr-sheet-header, .cr-sheet-footer, .cr-panel-title, .cr-cover-top, .cr-status-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .cr-sheet-header { min-height: 0; justify-content: flex-end; padding-bottom: .6rem; margin-bottom: 1rem; border-bottom: 1px solid #dce5e8; }
@@ -327,10 +326,28 @@
 .cr-preview-loading { display: grid; min-height: 20rem; place-items: center; margin: 0; color: #58717c; }
 .cr-preview-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .8rem; width: 100%; color: #395766; font-size: .85rem; }
 
+/* The HTML preview uses separate section pages. Keep these rules screen-only
+   so the issued PDF layout and its print header stay independent. */
+@media screen {
+  .clinical-report { gap: 1.5rem; }
+  .cr-sheet, .cr-sheet.cr-sheet-compact { min-height: 1030px; border: 1px solid #d7e5e8; border-radius: 1rem; box-shadow: 0 8px 28px #1734470d; }
+  .cr-sheet-header { min-height: 56px; justify-content: space-between; padding-bottom: 1rem; margin-bottom: 1rem; }
+  .cr-sheet-heading svg { flex: none; }
+  .cr-sheet-content { flex: 1; }
+  .cr-content-title { display: none; }
+  .cr-sheet-footer { display: flex; margin-top: auto; padding-top: 1rem; border-top: 1px solid #e5eff0; color: #607989; font-size: .7rem; }
+  /* Match the PDF: the advice title and each condition span the card width. */
+  .cr-sheet-care .cr-advice-block { display: block; }
+  .cr-sheet-care .cr-advice-heading { align-items: center; }
+  .cr-sheet-care .cr-advice-points { display: block; margin-top: .8rem; }
+  .cr-sheet-care .cr-advice-points li { margin-bottom: .35rem; padding-block: .35rem; line-height: 1.35; }
+  .cr-sheet-summary .cr-sheet-content { padding-top: .5rem; }
+}
+
 @media screen and (max-width: 650px) {
   .clinical-report { gap: .8rem; }
   .cr-sheet { min-height: 0; padding: 1.2rem 1rem; }
-  .cr-sheet-compact { min-height: 0; }
+  .cr-sheet.cr-sheet-compact { min-height: 0; }
   .cr-cover { min-height: 720px; }
   .cr-cover-top { top: 1.5rem; left: 1.4rem; }
   .cr-cover-art { top: -5%; right: -18%; width: 80%; }
@@ -492,3 +509,11 @@
   body.cr-print-document .cr-cover .cr-sheet-footer { display: none; }
   body.cr-print-document .cr-advice-columns .cr-advice-points { grid-template-columns: 1fr; }
 }
+
+.cr-change-neutral { color: #526b78; background: #edf2f4; }
+.cr-weight-chart-wrap { overflow-x: auto; }
+.cr-weight-chart-wrap .cr-weight-chart { min-width: 540px; }
+.cr-chart-axis { fill: #607989; font-family: Outfit Variable, Outfit, sans-serif; font-size: 9px; }
+
+.cr-supplement-benefits dd ul { margin: 0; padding-left: 1.1rem; list-style: disc; }
+.cr-supplement-benefits dd li + li { margin-top: .25rem; }

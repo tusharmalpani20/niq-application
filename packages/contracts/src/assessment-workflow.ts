@@ -10,7 +10,9 @@ export function formatAssessmentReference(serialNumber: number): string {
 const entity = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 export const initializeAssessmentSchema = z.object({ patientId: entity, requestKey: z.string().min(16).max(128) }).strict();
 export const assessmentAnswerSchema = z.union([z.string().max(ASSESSMENT_ANSWER_TEXT_LIMIT), z.number().finite(), z.array(z.string().max(100)).max(100), z.null()]);
-export const saveAssessmentSchema = z.object({ revision: z.number().int().nonnegative(), answers: z.record(z.string().max(100), assessmentAnswerSchema) }).strict();
+export const measurementUnitsSchema = z.object({ height: z.enum(["cm", "ft-in"]), weight: z.enum(["kg", "lb"]) }).strict();
+export type MeasurementUnits = z.infer<typeof measurementUnitsSchema>;
+export const saveAssessmentSchema = z.object({ revision: z.number().int().nonnegative(), answers: z.record(z.string().max(100), assessmentAnswerSchema), measurementUnits: measurementUnitsSchema.optional() }).strict();
 export const assessmentRevisionSchema = z.object({ revision: z.number().int().nonnegative() }).strict();
 /** Exact wording acknowledged for statementVersion 1; retain when adding a new version. */
 export const ASSESSMENT_ATTESTATION_STATEMENT_V1 = "I have reviewed the information in every section and confirm it is accurate to the best of my knowledge.";
@@ -55,7 +57,7 @@ export function getReportSubmissionIssues(report: Pick<AssessmentReport, "label"
 export type AssessmentInitialization = { id: string; status: string; assessmentId: string | null; assessmentReference?: string | null; failureCode: string | null };
 export type AssessmentWorkflow = {
   id: string; reference: string; serialNumber: number; organizationId: string; patientId: string; facilityId: string | null; status: string; revision: number; currentOwnerMembershipId?: string | null; canEditDraft?: boolean; isPriority: boolean;
-  patient: AssessmentPatient; answers: FormAnswers; manifest: AssessmentFormManifest;
+  patient: AssessmentPatient; answers: FormAnswers; manifest: AssessmentFormManifest; measurementUnits?: MeasurementUnits;
   progress: ReturnType<typeof getAssessmentCompletion>; reports: AssessmentReport[]; reportLimits?: AssessmentReportLimits;
   binding: { version: string; checksum: string }; result: unknown | null;
   submission: { id: string; status: string; failureCode: string | null; nextRetryAt?: string | null; issues?: Array<{ fieldId: string; message: string }> } | null;

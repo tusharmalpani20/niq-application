@@ -85,20 +85,21 @@ export type GeneratedReport = {
   generatedAt: string;
   approvedAt: string | null;
   patient: { displayName: string; reference: string; dateOfBirth: string; gender: string };
-  assessment: { id: string; reference: string; completedAt: string; submissionId: string; scoreRevision: number; ruleVersionId: string; checksum: string };
+  assessment: { id: string; reference: string; facilityName?: string | null; completedAt: string; recordedAt?: string; submissionId: string; scoreRevision: number; ruleVersionId: string; checksum: string };
   /** Applicable, non-calculated questions in the submitted assessment. */
   assessmentAnswerCoverage?: { answered: number; total: number };
   classification: { id: string; label: string; score: number; color?: AssessmentRiskColor };
   /** Exact nutritional status from the frozen care-plan risk mapping. */
   nutritionalStatus?: string;
   metrics: Array<{ id: string; label: string; value: string; unit?: string; measuredAt?: string; source: "assessment" | "face_scan"; referenceRange?: string; outsideReferenceRange?: boolean }>;
-  weightHistory: Array<{ date: string | null; kg: number; label?: string }>;
+  weightDisplayUnit?: "kg" | "lb";
+  weightHistory: Array<{ date: string | null; kg: number; label?: string; assessmentId?: string }>;
   /** Display labels from the submitted assessment; absent on reports saved before this field existed. */
   clinicalFacts?: Array<{ label: string; value: string }>;
   /** Selected rule instructions, retained as data rather than parsed from report prose. */
   productPlans?: GeneratedReportProductPlan[];
   /** Verified product catalog descriptions, distinct from the case-specific schedule. */
-  productCatalog?: Array<{ id: string; name: string; description: string; aliases?: string[] }>;
+  productCatalog?: Array<{ id: string; name: string; description: string; benefits?: string[]; aliases?: string[] }>;
   decision: { productStageChoice: "surgical" | "treatment_stage" | null; plannedTreatmentStartDate: string | null; confirmedToxicityIds?: string[] };
   narrative: GeneratedNarrative;
   narrativeEvidence?: Partial<Record<keyof GeneratedNarrative, string[]>>;

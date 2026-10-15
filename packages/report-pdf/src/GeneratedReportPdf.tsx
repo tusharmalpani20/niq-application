@@ -1,7 +1,7 @@
 import { Circle, Document, Font, Image, Page, Path, Rect, Svg, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { ReactNode } from "react";
 import { adultBmiCategory, adultBmiReference, calculateAssessmentBmi, reportFaceScanAdditionalMetricGroups, riskColorHex, type GeneratedReport } from "@niq/application-contracts";
-import { cleanWeights, metricText, reportAge, reportDate, reportGuidance } from "./generated-report-format";
+import { cleanWeights, metricText, productBenefits, reportAge, reportDate, reportGuidance } from "./generated-report-format";
 import { weightChartPoints } from "./generated-report-chart";
 import { accessibleBrandInk } from "./accessible-brand-ink";
 
@@ -327,7 +327,7 @@ function productParts(report: GeneratedReport) {
     detail: item.mealTiming || (item.timesPerDay == null ? "" : item.timesPerDay === 1 ? "Once daily" : `${item.timesPerDay} times daily`),
     preparation: item.preparation || "—",
     duration: readableDuration(selected.duration || (selected.durationAmount ? `${selected.durationAmount} days` : "—")),
-    benefits: report.productCatalog?.find(product => [product.name, ...(product.aliases ?? [])].some(alias => alias.trim().toLowerCase() === item.productName.trim().toLowerCase()))?.description || item.rationale || "—",
+    benefits: productBenefits(report, item.productName, item.rationale),
   })), duration: readableDuration(selected.duration || (selected.durationAmount ? `${selected.durationAmount} days` : "—")) };
   const section = reportGuidance(report, "product").find(item => item.title.toLowerCase() === "product plan");
   if (!section) return null;
@@ -336,10 +336,10 @@ function productParts(report: GeneratedReport) {
   if (!dose) return null;
   const items = dose.split(/\s+\+\s+/).map(part => {
     const scoop = /^([^:]+):\s*(\d+(?:\.\d+)?)\s+(.+)$/.exec(part);
-    if (scoop) return { name: scoop[1]!.trim(), quantity: scoop[2]!, detail: scoop[3]!.trim(), preparation: "—", duration: duration || "—", benefits: "—" };
+    if (scoop) return { name: scoop[1]!.trim(), quantity: scoop[2]!, detail: scoop[3]!.trim(), preparation: "—", duration: duration || "—", benefits: [] as string[] };
     const regular = /^(\d+(?:\.\d+)?)\s+(.+)$/.exec(part);
-    if (regular) return { name: regular[2]!.trim(), quantity: regular[1]!, detail: "per day", preparation: "—", duration: duration || "—", benefits: "—" };
-    return { name: part.trim(), quantity: "", detail: "", preparation: "—", duration: duration || "—", benefits: "—" };
+    if (regular) return { name: regular[2]!.trim(), quantity: regular[1]!, detail: "per day", preparation: "—", duration: duration || "—", benefits: [] as string[] };
+    return { name: part.trim(), quantity: "", detail: "", preparation: "—", duration: duration || "—", benefits: [] as string[] };
   });
   return { items, duration };
 }
@@ -392,7 +392,7 @@ function ProductPlan({ report, theme, compact = false }: { report: GeneratedRepo
       <Text style={{ fontSize: 9.5, fontWeight: 700, marginBottom: 5 }}>{item.name}</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 5 }}>
         {[["Dose", item.quantity || "—"], ["Timing", item.detail || "—"], ["Preparation", item.preparation], ["Duration", item.duration]].map(([label, value]) => <View key={label} style={{ width: "48%" }}><Text style={{ fontSize: 6.5, fontWeight: 700, color: brandInk }}>{label}</Text><Text style={{ fontSize: 7.5 }}>{value}</Text></View>)}
-        <View style={{ width: "100%", paddingTop: 4, borderTopWidth: .5, borderTopColor: theme.line }}><Text style={{ fontSize: 6.5, fontWeight: 700, color: brandInk }}>Key benefits</Text><Text style={{ fontSize: 7.5, lineHeight: 1.3 }}>{item.benefits}</Text></View>
+        <View style={{ width: "100%", paddingTop: 4, borderTopWidth: .5, borderTopColor: theme.line }}><Text style={{ fontSize: 6.5, fontWeight: 700, color: brandInk }}>Key benefits</Text>{item.benefits.length ? item.benefits.map((benefit, index) => <Text key={index} style={{ fontSize: 7.5, lineHeight: 1.3 }}>• {benefit}</Text>) : <Text style={{ fontSize: 7.5 }}>—</Text>}</View>
       </View>
     </View>)}
   </View>;

@@ -7,6 +7,7 @@ import { GeneratedReportPdfPreview } from "./GeneratedReportPdfPreview";
 import { GeneratedReportPreview } from "./GeneratedReportPreview";
 import { generatedReportPdfUrl, getGeneratedReport, refreshGeneratedReportPdf, regenerateGeneratedReport, type GeneratedReportResponse } from "./generated-report-api";
 import { reportDate } from "./generated-report-format";
+import { readMeasurementUnits } from "./measurement-units";
 import "./generated-report.css";
 
 const POLL_INTERVAL_MS = 5_000;
@@ -111,7 +112,7 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
         <button type="button" className={`cr-preview-tab ${preview === "html" ? "cr-preview-tab-active" : ""}`} aria-pressed={preview === "html"} onClick={() => setPreview("html")}>HTML layout</button>
         <button type="button" className={`cr-preview-tab ${preview === "pdf" ? "cr-preview-tab-active" : ""}`} aria-pressed={preview === "pdf"} onClick={() => setPreview("pdf")}>Saved PDF</button>
       </div>
-      {preview === "html" ? <div className="cr-html-preview"><p className="cr-preview-note">Layout preview from the saved report content. The downloaded PDF is the issued report.</p><GeneratedReportPreview report={report}/></div> : <GeneratedReportPdfPreview url={pdfUrl}/>}
+      {preview === "html" ? <div className="cr-html-preview"><p className="cr-preview-note">Layout preview from the saved report content. The downloaded PDF is the issued report.</p><GeneratedReportPreview report={report.weightDisplayUnit ? report : { ...report, weightDisplayUnit: readMeasurementUnits(user.organizationId, user.userId, report.assessment.id).weight }}/></div> : <GeneratedReportPdfPreview url={pdfUrl}/>}
     </>}
   </div>;
 }

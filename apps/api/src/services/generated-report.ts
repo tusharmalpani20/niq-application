@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq, isNull, lt, ne, or, lte, like, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
-import { assessFaceScanRange, formatAssessmentReference, getAssessmentAnswerCoverage, hasPermission, reportBrandingPayload, reportFaceScanAdditionalMetricGroups, type AssessmentFormManifest, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
+import { assessFaceScanRange, assessmentOptionDisplayLabel, formatAssessmentReference, getAssessmentAnswerCoverage, hasPermission, reportBrandingPayload, reportFaceScanAdditionalMetricGroups, type AssessmentFormManifest, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
 import type { GeneratedReport, GeneratedReportSection, GeneratedNarrative } from "../../../../packages/contracts/src/generated-report";
 import { assessmentScoreResultSchema, type AssessmentPatient } from "../../../../packages/contracts/src/assessment-workflow";
-import { assessmentFaceScans, assessmentSubmissions, assessments, generatedReportArtifacts, generatedReports, organizationBrandAssets, organizations } from "../db/schema";
+import { assessmentFaceScans, assessmentSubmissions, assessments, facilities, generatedReportArtifacts, generatedReports, organizationBrandAssets, organizations } from "../db/schema";
 import { decryptPatientBytes, encryptPatientBytes, patientDataKey } from "../security/patient-data";
 import { reviewState } from "./clinical-review-state";
 import { ServiceError, type Principal, type RequestContext } from "./application";
@@ -27,8 +27,10 @@ const sha = (value: unknown) => createHash("sha256").update(JSON.stringify(value
 const value = (answer: FormAnswers[string] | undefined): string | undefined => typeof answer === "string" && answer ? answer : undefined;
 const list = (answer: FormAnswers[string] | undefined): string[] => Array.isArray(answer) ? answer.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
 const positive = (answer: FormAnswers[string] | undefined): number | null => typeof answer === "number" && Number.isFinite(answer) && answer > 0 ? answer : null;
-const fieldLabel = (manifest: AssessmentFormManifest, fieldId: string, optionId: string): string | undefined =>
-  manifest.sections.flatMap(section => section.fields).find(field => field.id === fieldId)?.options?.find(option => option.id === optionId)?.label;
+const fieldLabel = (manifest: AssessmentFormManifest, fieldId: string, optionId: string): string | undefined => {
+  const label = manifest.sections.flatMap(section => section.fields).find(field => field.id === fieldId)?.options?.find(option => option.id === optionId)?.label;
+  return label === undefined ? undefined : assessmentOptionDisplayLabel(optionId, label);
+};
 const dateOnly = (date: Date | string): string => new Date(date).toISOString().slice(0, 10);
 const nonempty = (text: unknown): text is string => typeof text === "string" && text.trim().length > 0;
 
@@ -81,7 +83,7 @@ export function finishWeightHistory(priorMostRecentFirst: GeneratedReport["weigh
   if (current) points.unshift(current);
   if (firstAssessment && points.length < 2 && previousKg && previousKg < 600)
     points.push({ date: null, kg: previousKg, label: "Weight 1 Month Ago" });
-  const unique = new Map(points.reverse().map(point => [point.date ?? "undated", point]));
+  const unique = new Map(points.reverse().map(point => [point.assessmentId ?? point.date ?? "undated", point]));
   return [...unique.values()].slice(-6);
 }
 
@@ -210,8 +212,10 @@ export function reportClinicalFacts(answers: FormAnswers, manifest: AssessmentFo
   add("Diagnosis", selected("cancer_type") === "Other" ? value(answers.cancer_type_other) : selected("cancer_type"));
   add("Disease stage", selected("stage"));
   add("Treatment status", selected("treatment_status"));
-  const plannedStart = value(answers.planned_treatment_start_date);
-  const treatmentIsPlanned = Boolean(plannedStart && assessmentDate && plannedStart > assessmentDate);
+  const plannedStart = manifest.preConditioningStartPolicy === "relative_guidance" ? undefined : value(answers.planned_treatment_start_date);
+  const treatmentIsPlanned = manifest.preConditioningStartPolicy === "relative_guidance"
+    ? answers.treatment_status === "treatment_status_newly_diagnosed"
+    : Boolean(plannedStart && assessmentDate && plannedStart > assessmentDate);
   add(treatmentIsPlanned ? "Planned treatment" : "Current treatment", selectedList("current_cancer_treatment"));
   if (plannedStart) {
     const date = new Date(`${plannedStart}T00:00:00Z`);
@@ -245,9 +249,10 @@ export function reportProductPlans(content: ScoringReportContent): NonNullable<G
 export function reportProductCatalog(content: ScoringReportContent): NonNullable<GeneratedReport["productCatalog"]> {
   if (content.guidance.carePlan.products.status !== "selected") return [];
   return (content.guidance.carePlan.products.catalog ?? []).map(product => ({
-    id: product.id, name: cleanReportText(product.name), description: cleanReportText(product.description),
+    id: product.id, name: cleanReportText(product.name), description: cleanReportText(product.description ?? ""),
     aliases: product.aliases.map(cleanReportText),
-  })).filter(product => product.name && product.description);
+    ...(product.benefits ? { benefits: product.benefits.map(cleanReportText).filter(nonempty) } : {}),
+  })).filter(product => product.name && (product.description || product.benefits?.length));
 }
 
 export function reportToxicityAnswers(answers: FormAnswers): NonNullable<ReportFacts["assessmentAnswers"]> {
@@ -342,12 +347,18 @@ export class GeneratedReportService {
     const [row] = await this.service.db.select().from(generatedReportArtifacts).where(and(eq(generatedReportArtifacts.organizationId,org),eq(generatedReportArtifacts.reportId,reportId)));
     return row;
   }
+  private async assessmentFacilityName(assessment:WorkflowRow):Promise<string|null> {
+    if (!assessment.facilityId) return null;
+    const [facility]=await this.service.db.select({name:facilities.name}).from(facilities).where(and(
+      eq(facilities.organizationId,assessment.organizationId),eq(facilities.id,assessment.facilityId)));
+    return facility?.name ?? null;
+  }
   private async dto(row: ReportRow, assessment: WorkflowRow): Promise<GeneratedReport> {
     if (!row.content) throw new ServiceError("CONFLICT","The report is still generating.");
     const data = this.service.unseal<ReportData>(row.content);
     const artifact = await this.artifact(row.organizationId,row.id);
     const stale = row.status === "STALE" || this.currentFingerprint(assessment,data.assessment.checksum,data.decision) !== row.sourceFingerprint;
-    return { ...data,id:row.id,revision:row.revision,status:stale?"STALE":row.status as GeneratedReport["status"],approvedAt:row.approvedAt?.toISOString() ?? null,
+    return { ...data,assessment:{...data.assessment,facilityName:await this.assessmentFacilityName(assessment)},id:row.id,revision:row.revision,status:stale?"STALE":row.status as GeneratedReport["status"],approvedAt:row.approvedAt?.toISOString() ?? null,
       artifact:artifact && artifact.revision === row.revision ? {sha256:artifact.sha256,size:artifact.size,uploadedAt:artifact.uploadedAt.toISOString(),brandingFingerprint:artifact.brandingFingerprint}:null };
   }
   async read(actor: Principal, org: string, id: string): Promise<{report: GeneratedReport | null; generation: {status:"QUEUED"|"GENERATING"|"FAILED"|"READY";failureCode:string|null}|null}> {
@@ -384,7 +395,7 @@ export class GeneratedReportService {
     // Keep clients polling while the successor is being reserved.
     const awaitingRecovery=row.failureCode===REPORT_REVIEW_REQUIRED && ["DRAFT","FAILED"].includes(row.status);
     const generation=awaitingRecovery ? {status:"QUEUED" as const,failureCode:null} : publicReportGeneration(row.status,row.failureCode,issues);
-    const report=row.content && generation.status==="READY" ? await this.dto(row,assessment):null;
+    const report=row.content && generation.status==="READY" ? await this.chartView(await this.dto(row,assessment),actor,assessment):null;
     return {report:report?.status==="APPROVED"?{...report,status:"READY"}:report,
       generation};
   }
@@ -435,23 +446,40 @@ export class GeneratedReportService {
       throw error;
     }
   }
-  private async weightHistory(actor:Principal, org:string, row:WorkflowRow, currentKg:number|null, previousKg:number|null):Promise<GeneratedReport["weightHistory"]> {
-    const prior=await this.service.db.select({id:assessments.id,completedAt:assessments.completedAt,currentSubmissionId:assessments.currentSubmissionId})
-      .from(assessments).where(and(eq(assessments.organizationId,org),eq(assessments.patientId,row.patientId),eq(assessments.status,"COMPLETED"),
-        lt(assessments.completedAt,row.completedAt!),ne(assessments.id,row.id))).orderBy(desc(assessments.completedAt)).limit(8);
+  private async weightHistory(actor:Principal, org:string, row:WorkflowRow, currentKg:number|null, previousKg:number|null, recordedAt:Date):Promise<GeneratedReport["weightHistory"]> {
     const points: GeneratedReport["weightHistory"]=[];
-    for (const candidate of prior) {
-      if (!candidate.currentSubmissionId || !candidate.completedAt) continue;
-      // Prior reports may belong to another facility; use the ordinary assessment visibility check.
-      try { await this.service.authorize(actor,org,candidate.id); } catch { continue; }
-      const [submission]=await this.service.db.select({snapshot:assessmentSubmissions.snapshot,status:assessmentSubmissions.status})
-        .from(assessmentSubmissions).where(and(eq(assessmentSubmissions.organizationId,org),eq(assessmentSubmissions.assessmentId,candidate.id),eq(assessmentSubmissions.id,candidate.currentSubmissionId)));
-      if (submission?.status!=="SUCCEEDED") continue;
-      const kg=positive(this.service.unseal<StoredWorkflow>(submission.snapshot).answers.current_weight_kg);
-      if (kg && kg < 600) points.push({date:dateOnly(candidate.completedAt),kg});
-      if (points.length>=5) break;
+    let hasPriorApproved=false;
+    // Clinical approval determines eligibility; the saved submission determines chronology.
+    for (let offset=0; points.length<5; offset+=20) {
+      const prior=await this.service.db.select({id:assessments.id,snapshot:assessmentSubmissions.snapshot,recordedAt:assessmentSubmissions.createdAt})
+        .from(assessments).innerJoin(assessmentSubmissions,and(eq(assessmentSubmissions.organizationId,assessments.organizationId),
+          eq(assessmentSubmissions.assessmentId,assessments.id),eq(assessmentSubmissions.id,assessments.currentSubmissionId)))
+        .where(and(eq(assessments.organizationId,org),eq(assessments.patientId,row.patientId),eq(assessments.status,"COMPLETED"),
+          eq(assessmentSubmissions.status,"SUCCEEDED"),lt(assessmentSubmissions.createdAt,recordedAt),ne(assessments.id,row.id)))
+        .orderBy(desc(assessmentSubmissions.createdAt),desc(assessments.id)).limit(20).offset(offset);
+      for (const candidate of prior) {
+        // Enforce facility visibility and a valid final clinical decision before reading evidence.
+        try { this.source(await this.service.authorize(actor,org,candidate.id)); } catch { continue; }
+        hasPriorApproved=true;
+        const kg=positive(this.service.unseal<StoredWorkflow>(candidate.snapshot).answers.current_weight_kg);
+        if (kg && kg<600) points.push({assessmentId:candidate.id,date:dateOnly(candidate.recordedAt),kg});
+        if (points.length>=5) break;
+      }
+      if (prior.length<20) break;
     }
-    return finishWeightHistory(points,currentKg && currentKg<600?{date:dateOnly(row.completedAt!),kg:currentKg}:null,previousKg,prior.length===0);
+    return finishWeightHistory(points,currentKg && currentKg<600?{assessmentId:row.id,date:dateOnly(recordedAt),kg:currentKg}:null,previousKg,!hasPriorApproved);
+  }
+  private async chartView(report:GeneratedReport,actor:Principal,assessment:WorkflowRow):Promise<GeneratedReport> {
+    if (report.status==="STALE" || report.assessment.submissionId!==assessment.currentSubmissionId) return report;
+    const [submission]=await this.service.db.select().from(assessmentSubmissions).where(and(
+      eq(assessmentSubmissions.organizationId,assessment.organizationId),eq(assessmentSubmissions.assessmentId,assessment.id),
+      eq(assessmentSubmissions.id,report.assessment.submissionId),eq(assessmentSubmissions.status,"SUCCEEDED")));
+    if (!submission) return report;
+    const frozen=this.service.unseal<StoredWorkflow>(submission.snapshot);
+    // Project current chart metadata for HTML without rewriting the issued report or PDF.
+    return {...report,assessment:{...report.assessment,recordedAt:submission.createdAt.toISOString()},
+      ...(frozen.measurementUnits ? {weightDisplayUnit:frozen.measurementUnits.weight} : {}),
+      weightHistory:await this.weightHistory(actor,assessment.organizationId,assessment,positive(frozen.answers.current_weight_kg),positive(frozen.answers.previous_weight_kg),submission.createdAt)};
   }
   async generate(actor:Principal,org:string,id:string,input:{requestKey:string;productStageChoice?:"surgical"|"treatment_stage";confirmedToxicityIds?:string[]},context:RequestContext, internal=false):Promise<{report:GeneratedReport}> {
     if (!internal && input.confirmedToxicityIds?.length && !hasPermission(actor.role,"reviews.complete"))
@@ -468,7 +496,7 @@ export class GeneratedReportService {
     const frozen=this.service.unseal<StoredWorkflow>(submission.snapshot);
     const result=assessmentScoreResultSchema.parse(this.service.unseal(submission.result));
     if(result.checksum!==frozen.binding.checksum || result.resultReference.length===0)throw new ServiceError("CONFLICT","The submitted score does not match its rule version.");
-    const decision={productStageChoice:input.productStageChoice??null,plannedTreatmentStartDate:value(frozen.answers.planned_treatment_start_date)??null,
+    const decision={productStageChoice:input.productStageChoice??null,plannedTreatmentStartDate:frozen.manifest.preConditioningStartPolicy === "relative_guidance" ? null : value(frozen.answers.planned_treatment_start_date)??null,
       confirmedToxicityIds:[...source.confirmedToxicityIds].sort()};
     const fingerprint=this.currentFingerprint(assessment,frozen.binding.checksum,decision)!;
     // Lock the assessment while reserving the local request key. This serializes
@@ -505,7 +533,7 @@ export class GeneratedReportService {
         .where(and(eq(assessmentFaceScans.organizationId,org),eq(assessmentFaceScans.assessmentId,id),eq(assessmentFaceScans.isCurrent,true),eq(assessmentFaceScans.state,"COMPLETED"))).limit(1);
       const session=scan?.projection ? this.service.unseal(scan.projection) : null;
       const metrics=reportObservations(frozen.answers,frozen.manifest,assessment.completedAt!,session);
-      const weightHistory=await this.weightHistory(actor,org,assessment,positive(frozen.answers.current_weight_kg),positive(frozen.answers.previous_weight_kg));
+      const weightHistory=await this.weightHistory(actor,org,assessment,positive(frozen.answers.current_weight_kg),positive(frozen.answers.previous_weight_kg),submission.createdAt);
       const facts:ReportFacts={
         reviewedScore:source.reviewedScore,reviewedRiskCategoryId:source.risk.id,
         treatmentTypeIds:list(frozen.answers.current_cancer_treatment),drugClassIds:list(frozen.answers.drug_classes),
@@ -537,7 +565,7 @@ export class GeneratedReportService {
       const data:ReportData={
         runId:generated.runId,model:generated.model,promptVersion:generated.promptVersion,generatedAt:new Date().toISOString(),
         patient:{displayName:patient.displayName,reference:patient.reference,dateOfBirth:patient.dateOfBirth,gender:patient.gender},
-        assessment:{id,reference:formatAssessmentReference(assessment.serialNumber),completedAt:assessment.completedAt!.toISOString(),
+        assessment:{id,reference:formatAssessmentReference(assessment.serialNumber),facilityName:await this.assessmentFacilityName(assessment),completedAt:assessment.completedAt!.toISOString(),recordedAt:submission.createdAt.toISOString(),
           submissionId:source.submissionId,scoreRevision:source.scoreRevision,ruleVersionId:generated.ruleVersionId,checksum:generated.checksum},
         assessmentAnswerCoverage:{answered,total},
         classification:{id:source.risk.id!,label:source.risk.label ?? generated.classification.label,score:source.reviewedScore,
@@ -545,6 +573,7 @@ export class GeneratedReportService {
         ...(generated.guidance.carePlan.nutritionalStatus ? { nutritionalStatus:
           ({ well_nourished: "Well nourished", moderately_nourished: "Moderately nourished", severely_malnourished: "Severely malnourished" } as Record<string, string>)[generated.guidance.carePlan.nutritionalStatus]
             ?? generated.guidance.carePlan.nutritionalStatus } : {}),
+        ...(frozen.measurementUnits ? {weightDisplayUnit:frozen.measurementUnits.weight} : {}),
         metrics,weightHistory,decision,
         clinicalFacts:reportClinicalFacts(frozen.answers,frozen.manifest,dateOnly(assessment.completedAt!)),
         productPlans:reportProductPlans(generated),

@@ -21,7 +21,7 @@ const carePlan = z.object({
     status: z.enum(["none", "selected", "clinician_choice_required", "facts_required"]),
     plans: z.array(productPlan).max(30),
     choices: z.array(productPlan).max(30).optional(),
-    catalog: z.array(z.object({ id, name: bounded, description: guidanceText, aliases: z.array(bounded).max(30) })).max(100).optional(),
+    catalog: z.array(z.object({ id, name: bounded, description: guidanceText.nullable(), benefits: z.array(guidanceText).max(50).optional(), aliases: z.array(bounded).max(30) })).max(100).optional(),
     notes: z.array(z.object({ id, kind: id, label: bounded, guidance: guidanceText })).max(100),
     reason: bounded.optional(),
   }),

@@ -38,6 +38,7 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   useEffect(() => { if (record) void clinical.refresh(); }, [record?.status, record?.revision, clinical.refresh]);
   const [answers, setAnswers] = useState<FormAnswers>({});
   const [measurementUnits, setMeasurementUnits] = useState<MeasurementUnits>(metricUnits);
+  const [savedMeasurementUnits, setSavedMeasurementUnits] = useState<MeasurementUnits>(metricUnits);
   const [sectionId, setSectionId] = useState(() => location.state?.startAtFaceScan === true ? "face_scan" : "personal_details");
   const [error, setError] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -63,10 +64,10 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
   const [priorityBusy, setPriorityBusy] = useState(false);
   const [priorityError, setPriorityError] = useState("");
   const [verificationRecord, setVerificationRecord] = useState<AssessmentWorkflow | null>(null);
-  const dirty = !!record && JSON.stringify(answers) !== JSON.stringify(record.answers);
+  const dirty = !!record && (JSON.stringify(answers) !== JSON.stringify(record.answers) || JSON.stringify(measurementUnits) !== JSON.stringify(savedMeasurementUnits));
   const editable = record?.status === "DRAFT" && hasPermission(role, "assessments.edit") && (record.canEditDraft ?? true) && clinical.review?.canEditDraft !== false && !clinical.error;
   const navigationDialog = useDraftNavigationGuard(dirty || reportDirty || reportBusy || scanBusy || reviewBusy || contactOpen && !!phone, scanBusy ? "Camera capture or upload is unfinished. Leaving may discard the local capture. Accepted uploads continue processing." : undefined);
-  const accept = useCallback((value: AssessmentWorkflow) => { setRecord(value); setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers); setMeasurementUnits(readMeasurementUnits(organizationId, userId, value.id)); setConflict(false); if (value.result) { setShowScoredAnswers(false); requestAnimationFrame(() => document.getElementById("assessment-summary-heading")?.focus()); } }, [organizationId, userId]);
+  const accept = useCallback((value: AssessmentWorkflow) => { const units = value.measurementUnits ?? readMeasurementUnits(organizationId, userId, value.id); setRecord(value); setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers); setMeasurementUnits(units); setSavedMeasurementUnits(units); setConflict(false); if (value.result) { setShowScoredAnswers(false); requestAnimationFrame(() => document.getElementById("assessment-summary-heading")?.focus()); } }, [organizationId, userId]);
   const changeMeasurementUnits = (units: MeasurementUnits) => { setMeasurementUnits(units); if (record) rememberMeasurementUnits(organizationId, userId, record.id, units); };
   const handleError = useCallback((cause: unknown) => {
     if (cause instanceof AssessmentRequestError && cause.status === 401) {
@@ -105,6 +106,8 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
         if (latest.record && value.revision === latest.record.revision && value.status === latest.record.status && value.updatedAt === latest.record.updatedAt && value.isPriority === latest.record.isPriority && JSON.stringify(value.patient) === JSON.stringify(latest.record.patient)) return;
         setRecord(value);
         setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers);
+        const units = value.measurementUnits ?? readMeasurementUnits(organizationId, userId, value.id);
+        setMeasurementUnits(units); setSavedMeasurementUnits(units);
         setNotice("Assessment updated");
       }).catch(cause => {
         if (!active || requestSequence !== liveRequestSequence.current) return;
@@ -141,12 +144,14 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
       const value = await getAssessment(organizationId, assessmentId);
       // A report mutation advances the same revision as answers. Do not silently
       // adopt another editor's answer revision while retaining stale local answers.
-      const serverAnswersChanged = !!record && JSON.stringify(value.answers) !== JSON.stringify(record.answers);
+      const serverAnswersChanged = !!record && (JSON.stringify(value.answers) !== JSON.stringify(record.answers) || JSON.stringify(value.measurementUnits) !== JSON.stringify(record.measurementUnits));
       if (dirty && (serverAnswersChanged || value.status !== "DRAFT")) {
         setConflict(true);
         setError("Saved answers changed while updating reports. Your local changes are preserved. Load the saved version before continuing.");
       } else if (!dirty) {
         setAnswers(value.status === "DRAFT" ? clearInactiveAssessmentAnswers(value.manifest, value.answers) : value.answers);
+        const units = value.measurementUnits ?? readMeasurementUnits(organizationId, userId, value.id);
+        setMeasurementUnits(units); setSavedMeasurementUnits(units);
       }
       setRecord(value);
     } catch (cause) { handleError(cause); throw cause; }
@@ -157,10 +162,10 @@ function AssessmentEditor({ organizationId, userId, assessmentId, role }: { orga
     setScanCorrection(false);
     setErrors(invalid);
     if (Object.keys(invalid).length) { setError("Correct invalid values before saving. Incomplete fields can be saved in a draft."); return null; }
-    if (!dirty) return record;
+    if (!dirty && record.measurementUnits) return record;
     operation.current = true; setBusy(true); setError("");
     try {
-      const value = await saveAssessment(organizationId, internalId, record.revision, answers);
+      const value = await saveAssessment(organizationId, internalId, record.revision, answers, measurementUnits);
       accept(value); setNotice("Draft saved"); return value;
     } catch (cause) { handleError(cause); return null; }
     finally { operation.current = false; setBusy(false); }

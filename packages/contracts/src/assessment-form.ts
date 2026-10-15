@@ -12,8 +12,16 @@ export type FormField = {
   options?: Array<{ id: string; label: string }>; visibleWhen?: Array<{ fieldId: string; equals?: string; nonEmpty?: true }>;
   min?: number; exclusiveMin?: boolean; integer?: boolean; readOnly?: boolean; unit?: string;
 };
+/** Display correction only: identifiers and scoring inputs remain unchanged. */
+export const assessmentOptionDisplayLabel = (optionId: string, label: string): string =>
+  optionId === "dietary_symptoms_mouth_sores" ? "Mouth Ulcers / Mucositis" : label;
+export function assessmentFormDisplayLabels(manifest: AssessmentFormManifest): AssessmentFormManifest {
+  return { ...manifest, sections: manifest.sections.map(section => ({ ...section, fields: section.fields.map(field => ({
+    ...field, ...(field.options ? { options: field.options.map(option => ({ ...option, label: assessmentOptionDisplayLabel(option.id, option.label) })) } : {}),
+  })) })) };
+}
 export type DrugClassSuggestion = { cancerTypeId: string | null; treatmentTypeId: string; classId: string };
-export type AssessmentFormManifest = { version: string; sections: Array<{ id: string; title: string; fields: FormField[] }>; drugClassSuggestions?: DrugClassSuggestion[] };
+export type AssessmentFormManifest = { version: string; preConditioningStartPolicy?: "date_window" | "relative_guidance"; sections: Array<{ id: string; title: string; fields: FormField[] }>; drugClassSuggestions?: DrugClassSuggestion[] };
 const withOtherDrugClass = (options: Array<{ id: string; label: string }>) =>
   options.some(option => option.id === OTHER_DRUG_CLASS_ID) ? options : [...options, { id: OTHER_DRUG_CLASS_ID, label: "Other" }];
 /** Suggestions narrow the initial menu; a clinician can still search every configured class. */
@@ -31,6 +39,7 @@ export function suggestedDrugClassIds(manifest: AssessmentFormManifest, answers:
 const option = z.object({ id: z.string().min(1), label: z.string().min(1) });
 export const publicAssessmentQuestionnaireSchema = z.object({
   formatVersion: z.literal(2), profile: z.literal("NIQ_FINAL_ASSESSMENT"),
+  preConditioningStartPolicy: z.enum(["date_window", "relative_guidance"]).optional(),
   drugClassConfig: z.object({
     classes: z.array(option).max(200),
     suggestions: z.array(z.object({ cancerTypeId: z.string().min(1).nullable(), treatmentTypeId: z.string().min(1), classId: z.string().min(1) })).max(2000),
@@ -69,7 +78,7 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
       if (new Set(field.options.map(o => o.id)).size !== field.options.length) throw new Error("Duplicate option identifiers");
       const calculated = field.type === "calculated" || field.type === "derived";
       if (!calculated && !field.options.length) throw new Error("Questionnaire options missing");
-      return { id: field.id, label: field.label, kind: calculated ? "calculated" : field.type === "multi_select" ? "multi_select" : "select", required: false, owner: "scoring", source: spec[field.id]![1], options: field.options, readOnly: calculated, unit: field.unit } as FormField;
+      return { id: field.id, label: field.label, kind: calculated ? "calculated" : field.type === "multi_select" ? "multi_select" : "select", required: false, owner: "scoring", source: spec[field.id]![1], options: field.options.map(option => ({ ...option, label: assessmentOptionDisplayLabel(option.id, option.label) })), readOnly: calculated, unit: field.unit } as FormField;
     });
     const optionalLegacyStress = section.id === "dietary_details" && !fields.some(field => field.id === "stress_level") ? 1 : 0;
     if (fields.length !== Object.keys(spec).length - optionalLegacyStress) throw new Error("Questionnaire fields missing");
@@ -93,7 +102,7 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
     app("metastasis_site", "Metastasis site", "select", "F42:H46", { required: true, options: choices(["Brain", "Liver", "Lung", "Bone", "Others"]), visibleWhen: [when("stage", "stage_metastatic")] }),
     app("metastasis_other", "Specify metastasis site", "text", "H42", { required: true, visibleWhen: [when("stage", "stage_metastatic"), when("metastasis_site", "others")] }));
   add("treatment",
-    app("planned_treatment_start_date", "Planned treatment start date", "date", "APP_TREATMENT_START_DATE", { visibleWhen: [when("treatment_status", "treatment_status_newly_diagnosed")] }),
+    ...(remote.preConditioningStartPolicy === "relative_guidance" ? [] : [app("planned_treatment_start_date", "Planned treatment start date", "date", "APP_TREATMENT_START_DATE", { visibleWhen: [when("treatment_status", "treatment_status_newly_diagnosed")] })]),
     app("surgery_date", "Surgery date", "date", "H54", { required: true, visibleWhen: [when("cancer_surgical_status", "cancer_surgical_status_done")] }),
     app("planned_surgery_date", "Planned surgery date", "date", "H54", { required: true, visibleWhen: [when("cancer_surgical_status", "cancer_surgical_status_planned")] }),
     app("treatment_cycle_number", "Cycle number", "text", "B64:F64"), app("treatment_cycle_frequency", "Cycle frequency", "text", "F65"));
@@ -138,11 +147,12 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
     const position = (field: FormField) => field.id === "drug_classes" ? 63.5 : field.id === "diet_preference" ? 131.5 : field.id === "planned_treatment_start_date" ? 53.5 : Number(field.source.match(/\d+/)?.[0]);
     return position(a) - position(b);
   });
-  return { version: ASSESSMENT_FORM_VERSION, sections, ...(remote.drugClassConfig ? { drugClassSuggestions: remote.drugClassConfig.suggestions } : {}) };
+  return { version: ASSESSMENT_FORM_VERSION, sections, ...(remote.preConditioningStartPolicy ? { preConditioningStartPolicy: remote.preConditioningStartPolicy } : {}), ...(remote.drugClassConfig ? { drugClassSuggestions: remote.drugClassConfig.suggestions } : {}) };
 }
 
 /** Apply the new conditional requirement to open drafts without changing submitted snapshots. */
 export function upgradeDraftAssessmentForm(manifest: AssessmentFormManifest): AssessmentFormManifest {
+  manifest = assessmentFormDisplayLabels(manifest);
   const hasLegacyVersion = manifest.version === "niq-final-overlay-v1";
   const drugClass = manifest.sections.flatMap(section => section.fields).find(field => field.id === "drug_classes");
   if (!hasLegacyVersion && (!drugClass || drugClass.options?.some(option => option.id === OTHER_DRUG_CLASS_ID))) return manifest;

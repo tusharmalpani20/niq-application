@@ -1,4 +1,4 @@
-import type { GeneratedReport } from "@niq/application-contracts";
+import { assessmentOptionDisplayLabel, type GeneratedReport } from "@niq/application-contracts";
 
 export const reportDate = (value: string | null | undefined) => {
   if (!value) return "Not recorded";
@@ -18,18 +18,27 @@ export const reportAge = (birth: string | null, at: string | null) => {
   return years >= 0 && years <= 130 ? years : null;
 };
 
-export const metricText = (metric: GeneratedReport["metrics"][number]) => `${metric.value}${metric.unit ? ` ${metric.unit}` : ""}`;
+export const metricText = (metric: GeneratedReport["metrics"][number]) => `${assessmentOptionDisplayLabel(metric.id, metric.value)}${metric.unit ? ` ${metric.unit}` : ""}`;
+
+/** New snapshots use explicit benefit bullets; old reports retain their saved description. */
+export function productBenefits(report: GeneratedReport, name: string, rationale?: string): string[] {
+  const product = report.productCatalog?.find(product => [product.name, ...(product.aliases ?? [])]
+    .some(alias => alias.trim().toLowerCase() === name.trim().toLowerCase()));
+  if (product?.benefits !== undefined) return product.benefits.map(text => text.trim()).filter(Boolean);
+  const legacy = product?.description || rationale;
+  return legacy ? [legacy] : [];
+}
 
 export function cleanWeights(report: GeneratedReport) {
-  const byDate = new Map<string, { date: string | null; kg: number; label?: string }>();
-  const undated: Array<{ date: string | null; kg: number; label?: string }> = [];
+  const byDate = new Map<string, GeneratedReport["weightHistory"][number]>();
+  const undated: Array<GeneratedReport["weightHistory"][number]> = [];
   for (const item of report.weightHistory) {
     if (!Number.isFinite(item.kg) || item.kg <= 0) continue;
     const rawLabel = "label" in item ? (item as { label?: string }).label : undefined;
     const label = rawLabel && /^(?:weight 1[–-]2 months ago|reported 1[–-]2 months ago(?: \(exact date unknown\))?)$/i.test(rawLabel.trim()) ? "Weight 1 Month Ago" : rawLabel;
     if (item.date === null) { undated.push({ date: null, kg: item.kg, label: "Weight 1 Month Ago" }); continue; }
     if (!/^\d{4}-\d{2}-\d{2}/.test(item.date)) continue;
-    byDate.set(item.date.slice(0, 10), { date: item.date.slice(0, 10), kg: item.kg, label });
+    byDate.set(item.assessmentId ?? item.date.slice(0, 10), { ...item, date: item.date.slice(0, 10), label });
   }
   const dated = [...byDate.values()].sort((a, b) => a.date!.localeCompare(b.date!));
   return [...(dated.length <= 1 ? undated.slice(-1) : []), ...dated];
@@ -38,10 +47,10 @@ export function cleanWeights(report: GeneratedReport) {
 export function weightChange(report: GeneratedReport) {
   const items = cleanWeights(report);
   if (items.length < 2) return null;
-  const first = items[0]!;
+  const first = items[items.length - 2]!;
   const last = items[items.length - 1]!;
   const percentage = (last.kg - first.kg) / first.kg * 100;
-  return { percentage, first, last, basis: first.date === null ? "previously reported weight" : "first recorded weight" };
+  return { percentage, first, last, basis: first.date === null ? "previously reported weight" : "previous recorded weight" };
 }
 
 export const reportGuidance = (report: GeneratedReport, kind: GeneratedReport["guidance"]["sections"][number]["kind"]) =>
