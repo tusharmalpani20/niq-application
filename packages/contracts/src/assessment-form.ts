@@ -16,6 +16,9 @@ export type FormField = {
 export const assessmentOptionDisplayLabel = (optionId: string, label: string): string =>
   optionId === "dietary_symptoms_mouth_sores" ? "Mouth Ulcers / Mucositis" : label;
 export function assessmentFormDisplayLabels(manifest: AssessmentFormManifest): AssessmentFormManifest {
+  const needsCorrection = manifest.sections.some(section => section.fields.some(field =>
+    field.options?.some(option => assessmentOptionDisplayLabel(option.id, option.label) !== option.label)));
+  if (!needsCorrection) return manifest;
   return { ...manifest, sections: manifest.sections.map(section => ({ ...section, fields: section.fields.map(field => ({
     ...field, ...(field.options ? { options: field.options.map(option => ({ ...option, label: assessmentOptionDisplayLabel(option.id, option.label) })) } : {}),
   })) })) };

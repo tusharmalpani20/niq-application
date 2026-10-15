@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { isAssessmentFieldApplicable, getEffectiveAssessmentAnswers, validateAssessmentAnswers } from "./assessment-form-validation";
-import { OTHER_DRUG_CLASS_ID, buildAssessmentForm, upgradeDraftAssessmentForm } from "./assessment-form";
+import { OTHER_DRUG_CLASS_ID, assessmentFormDisplayLabels, buildAssessmentForm, upgradeDraftAssessmentForm } from "./assessment-form";
 function fixture() {
   const field = (id: string, type: string) => ({ id, type, label: id, options: type === "calculated" || type === "derived" ? [] : [{ id: `${id}_yes`, label: "Yes" }], dependencies: [] as string[] });
   const q = { formatVersion: 2, profile: "NIQ_FINAL_ASSESSMENT", sections: [
@@ -135,4 +135,27 @@ test("existing drafts gain the conditional metastasis requirement without changi
   expect(upgraded.version).toBe("niq-final-overlay-v2");
   expect(upgradeDraftAssessmentForm(upgraded)).toBe(upgraded);
   expect(legacy.sections.flatMap(section => section.fields).find(field => field.id === "metastasis_site")?.required).toBe(false);
+});
+
+
+test("dietary mouth symptom display correction changes only the requested label and is idempotent", () => {
+  const original = buildAssessmentForm(fixture());
+  const source = { ...original, sections: [...original.sections, { id: "display-fixture", title: "Display", fields: [{
+    id: "dietary_symptoms", label: "Dietary symptoms", kind: "multi_select" as const, required: false, owner: "scoring" as const, source: "fixture",
+    options: [{ id: "dietary_symptoms_mouth_sores", label: "Mouth sores" }, { id: "dietary_symptoms_taste", label: "Things taste funny" }],
+  }] }] };
+  const corrected = assessmentFormDisplayLabels(source);
+  expect(corrected.sections.at(-1)?.fields[0]?.options).toEqual([
+    { id: "dietary_symptoms_mouth_sores", label: "Mouth Ulcers / Mucositis" },
+    { id: "dietary_symptoms_taste", label: "Things taste funny" },
+  ]);
+  expect(source.sections.at(-1)?.fields[0]?.options?.[0]?.label).toBe("Mouth sores");
+  expect(assessmentFormDisplayLabels(corrected)).toBe(corrected);
+});
+
+test("relative pre-conditioning guidance omits the treatment start date question", () => {
+  const remote = { ...fixture(), preConditioningStartPolicy: "relative_guidance" };
+  const form = buildAssessmentForm(remote);
+  expect(form.sections.flatMap(section => section.fields).some(field => field.id === "planned_treatment_start_date")).toBe(false);
+  expect(form.preConditioningStartPolicy).toBe("relative_guidance");
 });

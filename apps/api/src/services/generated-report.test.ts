@@ -292,13 +292,13 @@ test("selected product schedule retains rule instructions as structured report d
   selected.guidance.carePlan.products = { status: "selected", plans: [{ id: "plan", stage: "during_treatment", nutritionalStatus: "moderate",
     products: "Invigour", dose: "1 daily", duration: "At least 3 months", durationAmount: 90,
     items: [{ productName: "Invigour", quantityPerDay: 1, unit: "sachet", timesPerDay: 1,
-      preparation: "Mix with water", mealTiming: "after breakfast" }],
-  }], catalog: [{ id: "product-1", name: "Invigour", description: "Nutrition supplement.", aliases: ["Es Invigour"] }], notes: [] };
+      preparation: "Mix with water", mealTiming: "after breakfast", description: "Obsolete product instructions", rationale: "Obsolete reason" }],
+  }], catalog: [{ id: "product-1", name: "Invigour", description: "Nutrition supplement.", benefits: ["Supports intake", "Supports muscle maintenance"], aliases: ["Es Invigour"] }], notes: [] };
   const parsed = scoringReportContentSchema.parse(selected);
   expect(reportProductPlans(parsed)).toEqual([{ id: "plan", duration: "At least 3 months", durationAmount: 90,
     items: [{ productName: "Invigour", quantityPerDay: 1, unit: "sachet", timesPerDay: 1,
       preparation: "Mix with water", mealTiming: "after breakfast" }] }]);
-  expect(reportProductCatalog(parsed)).toEqual([{ id: "product-1", name: "Invigour", description: "Nutrition supplement.", aliases: ["Es Invigour"] }]);
+  expect(reportProductCatalog(parsed)).toEqual([{ id: "product-1", name: "Invigour", description: "Nutrition supplement.", benefits: ["Supports intake", "Supports muscle maintenance"], aliases: ["Es Invigour"] }]);
 });
 
 test("a compound source topic is displayed using only the symptom actually reported", () => {

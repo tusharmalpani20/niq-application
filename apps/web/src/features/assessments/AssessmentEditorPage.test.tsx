@@ -11,7 +11,7 @@ function recordFixture(): AssessmentWorkflow {
   const manifest = buildAssessmentForm(assessmentQuestionnaireFixture());
   const answers = { patient_name: "Test patient", age: 20, gender: "FEMALE", contact: "1234567890", height_cm: 165, current_weight_kg: 60 };
   return { id: "assessment-a", reference: "ASM-000001", serialNumber: 1, organizationId: "org-a", patientId: "patient-a", facilityId: "facility-a", status: "DRAFT", revision: 3, answers, manifest,
-    progress: getAssessmentCompletion(manifest, answers), reports: [], binding: { version: "version-a", checksum: "checksum" }, result: null, submission: null, reviewToken: "review-token-a", attestations: [], heightSource: null,
+    measurementUnits: { height: "cm", weight: "kg" }, progress: getAssessmentCompletion(manifest, answers), reports: [], binding: { version: "version-a", checksum: "checksum" }, result: null, submission: null, reviewToken: "review-token-a", attestations: [], heightSource: null,
     patient: { id: "patient-a", reference: "PAT-1", displayName: "Test patient", dateOfBirth: "2006-01-01", gender: "FEMALE", phone: "1234567890", homeFacility: { id: "facility-a", name: "Chennai" } },
     createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
 }
@@ -54,7 +54,8 @@ async function harness(callback: (ctx: { dom: JSDOM; router: ReturnType<typeof c
     }
     if (method === "PATCH") {
       if (rejectSave) return Response.json({ error: { message: "Saved version changed", code: "CONFLICT" } }, { status: 409 });
-      record = { ...record, answers: body.answers, revision: record.revision + 1 };
+      if (body.revision !== record.revision) return Response.json({ error: { message: "Saved version changed", code: "CONFLICT" } }, { status: 409 });
+      record = { ...record, answers: body.answers, measurementUnits: body.measurementUnits, revision: record.revision + 1 };
     }
     if (method === "DELETE") record = { ...record, reports: [], revision: record.revision + 1 };
     return Response.json(record);
@@ -119,15 +120,21 @@ test("resumed real draft shows profile context read-only and saves dirty choices
   expect(saved?.body.answers.stage).toBe(recordFixture().manifest.sections.find(section => section.id === "disease_status")!.fields.find(field => field.id === "stage")!.options![0]!.id);
   expect(document.body.textContent).toContain("Draft saved");
 }));
-test("unit choices stay in this browser without changing saved assessment measurements", async () => harness(async ({ dom, requests, click }) => {
+test("unit choices persist separately without changing canonical assessment measurements", async () => harness(async ({ dom, requests, click }) => {
   await click("ft / in");
   expect(document.querySelector<HTMLInputElement>("#assessment-field-height_cm")?.value).toBe("5");
   expect(document.querySelector<HTMLInputElement>("#assessment-field-height_cm-inches")?.value).toBe("4.96");
   await click("lb");
   expect(document.querySelector<HTMLInputElement>("#assessment-field-current_weight_kg")?.value).toBe("132.28");
   expect(JSON.parse(dom.window.localStorage.getItem("niq:measurement-units:org-a:user-a:assessment-a") ?? "null")).toEqual({ height: "ft-in", weight: "lb" });
-  expect(document.body.textContent).not.toContain("Unsaved changes");
+  expect(document.body.textContent).toContain("Unsaved changes");
   expect(requests.some(request => request.method === "PATCH")).toBe(false);
+  await click("Save");
+  const saved = requests.find(request => request.method === "PATCH")!;
+  expect(saved.body.measurementUnits).toEqual({ height: "ft-in", weight: "lb" });
+  expect(saved.body.answers.height_cm).toBe(165);
+  expect(saved.body.answers.current_weight_kg).toBe(60);
+  expect(document.body.textContent).not.toContain("Unsaved changes");
 }));
 test("quick measurements disappear after selection and save canonical units", async () => harness(async ({ requests, click }) => {
   expect(document.body.textContent).toContain("160 cm");

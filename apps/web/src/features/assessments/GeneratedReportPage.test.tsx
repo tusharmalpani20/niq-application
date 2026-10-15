@@ -106,10 +106,10 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect(document.querySelector(".cr-nutrition-targets")?.textContent).toContain("1.5–2.0 g/kg/day");
     expect(document.body.textContent).toContain("Nutritional Supplement Recommendations");
     expect(document.body.textContent).toContain("Reviewed treatment guidance");
-    expect(document.querySelector('[aria-label="During treatment"]')?.textContent).toContain("Reviewed treatment guidance");
-    expect(document.querySelector('[aria-label="Intervention"]')?.textContent).not.toContain("Reviewed treatment guidance");
+    expect(document.querySelector('[aria-label="During treatment"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Intervention"]')?.textContent).toContain("Reviewed treatment guidance");
     expect(document.body.textContent).toContain("Reviewed condition guidance");
-    expect(document.querySelector('[aria-label="Other health conditions"] .cr-narrative-emphasis')?.textContent).toBe("Have TSH checked after a dose change.");
+    expect(document.querySelector('[aria-label="Other health conditions (Co-morbidities)"] .cr-narrative-emphasis')?.textContent).toBe("Have TSH checked after a dose change.");
     expect(document.querySelector('[aria-label="Recommendations"] .cr-narrative-emphasis')?.textContent).toBe("Track weight and intake.");
     expect(document.body.textContent).not.toContain("**");
     expect(document.body.textContent).toContain("Reviewed effects guidance");
@@ -220,7 +220,7 @@ test("report icons match assessment treatment choices and describe report sectio
     expect(summaryIconFor("Treatment status")).toContain("lucide-clipboard-plus");
     expect(summaryIconFor("Planned treatment")).toContain("lucide-flask-conical");
     expect(summaryIconFor("Treatment Start Date")).toContain("lucide-calendar-days");
-    expect(overview.querySelector(".cr-metric-card .lucide-weight")?.getAttribute("style")).toContain("width: 22px");
+    expect(overview.querySelector(".cr-metric-card .lucide-weighing-scale")?.getAttribute("style")).toContain("width: 22px");
     expect(document.querySelector('[aria-label="Nutrition status"] .cr-content-title .lucide-gauge')).not.toBeNull();
     expect(document.querySelector(".cr-clinical-interpretation .lucide-file-search")).not.toBeNull();
     expect(document.querySelector('[aria-label="Recommendations"] .cr-content-title .lucide-list-checks')).not.toBeNull();
@@ -314,18 +314,18 @@ test("narrative emphasis renders safely and an undated previous weight has a lab
   await renderWithResponse({ report, generation: { status: "READY" } }, () => {
     const status = document.querySelector('[aria-label="Nutrition status"]')!;
     expect(status.querySelector(".cr-weight-chart")).not.toBeNull();
-    expect(status.querySelector(".cr-weight-chart polyline")?.getAttribute("stroke-dasharray")).toBe("8 6");
-    expect(status.querySelector(".cr-weight-comparison")?.textContent).toContain("Weight 1 Month Ago");
-    expect(status.querySelector(".cr-weight-comparison")?.textContent).toContain("12 Oct 2026");
+    expect(status.querySelector(".cr-weight-chart polyline")?.getAttribute("stroke-dasharray")).toBe("7 5");
+    expect(status.querySelector(".cr-weight-chart")?.textContent).toContain("Weight 1 Month Ago");
+    expect(status.querySelector(".cr-weight-chart")?.textContent).toContain("12 Oct 2026");
     expect(status.querySelector(".cr-weight-chart")?.getAttribute("aria-label")).toContain("Weight 1 Month Ago");
-    expect(status.textContent).toContain("Weight comparison");
+    expect(status.textContent).toContain("Patient weight trend (kg)");
     const interpretation = document.querySelector(".cr-clinical-interpretation")!;
     expect(interpretation.querySelector("strong")?.textContent).toBe("reduced intake");
     expect(interpretation.querySelector("strong")?.className).toBe("cr-narrative-emphasis");
     expect(interpretation.textContent).toContain("<urgent>");
     expect(interpretation.querySelector("urgent")).toBeNull();
-    expect(document.querySelector('[aria-label="Planned treatment"]')).not.toBeNull();
-    expect(document.querySelector('[aria-label="Planned treatment"]')?.textContent).toContain("Preparation for planned treatment");
+    expect(document.querySelector('[aria-label="Planned treatment"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Intervention"]')?.textContent).toContain("Preparation for treatment");
     expect(document.querySelector('[aria-label="Report summary"]')?.textContent).toContain("Treatment Start Date");
     expect(document.querySelector('[aria-label="Intervention"] .cr-narrative-emphasis')?.textContent).toBe("energy dense meals");
   });
@@ -346,7 +346,7 @@ test("care guidance keeps approved sentences and uses matched clinical headings"
     ] },
   };
   await renderWithResponse({ report, generation: { status: "READY" } }, () => {
-    const conditionPage = document.querySelector('[aria-label="Other health conditions"]')!;
+    const conditionPage = document.querySelector('[aria-label="Other health conditions (Co-morbidities)"]')!;
     const care = document.querySelector('[aria-label="Recommendations"]')!;
     expect(conditionPage.querySelectorAll(".cr-advice-block").length).toBe(1);
     expect(care.querySelectorAll(".cr-advice-block").length).toBe(3);
@@ -407,7 +407,7 @@ test("condition advice stays together in its own report section", async () => {
     narrative: { ...readyReport.narrative, conditionAdvice },
   };
   await renderWithResponse({ report, generation: { status: "READY" } }, () => {
-    const conditionPage = document.querySelector('[aria-label="Other health conditions"]')!;
+    const conditionPage = document.querySelector('[aria-label="Other health conditions (Co-morbidities)"]')!;
     const recommendations = document.querySelector('[aria-label="Recommendations"]')!;
     expect(conditionPage.querySelectorAll(".cr-advice-points li").length).toBe(12);
     expect(recommendations.textContent).not.toContain("(continued)");
