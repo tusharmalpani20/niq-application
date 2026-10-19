@@ -16,3 +16,20 @@ test("authored closing prose is preserved", () => {
   const authored = "Your nutrition plan supports intake and strength. Follow up with your care team.";
   expect(readableClosingSummary(authored, [])).toBe(authored);
 });
+
+test("nutrition targets include complete units and do not limit a section to three highlights", async () => {
+  const {readableReportEmphasis} = await import("./report-readability");
+  const text = "Aim for 30–35 kcal/kg/day and 1.2–1.5 g protein/kg/day. Ensure **at least 75% of your nutrition needs** are met through your prescribed plan. **Include protein foods** at regular meals alongside suitable foods you tolerate. **Contact your care team** if intake falls, and explain any symptoms so support can be adjusted.";
+  const marked = readableReportEmphasis(text);
+  expect(marked).toContain("**30–35 kcal/kg/day**");
+  expect(marked).toContain("**1.2–1.5 g protein/kg/day**");
+  expect([...marked.matchAll(/\*\*[^*]+\*\*/g)].length).toBeGreaterThan(3);
+  expect(marked.replaceAll("**", "")).toBe(text.replaceAll("**", ""));
+});
+
+
+test("a short targets sentence keeps both complete measurements emphasized", async () => {
+  const {readableReportEmphasis} = await import("./report-readability");
+  const text="Aim for 30–35 kcal/kg/day and 1.2–1.5 g protein/kg/day.";
+  expect(readableReportEmphasis(text)).toBe("Aim for **30–35 kcal/kg/day** and **1.2–1.5 g protein/kg/day**.");
+});

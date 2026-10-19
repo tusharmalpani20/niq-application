@@ -72,7 +72,7 @@ export async function renderGeneratedReportHtml(report: GeneratedReport, brand: 
     .replaceAll('"/eioms-logo.png"', `"${partnerLogo}"`)
     .replaceAll('"/report-cover-food.webp"', `"${coverPhoto}"`);
   const ink = accessibleBrandInk(brand.primaryColor, ["#f6f8fb", "#eef2f6", "#ffffff"]);
-  return `<!doctype html><html lang="en" style="--brand-primary:${brand.primaryColor};--brand-secondary:${branding.secondaryColor};--brand-ink:${ink}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Medical Nutrition Therapy Report</title><style>${css}</style></head><body class="cr-print-document">${markup}</body></html>`;
+  return `<!doctype html><html lang="en" style="--brand-primary:${brand.primaryColor};--brand-secondary:${branding.secondaryColor};--brand-ink:${ink}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nutritional Assessment Protocol Report</title><style>${css}</style></head><body class="cr-print-document">${markup}</body></html>`;
 }
 
 /** Render the same HTML report used in the browser to a paginated, selectable-text PDF. */

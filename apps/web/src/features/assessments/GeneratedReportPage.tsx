@@ -70,6 +70,7 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
     try {
       const next = await regenerateGeneratedReport(user.organizationId, assessmentId);
       setResult(next);
+      setPreview("html");
       setReload(current => current + 1);
     } catch (cause) {
       setRegenerateError(cause instanceof Error ? cause.message : "Could not restart report generation.");
@@ -93,7 +94,7 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
 
   return <div className="cr-workspace">
     <nav className="cr-back"><Link to={assessmentPath}><ArrowLeft size={17} aria-hidden="true"/>Back to assessment</Link></nav>
-    <div className="cr-workspace-head"><div><p className="cr-workspace-eyebrow">Clinical reporting</p><h1>Medical nutrition therapy report</h1></div><span className={`cr-status ${ready ? "cr-status-approved" : ""}`}>{statusLabel}</span></div>
+    <div className="cr-workspace-head"><div><p className="cr-workspace-eyebrow">Clinical reporting</p><h1>Nutritional Assessment Protocol Report</h1></div><span className={`cr-status ${ready ? "cr-status-approved" : ""}`}>{statusLabel}</span></div>
     {error && <div className="cr-message cr-error" role="alert"><p>{error}</p><Button variant="outline" onPress={refresh}><RotateCcw size={16} aria-hidden="true"/>Refresh status</Button></div>}
     {loading && !result && <p role="status" className="cr-empty"><LoaderCircle className="cr-spin" size={20} aria-hidden="true"/>Loading report status</p>}
     {!loading && !error && (generation?.status === "QUEUED" || generation?.status === "GENERATING") &&
@@ -103,10 +104,11 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
     {!loading && !error && !generation &&
       <section className="cr-empty"><FileCheck2 size={35} aria-hidden="true"/><h2>Report not started</h2><p>Complete the final clinical review to start report and PDF generation.</p><Link to={assessmentPath}>Return to assessment</Link></section>}
     {!loading && !error && generation?.status === "READY" && !ready && !htmlReady &&
-      <div className="cr-message cr-error" role="alert"><p>The report content is ready, but its saved PDF is unavailable.</p>{hasPermission(user.role, "reports.manage") && <Button variant="outline" isDisabled={updatingPdf} onPress={() => { void rebuildPdf(); }}>{updatingPdf ? <LoaderCircle className="cr-spin" size={16} aria-hidden="true"/> : <RotateCcw size={16} aria-hidden="true"/>}{updatingPdf ? "Rebuilding PDF" : "Rebuild PDF"}</Button>}<Button variant="outline" onPress={refresh}>Refresh status</Button>{pdfError && <p>{pdfError}</p>}</div>}
+      <div className="cr-message cr-error" role="alert"><p>The report content is ready, but its saved PDF is unavailable.</p>{hasPermission(user.role, "reports.manage") && <Button variant="outline" isDisabled={updatingPdf || regenerating} onPress={() => { void rebuildPdf(); }}>{updatingPdf ? <LoaderCircle className="cr-spin" size={16} aria-hidden="true"/> : <RotateCcw size={16} aria-hidden="true"/>}{updatingPdf ? "Rebuilding PDF" : "Rebuild PDF"}</Button>}<Button variant="outline" onPress={refresh}>Refresh status</Button>{pdfError && <p>{pdfError}</p>}</div>}
     {!error && (ready || htmlReady) && report && <>
       <div className="cr-report-meta"><span>Assessment {report.assessment.reference}</span><span>Generated {reportDate(report.generatedAt)}</span></div>
-      <div className="cr-approved-bar"><div><FileCheck2 size={24} aria-hidden="true"/><div><strong>{htmlReady ? "HTML ready for review" : "Final report ready"}</strong><p>{htmlReady ? "PDF generation is paused until you request it." : "The PDF was saved after final clinical approval."}</p></div></div><div className="cr-pdf-actions">{hasPermission(user.role, "reports.manage") && <Button variant="outline" isDisabled={updatingPdf} onPress={() => { void rebuildPdf(); }}>{updatingPdf ? <LoaderCircle className="cr-spin" size={16} aria-hidden="true"/> : <RotateCcw size={16} aria-hidden="true"/>}{updatingPdf ? "Generating PDF" : htmlReady ? "Generate PDF" : "Update PDF layout"}</Button>}{ready && <a className="cr-download" href={pdfUrl} download={`NIQ-report-${report.assessment.reference}.pdf`}><Download size={18} aria-hidden="true"/>Download PDF</a>}</div></div>
+      <div className="cr-approved-bar"><div><FileCheck2 size={24} aria-hidden="true"/><div><strong>{htmlReady ? "HTML ready for review" : "Final report ready"}</strong><p>{htmlReady ? "PDF generation is paused until you request it." : "The PDF was saved after final clinical approval."}</p></div></div><div className="cr-pdf-actions">{hasPermission(user.role, "reports.manage") && <Button variant="outline" isDisabled={regenerating || updatingPdf} onPress={() => { void regenerate(); }}>{regenerating ? <LoaderCircle className="cr-spin" size={16} aria-hidden="true"/> : <RotateCcw size={16} aria-hidden="true"/>}{regenerating ? "Restarting report" : "Regenerate report"}</Button>}{hasPermission(user.role, "reports.manage") && <Button variant="outline" isDisabled={updatingPdf || regenerating} onPress={() => { void rebuildPdf(); }}>{updatingPdf ? <LoaderCircle className="cr-spin" size={16} aria-hidden="true"/> : <RotateCcw size={16} aria-hidden="true"/>}{updatingPdf ? "Generating PDF" : htmlReady ? "Generate PDF" : "Update PDF layout"}</Button>}{ready && <a className="cr-download" href={pdfUrl} download={`NIQ-report-${report.assessment.reference}.pdf`}><Download size={18} aria-hidden="true"/>Download PDF</a>}</div></div>
+      {regenerateError && <div className="cr-message cr-error" role="alert"><p>{regenerateError}</p></div>}
       {pdfError && <div className="cr-message cr-error" role="alert"><p>{pdfError}</p></div>}
       <div className="cr-preview-heading"><div><h2>Report preview</h2><p>Review the layout in the browser, or view the saved PDF.</p></div></div>
       <div className="cr-preview-tabs" role="group" aria-label="Report preview format">

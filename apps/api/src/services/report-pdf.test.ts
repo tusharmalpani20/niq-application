@@ -65,7 +65,9 @@ test("possible effect summaries appear in the PDF layout without raw source advi
   }] } } as GeneratedReport;
   const html = await renderGeneratedReportHtml(withPossible, { name: "Example Clinic", primaryColor: "#138f94" });
   expect(html).toContain("Possible treatment effects");
-  expect(html).toContain("They have not been reported as symptoms");
+  expect(html).toContain("The guidance explains what to do if they occur.");
+  expect(html).toContain("Contact your care team about new or worsening symptoms.");
+  expect(html).not.toContain("They have not been reported as symptoms");
   expect(html).toContain("If mouth discomfort occurs");
   expect(html).toContain("cr-possible-effect");
 });

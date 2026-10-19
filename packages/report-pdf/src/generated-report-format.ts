@@ -20,6 +20,15 @@ export const reportAge = (birth: string | null, at: string | null) => {
 
 export const metricText = (metric: GeneratedReport["metrics"][number]) => `${assessmentOptionDisplayLabel(metric.id, metric.value)}${metric.unit ? ` ${metric.unit}` : ""}`;
 
+/** Reviewed conflicts override extraction from legacy matched-rule text. */
+export function nutritionTargetValue(report: GeneratedReport, nutrient: "energy" | "protein"): string | null {
+  const resolution = report.targetResolutions?.find(row => row.nutrient === nutrient);
+  if (resolution) return resolution.decision === "withhold_numeric" ? null : resolution.targetText;
+  const source = report.guidance.sections.filter(row => row.kind === "nutrition").map(row => row.text).join("\n");
+  const match = new RegExp(`${nutrient}[:\\s]*([0-9]+(?:\\.[0-9]+)?\\s*[–-]\\s*[0-9]+(?:\\.[0-9]+)?\\s*${nutrient === "energy" ? "kcal" : "g"}\\s*\\/\\s*kg\\s*\\/\\s*day)`, "i").exec(source);
+  return match?.[1]?.replace(/\s+/g, " ") ?? null;
+}
+
 /** Benefits belong to the product catalog, not an individual dosage plan. */
 export function productBenefits(report: GeneratedReport, name: string): string[] {
   const product = report.productCatalog?.find(product => [product.name, ...(product.aliases ?? [])]

@@ -1,7 +1,7 @@
 import { Circle, Document, Font, Image, Page, Path, Rect, Svg, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { ReactNode } from "react";
 import { adultBmiCategory, adultBmiReference, calculateAssessmentBmi, reportFaceScanAdditionalMetricGroups, riskColorHex, type GeneratedReport } from "@niq/application-contracts";
-import { cleanWeights, metricText, productBenefits, reportAge, reportDate, reportGuidance } from "./generated-report-format";
+import { cleanWeights, metricText, nutritionTargetValue, productBenefits, reportAge, reportDate, reportGuidance } from "./generated-report-format";
 import { weightChartPoints } from "./generated-report-chart";
 import { accessibleBrandInk } from "./accessible-brand-ink";
 
@@ -344,16 +344,10 @@ function productParts(report: GeneratedReport) {
   return { items, duration };
 }
 
-function targetValue(text: string, label: "energy" | "protein") {
-  const match = new RegExp(`${label}[:\\s]*([0-9]+(?:\\.[0-9]+)?\\s*[–-]\\s*[0-9]+(?:\\.[0-9]+)?\\s*${label === "energy" ? "kcal" : "g"}\\s*\\/\\s*kg\\s*\\/\\s*day)`, "i").exec(text);
-  return match?.[1]?.replace(/\s+/g, " ") ?? null;
-}
-
 function nutritionTargets(report: GeneratedReport) {
-  const source = reportGuidance(report, "nutrition").map(item => item.text).join("\n");
   return [
-    { label: "Energy target", value: targetValue(source, "energy"), icon: "pulse" as IconName },
-    { label: "Protein target", value: targetValue(source, "protein"), icon: "food" as IconName },
+    { label: "Energy target", value: nutritionTargetValue(report, "energy"), icon: "pulse" as IconName },
+    { label: "Protein target", value: nutritionTargetValue(report, "protein"), icon: "food" as IconName },
   ].filter((item): item is { label: string; value: string; icon: IconName } => Boolean(item.value));
 }
 
@@ -579,14 +573,14 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
     </ReportPage>}
 
     {antimetaboliteSections.length > 0 && <ReportPage report={report} brand={brand} number={page++} title="Symptoms Associated with Antimetabolite Chemotherapy" icon="alert">
-      <Text style={[styles.body, { marginBottom: 11 }]}>The guidance in this report covers potential side effects associated with antimetabolite chemotherapy, including mouth sores, diarrhoea, hand-foot symptoms, nausea or vomiting, infection, dehydration, raised liver enzymes, fatigue or swelling, and anaemia. These are precautionary measures, not diagnoses. Not every patient will experience all these effects, and any symptoms that develop should be reviewed by the treating oncologist.</Text>
+      <Text style={[styles.body, { marginBottom: 11 }]}>These side effects may occur during antimetabolite chemotherapy, but not everyone experiences them. The guidance below explains what to do if they occur. Contact your care team about new or worsening symptoms.</Text>
       {antimetaboliteSections.map(section => <AdvicePanel key={section.id} title={section.title} text={section.text} icon="alert" theme={theme} compact allowWrap/>)}
     </ReportPage>}
     {otherPossibleSections.length > 0 && <ReportPage report={report} brand={brand} number={page++} title="Possible treatment effects" icon="alert">
-      <Text style={[styles.body, { marginBottom: 11 }]}>These effects are possible with the matched treatment and drug class. They have not been reported as symptoms in this assessment.</Text>
+      <Text style={[styles.body, { marginBottom: 11 }]}>These are possible treatment effects. The guidance explains what to do if they occur. Contact your care team about new or worsening symptoms.</Text>
       {otherPossibleSections.map(section => <AdvicePanel key={section.id} title={section.title} text={section.text} icon="alert" theme={theme} compact allowWrap/>)}
     </ReportPage>}
-    {redFlags && <ReportPage report={report} brand={brand} number={page++} title="Red flags" icon="alert"><AdvicePanel title="When to seek urgent help" text={redFlags} icon="alert" theme={theme}/></ReportPage>}
+    {redFlags && <ReportPage report={report} brand={brand} number={page++} title="When to contact your care team" icon="alert"><AdvicePanel title="When to seek urgent help" text={redFlags} icon="alert" theme={theme}/></ReportPage>}
 
     {(hasConsiderations || (hasActions && (!hasFindings || Boolean(report.narrative.foodSafetyAdvice)))) && <ReportPage report={report} brand={brand} number={page++} title="Recommendations" icon="heart">
       <View style={{ gap: 10 }}>

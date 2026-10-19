@@ -92,6 +92,29 @@ const readyReport: GeneratedReport = {
     artifact: { sha256: "a".repeat(64), size: 1024, uploadedAt: "2026-10-12T08:00:00.000Z", brandingFingerprint: null },
 };
 
+test("reviewed target selection overrides the old rule range in target cards", async () => {
+  const report: GeneratedReport = { ...readyReport,
+    targetResolutions: [{ nutrient: "protein", decision: "select_source", targetText: "1.2–1.5 g/kg/day" }] };
+  await renderWithResponse({ report, generation: { status: "READY" } }, () => {
+    const targets = document.querySelector(".cr-nutrition-targets")?.textContent;
+    expect(targets).toContain("1.2–1.5 g/kg/day");
+    expect(targets).not.toContain("1.5–2.0 g/kg/day");
+    expect(targets).toContain("30–35 kcal/kg/day");
+  });
+});
+
+test("withheld target hides its card without reviving the legacy numeric range", async () => {
+  const report: GeneratedReport = { ...readyReport,
+    targetResolutions: [{ nutrient: "protein", decision: "withhold_numeric", targetText: null }] };
+  await renderWithResponse({ report, generation: { status: "READY" } }, () => {
+    const targets = document.querySelector(".cr-nutrition-targets")?.textContent;
+    expect(targets).not.toContain("Protein target");
+    expect(targets).not.toContain("1.5–2.0 g/kg/day");
+    expect(targets).toContain("30–35 kcal/kg/day");
+    expect(document.querySelectorAll(".cr-nutrition-target-card")).toHaveLength(1);
+  });
+});
+
 test("ready report shows HTML layout with access to the saved PDF", async () => {
   const report = readyReport;
   await renderWithResponse({ report, generation: { status: "READY" } }, async () => {
@@ -123,6 +146,7 @@ test("ready report shows HTML layout with access to the saved PDF", async () => 
     expect(summary.textContent).toContain("NIQ score");
     expect(summary.querySelector(".cr-summary-score-circle")?.getAttribute("aria-label")).toBe("27 points, High Risk");
     expect(summary.querySelector('[aria-label="Overall clinical summary"]')?.textContent).toContain("High nutritional risk and treatment-related eating difficulty");
+    expect(summary.querySelectorAll(".cr-summary-brief p")).toHaveLength(1);
     expect(summary.textContent).not.toContain("Reviewed nutrition guidance");
     expect(summary.textContent).not.toContain("Reviewed action plan");
     expect(summary.textContent).not.toContain("Reviewed monitoring plan");
@@ -249,10 +273,7 @@ test("older reports get a brief closing recap from reviewed narrative", async ()
   await renderWithResponse({ report, generation: { status: "READY" } }, () => {
     const summary = document.querySelector('[aria-label="Overall clinical summary"]')!;
     expect(Array.from(summary.querySelectorAll("p")).map(point => point.textContent)).toEqual([
-      "Weight loss raises nutritional concern.",
-      "Use the reviewed nutrition approach.",
-      "Discuss changes with the care team.",
-      "Monitor weight and intake.",
+      "Weight loss raises nutritional concern. Use the reviewed nutrition approach. Discuss changes with the care team. Monitor weight and intake.",
     ]);
     expect(summary.textContent).not.toContain("second detail");
   });
@@ -334,6 +355,11 @@ test("narrative emphasis renders safely and an undated previous weight has a lab
     expect(interpretation.querySelector("strong")?.className).toBe("cr-narrative-emphasis");
     expect(interpretation.textContent).toContain("<urgent>");
     expect(interpretation.querySelector("urgent")).toBeNull();
+    expect(interpretation.querySelectorAll("p")).toHaveLength(1);
+    expect(interpretation.querySelector("ul")).toBeNull();
+    const coverTitle = document.querySelector(".cr-cover h1")!;
+    expect(Array.from(coverTitle.childNodes).map(part => part.nodeName === "BR" ? " " : part.textContent).join("")).toBe("Nutritional Assessment Protocol Report");
+    expect(document.querySelector(".cr-cover")?.textContent).toContain("Precision Nutrition Assessment for Better Cancer Care");
     expect(document.querySelector('[aria-label="Planned treatment"]')).toBeNull();
     expect(document.querySelector('[aria-label="Intervention"]')?.textContent).toContain("Preparation for treatment");
     expect(document.querySelector('[aria-label="Report summary"]')?.textContent).toContain("Treatment Start Date");
@@ -385,7 +411,7 @@ test("possible treatment effects use continuous section headings and keep confir
     expect(pages.length).toBe(3);
     expect([...pages].flatMap(page => [...page.querySelectorAll(".cr-possible-effect h3")].map(title => title.textContent)))
       .toEqual(possible.map(item => item.title));
-    expect([...pages].every(page => page.textContent?.includes("They have not been reported as symptoms"))).toBe(true);
+    expect([...pages].every(page => page.textContent?.includes("The guidance explains what to do if they occur"))).toBe(true);
     expect([...pages].every(page => page.textContent?.includes("Possible effect · Taxanes"))).toBe(true);
     expect(document.querySelector('[aria-label="Recommendations"]')?.textContent).toContain("Reported nausea");
     expect(document.querySelector('[aria-label="Recommendations"]')?.textContent).not.toContain("Effect 1");
@@ -462,7 +488,7 @@ test("HTML supplement cards show the saved product master image through its exis
   });
 });
 
-test("fallback mouth reference displays the sourced reported care once, not placeholder text", async () => {
+test("legacy mouth placeholder displays full care in both relevant sections without references", async () => {
   const report: GeneratedReport = { ...readyReport,
     narrative: { ...readyReport.narrative, effectsAdvice: "Choose soft, moist foods. Avoid spicy foods." },
     narrativeEvidence: { effectsAdvice: ["fact:assessment_dietary_symptoms_dietary_symptoms_mouth_sores", "rule:toxicity:mouth"] },
@@ -471,8 +497,62 @@ test("fallback mouth reference displays the sourced reported care once, not plac
   await renderWithResponse({report,generation:{status:"READY"}}, () => {
     const mouth = document.querySelector(".cr-possible-effect")!;
     expect(mouth.textContent).toContain("Choose soft, moist foods.");
-    expect(mouth.textContent).toContain("Patient-reported mouth symptoms");
+    expect(mouth.textContent).toContain("Avoid spicy foods.");
+    expect(mouth.textContent).not.toContain("Patient-reported mouth symptoms");
+    expect(mouth.querySelector("a")).toBeNull();
     expect(document.body.textContent).not.toContain("A related symptom was reported separately");
-    expect(document.querySelectorAll("#cr-reported-symptom-care").length).toBe(0);
+    const reportedCare = document.querySelector("#cr-reported-symptom-care")!;
+    expect(reportedCare.textContent).toContain("Choose soft, moist foods.");
+    expect(reportedCare.textContent).toContain("Avoid spicy foods.");
+    expect(reportedCare.querySelector("a")).toBeNull();
+  });
+});
+
+test("a ready report can explicitly start a fresh generation and displays queued progress", async () => {
+  let queued = false;
+  let requests = 0;
+  await renderWithResponse(async (url: string, options?: RequestInit) => {
+    if (String(url).endsWith("/regenerate")) {
+      expect(options?.method).toBe("POST");
+      requests++;
+      queued = true;
+    }
+    return Response.json(queued ? { report: null, generation: { status: "QUEUED", failureCode: null } }
+      : { report: readyReport, generation: { status: "READY", failureCode: null } });
+  }, async () => {
+    const button = Array.from(document.querySelectorAll("button")).find(item => item.textContent === "Regenerate report");
+    expect(button).toBeDefined();
+    await act(async () => { button!.click(); await new Promise(resolve => setTimeout(resolve, 20)); });
+    expect(requests).toBe(1);
+    expect(document.body.textContent).toContain("Report queued");
+    expect(document.querySelector(".cr-download")).toBeNull();
+  });
+});
+
+test("a regeneration error keeps the existing ready report available", async () => {
+  await renderWithResponse(async (url: string) => String(url).endsWith("/regenerate")
+    ? Response.json({ error: { code: "CONFLICT", message: "Wait for the current report attempt to finish." } }, { status: 409 })
+    : Response.json({ report: readyReport, generation: { status: "READY", failureCode: null } }), async () => {
+    const button = Array.from(document.querySelectorAll("button")).find(item => item.textContent === "Regenerate report");
+    await act(async () => { button!.click(); await new Promise(resolve => setTimeout(resolve, 20)); });
+    expect(document.querySelector(".cr-download")).not.toBeNull();
+    expect(document.body.textContent).toContain("Wait for the current report attempt to finish.");
+    expect(button?.disabled).toBe(false);
+  });
+});
+
+test("patient report uses a clear contact heading and the same completion statement in the summary", async () => {
+  const report: GeneratedReport = { ...readyReport, assessmentAnswerCoverage: {answered:29,total:32},
+    narrative:{...readyReport.narrative,redFlagsAdvice:"Contact your oncologist immediately if instructed warning signs occur."},
+    guidance: {sections:[...readyReport.guidance.sections,{id:"possible-mouth",kind:"toxicity",title:"Mouth sores",text:"If mouth sores occur, discuss care with your team.",certainty:"possible",drugClass:"Antimetabolites"}]},
+  };
+  await renderWithResponse({report,generation:{status:"READY"}},()=>{
+    const summary=document.querySelector('[aria-label="Report summary"]')!;
+    expect(summary.querySelector('.cr-answer-coverage')?.textContent).toBe('This report is based on an assessment that was 90% complete.');
+    expect(summary.textContent).not.toContain('29 of 32');
+    expect(document.querySelector('[aria-label="When to contact your care team"]')).not.toBeNull();
+    expect(document.querySelector('[aria-label="Red flags"]')).toBeNull();
+    expect(document.querySelector('.cr-possible-intro')?.textContent).toContain('not everyone experiences them');
+    expect(document.querySelector('.cr-possible-intro')?.textContent).not.toContain('These are precautionary measures, not diagnoses');
   });
 });

@@ -14,7 +14,7 @@ export function readableReportEmphasis(marked: string): string {
   let removed = 0;
   for (const match of marked.matchAll(/\*\*([^*]+)\*\*/g)) {
     const start = match.index! - removed;
-    existing.push({ start, end: start + match[1]!.length, priority: 5 });
+    existing.push({ start, end: start + match[1]!.length, priority: 12 });
     removed += 4;
   }
   const points = text.split(/(?<=\n)/u).flatMap((line, index, lines) => {
@@ -36,12 +36,15 @@ export function readableReportEmphasis(marked: string): string {
     if (!point || /^\s*#{1,6}\s/.test(point.text) || phrase === point.text.trim()) return;
     candidates.push({ start, end, priority });
   };
-  // An intentionally unhighlighted model passage must remain unhighlighted.
-  if (!existing.length) return marked;
+  // Complete numeric targets remain useful even when an older model omitted
+  // emphasis. Other intentionally unhighlighted passages remain unchanged.
+  const targets = Array.from(text.matchAll(/\b\d+(?:\.\d+)?(?:\s*[–−-]\s*\d+(?:\.\d+)?)?\s*(?:kcal|g(?:\s+protein)?)\s*\/\s*kg\s*\/\s*day\b/gi));
+  if (!existing.length && !targets.length) return marked;
+  for (const target of targets) add(target.index!, target.index! + target[0].length, 20);
   const existingWords = existing.reduce((sum, span) => sum + words(text.slice(span.start, span.end)), 0);
   if (existingWords <= budget) {
     for (const span of existing) add(span.start, span.end, span.priority);
-    if (candidates.length === existing.length && existing.length) return marked;
+    if (!targets.length && candidates.length === existing.length && existing.length) return marked;
   }
   const patterns: Array<[RegExp, number]> = [
     [/\b(?:contact|call|inform|notify)\s+(?:your|the)\s+(?:care team|oncologist|doctor)(?:\s+(?:immediately|early))?\b/gi, 4],
@@ -63,7 +66,7 @@ export function readableReportEmphasis(marked: string): string {
   for (const candidate of candidates.sort((a, b) => b.priority - a.priority || a.start - b.start)) {
     const count = words(text.slice(candidate.start, candidate.end));
     const point = points.findIndex(item => candidate.start >= item.start && candidate.end <= item.start + item.text.length);
-    if (count > remaining || (pointCounts.get(point) ?? 0) >= 2
+    if ((count > remaining && candidate.priority < 20) || (pointCounts.get(point) ?? 0) >= 2
       || selected.some(span => candidate.start < span.end && candidate.end > span.start)) continue;
     selected.push(candidate);
     remaining -= count;
