@@ -89,6 +89,11 @@ export type GeneratedReport = {
   classification: { id: string; label: string; score: number; color?: AssessmentRiskColor };
   /** Exact nutritional status from the frozen care-plan risk mapping. */
   nutritionalStatus?: string;
+  /** Reviewed numeric target decisions, without internal rule-conflict reasoning. */
+  targetResolutions?: Array<
+    { nutrient: "energy" | "protein"; decision: "select_source"; targetText: string } |
+    { nutrient: "energy" | "protein"; decision: "withhold_numeric"; targetText: null }
+  >;
   metrics: Array<{ id: string; label: string; value: string; unit?: string; measuredAt?: string; source: "assessment" | "face_scan"; referenceRange?: string; outsideReferenceRange?: boolean }>;
   weightDisplayUnit?: "kg" | "lb";
   weightHistory: Array<{ date: string | null; kg: number; label?: string; assessmentId?: string }>;

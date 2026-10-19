@@ -41,11 +41,19 @@ const selectedGuidance = z.object({
   classGuidance: z.array(z.object({ id: z.string(), label: z.string(), guidance: bounded })).max(30).optional(),
   carePlan,
 });
+// Retain only display decisions. Internal source IDs and manager rationale stay
+// in Scoring's restricted trace rather than entering a patient-facing snapshot.
+const targetResolution = z.discriminatedUnion("decision", [
+  z.object({ nutrient: z.enum(["energy", "protein"]), decision: z.literal("select_source"), targetText: z.string().trim().min(1).max(1000) }),
+  z.object({ nutrient: z.enum(["energy", "protein"]), decision: z.literal("withhold_numeric"), targetText: z.null() }),
+]);
 export const scoringReportContentSchema = z.object({
   runId: z.string().min(1), status: z.enum(["READY", "REVIEW_REQUIRED"]),
   assessmentReference: z.string(), resultReference: z.string(), ruleVersionId: z.string(), checksum: z.string().regex(/^[a-f0-9]{64}$/),
   model: z.string().min(1), promptVersion: z.string().min(1), schemaVersion: z.number().int().positive(),
   classification: z.object({ id: z.string(), label: z.string() }),
+  targetResolutions: z.array(targetResolution).max(2).refine(rows => new Set(rows.map(row => row.nutrient)).size === rows.length,
+    "Each nutrient has at most one reviewed resolution").optional(),
   guidance: selectedGuidance,
   narrative: z.object({
     overview: narrative, keyFindings: narrative, actionSummary: narrative, monitoringSummary: narrative,
@@ -76,6 +84,12 @@ export const scoringReportContentSchema = z.object({
 export type ScoringReportContent = z.infer<typeof scoringReportContentSchema>;
 
 export type ReportFacts = {
+  // Narrative context only: the original questionnaire answers remain unchanged.
+  weightComparison?: {
+    source: "assessment_history" | "reported_previous_weight";
+    previousWeightKg: number; currentWeightKg: number; changePercent: number;
+    previousDate?: string; currentDate: string; previousLabel?: string;
+  };
   treatmentTypeIds: string[]; drugClassIds: string[]; confirmedToxicityIds: string[];
   assessmentAnswers?: {
     gastrointestinal_symptoms?: string[]; dietary_symptoms?: string[]; appetite_status?: string; functional_capacity?: string;

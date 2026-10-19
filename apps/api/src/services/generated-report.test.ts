@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { GeneratedReportService, REPORT_REVIEW_REQUIRED, assertGeneratedPdf, assertReadyPdfRefresh, assertReportPdfDownloadable, assertReportReadyForApproval, assertReviewedArtifact, automaticReportCanFinalize, automaticRetryDelay, cleanReportText, finishWeightHistory, normalizeGuidance, normalizeNarrative, prepareNarrativeEdit, publicReportGeneration, preserveReportPdfHold, reportDefersPdf, reportBrandingFingerprint, reportClinicalFacts, reportGenerationIssues, reportNeedsClinicalReview, reportObservations, reportProductCatalog, reportProductPlans, reportToxicityAnswers } from "./generated-report";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { GeneratedReportService, REPORT_REVIEW_REQUIRED, assertGeneratedPdf, assertReadyPdfRefresh, assertReportPdfDownloadable, assertReportReadyForApproval, assertReviewedArtifact, automaticReportCanFinalize, automaticRetryDelay, cleanReportText, finishWeightHistory, reportWeightComparison, normalizeGuidance, normalizeNarrative, prepareNarrativeEdit, publicReportGeneration, reportPredecessorId, preserveReportPdfHold, reportDefersPdf, reportBrandingFingerprint, reportClinicalFacts, reportGenerationIssues, reportNeedsClinicalReview, reportObservations, reportProductCatalog, reportProductPlans, reportToxicityAnswers } from "./generated-report";
 import { requestScoringReportContent, requestScoringToxicityOptions, scoringReportContentSchema } from "./scoring-report-content";
 import { approveGeneratedReportSchema, editGeneratedNarrativeSchema } from "../../../../packages/contracts/src/generated-report";
 
@@ -20,6 +21,26 @@ const packet = {
       ], notes: [] } },
   }, issues: [],
 };
+
+test("reviewed target decisions cross the boundary without private conflict reasoning", () => {
+  const targetResolutions = [
+    { nutrient: "protein", decision: "select_source", selectedSourceId: "rule:status:high", sourceIds: ["rule:nutrition:high", "rule:status:high"],
+      rationale: "Internal clinical comparison", targetText: "1.2–1.5 g/kg/day" },
+    { nutrient: "energy", decision: "withhold_numeric", selectedSourceId: null, sourceIds: ["rule:nutrition:high"],
+      rationale: "Internal unresolved conflict", targetText: null },
+  ];
+  expect(scoringReportContentSchema.parse({ ...packet, targetResolutions }).targetResolutions).toEqual([
+    { nutrient: "protein", decision: "select_source", targetText: "1.2–1.5 g/kg/day" },
+    { nutrient: "energy", decision: "withhold_numeric", targetText: null },
+  ]);
+  expect(scoringReportContentSchema.parse(packet).targetResolutions).toBeUndefined();
+});
+
+test("target decisions reject ambiguous duplicates or missing selected text", () => {
+  const selected = { nutrient: "protein", decision: "select_source", targetText: "1.2–1.5 g/kg/day" };
+  expect(scoringReportContentSchema.safeParse({ ...packet, targetResolutions: [selected, selected] }).success).toBe(false);
+  expect(scoringReportContentSchema.safeParse({ ...packet, targetResolutions: [{ ...selected, targetText: null }] }).success).toBe(false);
+});
 const manifest = { sections: [{ fields: [
   { id: "drug_classes", options: [{ id: "taxanes", label: "Taxanes" }] },
   { id: "current_cancer_treatment", options: [{ id: "radiation", label: "Radiotherapy" }] },
@@ -58,7 +79,9 @@ test("report-content request binds the clinician-reviewed score and result refer
   let calls = 0;
   const result = await requestScoringReportContent({ baseUrl: "http://scoring.test", credential: "private", requestId: "r1", timeoutMs: 1000,
     assessmentReference: packet.assessmentReference, resultReference: packet.resultReference, idempotencyKey: "request-1234567890",
-    facts: { reviewedScore: 28, reviewedRiskCategoryId: "high", treatmentTypeIds: [], drugClassIds: [], confirmedToxicityIds: [], observations: [] },
+    facts: { reviewedScore: 28, reviewedRiskCategoryId: "high", treatmentTypeIds: [], drugClassIds: [], confirmedToxicityIds: [], observations: [],
+      assessmentAnswers: { previous_weight_kg: 62, current_weight_kg: 64 },
+      weightComparison: { source: "assessment_history", previousWeightKg: 63, currentWeightKg: 64, previousDate: "2026-10-13", currentDate: "2026-10-15", changePercent: 1 / 63 * 100 } },
     fetcher: async (_url: RequestInfo | URL, init?: RequestInit) => {
       calls++;
       if (init?.method === "POST") { sent = JSON.parse(String(init.body)); return Response.json({ runId: "run-1", status: "QUEUED" }, { status: 202 }); }
@@ -67,6 +90,9 @@ test("report-content request binds the clinician-reviewed score and result refer
   } as any);
   expect(sent.resultReference).toBe("reviewed-result-2");
   expect(sent.facts.reviewedScore).toBe(28);
+  expect(sent.facts.assessmentAnswers.previous_weight_kg).toBe(62);
+  expect(sent.facts.weightComparison).toMatchObject({ source: "assessment_history", previousWeightKg: 63, currentWeightKg: 64,
+    previousDate: "2026-10-13", currentDate: "2026-10-15" });
   expect(result.checksum).toBe("a".repeat(64));
   expect(calls).toBe(2);
   await expect(requestScoringReportContent({ baseUrl: "http://scoring.test", credential: "private", requestId: "r2", timeoutMs: 1000,
@@ -404,6 +430,40 @@ test("HTML review holds survive retries and expose only checked drafts without i
   expect(publicReportGeneration("QUEUED", null, [], held).status).toBe("QUEUED");
 });
 
+test("a rejected explicit HTML attempt stays terminal while legacy automatic attempts remain queued", async () => {
+  const assessment = {};
+  const service = new GeneratedReportService({ unseal: (stored: unknown) => stored } as any);
+  (service as any).clinical = async () => assessment;
+  for (const status of ["DRAFT", "FAILED"]) {
+    const row = { status, failureCode: REPORT_REVIEW_REQUIRED, requestKey: "auto-final-v1:submission:html-review",
+      content: { issues: ["nutritionAdvice:MISSING_SOURCE_CONTENT"] } };
+    (service as any).latest = async () => row;
+    expect(await service.read({} as any, "org", "assessment")).toEqual({ report: null,
+      generation: { status: "FAILED", failureCode: REPORT_REVIEW_REQUIRED } });
+    row.requestKey = "auto-final-v1:submission";
+    expect(await service.read({} as any, "org", "assessment")).toEqual({ report: null,
+      generation: { status: "QUEUED", failureCode: null } });
+  }
+});
+
+test("HTML review recovery cannot reserve a successor even when called directly", async () => {
+  const service = new GeneratedReportService({ db: { transaction: () => { throw new Error("Unexpected successor transaction"); } } } as any);
+  await (service as any).recoverReviewRequired({ requestKey: "auto-final-v1:submission:html-review" }, {}, {});
+  await (service as any).recoverReviewRequired({ requestKey: "auto-final-v1:submission:html-review:retry:run" }, {}, {});
+});
+
+test("the recovery worker query excludes explicit HTML review requests with token boundaries", async () => {
+  let query: { sql: string; params: unknown[] } | undefined;
+  const chain: any = {};
+  for (const method of ["from", "orderBy"]) chain[method] = () => chain;
+  chain.where = (predicate: any) => { query = new PgDialect().sqlToQuery(predicate); return chain; };
+  chain.limit = async () => [];
+  const service = new GeneratedReportService({ config: { REPORT_GENERATION_TIMEOUT_MS: 1000 }, db: { select: () => chain } } as any);
+  await service.processDue();
+  expect(query?.sql).toContain('"request_key" !~');
+  expect(query?.params).toContain("(^|:)html-review(:|$)");
+});
+
 
 test("selected product images survive the authenticated transport boundary and report snapshot", () => {
   const image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
@@ -417,4 +477,111 @@ test("selected product images survive the authenticated transport boundary and r
   expect(scoringReportContentSchema.safeParse(current).success).toBe(false);
   current.guidance.carePlan.products.catalog[0].imageDataUrl = "https://example.com/product.png";
   expect(scoringReportContentSchema.safeParse(current).success).toBe(false);
+});
+
+describe("explicit report regeneration", () => {
+  async function attempt(status: string, requestKey = "auto-final-v1:submission", failureCode: string | null = null) {
+    const previous = { id: "01PREVIOUSREPORT", status, requestKey, failureCode, content: "saved-content", artifact: "saved-pdf" };
+    const inserted: any[] = [];
+    const audited: any[] = [];
+    const query: any = {};
+    for (const method of ["from", "where", "orderBy", "limit"]) query[method] = () => query;
+    query.for = async () => [previous];
+    const tx = { select: () => query, insert: () => ({ values: async (row: unknown) => { inserted.push(row); } }) };
+    const assessment = { patientId: "patient" };
+    const backing = { db: { transaction: async (run: any) => run(tx) }, authorize: async () => assessment,
+      audit: async (...args: any[]) => { audited.push(args); } };
+    const service = new GeneratedReportService(backing as any);
+    (service as any).clinical = async () => assessment;
+    (service as any).source = () => ({ submissionId: "submission", scoreRevision: 2 });
+    service.read = async () => ({ report: null, generation: { status: "QUEUED", failureCode: null } });
+    const result = service.regenerate({} as any, "org", "assessment", {} as any);
+    return { result, inserted, audited, previous };
+  }
+
+  test("ready and approved reports create a new attempt while preserving issued content and PDF", async () => {
+    for (const status of ["READY", "APPROVED"]) {
+      const run = await attempt(status, "auto-final-v1:submission:html-review");
+      expect(await run.result).toMatchObject({ generation: { status: "QUEUED" } });
+      expect(run.inserted).toHaveLength(1);
+      expect(run.inserted[0]).toMatchObject({ status: "QUEUED", submissionId: "submission", attemptCount: 0 });
+      expect(run.inserted[0].id).not.toBe("01PREVIOUSREPORT");
+      expect(reportDefersPdf(run.inserted[0].requestKey)).toBe(true);
+      expect(reportPredecessorId(run.inserted[0].requestKey)).toBe("01PREVIOUSREPORT");
+      expect(run.previous).toMatchObject({ status, content: "saved-content", artifact: "saved-pdf" });
+      expect(run.audited[0]?.[5]).toMatchObject({ previousReportId: "01PREVIOUSREPORT", scoreRevision: 2 });
+    }
+  });
+
+  test("a queued or generating latest attempt rejects duplicate regeneration without writes", async () => {
+    for (const status of ["QUEUED", "GENERATING"]) {
+      const run = await attempt(status);
+      await expect(run.result).rejects.toMatchObject({ code: "CONFLICT" });
+      expect(run.inserted).toHaveLength(0);
+      expect(run.audited).toHaveLength(0);
+    }
+  });
+
+  test("checked HTML drafts and failed automatic attempts remain restartable", async () => {
+    for (const [status, requestKey, failureCode] of [
+      ["DRAFT", "auto-final-v1:submission:html-review", null],
+      ["DRAFT", "auto-final-v1:submission", REPORT_REVIEW_REQUIRED],
+      ["FAILED", "auto-final-v1:submission", "MODEL_UNAVAILABLE"],
+    ] as const) {
+      const run = await attempt(status, requestKey, failureCode);
+      await run.result;
+      expect(run.inserted).toHaveLength(1);
+    }
+  });
+});
+
+ test("report predecessor references preserve recovery and explicit retry lineage", () => {
+  expect(reportPredecessorId("auto-final-v1:submission:recovery:01PREVIOUS:html-review")).toBe("01PREVIOUS");
+  expect(reportPredecessorId("auto-final-v1:submission:retry:01NEW:predecessor:01PREVIOUS")).toBe("01PREVIOUS");
+  expect(reportPredecessorId("auto-final-v1:submission:retry:01NEW")).toBeUndefined();
+});
+
+test("regeneration inherits the clinician product stage across a failed attempt without changing toxicities", async () => {
+  const decision = { productStageChoice: "surgical", confirmedToxicityIds: ["old-confirmation"] };
+  const rows = [
+    { id: "01FAILED", submissionId: "submission", requestKey: "auto-final-v1:submission:retry:01FAILED:predecessor:01ISSUED", content: null },
+    { id: "01ISSUED", submissionId: "submission", requestKey: "auto-final-v1:submission", content: { decision } },
+  ];
+  let reads = 0;
+  const query: any = {};
+  for (const name of ["from", "where"]) query[name] = () => query;
+  query.limit = async () => { reads++; return [rows.shift()]; };
+  const service = new GeneratedReportService({ db: { select: () => query }, unseal: (value: unknown) => value } as any);
+  expect(await (service as any).predecessorDecision({ id: "01NEW", organizationId: "org", assessmentId: "assessment",
+    submissionId: "submission", requestKey: "auto-final-v1:submission:retry:01NEW:predecessor:01FAILED" })).toEqual(decision);
+  expect(reads).toBe(2);
+});
+
+
+describe("narrative weight comparison matches the chart", () => {
+  test("recorded assessment history takes priority without altering reported assessment answers", () => {
+    const answers = { previous_weight_kg: 62, current_weight_kg: 64 };
+    const history = finishWeightHistory([{ assessmentId: "previous", date: "2026-10-13", kg: 63 }],
+      { assessmentId: "current", date: "2026-10-15", kg: 64 }, answers.previous_weight_kg);
+    expect(reportWeightComparison(history, 64, "2026-10-15")).toEqual({
+      source: "assessment_history", previousWeightKg: 63, currentWeightKg: 64,
+      previousDate: "2026-10-13", currentDate: "2026-10-15", changePercent: 1 / 63 * 100,
+    });
+    expect(reportToxicityAnswers(answers)).toMatchObject({ previous_weight_kg: 62, current_weight_kg: 64 });
+    expect(JSON.stringify(reportWeightComparison(history, 64, "2026-10-15"))).not.toContain("assessmentId");
+  });
+
+  test("first assessment uses its reported previous weight without inventing a date", () => {
+    const history = finishWeightHistory([], { date: "2026-10-15", kg: 64 }, 62);
+    expect(reportWeightComparison(history, 64, "2026-10-15")).toEqual({
+      source: "reported_previous_weight", previousWeightKg: 62, currentWeightKg: 64,
+      previousLabel: "Weight 1 Month Ago", currentDate: "2026-10-15", changePercent: 2 / 62 * 100,
+    });
+  });
+
+  test("omits unavailable or stale comparisons instead of describing two prior measurements", () => {
+    expect(reportWeightComparison([{ date: "2026-10-15", kg: 64 }], 64, "2026-10-15")).toBeUndefined();
+    expect(reportWeightComparison([{ date: "2026-10-13", kg: 63 }, { date: "2026-10-14", kg: 64 }], null, "2026-10-15")).toBeUndefined();
+    expect(reportWeightComparison([{ date: "2026-10-13", kg: 63 }, { date: "2026-10-14", kg: 64 }], 64, "2026-10-15")).toBeUndefined();
+  });
 });

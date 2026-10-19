@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq, isNull, lt, ne, or, lte, like, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
+import { weightChange } from "../../../../packages/report-pdf/src/generated-report-format";
 import { assessFaceScanRange, assessmentOptionDisplayLabel, formatAssessmentReference, getAssessmentAnswerCoverage, hasPermission, reportBrandingPayload, reportFaceScanAdditionalMetricGroups, type AssessmentFormManifest, type FaceScanSession, type FormAnswers } from "@niq/application-contracts";
 import type { GeneratedReport, GeneratedReportSection, GeneratedNarrative } from "../../../../packages/contracts/src/generated-report";
 import { assessmentScoreResultSchema, type AssessmentPatient } from "../../../../packages/contracts/src/assessment-workflow";
@@ -18,6 +19,7 @@ export const AUTOMATIC_REPORT_KEY_PREFIX = "auto-final-v1:";
 // Stored in the durable request key so retries retain the clinician's PDF hold.
 export const reportDefersPdf = (requestKey: string) => /(?:^|:)html-review(?:$|:)/.test(requestKey);
 export const preserveReportPdfHold = (requestKey: string, previousKey: string) => reportDefersPdf(previousKey) && !reportDefersPdf(requestKey) ? `${requestKey}:html-review` : requestKey;
+export const reportPredecessorId = (requestKey: string) => requestKey.match(/:(?:recovery|predecessor):([A-Za-z0-9]+)(?::html-review)?$/)?.[1];
 export const REPORT_REVIEW_REQUIRED = "REVIEW_REQUIRED";
 class AutomaticReportReviewRequired extends Error {
   constructor() { super("Generated content requires clinical review before a PDF can be issued."); }
@@ -88,6 +90,19 @@ export function finishWeightHistory(priorMostRecentFirst: GeneratedReport["weigh
     points.push({ date: null, kg: previousKg, label: "Weight 1 Month Ago" });
   const unique = new Map(points.reverse().map(point => [point.assessmentId ?? point.date ?? "undated", point]));
   return [...unique.values()].slice(-6);
+}
+
+export function reportWeightComparison(weightHistory: GeneratedReport["weightHistory"], currentKg: number | null, currentDate: string): ReportFacts["weightComparison"] {
+  // Use the chart's exact filtering, ordering and last-two-measurement selection.
+  // The chart helper reads only weightHistory; patient identifiers never cross this boundary.
+  const comparison = weightChange({ weightHistory } as GeneratedReport);
+  if (!comparison || !currentKg || comparison.last.kg !== currentKg || comparison.last.date !== currentDate) return undefined;
+  return {
+    source: comparison.first.date === null ? "reported_previous_weight" : "assessment_history",
+    previousWeightKg: comparison.first.kg, currentWeightKg: comparison.last.kg,
+    changePercent: comparison.percentage, currentDate,
+    ...(comparison.first.date ? { previousDate: comparison.first.date } : { previousLabel: "Weight 1 Month Ago" }),
+  };
 }
 
 export function assertReportReadyForApproval(issues: string[], artifactRevision: number | null, reportRevision: number) {
@@ -367,10 +382,10 @@ export class GeneratedReportService {
     const assessment=await this.clinical(actor,org,id);
     let row=await this.latest(org,id);
     if(!row) return {report:null,generation:null};
-    // A legacy or locally started attempt is still a real generation attempt.
-    // Hiding it makes an assessment with a pending/failed report say Not started.
+    // A queued attempt may be polling a durable Scoring job long after the
+    // local HTTP timeout. Only an abandoned local generation lease can expire.
     const legacyExpired = !row.requestKey.startsWith(AUTOMATIC_REPORT_KEY_PREFIX)
-      && ["QUEUED", "GENERATING"].includes(row.status)
+      && row.status === "GENERATING"
       && Date.now() - row.updatedAt.getTime() > this.service.config.REPORT_GENERATION_TIMEOUT_MS + 30_000;
     if (legacyExpired) {
       // Old manual attempts have no automatic worker. Fence expiry against a
@@ -393,13 +408,32 @@ export class GeneratedReportService {
       if(!row)return {report:null,generation:null};
       issues=row.content ? this.service.unseal<ReportData>(row.content).issues : [];
     }
-    // Report-content review is a worker state, not a request for human action.
-    // Keep clients polling while the successor is being reserved.
-    const awaitingRecovery=row.failureCode===REPORT_REVIEW_REQUIRED && ["DRAFT","FAILED"].includes(row.status);
+    // Legacy automatic reports retain their recovery behavior. An explicit
+    // HTML review attempt is bounded and must not silently reserve a new run.
+    const awaitingRecovery=!reportDefersPdf(row.requestKey) && row.failureCode===REPORT_REVIEW_REQUIRED && ["DRAFT","FAILED"].includes(row.status);
     const generation=awaitingRecovery ? {status:"QUEUED" as const,failureCode:null} : publicReportGeneration(row.status,row.failureCode,issues,row.requestKey);
     const report=row.content && generation.status==="READY" ? await this.chartView(await this.dto(row,assessment),actor,assessment):null;
     return {report:report?.status==="APPROVED"?{...report,status:"READY"}:report,
       generation};
+  }
+  private async predecessorDecision(row: ReportRow): Promise<ReportData["decision"] | undefined> {
+    // Explicit regeneration and automatic recovery retain the clinician's
+    // product-stage choice, including across an intervening failed attempt.
+    let predecessorId=reportPredecessorId(row.requestKey);
+    let predecessorDecision: ReportData["decision"] | undefined;
+    const visited=new Set<string>([row.id]);
+    while(predecessorId && !visited.has(predecessorId)) {
+      visited.add(predecessorId);
+      const [predecessor]=await this.service.db.select().from(generatedReports)
+        .where(and(eq(generatedReports.organizationId,row.organizationId),eq(generatedReports.assessmentId,row.assessmentId),eq(generatedReports.id,predecessorId))).limit(1);
+      if(!predecessor || predecessor.submissionId!==row.submissionId) break;
+      if(predecessor.content) {
+        predecessorDecision=this.service.unseal<ReportData>(predecessor.content).decision;
+        break;
+      }
+      predecessorId=reportPredecessorId(predecessor.requestKey);
+    }
+    return predecessorDecision;
   }
   async regenerate(actor: Principal, org: string, id: string, context: RequestContext) {
     const assessment = await this.clinical(actor, org, id, "reports.manage");
@@ -413,10 +447,14 @@ export class GeneratedReportService {
       const [latest] = await tx.select().from(generatedReports)
         .where(and(eq(generatedReports.organizationId, org), eq(generatedReports.assessmentId, id)))
         .orderBy(desc(generatedReports.createdAt), desc(generatedReports.id)).limit(1).for("update");
-      if (!latest || !(latest.status === "FAILED" || latest.status === "DRAFT" && latest.failureCode === REPORT_REVIEW_REQUIRED))
-        throw new ServiceError("CONFLICT", "Regenerate is available after an automatic report attempt fails.");
+      // The locked assessment serializes explicit attempts. Keep the prior row and artifact
+      // unchanged, and reject a second request while its latest attempt is active.
+      const canRegenerate = latest && (["READY", "APPROVED", "FAILED"].includes(latest.status)
+        || latest.status === "DRAFT" && (latest.failureCode === REPORT_REVIEW_REQUIRED || reportDefersPdf(latest.requestKey)));
+      if (!canRegenerate)
+        throw new ServiceError("CONFLICT", "Wait for the current report attempt to finish before regenerating.");
       await tx.insert(generatedReports).values({id:reportId, organizationId:org, assessmentId:id, patientId:current.patientId,
-        submissionId:currentSource.submissionId, requestKey:preserveReportPdfHold(`${AUTOMATIC_REPORT_KEY_PREFIX}${currentSource.submissionId}:retry:${reportId}`,latest.requestKey),
+        submissionId:currentSource.submissionId, requestKey:preserveReportPdfHold(`${AUTOMATIC_REPORT_KEY_PREFIX}${currentSource.submissionId}:retry:${reportId}:predecessor:${latest.id}`,latest.requestKey),
         sourceFingerprint:"", status:"QUEUED", attemptCount:0});
       await this.service.audit(tx,actor,context,id,"GENERATED_REPORT_REGENERATE_REQUESTED",{reportId,previousReportId:latest.id,
         submissionId:currentSource.submissionId,scoreRevision:currentSource.scoreRevision});
@@ -517,10 +555,14 @@ export class GeneratedReportService {
         if(existing.status==="GENERATING" && Date.now()-existing.updatedAt.getTime()<this.service.config.REPORT_GENERATION_TIMEOUT_MS+10_000)
           throw new ServiceError("CONFLICT","Report generation is already in progress.");
       }
-      const [recent]=await tx.select({id:generatedReports.id,updatedAt:generatedReports.updatedAt}).from(generatedReports)
-        .where(and(eq(generatedReports.organizationId,org),eq(generatedReports.assessmentId,id),eq(generatedReports.status,"GENERATING")))
-        .orderBy(desc(generatedReports.updatedAt)).limit(1);
-      if(recent && recent.id!==existing?.id && Date.now()-recent.updatedAt.getTime()<this.service.config.REPORT_GENERATION_TIMEOUT_MS+10_000)
+      // Match regenerate/read: only the latest attempt owns coordination. Old
+      // orphaned queue rows must not block a report that has since completed.
+      const [latest]=await tx.select({id:generatedReports.id,status:generatedReports.status,updatedAt:generatedReports.updatedAt}).from(generatedReports)
+        .where(and(eq(generatedReports.organizationId,org),eq(generatedReports.assessmentId,id)))
+        .orderBy(desc(generatedReports.createdAt),desc(generatedReports.id)).limit(1);
+      const pending=latest?.status==="QUEUED" || latest?.status==="GENERATING"
+        && Date.now()-latest.updatedAt.getTime()<this.service.config.REPORT_GENERATION_TIMEOUT_MS+10_000;
+      if(latest && latest.id!==existing?.id && pending)
         throw new ServiceError("CONFLICT","Another report generation is already in progress.");
       const reportId=existing?.id??createEntityId();
       const leaseToken=createEntityId();
@@ -536,7 +578,9 @@ export class GeneratedReportService {
       const session=scan?.projection ? this.service.unseal(scan.projection) : null;
       const metrics=reportObservations(frozen.answers,frozen.manifest,assessment.completedAt!,session);
       const weightHistory=await this.weightHistory(actor,org,assessment,positive(frozen.answers.current_weight_kg),positive(frozen.answers.previous_weight_kg),submission.createdAt);
+      const weightComparison=reportWeightComparison(weightHistory,positive(frozen.answers.current_weight_kg),dateOnly(submission.createdAt));
       const facts:ReportFacts={
+        ...(weightComparison?{weightComparison}:{}),
         reviewedScore:source.reviewedScore,reviewedRiskCategoryId:source.risk.id,
         treatmentTypeIds:list(frozen.answers.current_cancer_treatment),drugClassIds:list(frozen.answers.drug_classes),
         confirmedToxicityIds:decision.confirmedToxicityIds,assessmentAnswers:reportToxicityAnswers(frozen.answers),
@@ -577,6 +621,7 @@ export class GeneratedReportService {
             ?? generated.guidance.carePlan.nutritionalStatus } : {}),
         ...(frozen.measurementUnits ? {weightDisplayUnit:frozen.measurementUnits.weight} : {}),
         metrics,weightHistory,decision,
+        ...(generated.targetResolutions ? { targetResolutions: generated.targetResolutions } : {}),
         clinicalFacts:reportClinicalFacts(frozen.answers,frozen.manifest,dateOnly(assessment.completedAt!)),
         productPlans:reportProductPlans(generated),
         productCatalog:reportProductCatalog(generated),
@@ -773,6 +818,7 @@ export class GeneratedReportService {
     }
   }
   private async recoverReviewRequired(row:ReportRow, actor:Principal, context:RequestContext) {
+    if (reportDefersPdf(row.requestKey)) return;
     // A Scoring run is terminal once it returns REVIEW_REQUIRED. Start a new
     // report row (and therefore a new Scoring idempotency key) while retaining
     // the cumulative automatic generation budget from the reviewed attempt.
@@ -818,6 +864,7 @@ export class GeneratedReportService {
       and (newer.created_at > ${generatedReports.createdAt} or (newer.created_at = ${generatedReports.createdAt} and newer.id > ${generatedReports.id})))`;
     const reviewRecoveryDue=and(or(eq(generatedReports.status,"DRAFT"),eq(generatedReports.status,"FAILED")),
       eq(generatedReports.failureCode,REPORT_REVIEW_REQUIRED),latestReview,
+      sql`${generatedReports.requestKey} !~ ${"(^|:)html-review(:|$)"}`,
       or(isNull(generatedReports.nextAttemptAt),lte(generatedReports.nextAttemptAt,now)));
     const rows=await this.service.db.select().from(generatedReports).where(and(or(
       like(generatedReports.requestKey,`${AUTOMATIC_REPORT_KEY_PREFIX}%`),reviewRecoveryDue),or(
@@ -843,10 +890,7 @@ export class GeneratedReportService {
         if((row.status==="DRAFT" || row.status==="FAILED") && row.failureCode===REPORT_REVIEW_REQUIRED)
           return await this.recoverReviewRequired(row,actor,context);
         if(row.status==="DRAFT")return await this.finalizeAutomatic(row,actor,context);
-        const recoveryPredecessorId=row.requestKey.match(/:recovery:([A-Za-z0-9]+)(?::html-review)?$/)?.[1];
-        const [predecessor]=recoveryPredecessorId ? await this.service.db.select().from(generatedReports)
-          .where(and(eq(generatedReports.organizationId,row.organizationId),eq(generatedReports.assessmentId,row.assessmentId),eq(generatedReports.id,recoveryPredecessorId))).limit(1) : [];
-        const predecessorDecision=predecessor?.content ? this.service.unseal<ReportData>(predecessor.content).decision : undefined;
+        const predecessorDecision=await this.predecessorDecision(row);
         const {report}=await this.generate(actor,row.organizationId,row.assessmentId,{requestKey:row.requestKey,
           ...(predecessorDecision?.productStageChoice ? {productStageChoice:predecessorDecision.productStageChoice} : {})},context,true);
         if(report.status==="DRAFT") {
