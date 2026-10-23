@@ -23,7 +23,10 @@ CMD ["bun", "run", "--cwd", "apps/api", "db:migrate"]
 FROM oven/bun:1.4.0-alpine AS runtime
 WORKDIR /workspace/apps/api
 ENV NODE_ENV=production
-RUN apk add --no-cache libstdc++ chromium fontconfig && addgroup -S niq && adduser -S niq -G niq
+RUN apk add --no-cache libstdc++ chromium fontconfig && addgroup -S niq && adduser -S niq -G niq \
+    && mkdir -p /var/lib/niq/report-uploads \
+    && chown niq:niq /var/lib/niq/report-uploads \
+    && chmod 700 /var/lib/niq/report-uploads
 COPY --from=build --chown=niq:niq /workspace/apps/api/dist ./dist
 COPY --from=build --chown=niq:niq /workspace/apps/api/assets ./assets
 COPY --from=dependencies --chown=niq:niq /workspace/node_modules /workspace/node_modules

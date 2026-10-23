@@ -3,11 +3,13 @@ WORKDIR /workspace
 COPY package.json bun.lock* turbo.json tsconfig.base.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/report-pdf/package.json packages/report-pdf/package.json
 RUN bun install --frozen-lockfile
 
 FROM dependencies AS build
 COPY apps/web apps/web
 COPY packages/contracts packages/contracts
+COPY packages/report-pdf packages/report-pdf
 RUN bun run --filter @niq/application-web build
 
 FROM nginxinc/nginx-unprivileged:1.29-alpine AS runtime
