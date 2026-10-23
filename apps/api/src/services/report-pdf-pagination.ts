@@ -38,6 +38,13 @@ export function paginateReportSheets() {
       current.content.append(displayed);
       if (fits()) return;
       displayed.remove();
+      // Vital IQ detail groups may continue independently. Keeping the entire
+      // grid atomic otherwise strands all measurements on a second page.
+      if (node.matches(".cr-vital-detail-grid") && node.children.length > 1) {
+        for (const group of Array.from(node.children) as HTMLElement[])
+          place(group, fragment => wrapperFor(node, fragment));
+        return;
+      }
       if (current.content.children.length) current = makePage();
       current.content.append(displayed);
       if (fits()) return;

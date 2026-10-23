@@ -84,3 +84,57 @@ test("physical pages keep whole cards and split oversized nested advice only at 
     await expect(page.evaluate(paginateReportSheets)).rejects.toThrow("A report card is taller than a PDF page");
   } finally { await browser.close(); }
 }, 30_000);
+
+test("full historical Vital IQ measurements fit one A4 page without losing metrics or references", async () => {
+  const { reportFaceScanAdditionalMetricGroups } = await import("@niq/application-contracts");
+  const provenance = { sessionId: "historical-source", assessmentReference: "ASM-003545", capturedAt: "2026-10-21T08:00:00Z" };
+  const metric = (id: string, label: string, value: string, unit?: string) => ({ id, label, value, unit, source: "face_scan" as const, measuredAt: provenance.capturedAt, historicalSource: provenance });
+  const report = {
+    assessment: { id: "assessment", reference: "ASM-003546", completedAt: "2026-10-23T12:00:00Z" },
+    patient: { displayName: "Example Patient", reference: "P-1" }, classification: { label: "Moderate risk", score: 25 }, decision: {}, weightHistory: [],
+    narrative: { overview: "", keyFindings: "", actionSummary: "", monitoringSummary: "" }, guidance: { sections: [] },
+    metrics: [
+      metric("vital_iq_points", "Vital IQ points", "3"), metric("wellness_score", "Wellness score", "84", "/100"), metric("health_risk_score", "Health risk score", "16", "/100"),
+      metric("heart_rate", "Heart rate", "59", "bpm"), metric("oxygen_saturation", "Oxygen saturation", "96", "%"), metric("respiratory_rate", "Breathing rate", "12", "/min"),
+      metric("systolic", "Systolic blood pressure", "128", "mmHg"), metric("diastolic", "Diastolic blood pressure", "78", "mmHg"),
+      ...reportFaceScanAdditionalMetricGroups.flatMap(group => group.metrics.map(item => ({ ...metric(item.id, item.label, "25.77", item.unit), ...(item.id === "sdnn" ? { outsideReferenceRange: true, referenceRange: "60–100 ms" } : item.id === "scan_bmi" ? { outsideReferenceRange: true, referenceRange: "18.5–24.9 kg/m²" } : {}) }))),
+      metric("physiological_score", "Physiological health score", "70", "/100"), metric("mental_wellbeing_score", "Mental wellbeing score", "87.04", "/100"), metric("stress_band", "Stress band", "good"),
+    ],
+  } as unknown as GeneratedReport;
+  const browser = await chromium.launch({ executablePath: process.env.REPORT_CHROMIUM_PATH || "/usr/bin/chromium", headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+  try {
+    const page = await browser.newPage({ viewport: { width: 794, height: 1123 } });
+    await page.setContent(await renderGeneratedReportHtml(report, { name: "Example Clinic", primaryColor: "#138f94" }));
+    await page.emulateMedia({ media: "print" });
+    await page.evaluate(async () => { await document.fonts.ready; await Promise.all(Array.from(document.images, image => image.decode())); });
+    await page.evaluate(paginateReportSheets);
+    const vital = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>(".cr-sheet-vital")).map(sheet => {
+      const content = sheet.querySelector<HTMLElement>(".cr-sheet-content")!;
+      const bounds = content.getBoundingClientRect();
+      const cards = Array.from(content.querySelectorAll<HTMLElement>(".cr-vital-score-card, .cr-vital-highlight, .cr-vital-detail"));
+      return { text: content.textContent, detailRows: content.querySelectorAll(".cr-vital-detail dl > div").length, overflow: content.scrollHeight > content.clientHeight + 1,
+        cardsFit: cards.every(card => card.getBoundingClientRect().bottom <= bounds.bottom + 1), logos: sheet.querySelectorAll(".cr-sheet-header img").length,
+        smallestRowFont: Math.min(...Array.from(content.querySelectorAll(".cr-vital-detail dl > div"), row => parseFloat(getComputedStyle(row).fontSize))) };
+    }));
+    expect(vital).toHaveLength(1);
+    expect(vital[0]).toMatchObject({ detailRows: 23, overflow: false, cardsFit: true });
+    expect(vital[0]!.smallestRowFont).toBeGreaterThanOrEqual(12);
+    expect(vital[0]!.logos).toBeGreaterThanOrEqual(1);
+    for (const text of ["Historical measurement", "Recorded 21 Oct 2026", "reused from ASM-003545", "60–100 ms", "18.5–24.9 kg/m²", "Blood volume", "Stress band"]) expect(vital[0]!.text).toContain(text);
+    await page.pdf({ path: "/tmp/niq-vital-iq-layout.pdf", format: "A4", preferCSSPageSize: true, printBackground: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } });
+    // Truly long groups can continue without treating the entire grid as one
+    // unbreakable card or clipping its measurements at the footer.
+    await page.evaluate(() => {
+      for (const group of document.querySelectorAll<HTMLElement>(".cr-vital-detail")) group.style.minHeight = "450px";
+    });
+    await page.evaluate(paginateReportSheets);
+    const continued = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>(".cr-sheet-vital")).map(sheet => {
+      const content = sheet.querySelector<HTMLElement>(".cr-sheet-content")!;
+      return { rows: content.querySelectorAll(".cr-vital-detail dl > div").length, groups: content.querySelectorAll(".cr-vital-detail").length, fits: content.scrollHeight <= content.clientHeight + 1 };
+    }));
+    expect(continued.length).toBeGreaterThan(1);
+    expect(continued.every(sheet => sheet.fits)).toBe(true);
+    expect(continued.reduce((count, sheet) => count + sheet.rows, 0)).toBe(23);
+    expect(continued.reduce((count, sheet) => count + sheet.groups, 0)).toBe(3);
+  } finally { await browser.close(); }
+}, 30_000);

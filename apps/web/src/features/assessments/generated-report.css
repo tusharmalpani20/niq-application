@@ -522,3 +522,20 @@
 }
 
 .cr-cover-copy .cr-cover-tagline { max-width: 25rem; margin: 1.2rem 0 1.8rem; font-size: 1rem; line-height: 1.5; color: #ffffff; }
+
+
+@media print {
+  /* Keep the complete Vital IQ panel together through spacing and chart size,
+     while retaining the existing readable measurement and reference fonts. */
+  body.cr-print-document .cr-sheet-vital .cr-sheet-content > * + * { margin-top: .65rem; }
+  body.cr-print-document .cr-sheet-vital .cr-answer-coverage { padding-block: .5rem; }
+  body.cr-print-document .cr-sheet-vital .cr-vital-score-card { min-height: 140px; gap: .4rem; padding: .65rem; }
+  body.cr-print-document .cr-sheet-vital .cr-vital-score-ring { width: 88px; height: 88px; }
+  body.cr-print-document .cr-sheet-vital .cr-vital-score-ring > div { width: 70px; height: 70px; }
+  body.cr-print-document .cr-sheet-vital .cr-vital-score-value { min-height: 88px; }
+  body.cr-print-document .cr-sheet-vital .cr-vital-highlight { gap: .2rem; padding-block: .6rem; }
+  body.cr-print-document .cr-sheet-vital .cr-vital-detail-grid { gap: .6rem; }
+  body.cr-print-document .cr-sheet-vital .cr-vital-detail h3 { padding-block: .5rem; }
+  body.cr-print-document .cr-sheet-vital .cr-vital-detail dl > div { padding-block: .3rem; }
+  body.cr-print-document .cr-sheet-vital .cr-vital-detail dt .cr-metric-icon { width: 20px; height: 20px; }
+}
