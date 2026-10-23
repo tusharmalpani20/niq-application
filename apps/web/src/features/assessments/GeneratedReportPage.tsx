@@ -123,6 +123,7 @@ function GeneratedReportWorkspace({ user, assessmentId }: { user: AuthenticatedU
 export function GeneratedReportPage() {
   const user = useOutletContext<AuthenticatedUser>();
   const { assessmentId = "" } = useParams();
+  if (!user.developmentToolsEnabled) return <Navigate to={`/assessments/${encodeURIComponent(assessmentId)}`} replace />;
   if (!hasPermission(user.role, "assessments.read")) return <Navigate to="/assessments" replace />;
   return <GeneratedReportWorkspace key={`${user.organizationId}:${assessmentId}`} user={user} assessmentId={assessmentId}/>;
 }

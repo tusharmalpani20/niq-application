@@ -135,3 +135,12 @@ test("restored questionnaire uses original risk and has no retry", async()=>harn
  expect(document.body.textContent).not.toContain("Risk assessment pending");
  expect([...document.querySelectorAll("button")].some(b=>b.textContent==="Retry risk assessment")).toBe(false);
 },[entry,{...entry,id:"restore",revision:2,points:null}],{status:"ORIGINAL",classification:result.classification,resultReference:result.resultReference,failureCode:null,canRetry:false}));
+
+for (const developmentToolsEnabled of [true, false]) {
+ test(`completed assessment offers PDF download and gates clinical workspace when development is ${developmentToolsEnabled}`, () => {
+  const html=renderToStaticMarkup(<MemoryRouter><AssessmentScoreReview record={{...record,status:"COMPLETED"}} organizationId="org" developmentToolsEnabled={developmentToolsEnabled} renderScan={()=>null} reportsContent={null}/></MemoryRouter>);
+  expect(html).toContain('Download PDF for ASM-000002');
+  expect(html.includes('Clinical report')).toBe(developmentToolsEnabled);
+  expect(html.includes('/assessments/ASM-000002/generated-report')).toBe(developmentToolsEnabled);
+ });
+}

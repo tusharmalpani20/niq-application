@@ -38,7 +38,7 @@ test("unavailable saved PDFs show an error and a report link without downloading
  await exercise(Response.json({error:{message:"The PDF is not available yet."}},{status:409}),async(requests,downloads)=>{
   expect(requests).toHaveLength(1);expect(downloads).toHaveLength(0);
   expect(document.querySelector('[role="alert"]')?.textContent).toContain("The PDF is not available yet.");
-  expect(document.querySelector('a')?.getAttribute('href')).toBe('/assessments/ASM-006564/generated-report');
+  expect(document.querySelector('a')?.getAttribute('href')).toBe('/assessments/ASM-006564');
   expect(document.querySelector<HTMLButtonElement>('button')?.disabled).toBe(false);
  });
 });

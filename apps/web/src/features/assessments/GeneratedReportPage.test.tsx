@@ -7,7 +7,7 @@ import type { AuthenticatedUser, GeneratedReport } from "@niq/application-contra
 import { BrandingProvider } from "@/lib/branding-context";
 import { GeneratedReportPage } from "./GeneratedReportPage";
 
-async function renderWithResponse(response: unknown, inspect: () => void | Promise<void>) {
+async function renderWithResponse(response: unknown, inspect: () => void | Promise<void>, developmentToolsEnabled: boolean | null = true) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", { url: "http://localhost" });
   const values: Record<string, unknown> = {
     window: dom.window,
@@ -21,10 +21,10 @@ async function renderWithResponse(response: unknown, inspect: () => void | Promi
   const previous = Object.fromEntries(Object.keys(values).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable: true });
   const root = createRoot(document.getElementById("root")!);
-  const user = { organizationId: "org", role: "DOCTOR" } as AuthenticatedUser;
+  const user = { organizationId: "org", role: "DOCTOR", developmentToolsEnabled: developmentToolsEnabled ?? undefined } as AuthenticatedUser;
   try {
     await act(async () => {
-      root.render(<BrandingProvider><MemoryRouter initialEntries={["/assessments/assessment/generated-report"]}><Routes><Route element={<Outlet context={user}/>}><Route path="/assessments/:assessmentId/generated-report" element={<GeneratedReportPage/>}/></Route></Routes></MemoryRouter></BrandingProvider>);
+      root.render(<BrandingProvider><MemoryRouter initialEntries={["/assessments/assessment/generated-report"]}><Routes><Route element={<Outlet context={user}/>}><Route path="/assessments/:assessmentId/generated-report" element={<GeneratedReportPage/>}/><Route path="/assessments/:assessmentId" element={<p>Assessment detail</p>}/></Route></Routes></MemoryRouter></BrandingProvider>);
       await new Promise(resolve => setTimeout(resolve, 0));
     });
     await inspect();
@@ -556,3 +556,14 @@ test("patient report uses a clear contact heading and the same completion statem
     expect(document.querySelector('.cr-possible-intro')?.textContent).not.toContain('These are precautionary measures, not diagnoses');
   });
 });
+
+for (const enabled of [false, null]) {
+  test(`report workspace redirects without fetching report content when development capability is ${enabled}`, async () => {
+    const calls:string[]=[];
+    await renderWithResponse(async (input:string)=>{calls.push(String(input));return Response.json({});},()=>{
+      expect(document.body.textContent).toContain("Assessment detail");
+      expect(document.body.textContent).not.toContain("Clinical reporting");
+      expect(calls).toEqual([]);
+    }, enabled);
+  });
+}

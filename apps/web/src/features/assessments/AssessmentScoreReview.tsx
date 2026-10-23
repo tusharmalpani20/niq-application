@@ -1,3 +1,4 @@
+import { AssessmentPdfDownload } from "./AssessmentPdfDownload";
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { getAssessmentAnswerCoverage, type AssessmentWorkflow, type AssessmentScoreReviews, type AssessmentScoreResult } from "@niq/application-contracts";
 import { ChevronDown, ChevronRight, ClipboardList, FileText } from "lucide-react";
@@ -60,8 +61,8 @@ function riskCardAppearance(classification: AssessmentScoreResult["classificatio
 const summaryRowClass = "flex items-center gap-2 px-2 py-1 sm:px-3";
 const summaryToggleClass = "min-h-11 min-w-0 flex-1 justify-start gap-2 whitespace-normal text-left hover:bg-primary/5 hover:text-primary aria-expanded:bg-primary/10 aria-expanded:text-primary aria-expanded:hover:bg-primary/15";
 
-export function AssessmentScoreReview({ record, organizationId, renderScan, reportsContent, onSaved, canReview = true, scanStatus = "Vital IQ unavailable" }: {
-  onSaved?: () => Promise<unknown>; canReview?: boolean; scanStatus?: string; record: AssessmentWorkflow; organizationId: string; renderScan: (active: boolean) => ReactNode; reportsContent: ReactNode;
+export function AssessmentScoreReview({ record, organizationId, renderScan, reportsContent, onSaved, canReview = true, scanStatus = "Vital IQ unavailable", developmentToolsEnabled = false }: {
+  developmentToolsEnabled?: boolean; onSaved?: () => Promise<unknown>; canReview?: boolean; scanStatus?: string; record: AssessmentWorkflow; organizationId: string; renderScan: (active: boolean) => ReactNode; reportsContent: ReactNode;
 }) {
   const [data, setData] = useState<AssessmentScoreReviews | null>(null);
   const [error, setError] = useState("");
@@ -120,7 +121,8 @@ export function AssessmentScoreReview({ record, organizationId, renderScan, repo
     </div>
   </div>;
   return <section className="my-5 min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6" aria-label="Assessment score review">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="assessment-summary-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">Assessment summary</h2><div className="flex flex-wrap items-center gap-3"><span className="text-sm text-muted-foreground">{record.progress.answered}/{record.progress.required} required answers complete</span><RouterButtonLink variant="outline" size="sm" to={`/assessments/${encodeURIComponent(record.reference)}/generated-report`}><FileText className="size-4" aria-hidden="true"/>Clinical report</RouterButtonLink></div></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="assessment-summary-heading" tabIndex={-1} className="scroll-mt-40 text-xl font-semibold outline-none">Assessment summary</h2><div className="flex flex-wrap items-center gap-3"><span className="text-sm text-muted-foreground">{record.progress.answered}/{record.progress.required} required answers complete</span>{record.status === "COMPLETED" && <AssessmentPdfDownload organizationId={organizationId} assessmentReference={record.reference}/>}
+    {developmentToolsEnabled && <RouterButtonLink variant="outline" size="sm" to={`/assessments/${encodeURIComponent(record.reference)}/generated-report`}><FileText className="size-4" aria-hidden="true"/>Clinical report</RouterButtonLink>}</div></div>
     {record.progress.answered === record.progress.required && coverage.answered < coverage.total && <p className="mt-2 text-sm text-muted-foreground">Some optional questions remain unanswered.</p>}
     <div {...scoreCard}>
       <div className="min-w-44 flex-1"><AssessmentRiskCircle score={result.score} classification={result.classification} categories={result.riskCategories} formCoverage={coverage} /></div>
