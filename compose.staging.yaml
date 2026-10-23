@@ -1,0 +1,22 @@
+# Explicit opt-in to development diagnostics on a restricted staging server.
+# Requires Docker Compose 2.24.4+ for !override. Base Compose remains production.
+services:
+  api:
+    environment:
+      NODE_ENV: development
+      AUTH_MODE: local
+      DATABASE_URL: postgres://niq:${POSTGRES_PASSWORD:?Set a private staging database password}@postgres:5432/niq_application
+      SESSION_SECRET: ${SESSION_SECRET:?Set a private staging session secret}
+      PATIENT_DATA_ENCRYPTION_KEY: ${PATIENT_DATA_ENCRYPTION_KEY:?Set a patient encryption key}
+      SCORING_CREDENTIAL_ENCRYPTION_KEY: ${SCORING_CREDENTIAL_ENCRYPTION_KEY:?Set a scoring credential encryption key}
+      BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN:?Set a private bootstrap token}
+      SCORING_API_URL: http://niq-scoring-api:4100
+    ports: !override ["127.0.0.1:3000:3000"]
+    networks: [private, edge, staging]
+  web:
+    ports: !override ["127.0.0.1:8080:8080"]
+
+networks:
+  staging:
+    external: true
+    name: niq-staging

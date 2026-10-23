@@ -40,7 +40,7 @@ Clinical scoring belongs exclusively to NIQ Scoring; this application persists t
 
 Local authentication is invite-only. Passwords use Argon2id, sessions and invitation tokens are stored only as keyed hashes, and administrator sign-in requires an OTP challenge. `DEV_OTP_DELIVERY=true` supports local development and is rejected in production. A production OTP delivery adapter is still required. Authenticated mutations require the configured browser Origin. Invitation details and scoring connection metadata are limited to authorized administrators. See [Authentication and onboarding](docs/authentication.md).
 
-This is still not a production-ready clinical deployment. The completed-assessment PDF export is not implemented; its download action remains unavailable. Production report storage needs a durable private volume and backup plan, and the supplied Compose file does not mount one. See [Report storage](docs/report-storage.md) and [Deployment](docs/deployment.md).
+This is still not a production-ready clinical deployment. Completed-assessment PDFs are saved in PostgreSQL and downloaded through authorized API routes. Compose mounts private uploaded-report storage in a persistent volume. Back up both volumes and the deployment encryption keys. See [Report storage](docs/report-storage.md) and [Deployment](docs/deployment.md).
 
 See [Architecture](docs/architecture.md), [Compliance baseline](docs/compliance-baseline.md), and [Deployment](docs/deployment.md).
 
@@ -61,3 +61,7 @@ The notification bell stores actionable workflow messages without VAPID. To enab
 3. Apply the latest migrations and restart the API. Each user then opens the notification bell, turns on push alerts for that device, and grants the browser's notification permission.
 
 The API retries queued push deliveries. Push subscriptions belong to the signed-in session and are revoked on sign-out; users opt in again after signing back in. Push messages contain only a generic task description; assessment details require sign-in. On iPhone, push alerts require HTTPS and opening the app from an Add to Home Screen icon. A phone visiting the LAN HTTP development address cannot receive them.
+
+## OpenRouter staging server
+
+See [Restricted staging deployment](docs/staging-openrouter.md) for the explicit development-mode Compose override, shared scoring network, secrets and PDF checks.

@@ -31,6 +31,9 @@ services:
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
       DATABASE_URL: postgres://niq:${POSTGRES_PASSWORD:-change-me-locally}@postgres:5432/niq_application
       DATABASE_SSL: "false"
+      DEV_OTP_DELIVERY: ${DEV_OTP_DELIVERY:-false}
+      REPORT_UPLOAD_ROOT: /var/lib/niq/report-uploads
+      REPORT_GENERATION_TIMEOUT_MS: ${REPORT_GENERATION_TIMEOUT_MS:-720000}
       DEV_FIXED_OTP: ${DEV_FIXED_OTP:-false}
       AUTH_MODE: ${AUTH_MODE:-disabled}
       SESSION_SECRET: ${SESSION_SECRET:-replace-this-development-only-secret}
@@ -51,6 +54,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    volumes:
+      - application-reports:/var/lib/niq/report-uploads
     ports: ["3000:3000"]
     networks: [private, edge]
 
@@ -83,3 +88,4 @@ networks:
 
 volumes:
   application-postgres:
+  application-reports:
