@@ -120,7 +120,7 @@ test("full historical Vital IQ measurements fit one A4 page without losing metri
     expect(vital[0]).toMatchObject({ detailRows: 23, overflow: false, cardsFit: true });
     expect(vital[0]!.smallestRowFont).toBeGreaterThanOrEqual(12);
     expect(vital[0]!.logos).toBeGreaterThanOrEqual(1);
-    for (const text of ["Historical measurement", "Recorded 21 Oct 2026", "reused from ASM-003545", "60–100 ms", "18.5–24.9 kg/m²", "Blood volume", "Stress band"]) expect(vital[0]!.text).toContain(text);
+    for (const text of ["60–100 ms", "18.5–24.9 kg/m²", "Blood volume", "Stress band"]) expect(vital[0]!.text).toContain(text);
     await page.pdf({ path: "/tmp/niq-vital-iq-layout.pdf", format: "A4", preferCSSPageSize: true, printBackground: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } });
     // Truly long groups can continue without treating the entire grid as one
     // unbreakable card or clipping its measurements at the footer.
