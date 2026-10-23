@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
@@ -34,7 +35,7 @@ export function verifyHistoricalScanResponse(value: unknown, expected: {
       !hasUsableFaceScan(remote) || remote.score?.ruleVersionId !== expected.ruleVersionId ||
       !historical || historical.sessionId !== expected.sourceRemoteId || historical.assessmentReference !== expected.sourceAssessmentId ||
       historical.capturedAt !== expected.source.completedAt || remote.completedAt !== expected.source.completedAt ||
-      JSON.stringify(remote.context) !== JSON.stringify(expected.source.context) || JSON.stringify(remote.result) !== JSON.stringify(expected.source.result))
+      !isDeepStrictEqual(remote.context, expected.source.context) || !isDeepStrictEqual(remote.result, expected.source.result))
     throw new ServiceError("SCORING_UNAVAILABLE", "Scoring did not confirm the original measurement and its new rule mapping.");
   return remote;
 }
@@ -71,7 +72,7 @@ export class AssessmentFaceScanReuseService {
       const state = workflow.unseal<StoredWorkflow>(target.workflow);
       const sourceConnection = sourceRow.connection as Parameters<AssessmentFaceScanService["transport"]>[1];
       const transport = await this.scans.transport(organizationId, sourceConnection, tx);
-      if (JSON.stringify(state.connection) !== JSON.stringify(sourceRow.connection))
+      if (!isDeepStrictEqual(state.connection, sourceRow.connection))
         throw new ServiceError("CONFLICT", "Both assessments must use the same scoring connection.");
       const response = await this.fetcher(new URL(`/v1/face-scans/${encodeURIComponent(sourceRow.remoteId)}/reuse`, transport.identity.origin), {
         method: "POST", redirect: "error",
