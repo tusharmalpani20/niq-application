@@ -1,7 +1,8 @@
 import type { Hono } from "hono";
 import { z } from "zod";
-import { FACE_SCAN_MAX_BYTES, faceScanSignalSchema, startFaceScanSchema } from "../../../packages/contracts/src/face-scan";
+import { FACE_SCAN_MAX_BYTES, faceScanSignalSchema, startFaceScanSchema, reuseFaceScanSchema } from "../../../packages/contracts/src/face-scan";
 import { ServiceError } from "./services/application";
+import { AssessmentFaceScanReuseService } from "./services/assessment-face-scan-reuse";
 import type { AssessmentFaceScanService } from "./services/assessment-face-scan";
 import { readBoundedJson } from "./http/bounded-json";
 const id = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
@@ -33,6 +34,7 @@ export function mountFaceScanRoutes(app: Hono<any>, service: AssessmentFaceScanS
   app.post(base, async (c) => c.json(await service.start(...parts(c), parse(startFaceScanSchema, await json(c)), {
     requestId: c.get("requestId")
   }), 201));
+  app.post(`${base}/reuse`, async c => c.json(await new AssessmentFaceScanReuseService(service).reuse(...parts(c), parse(reuseFaceScanSchema, await json(c)), { requestId: c.get("requestId") }), 201));
   app.get(`${base}/:sessionId`, async (c) => c.json(await service.get(...parts(c), parse(id, c.req.param("sessionId")))));
   app.post(`${base}/:sessionId/signal`, async (c) => c.json(await service.mutate(...parts(c), parse(id, c.req.param("sessionId")), "signal", parse(faceScanSignalSchema, await json(c, FACE_SCAN_MAX_BYTES))), 202));
   app.post(`${base}/:sessionId/cancel`, async (c) => c.json(await service.mutate(...parts(c), parse(id, c.req.param("sessionId")), "cancel")));

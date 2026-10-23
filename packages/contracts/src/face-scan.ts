@@ -21,6 +21,13 @@ export const startFaceScanSchema = z.object({
   requestKey: z.string().min(16).max(128),
   posture: z.enum(["resting", "standing", "walking", "exercising"])
 }).strict();
+/** Reuse existing evidence without creating a new patient capture or consent. */
+export const reuseFaceScanSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  requestKey: z.string().min(16).max(128),
+  sourceAssessmentId: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/),
+  sourceSessionId: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/),
+}).strict();
 export const faceScanSignalSchema = z.object({
   schemaVersion: z.literal(1).default(1),
   raw_intensity: z.array(z.object({
@@ -64,6 +71,7 @@ export const faceScanSessionSchema = z.object({
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
   completedAt: z.iso.datetime().nullable(),
+  historicalSource: z.object({ sessionId: z.string().min(1), assessmentReference: z.string().min(1), capturedAt: z.iso.datetime() }).optional(),
   failureCode: z.string().nullable(),
   result: faceScanResultSchema.nullable(),
   score: z.object({

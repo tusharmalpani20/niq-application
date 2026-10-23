@@ -1,3 +1,4 @@
+import { AssessmentFaceScanReuseService } from "./assessment-face-scan-reuse";
 import { ClinicalReviewService } from "./clinical-review";
 import { AssessmentScoreReviewService } from "./assessment-score-reviews";
 import type { ClinicalReviewAction } from "../../../../packages/contracts/src/clinical-review";
@@ -413,6 +414,38 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("assessment PostgreSQ
   const history=await db.select().from(tables.assessmentHistory).where(eq(tables.assessmentHistory.assessmentId,assessment));
   expect(history.filter(h=>h.kind==="SCORING_SUBMITTED")).toHaveLength(3);expect(history.filter(h=>h.kind==="DRAFT_SAVED")).toHaveLength(3);
   expect(history.filter(h=>h.kind==="RETURN_TO_DRAFT")).toHaveLength(2);
+ });
+
+ test("historical reuse persists original evidence with an audited new-rule mapping and idempotent replay", async () => {
+  const sourceInit=await service.initialize(actor,org,{patientId:patient,requestKey:"reuse-source-initialization"},context);
+  const targetInit=await service.initialize(actor,org,{patientId:patient,requestKey:"reuse-target-initialization"},context);
+  const sourceId=sourceInit.assessmentId!,targetId=targetInit.assessmentId!;
+  const [sourceRow]=await db.select().from(tables.assessments).where(eq(tables.assessments.id,sourceId));
+  const sourceState=service.unseal<any>(sourceRow!.workflow);
+  const capture="2026-09-01T10:00:00.000Z",sourceLocalId=createEntityId(),sourceRemoteId=createEntityId();
+  const original={id:sourceLocalId,state:"COMPLETED",createdAt:capture,updatedAt:capture,completedAt:capture,failureCode:null,
+   context:{dob:"1990-01-01",gender:"female",heightCm:170,weightKg:60,posture:"resting",employeeId:"fixture"},
+   result:{schemaVersion:1,providerScanId:"original-provider",providerCompletedAt:capture,wellnessScore:70,healthRiskScore:null,vitals:{heartRate:70,oxygenSaturation:98,respiratoryRate:15,systolic:120,diastolic:80},physiologicalScore:null,mentalWellbeingScore:null},
+   score:{status:"SCORED",points:1,ruleVersionId:"previous-rule"}};
+  await db.update(tables.assessments).set({status:"COMPLETED"}).where(eq(tables.assessments.id,sourceId));
+  await db.insert(tables.assessmentFaceScans).values({id:sourceLocalId,organizationId:org,assessmentId:sourceId,revision:0,requestKey:"original-history-source",connection:sourceState.connection,snapshot:service.seal(original.context),remoteId:sourceRemoteId,state:"COMPLETED",isCurrent:true,active:false,projection:service.seal(original)});
+  let calls=0;
+  const reuse=new AssessmentFaceScanReuseService(new AssessmentFaceScanService(service),async(url,init)=>{
+   calls++;expect(String(url)).toEndWith(`/v1/face-scans/${sourceRemoteId}/reuse`);
+   expect(JSON.parse(String(init?.body))).toEqual({organizationReference:org,sourceAssessmentReference:sourceId,assessmentReference:targetId});
+   return Response.json({session:{...original,id:"mapped-reuse",organizationReference:org,assessmentReference:targetId,createdAt:"2026-09-02T10:00:00.000Z",updatedAt:"2026-09-02T10:00:00.000Z",score:{status:"SCORED",points:4,ruleVersionId:"rule"},historicalSource:{sessionId:sourceRemoteId,assessmentReference:sourceId,capturedAt:capture}},providerConfigured:true});
+  });
+  const input={revision:0,requestKey:"historical-reuse-idempotency",sourceAssessmentId:sourceId,sourceSessionId:sourceLocalId};
+  const saved=await reuse.reuse(actor,org,targetId,input,context);
+  expect(saved.completedAt).toBe(capture);expect(saved.historicalSource?.assessmentReference).toMatch(/^ASM-/);expect(saved.score?.points).toBe(4);
+  expect((await reuse.reuse(actor,org,targetId,input,context)).id).toBe(saved.id);expect(calls).toBe(1);
+  const rows=await db.select().from(tables.assessmentFaceScans).where(eq(tables.assessmentFaceScans.assessmentId,targetId));
+  expect(rows).toHaveLength(1);expect(rows[0]!.active).toBe(false);expect(rows[0]!.remoteId).toBe("mapped-reuse");
+  expect((await new AssessmentFaceScanService(service).get(actor,org,sourceId,sourceLocalId)).score?.points).toBe(1);
+  const history=await db.select().from(tables.assessmentHistory).where(and(eq(tables.assessmentHistory.assessmentId,targetId),eq(tables.assessmentHistory.kind,"FACE_SCAN_HISTORICAL_REUSED")));
+  expect(history).toHaveLength(1);
+  await expect(reuse.reuse({...actor,role:"SUPPORT"},org,targetId,input,context)).rejects.toMatchObject({code:"FORBIDDEN"});
+  expect(calls).toBe(1);
  });
 
 });

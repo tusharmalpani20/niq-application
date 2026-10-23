@@ -2,7 +2,7 @@
 export class BoundedBodyError extends Error {
   constructor(readonly status: 408 | 413, message: string) { super(message); }
 }
-export async function readBoundedJson(request: Request, maxBytes: number, timeoutMs = 30_000): Promise<unknown> {
+export async function readBoundedJson(request: Request | Response, maxBytes: number, timeoutMs = 30_000): Promise<unknown> {
   if (Number(request.headers.get("content-length")) > maxBytes)
     throw new BoundedBodyError(413, "The request is too large.");
   if (!request.body) throw new SyntaxError("Missing JSON body");
