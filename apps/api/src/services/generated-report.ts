@@ -1,3 +1,5 @@
+import { publishWorkspaceChange } from "./workspace-notifications";
+import { reportSourceFingerprint } from "./report-source-fingerprint";
 import { createHash } from "node:crypto";
 import { and, desc, eq, isNull, lt, ne, or, lte, like, sql } from "drizzle-orm";
 import { createEntityId } from "@niq/application-domain";
@@ -353,8 +355,7 @@ export class GeneratedReportService {
   }
   private currentFingerprint(row: WorkflowRow, checksum: string, decision?:GeneratedReport["decision"]): string | null {
     try {
-      const source = this.source(row);
-      return sha({ submissionId:source.submissionId,scoreRevision:source.scoreRevision,completedAt:source.completedAt.toISOString(),reviewedScore:source.reviewedScore,riskId:source.risk.id,resultReference:source.resultReference,checksum,decision:decision??{productStageChoice:null,plannedTreatmentStartDate:null} });
+      return reportSourceFingerprint(row, reviewState(this.service, row), checksum, decision);
     } catch { return null; }
   }
   private async latest(org: string, id: string): Promise<ReportRow | undefined> {
@@ -739,6 +740,7 @@ export class GeneratedReportService {
       if(!updated)throw new ServiceError("CONFLICT","The report changed before approval.");
       await this.service.audit(tx,actor,context,id,"GENERATED_REPORT_APPROVED",{reportId:row.id,revision,sha256:artifact!.sha256,
         submissionId:data.assessment.submissionId,scoreRevision:data.assessment.scoreRevision,ruleChecksum:data.assessment.checksum,runId:data.runId,model:data.model,promptVersion:data.promptVersion});
+      await publishWorkspaceChange(tx,{organizationId:org,scope:"assessment",assessmentId:id});
       return [updated];
     });
     return {report:await this.dto(saved!,assessment)};
@@ -809,6 +811,7 @@ export class GeneratedReportService {
           .where(eq(generatedReports.id,row.id));
         await this.service.audit(tx,actor,context,row.assessmentId,"GENERATED_REPORT_READY",{reportId:row.id,revision:current.revision,
           sha256:hash,runId:report.runId,ruleChecksum:report.assessment.checksum,model:report.model,promptVersion:report.promptVersion});
+        await publishWorkspaceChange(tx,{organizationId:row.organizationId,scope:"assessment",assessmentId:row.assessmentId});
       });
     } catch(error) {
       const reviewRequired=error instanceof AutomaticReportReviewRequired;
@@ -972,6 +975,7 @@ export class GeneratedReportService {
           brandingFingerprint,encryptedPdf:encryptPatientBytes(pdf,key),uploadedAt:new Date()}});
       await this.service.audit(tx,actor,context,id,"GENERATED_REPORT_PDF_REFRESHED",{reportId:row.id,revision:row.revision,
         previousSha256:previous?.sha256??null,sha256:hash,size:pdf.length});
+      await publishWorkspaceChange(tx,{organizationId:org,scope:"assessment",assessmentId:id});
       return current;
     });
     return {report:await this.dto(saved,assessment)};

@@ -137,7 +137,7 @@ export function AssessmentsPage() {
     const ActionIcon = assessmentActionIcon(record);
     return <RouterButtonLink variant="outline" size="sm" className="whitespace-nowrap" to={`/assessments/${record.reference}`} aria-label={`${assessmentActionLabel(record)} ${record.reference}`}><ActionIcon className="size-4" aria-hidden="true" />{assessmentActionLabel(record)}</RouterButtonLink>;
   };
-  const downloadButton = (record: AssessmentSummary) => record.status === "COMPLETED" && <AssessmentPdfDownload organizationId={user.organizationId} assessmentReference={record.reference}/>;
+  const downloadButton = (record: AssessmentSummary) => record.status === "COMPLETED" && <AssessmentPdfDownload organizationId={user.organizationId} assessmentReference={record.reference} pdfAvailable={record.pdfAvailable === true}/>;
   const selectTab = (next: AssessmentTab) => {
     setTab(next);
     setPage(1);

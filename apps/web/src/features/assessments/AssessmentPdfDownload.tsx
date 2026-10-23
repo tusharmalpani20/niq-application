@@ -4,11 +4,11 @@ import { Download, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { generatedReportPdfUrl } from "./generated-report-api";
 
-export function AssessmentPdfDownload({ organizationId, assessmentReference }: { organizationId: string; assessmentReference: string }) {
+export function AssessmentPdfDownload({ organizationId, assessmentReference, pdfAvailable = false }: { organizationId: string; assessmentReference: string; pdfAvailable?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function download() {
-    if (busy) return;
+    if (busy || !pdfAvailable) return;
     setBusy(true);
     setError("");
     try {
@@ -34,8 +34,8 @@ export function AssessmentPdfDownload({ organizationId, assessmentReference }: {
       setBusy(false);
     }
   }
-  return <div className="min-w-0">
-    <Button variant="outline" size="sm" isDisabled={busy} aria-label={`Download PDF for ${assessmentReference}`} onPress={() => { void download(); }}>
+  return <div className="min-w-0" title={!pdfAvailable ? "The PDF is not available yet." : undefined}>
+    <Button variant="outline" size="sm" isDisabled={busy || !pdfAvailable} aria-label={`Download PDF for ${assessmentReference}`} onPress={() => { void download(); }}>
       {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true"/> : <Download className="size-4" aria-hidden="true"/>}{busy ? "Downloading PDF" : "Download PDF"}
     </Button>
     {error && <p role="alert" className="mt-1 max-w-64 whitespace-normal text-xs text-destructive">{error} <Link className="underline" to={`/assessments/${encodeURIComponent(assessmentReference)}`}>Open assessment</Link></p>}

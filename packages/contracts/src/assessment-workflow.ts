@@ -56,6 +56,7 @@ export function getReportSubmissionIssues(report: Pick<AssessmentReport, "label"
 }
 export type AssessmentInitialization = { id: string; status: string; assessmentId: string | null; assessmentReference?: string | null; failureCode: string | null };
 export type AssessmentWorkflow = {
+  pdfAvailable?: boolean;
   id: string; reference: string; serialNumber: number; organizationId: string; patientId: string; facilityId: string | null; status: string; revision: number; currentOwnerMembershipId?: string | null; canEditDraft?: boolean; isPriority: boolean;
   patient: AssessmentPatient; answers: FormAnswers; manifest: AssessmentFormManifest; measurementUnits?: MeasurementUnits;
   progress: ReturnType<typeof getAssessmentCompletion>; reports: AssessmentReport[]; reportLimits?: AssessmentReportLimits;

@@ -490,6 +490,7 @@ export const assessmentStatusSchema = z.enum([
 ]);
 
 export const assessmentSummarySchema = z.object({
+  pdfAvailable: z.boolean().optional(),
   id: idSchema,
   reference: z.string().regex(/^ASM-[0-9]{6,}$/),
   serialNumber: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),

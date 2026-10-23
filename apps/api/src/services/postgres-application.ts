@@ -1,3 +1,4 @@
+import { loadReportPdfAvailability } from "./report-pdf-availability";
 import { correctPatientDob as correctDob, correctPatientMrn as correctMrn, editPatient, editOrganizationUser } from "./profile-edits";
 import { faceScanSessionSchema } from "../../../../packages/contracts/src/face-scan";
 import { formatAssessmentReference, hasPermission, type Permission } from "@niq/application-contracts";
@@ -1138,6 +1139,7 @@ export class PostgresApplicationService implements ApplicationService {
       if (!encrypted) throw new ServiceError("CONFLICT", "Assessment risk data could not be read.");
       return JSON.parse(decryptPatientData(Buffer.from(encrypted, "base64"), key)) as T;
     });
+    const pdfAvailability = await loadReportPdfAvailability(this.db, organizationId, visibleRows.map(row => row.id), key);
     return visibleRows.map((row) => {
       const review = (row.status === "DRAFT" || row.status === "SCORED") && row.clinicalReview ? (() => {
         const encrypted = (row.clinicalReview as { encrypted?: string }).encrypted;
@@ -1146,6 +1148,7 @@ export class PostgresApplicationService implements ApplicationService {
       })() : null;
       return {
         id: row.id,
+        pdfAvailable: pdfAvailability.get(row.id) === true,
         reference: formatAssessmentReference(row.serialNumber),
         serialNumber: row.serialNumber,
         organizationId: row.organizationId,

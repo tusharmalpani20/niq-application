@@ -1,3 +1,4 @@
+import { loadReportPdfAvailability } from "./report-pdf-availability";
 import { formatAssessmentReference, type AssessmentPageQuery, type AssessmentPageResponse, type AssessmentSummary } from "@niq/application-contracts";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
@@ -114,11 +115,13 @@ export async function listAssessmentPage(db: Database, actor: Principal, organiz
       .where(and(eq(patients.organizationId, organizationId), inArray(patients.id, missingNames)));
     for (const profile of profiles) nameByPatient.set(profile.id, (JSON.parse(decryptPatientData(profile.encryptedProfile, key)) as { name: string }).name);
   }
+  const pdfAvailability = await loadReportPdfAvailability(db, organizationId, visible.map(row => row.id), key);
   return {
     items: visible.map(row => ({
       id: row.id, reference: formatAssessmentReference(row.serialNumber), serialNumber: row.serialNumber, organizationId: row.organizationId,
       patient: { id: row.patientId, reference: `${row.patientReferencePrefix}-${row.patientSerialNumber}`, displayName: nameByPatient.get(row.patientId) ?? "" },
       facility: row.facilityId && row.facilityName ? { id: row.facilityId, name: row.facilityName } : null,
+      pdfAvailable: pdfAvailability.get(row.id) === true,
       status: row.status, riskCategory: riskById.get(row.id) ?? null, myAction: row.myAction, isPriority: row.priorityMembershipId !== null,
       createdAt: row.createdAt, updatedAt: row.updatedAt, completedAt: row.completedAt,
     })),

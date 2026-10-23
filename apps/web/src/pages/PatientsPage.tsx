@@ -309,7 +309,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
     const { label, icon: ActionIcon } = assessmentAction(record);
     return <RouterButtonLink variant="outline" size="sm" className="whitespace-nowrap" to={`/assessments/${record.reference}`} aria-label={`${label} ${record.reference}`}><ActionIcon className="size-4" aria-hidden="true" />{label}</RouterButtonLink>;
   };
-  const downloadButton = (record: AssessmentSummary) => record.status === "COMPLETED" && <AssessmentPdfDownload organizationId={user.organizationId} assessmentReference={record.reference}/>;
+  const downloadButton = (record: AssessmentSummary) => record.status === "COMPLETED" && <AssessmentPdfDownload organizationId={user.organizationId} assessmentReference={record.reference} pdfAvailable={record.pdfAvailable === true}/>;
   const historyColumns: Array<DataTableColumn<AssessmentSummary>> = [
     { id: "reference", header: "Assessment", cell: ({ row }) => canReadAssessment ? <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> : row.original.reference },
     { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "—" },
