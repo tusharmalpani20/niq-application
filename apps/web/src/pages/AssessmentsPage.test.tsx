@@ -464,15 +464,15 @@ test("assessment rows offer a status-aware action to open the assessment", async
   });
 });
 
-test("completed assessments show a PDF download entry point until reports are available", async () => {
+test("completed assessment rows and mobile cards offer an enabled saved PDF download", async () => {
   const completed = { ...records[0]!, status: "COMPLETED", completedAt: date };
   await renderAssessments("/assessments?tab=completed", [completed], () => {
     const table = document.querySelector('[aria-label="Assessments"]');
     expect(table?.querySelector('a[aria-label="View result ASM-000001"]')?.textContent).toBe("View result");
     expect(table?.querySelector('a[aria-label="View result ASM-000001"] svg.lucide-eye')).not.toBeNull();
-    const download = table?.querySelector<HTMLButtonElement>('button[aria-label="Download PDF for ASM-000001 (not yet available)"]');
+    const download = table?.querySelector<HTMLButtonElement>('button[aria-label="Download PDF for ASM-000001"]');
     expect(download?.textContent).toContain("Download PDF");
-    expect(download?.disabled).toBe(true);
-    expect(document.querySelector('.assessment-mobile-card .assessment-card-secondary button[aria-label="Download PDF for ASM-000001 (not yet available)"]')).not.toBeNull();
+    expect(download?.disabled).toBe(false);
+    expect(document.querySelector('.assessment-mobile-card .assessment-card-secondary button[aria-label="Download PDF for ASM-000001"]')).not.toBeNull();
   });
 });

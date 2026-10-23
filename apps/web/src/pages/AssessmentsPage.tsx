@@ -1,3 +1,4 @@
+import { AssessmentPdfDownload } from "../features/assessments/AssessmentPdfDownload";
 import { ClinicalReviewQueue } from "../features/assessments/ClinicalReviewQueue";
 import { useWorkspaceRevision } from "../features/notifications/useWorkspaceRevision";
 import { listClinicalReviews } from "../features/assessments/clinical-review-api";
@@ -6,7 +7,7 @@ import { assessmentStatusSchema, hasPermission } from "@niq/application-contract
 import type { AssessmentSummary, AuthenticatedUser, ClinicalReview, Facility } from "@niq/application-contracts";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
-import { ClipboardCheck, Clock3, Download, Eye, Pencil, Search, Send, Star, TriangleAlert, UserRoundCheck, X } from "lucide-react";
+import { ClipboardCheck, Clock3, Eye, Pencil, Search, Send, Star, TriangleAlert, UserRoundCheck, X } from "lucide-react";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -136,8 +137,7 @@ export function AssessmentsPage() {
     const ActionIcon = assessmentActionIcon(record);
     return <RouterButtonLink variant="outline" size="sm" className="whitespace-nowrap" to={`/assessments/${record.reference}`} aria-label={`${assessmentActionLabel(record)} ${record.reference}`}><ActionIcon className="size-4" aria-hidden="true" />{assessmentActionLabel(record)}</RouterButtonLink>;
   };
-  // The report is not generated yet; keep its future entry point visible without promising a download.
-  const downloadButton = (record: AssessmentSummary) => record.status === "COMPLETED" && <span title="PDF reports are not available yet"><Button variant="outline" size="sm" isDisabled aria-label={`Download PDF for ${record.reference} (not yet available)`}><Download className="size-4" aria-hidden="true" />Download PDF</Button></span>;
+  const downloadButton = (record: AssessmentSummary) => record.status === "COMPLETED" && <AssessmentPdfDownload organizationId={user.organizationId} assessmentReference={record.reference}/>;
   const selectTab = (next: AssessmentTab) => {
     setTab(next);
     setPage(1);

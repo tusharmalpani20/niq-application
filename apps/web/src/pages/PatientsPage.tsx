@@ -1,8 +1,9 @@
+import { AssessmentPdfDownload } from "../features/assessments/AssessmentPdfDownload";
 import { hasPermission } from "@niq/application-contracts";
 import type { AssessmentSummary, AuthenticatedUser, Facility, Patient } from "@niq/application-contracts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
-import { ArrowDownUp, Building2, CalendarDays, ClipboardCheck, Clock3, Download, Eye, HeartHandshake, IdCard, Mail, Pencil, Phone, Search, Send, Star, TriangleAlert, UserRound, UsersRound } from "lucide-react";
+import { ArrowDownUp, Building2, CalendarDays, ClipboardCheck, Clock3, Eye, HeartHandshake, IdCard, Mail, Pencil, Phone, Search, Send, Star, TriangleAlert, UserRound, UsersRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip";
@@ -308,8 +309,7 @@ function PatientDetailView({ user, patientLocator }: { user: AuthenticatedUser; 
     const { label, icon: ActionIcon } = assessmentAction(record);
     return <RouterButtonLink variant="outline" size="sm" className="whitespace-nowrap" to={`/assessments/${record.reference}`} aria-label={`${label} ${record.reference}`}><ActionIcon className="size-4" aria-hidden="true" />{label}</RouterButtonLink>;
   };
-  // Reports are not generated yet, so this mirrors the disabled affordance in the main list.
-  const downloadButton = (record: AssessmentSummary) => record.status === "COMPLETED" && <span title="PDF reports are not available yet"><Button variant="outline" size="sm" isDisabled aria-label={`Download PDF for ${record.reference} (not yet available)`}><Download className="size-4" aria-hidden="true" />Download PDF</Button></span>;
+  const downloadButton = (record: AssessmentSummary) => record.status === "COMPLETED" && <AssessmentPdfDownload organizationId={user.organizationId} assessmentReference={record.reference}/>;
   const historyColumns: Array<DataTableColumn<AssessmentSummary>> = [
     { id: "reference", header: "Assessment", cell: ({ row }) => canReadAssessment ? <Link className="font-normal text-primary hover:underline focus-visible:underline" to={`/assessments/${row.original.reference}`}>{row.original.reference}</Link> : row.original.reference },
     { id: "facility", header: "Facility", cell: ({ row }) => row.original.facility?.name ?? "—" },
