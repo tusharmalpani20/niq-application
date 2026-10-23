@@ -850,3 +850,19 @@ describe("local authentication routes", () => {
     expect(await response.json()).toEqual(values);
   });
 });
+
+for (const runtimeEnvironment of ["development", "test", "production"] as const) {
+  test(`report workspace access follows server environment ${runtimeEnvironment}`, async () => {
+    const app = createApp({allowedOrigin:"http://localhost:5173",authMode:"local",checkDatabase:async()=>true,service:fakeService(),runtimeEnvironment,
+      assessmentWorkflow:{} as NonNullable<Parameters<typeof createApp>[0]["assessmentWorkflow"]>});
+    const headers={cookie:"niq_session=valid-session",origin:"http://localhost:5173"};
+    const me=await (await app.request("/v1/auth/me",{headers})).json();
+    expect(me.user.developmentToolsEnabled).toBe(runtimeEnvironment==="development");
+    const base="/v1/organizations/invalid/assessments/ASM-006564/generated-report";
+    for(const [path,method] of [[base,"GET"],[base+"/regenerate","POST"],[base+"/refresh-pdf","POST"]]) {
+      expect((await app.request(path!,{method,headers})).status).toBe(runtimeEnvironment==="development"?400:404);
+    }
+    // PDF downloads remain routed in every environment.
+    expect((await app.request(base+"/pdf",{headers})).status).toBe(400);
+  });
+}

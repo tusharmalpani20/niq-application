@@ -45,6 +45,7 @@ reportWorker.unref();
 const app = createApp({
   allowedOrigin: config.WEB_ORIGIN,
   authMode: config.AUTH_MODE,
+  runtimeEnvironment: config.NODE_ENV,
   checkDatabase: () => isDatabaseSchemaReady(sql),
   service,
   assessmentWorkflow: workflow,

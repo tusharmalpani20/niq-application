@@ -12,7 +12,7 @@ const json=async(c:any)=>{try{return await c.req.json();}catch(error){if(!(error
 const id=z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{const result=schema.safeParse(value);if(!result.success)throw new ServiceError("VALIDATION_ERROR","The request is invalid.");return result.data;};
 /** Register after session and origin/CSRF middleware; all response data is private. */
-export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowService) {
+export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowService, developmentToolsEnabled = false) {
   const clinicalReviews = new ClinicalReviewService(service);
   const scoreReviews = new AssessmentScoreReviewService(service);
   const generatedReports = new GeneratedReportService(service);
@@ -48,13 +48,17 @@ export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowSe
     const assessment=requested.startsWith("ASM-")?(await service.read(actor,org,requested)).id:requested;
     return {actor,org,assessment};
   };
-  app.get(generated,async c=>{const p=await generatedParts(c);return c.json(await generatedReports.read(p.actor,p.org,p.assessment));});
-  app.post(generated+"/regenerate",async c=>{const p=await generatedParts(c);return c.json(await generatedReports.regenerate(p.actor,p.org,p.assessment,{requestId:c.get("requestId")}),202);});
+  const developmentOnly = async (c:any,next:()=>Promise<void>) => {
+    if (!developmentToolsEnabled) throw new ServiceError("NOT_FOUND","Report workspace not found.");
+    await next();
+  };
+  app.get(generated,developmentOnly,async c=>{const p=await generatedParts(c);return c.json(await generatedReports.read(p.actor,p.org,p.assessment));});
+  app.post(generated+"/regenerate",developmentOnly,async c=>{const p=await generatedParts(c);return c.json(await generatedReports.regenerate(p.actor,p.org,p.assessment,{requestId:c.get("requestId")}),202);});
   app.get(generated+"/pdf",async c=>{
     const p=await generatedParts(c),file=await generatedReports.downloadPdf(p.actor,p.org,p.assessment);
     return new Response(new Uint8Array(file.pdf),{headers:{"Content-Type":"application/pdf","Content-Length":String(file.pdf.length),"Content-Disposition":"inline; filename=\"NIQ-clinical-report.pdf\"","ETag":'"'+file.sha256+'"',"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
   });
-  app.post(generated+"/refresh-pdf",async c=>{
+  app.post(generated+"/refresh-pdf",developmentOnly,async c=>{
     const p=await generatedParts(c);
     return c.json(await generatedReports.refreshReadyPdf(p.actor,p.org,p.assessment,{requestId:c.get("requestId")}));
   });

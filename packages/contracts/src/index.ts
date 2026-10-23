@@ -114,6 +114,7 @@ export const authenticatedUserSchema = z.object({
   displayName: z.string().min(1).max(120),
   role: membershipRoleSchema,
   platformRole: z.enum(["USER", "NIQ_ADMIN"]),
+  developmentToolsEnabled: z.boolean().optional(),
 });
 
 export const signInResponseSchema = z.union([

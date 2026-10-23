@@ -31,6 +31,7 @@ export type AppDependencies = {
   webPush?: WebPushService;
   sessionCookieName?: string;
   secureCookies?: boolean;
+  runtimeEnvironment?: "development" | "test" | "production";
   bootstrapToken?: string;
   exposeDevelopmentTokens?: boolean;
 };
@@ -83,12 +84,12 @@ export function createApp(dependencies: AppDependencies) {
       resendsRemaining: result.resendsRemaining,
     }, 202);
     issueCookie(context, result.session.token, result.session.expiresAt);
-    return context.json({ user: result.session.principal });
+    return context.json({ user: { ...result.session.principal, developmentToolsEnabled: dependencies.runtimeEnvironment === "development" } });
   });
   app.post("/v1/auth/mfa/verify", zValidator("json", verifyMfaRequestSchema, validationFailure), async (context) => {
     const service = localService(context); if (service instanceof Response) return service;
     const session = await service.verifyMfa(context.req.valid("json"), requestContext(context)); issueCookie(context, session.token, session.expiresAt);
-    return context.json({ user: session.principal });
+    return context.json({ user: { ...session.principal, developmentToolsEnabled: dependencies.runtimeEnvironment === "development" } });
   });
   app.post("/v1/auth/mfa/resend", zValidator("json", resendMfaRequestSchema, validationFailure), async (context) => {
     const service = localService(context); if (service instanceof Response) return service;
@@ -164,7 +165,7 @@ export function createApp(dependencies: AppDependencies) {
       await dependencies.assessmentWorkflow.db.transaction(tx => publishWorkspaceChange(tx, { organizationId: match[1]!, scope: scope === "assessment" && !assessmentId ? "organization" : scope, assessmentId }));
     } catch (cause) { console.error("Workspace refresh event unavailable", cause); }
   });
-  app.get("/v1/auth/me", (context) => context.json({ user: context.get("principal") }));
+  app.get("/v1/auth/me", (context) => context.json({ user: { ...context.get("principal"), developmentToolsEnabled: dependencies.runtimeEnvironment === "development" } }));
   app.post("/v1/auth/sign-out", async (context) => {
     const token = getCookie(context, cookieName); if (token) await dependencies.service!.signOut(token, requestContext(context));
     deleteCookie(context, cookieName, { path: "/", secure: dependencies.secureCookies ?? false }); return context.body(null, 204);
@@ -285,7 +286,7 @@ export function createApp(dependencies: AppDependencies) {
   if (dependencies.assessmentWorkflow) {
     if (dependencies.webPush) mountWebPushRoutes(app, dependencies.webPush, cookieName);
     mountWorkspaceNotificationRoutes(app, dependencies.assessmentWorkflow, dependencies.service!, cookieName);
-    mountAssessmentRoutes(app, dependencies.assessmentWorkflow);
+    mountAssessmentRoutes(app, dependencies.assessmentWorkflow, dependencies.runtimeEnvironment === "development");
     mountFaceScanRoutes(app, new AssessmentFaceScanService(dependencies.assessmentWorkflow));
     mountFaceScanConsentRoutes(app, dependencies.assessmentWorkflow);
   }
