@@ -22,6 +22,8 @@ Requires Docker Engine, Docker Compose 2.24.4 or newer, and a checkout of both
    `openssl rand -base64 32`. Keep keys stable across restarts and back them up securely.
    Use a hex database password to avoid URL escaping problems.
 3. Set `WEB_ORIGIN` to the exact HTTPS browser origin, without a trailing slash.
+   Keep `SECURE_COOKIES=true` for HTTPS staging. Production always uses secure cookies,
+   while local HTTP development defaults to `SECURE_COOKIES=false`.
    The staging override uses local authentication. `DEV_OTP_DELIVERY=true` explicitly
    enables development OTP delivery, while fixed OTP stays disabled. Invitations and
    bootstrap follow [Authentication and onboarding](authentication.md).
@@ -79,3 +81,21 @@ No real OpenRouter call or server deployment is implied by repository checks. Th
 staging configuration postpones production OTP/invitation delivery and the remaining
 production controls. Remove the staging override for production and complete those
 controls before public patient use.
+
+## Existing native staging installations
+
+If the server runs Bun and Vite under PM2 instead of Docker, keep its PM2 ecosystem
+file, absolute paths and site names in operator-managed files on that server. Do not
+copy these site-specific settings into the shared source files. Use private API `.env`
+files for `SECURE_COOKIES=true`, `WEB_ORIGIN` and other deployment values.
+
+The installed Vite 7.1.4 supports `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS`. Set this
+environment variable on the web process to the single exact deployed hostname, without
+a scheme or path, then restart it with the updated environment. It adds that hostname
+to Vite's default allowed hosts without changing `vite.config.ts`. Do not use unrestricted
+`allowedHosts: true`. Do not rely on the API `.env` to configure the separate web process.
+
+Keep local operator scripts and legacy disk PDF artifacts outside tracked source. They
+are not part of the supported report download workflow. Standard report generation and
+the generated-report PDF download route use the saved assessment artifacts. Preserve
+any legacy files separately before reconciling an existing server checkout.

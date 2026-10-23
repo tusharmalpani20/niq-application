@@ -2,6 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { loadApplicationConfig } from "./index";
 
 describe("configuration", () => {
+  test("secure cookies can be enabled for HTTPS development deployments", () => {
+    const base = { DATABASE_URL: "postgres://localhost/niq", SESSION_SECRET: "a-development-secret-with-32-chars" };
+    expect(loadApplicationConfig(base).SECURE_COOKIES).toBe(false);
+    expect(loadApplicationConfig({ ...base, SECURE_COOKIES: "true" }).SECURE_COOKIES).toBe(true);
+    expect(loadApplicationConfig({ ...base, SECURE_COOKIES: "false" }).SECURE_COOKIES).toBe(false);
+    expect(() => loadApplicationConfig({ ...base, SECURE_COOKIES: "yes" })).toThrow();
+  });
+
   test("rejects a weak session secret", () => {
     expect(() => loadApplicationConfig({ DATABASE_URL: "postgres://localhost/niq", SESSION_SECRET: "short" })).toThrow();
   });

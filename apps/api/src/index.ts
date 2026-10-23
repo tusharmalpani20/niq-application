@@ -52,7 +52,7 @@ const app = createApp({
   assessmentWorkflow: workflow,
   webPush,
   sessionCookieName: config.SESSION_COOKIE_NAME,
-  secureCookies: config.NODE_ENV === "production",
+  secureCookies: config.SECURE_COOKIES || config.NODE_ENV === "production",
   bootstrapToken: config.BOOTSTRAP_TOKEN,
   exposeDevelopmentTokens: config.NODE_ENV !== "production",
 });

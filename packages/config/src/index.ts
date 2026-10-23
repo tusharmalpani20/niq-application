@@ -46,6 +46,7 @@ export const applicationConfigSchema = z.object({
   AUTH_MODE: z.enum(["disabled", "local", "oidc"]).default("disabled"),
   SESSION_SECRET: z.string().min(32),
   SESSION_COOKIE_NAME: z.string().regex(/^[A-Za-z0-9_-]+$/).default("niq_session"),
+  SECURE_COOKIES: booleanFromString,
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(12),
   MFA_OTP_TTL_MINUTES: z.coerce.number().int().min(2).max(15).default(10),
   MFA_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(10).default(5),

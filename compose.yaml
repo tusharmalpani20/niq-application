@@ -25,6 +25,7 @@ services:
     environment:
       NODE_ENV: production
       REPORT_DIAGNOSTICS_ENABLED: ${REPORT_DIAGNOSTICS_ENABLED:-false}
+      SECURE_COOKIES: ${SECURE_COOKIES:-false}
       APP_REGION: ${APP_REGION:-india}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-on-prem}
       API_HOST: 0.0.0.0
