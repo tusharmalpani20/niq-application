@@ -48,17 +48,17 @@ export function mountAssessmentRoutes(app:Hono<any>,service:AssessmentWorkflowSe
     const assessment=requested.startsWith("ASM-")?(await service.read(actor,org,requested)).id:requested;
     return {actor,org,assessment};
   };
-  const developmentOnly = async (c:any,next:()=>Promise<void>) => {
+  const diagnosticsOnly = async (c:any,next:()=>Promise<void>) => {
     if (!developmentToolsEnabled) throw new ServiceError("NOT_FOUND","Report workspace not found.");
     await next();
   };
-  app.get(generated,developmentOnly,async c=>{const p=await generatedParts(c);return c.json(await generatedReports.read(p.actor,p.org,p.assessment));});
-  app.post(generated+"/regenerate",developmentOnly,async c=>{const p=await generatedParts(c);return c.json(await generatedReports.regenerate(p.actor,p.org,p.assessment,{requestId:c.get("requestId")}),202);});
+  app.get(generated,diagnosticsOnly,async c=>{const p=await generatedParts(c);return c.json(await generatedReports.read(p.actor,p.org,p.assessment));});
+  app.post(generated+"/regenerate",diagnosticsOnly,async c=>{const p=await generatedParts(c);return c.json(await generatedReports.regenerate(p.actor,p.org,p.assessment,{requestId:c.get("requestId")}),202);});
   app.get(generated+"/pdf",async c=>{
     const p=await generatedParts(c),file=await generatedReports.downloadPdf(p.actor,p.org,p.assessment);
     return new Response(new Uint8Array(file.pdf),{headers:{"Content-Type":"application/pdf","Content-Length":String(file.pdf.length),"Content-Disposition":"inline; filename=\"NIQ-clinical-report.pdf\"","ETag":'"'+file.sha256+'"',"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
   });
-  app.post(generated+"/refresh-pdf",developmentOnly,async c=>{
+  app.post(generated+"/refresh-pdf",diagnosticsOnly,async c=>{
     const p=await generatedParts(c);
     return c.json(await generatedReports.refreshReadyPdf(p.actor,p.org,p.assessment,{requestId:c.get("requestId")}));
   });

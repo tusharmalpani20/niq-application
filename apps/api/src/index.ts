@@ -46,6 +46,7 @@ const app = createApp({
   allowedOrigin: config.WEB_ORIGIN,
   authMode: config.AUTH_MODE,
   runtimeEnvironment: config.NODE_ENV,
+  reportDiagnosticsEnabled: config.REPORT_DIAGNOSTICS_ENABLED,
   checkDatabase: () => isDatabaseSchemaReady(sql),
   service,
   assessmentWorkflow: workflow,

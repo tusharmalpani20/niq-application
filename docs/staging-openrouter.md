@@ -1,7 +1,12 @@
 # Restricted development staging server
 
 This setup deliberately runs the application API with `NODE_ENV=development`.
-Development report controls and AI diagnostics remain available. Keep access restricted
+Report diagnostics are controlled separately by `REPORT_DIAGNOSTICS_ENABLED`, which
+defaults to `false`. Keep it false on client servers. Trusted local diagnostics can set
+it to `true`, then restart the API and refresh the browser session. This flag controls
+report workspace visibility and its preview/regenerate/refresh APIs independently of
+`NODE_ENV`. Automatic report generation and authorized PDF downloads stay available.
+Keep access restricted
 to the team using a VPN or an authenticated reverse proxy. This is not the production
 rollout. The normal `compose.yaml` continues to use production mode.
 
@@ -63,7 +68,7 @@ than trying to reach its own localhost.
 - Confirm scoring reports `openrouter` and verify the chosen model IDs against the funded
   account. Then complete one agreed assessment. Normal accepted report generation saves
   its PDF automatically. Historical test records marked for HTML review may still require
-  the development-only Generate PDF action. Check agent approval, saved PDF, download
+  the diagnostics-only Generate PDF action, with explicit diagnostics access. Check agent approval, saved PDF, download
   from the assessment and assessment list, and browser PDF preview.
 - The API image includes Chromium, fontconfig and generated report assets. Uploaded
   attachments persist in `application-reports`, writable by the non-root `niq` user.

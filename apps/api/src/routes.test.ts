@@ -852,17 +852,29 @@ describe("local authentication routes", () => {
 });
 
 for (const runtimeEnvironment of ["development", "test", "production"] as const) {
-  test(`report workspace access follows server environment ${runtimeEnvironment}`, async () => {
-    const app = createApp({allowedOrigin:"http://localhost:5173",authMode:"local",checkDatabase:async()=>true,service:fakeService(),runtimeEnvironment,
-      assessmentWorkflow:{} as NonNullable<Parameters<typeof createApp>[0]["assessmentWorkflow"]>});
-    const headers={cookie:"niq_session=valid-session",origin:"http://localhost:5173"};
-    const me=await (await app.request("/v1/auth/me",{headers})).json();
-    expect(me.user.developmentToolsEnabled).toBe(runtimeEnvironment==="development");
-    const base="/v1/organizations/invalid/assessments/ASM-006564/generated-report";
-    for(const [path,method] of [[base,"GET"],[base+"/regenerate","POST"],[base+"/refresh-pdf","POST"]]) {
-      expect((await app.request(path!,{method,headers})).status).toBe(runtimeEnvironment==="development"?400:404);
-    }
-    // PDF downloads remain routed in every environment.
-    expect((await app.request(base+"/pdf",{headers})).status).toBe(400);
-  });
+  for (const reportDiagnosticsEnabled of [undefined, false, true]) {
+    test(`report diagnostics ${reportDiagnosticsEnabled} independently controls access in ${runtimeEnvironment}`, async () => {
+      const enabled = reportDiagnosticsEnabled === true;
+      const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+        service: fakeService(), runtimeEnvironment, reportDiagnosticsEnabled,
+        assessmentWorkflow: {} as NonNullable<Parameters<typeof createApp>[0]["assessmentWorkflow"]> });
+      const headers = { cookie: "niq_session=valid-session", origin: "http://localhost:5173" };
+      const me = await (await app.request("/v1/auth/me", { headers })).json();
+      expect(me.user.developmentToolsEnabled).toBe(enabled);
+      for (const [path, body] of [
+        ["/v1/auth/sign-in", { email: "admin@example.com", password: "a secure password" }],
+        ["/v1/auth/mfa/verify", { challengeToken: "x".repeat(32), otp: "123456" }],
+      ] as const) {
+        const response = await app.request(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+        expect(response.status).toBe(200);
+        expect((await response.json()).user.developmentToolsEnabled).toBe(enabled);
+      }
+      const base = "/v1/organizations/invalid/assessments/ASM-006564/generated-report";
+      for (const [path, method] of [[base, "GET"], [base + "/regenerate", "POST"], [base + "/refresh-pdf", "POST"]]) {
+        expect((await app.request(path!, { method, headers })).status).toBe(enabled ? 400 : 404);
+      }
+      // The download route remains available with diagnostics disabled.
+      expect((await app.request(base + "/pdf", { headers })).status).toBe(400);
+    });
+  }
 }

@@ -73,3 +73,14 @@ test("browser push keys must be configured together", () => {
   expect(() => loadApplicationConfig({ ...base, VAPID_PUBLIC_KEY: "A".repeat(87) })).toThrow("Configure all VAPID values together");
   expect(loadApplicationConfig({ ...base, VAPID_PUBLIC_KEY: "A".repeat(87), VAPID_PRIVATE_KEY: "B".repeat(43), VAPID_SUBJECT: "mailto:ops@example.com" }).VAPID_SUBJECT).toBe("mailto:ops@example.com");
 });
+
+for (const NODE_ENV of ["development", "test", "production"]) {
+  test(`report diagnostics opt-in is independent of ${NODE_ENV}`, () => {
+    const base = { NODE_ENV, DATABASE_URL: "postgres://localhost/niq", SESSION_SECRET: "a-development-secret-with-32-chars",
+      PATIENT_DATA_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64") };
+    expect(loadApplicationConfig(base).REPORT_DIAGNOSTICS_ENABLED).toBe(false);
+    expect(loadApplicationConfig({ ...base, REPORT_DIAGNOSTICS_ENABLED: "false" }).REPORT_DIAGNOSTICS_ENABLED).toBe(false);
+    expect(loadApplicationConfig({ ...base, REPORT_DIAGNOSTICS_ENABLED: "true" }).REPORT_DIAGNOSTICS_ENABLED).toBe(true);
+    expect(() => loadApplicationConfig({ ...base, REPORT_DIAGNOSTICS_ENABLED: "yes" })).toThrow();
+  });
+}

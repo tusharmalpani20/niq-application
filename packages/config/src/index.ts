@@ -19,6 +19,7 @@ const optionalEncryptionKey = z.preprocess(
 
 export const applicationConfigSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  REPORT_DIAGNOSTICS_ENABLED: booleanFromString,
   APP_REGION: z.enum(["india", "us", "eu"]).default("india"),
   DEPLOYMENT_MODE: z.enum(["niq-hosted", "client-cloud", "on-prem"]).default("niq-hosted"),
   API_HOST: z.string().default("0.0.0.0"),
