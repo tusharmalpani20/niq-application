@@ -77,7 +77,7 @@ export function FaceScanResults({ session }: { session: FaceScanSession }) {
     { label: "Health risk score", value: r.healthRiskScore, unit: "/100", icon: Shield },
   ];
   return <section aria-label="Vital IQ results" className="@container space-y-4">
-    <p role="status" className="text-xs text-muted-foreground">Completed{session.completedAt ? ` · ${new Date(session.completedAt).toLocaleString()}` : ""}</p>
+    <p role="status" className="text-xs text-muted-foreground">{session.historicalSource ? <>Historical measurement · Recorded {new Date(session.historicalSource.capturedAt).toLocaleString()} · reused from {session.historicalSource.assessmentReference}</> : <>Completed{session.completedAt ? ` · ${new Date(session.completedAt).toLocaleString()}` : ""}</>}</p>
     <dl className="grid gap-4 rounded-xl border border-border bg-card py-4 @min-[30rem]:grid-cols-3">
       {scores.map(item => <div key={item.label} className="min-w-0 px-4"><dt className="flex items-center gap-2 text-sm text-muted-foreground"><item.icon className="size-4 shrink-0 text-primary" aria-hidden="true" />{item.label}</dt><dd className="mt-1 text-2xl font-semibold tabular-nums">{item.value ?? "—"}{item.value != null && item.unit && <span className="ml-1 text-base font-normal text-muted-foreground">{item.unit}</span>}</dd></div>)}
     </dl>

@@ -29,3 +29,14 @@ test("extended scan metrics survive application validation and render missing va
   delete session.result!.additionalMetrics;
   expect(()=>renderToStaticMarkup(<FaceScanResults session={session}/>)).not.toThrow();
 });
+
+
+test("historical measurements retain their original recording date and source assessment", () => {
+  const session = faceScanSessionSchema.parse({ id: "reused", state: "COMPLETED", context: { dob: "1990-01-01", gender: "male", heightCm: 170, weightKg: 70, posture: "resting", employeeId: "operator" }, createdAt: "2026-10-23T00:00:00Z", updatedAt: "2026-10-23T00:00:00Z", completedAt: "2026-10-21T08:00:00Z", failureCode: null, score: null, result: { schemaVersion: 1, providerScanId: "source", wellnessScore: 80, healthRiskScore: 20, physiologicalScore: null, mentalWellbeingScore: null, vitals: { heartRate: 72, oxygenSaturation: 96, respiratoryRate: 17, systolic: 123, diastolic: 80 } }, historicalSource: { sessionId: "source", assessmentReference: "ASM-003545", capturedAt: "2026-10-21T08:00:00Z" } });
+  const html = renderToStaticMarkup(<FaceScanResults session={session}/>);
+  expect(html).toContain("Historical measurement");
+  expect(html).toContain("Recorded ");
+  expect(html).toContain("reused from ASM-003545");
+  expect(html).not.toContain("Completed ·");
+  expect(html).not.toContain("23/10/2026");
+});

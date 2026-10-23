@@ -289,10 +289,12 @@ export function reportToxicityAnswers(answers: FormAnswers): NonNullable<ReportF
 
 export function reportObservations(answers: FormAnswers, manifest: AssessmentFormManifest, completedAt: Date, scan: unknown) {
   const metrics: GeneratedReport["metrics"] = [];
+  const session = scan as FaceScanSession | null;
   const add = (id: string, label: string, raw: number | string | null | undefined, unit?: string, source: "assessment" | "face_scan" = "assessment", measuredAt?: string, range?: { outside: boolean; reference: string } | null) => {
     if (raw === null || raw === undefined || raw === "") return;
     metrics.push({ id, label, value: String(raw), ...(unit ? {unit} : {}), ...(measuredAt ? {measuredAt} : {}), source,
-      ...(range ? { referenceRange: range.reference, outsideReferenceRange: range.outside } : {}) });
+      ...(range ? { referenceRange: range.reference, outsideReferenceRange: range.outside } : {}),
+      ...(source === "face_scan" && session?.historicalSource ? { historicalSource: session.historicalSource } : {}) });
   };
   const weight = positive(answers.current_weight_kg);
   const height = positive(answers.height_cm);
@@ -307,8 +309,7 @@ export function reportObservations(answers: FormAnswers, manifest: AssessmentFor
   }
   for (const symptom of list(answers.dietary_symptoms).slice(0, 10))
     add(symptom, "Reported dietary symptom", fieldLabel(manifest,"dietary_symptoms",symptom) ?? symptom);
-  const session = scan as FaceScanSession | null;
-  const measuredAt = session?.completedAt ?? undefined;
+  const measuredAt = session?.historicalSource?.capturedAt ?? session?.completedAt ?? undefined;
   const face = (id: string, label: string, raw: number | string | null | undefined, unit?: string, rangeKey?: string, rangeValue: number | string | null | undefined = raw) =>
     add(id,label,raw,unit,"face_scan",measuredAt,
       rangeKey && session?.context && rangeValue !== undefined ? assessFaceScanRange(rangeKey,rangeValue,session.context) : null);
@@ -598,7 +599,8 @@ export class GeneratedReportService {
         observations:metrics.filter(metric=>new Set([
           "current_weight_kg","height_cm","bmi","weight_loss_percent","wellness_score","health_risk_score",
           "heart_rate","oxygen_saturation","respiratory_rate","systolic","diastolic","stress_index"
-        ]).has(metric.id)).slice(0,30).map(({id,label,value,unit,measuredAt})=>({id,label,value,...(unit?{unit}:{}),...(measuredAt?{measuredAt:dateOnly(measuredAt)}:{})})),
+        ]).has(metric.id)).slice(0,30).map(({id,label,value,unit,measuredAt,historicalSource})=>({id,label,value,...(unit?{unit}:{}),...(measuredAt?{measuredAt:dateOnly(measuredAt)}:{}),
+          ...(historicalSource?{measurementSource:"historical" as const,sourceAssessmentReference:historicalSource.assessmentReference}:{})})),
       };
       const transport=await this.service.transport(org,context,frozen.connection);
       const generated=await requestScoringReportContent({...transport,timeoutMs:this.service.config.REPORT_GENERATION_TIMEOUT_MS,

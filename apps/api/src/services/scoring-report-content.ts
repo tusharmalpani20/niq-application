@@ -100,7 +100,7 @@ export type ReportFacts = {
   surgicalStatusId?: string; surgeryDate?: string; plannedSurgeryDate?: string;
   plannedTreatmentStartDate?: string; assessmentDate: string; productStageChoice?: "surgical" | "treatment_stage";
   reviewedScore: number; reviewedRiskCategoryId?: string;
-  observations: Array<{ id: string; label: string; value: string; unit?: string; measuredAt?: string }>;
+  observations: Array<{ id: string; label: string; value: string; unit?: string; measuredAt?: string; measurementSource?: "historical"; sourceAssessmentReference?: string }>;
 };
 
 export class ScoringReportContentError extends Error {

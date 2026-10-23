@@ -514,6 +514,7 @@ export function GeneratedReportPdf({ report, brand }: { report: GeneratedReport;
     </ReportPage>
 
     {faceMetrics.length > 0 && <ReportPage report={report} brand={brand} number={page++} title="Vital IQ measurements" icon="pulse">
+      {faceMetrics[0]?.historicalSource && <Text style={[styles.muted, { marginBottom: 9 }]}>Historical measurement · Recorded {reportDate(faceMetrics[0].historicalSource.capturedAt)} · reused from {faceMetrics[0].historicalSource.assessmentReference}</Text>}
       {compactScores ? <View style={[styles.row, { marginBottom: 13 }]}>
         <View wrap={false} style={[styles.scoreCard, { width: "31.8%", minHeight: 105, flexDirection: "column", justifyContent: "center", gap: 3, padding: 9, borderColor: theme.line, backgroundColor: theme.soft }]}><Text style={styles.scoreLabel}>Vital IQ points</Text><Text style={[styles.largeValue, { color: brandInk, fontSize: 28 }]}>{vitalPoints!.value}</Text><Text style={styles.muted}>points</Text></View>
         {faceScores.map(metric => <ScoreMetric key={metric.id} metric={metric} theme={theme} compact/>)}

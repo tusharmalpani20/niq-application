@@ -585,3 +585,11 @@ describe("narrative weight comparison matches the chart", () => {
     expect(reportWeightComparison([{ date: "2026-10-13", kg: 63 }, { date: "2026-10-14", kg: 64 }], 64, "2026-10-15")).toBeUndefined();
   });
 });
+
+
+test("historical Vital IQ report observations retain provenance without redating measurements", () => {
+  const source = { sessionId: "source", assessmentReference: "ASM-003545", capturedAt: "2026-10-21T08:00:00Z" };
+  const metrics = reportObservations({ current_weight_kg: 62 } as any, { sections: [] } as any, new Date("2026-10-23T08:00:00Z"), { completedAt: source.capturedAt, historicalSource: source, result: { vitals: { heartRate: 66 } } });
+  expect(metrics.find(metric => metric.id === "heart_rate")).toMatchObject({ measuredAt: source.capturedAt, historicalSource: source });
+  expect(metrics.find(metric => metric.id === "current_weight_kg")).not.toHaveProperty("historicalSource");
+});

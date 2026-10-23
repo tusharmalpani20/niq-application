@@ -94,7 +94,7 @@ export type GeneratedReport = {
     { nutrient: "energy" | "protein"; decision: "select_source"; targetText: string } |
     { nutrient: "energy" | "protein"; decision: "withhold_numeric"; targetText: null }
   >;
-  metrics: Array<{ id: string; label: string; value: string; unit?: string; measuredAt?: string; source: "assessment" | "face_scan"; referenceRange?: string; outsideReferenceRange?: boolean }>;
+  metrics: Array<{ id: string; label: string; value: string; unit?: string; measuredAt?: string; historicalSource?: { sessionId: string; assessmentReference: string; capturedAt: string }; source: "assessment" | "face_scan"; referenceRange?: string; outsideReferenceRange?: boolean }>;
   weightDisplayUnit?: "kg" | "lb";
   weightHistory: Array<{ date: string | null; kg: number; label?: string; assessmentId?: string }>;
   /** Display labels from the submitted assessment; absent on reports saved before this field existed. */

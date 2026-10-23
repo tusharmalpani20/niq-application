@@ -116,3 +116,12 @@ test("print preserves live section borders, headers, logos and footer dividers",
     expect(borders.footers.every(footer => footer.display !== "none" && footer.border !== "0px")).toBe(true);
   } finally { await browser.close(); }
 }, 30_000);
+
+
+test("PDF HTML labels historical Vital IQ measurements with their original date and assessment", async () => {
+  const historical = { ...report, metrics: [{ id: "heart_rate", label: "Heart rate", value: "66", unit: "bpm", source: "face_scan", measuredAt: "2026-10-21T08:00:00Z", historicalSource: { sessionId: "source", assessmentReference: "ASM-003545", capturedAt: "2026-10-21T08:00:00Z" } }] } as GeneratedReport;
+  const html = await renderGeneratedReportHtml(historical, { name: "Example Clinic", primaryColor: "#138f94" });
+  expect(html).toContain("Historical measurement");
+  expect(html).toContain("Recorded 21 Oct 2026");
+  expect(html).toContain("reused from ASM-003545");
+});
