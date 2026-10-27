@@ -117,11 +117,15 @@ export class PostgresApplicationService implements ApplicationService {
   constructor(private readonly db: Database, private readonly config: ApplicationConfig, private readonly otpDelivery: OtpDelivery) {}
 
   private async audit(executor: Executor, organizationId: string, context: RequestContext, action: string, resourceType: string, resourceId?: string, actor?: Principal, metadata: Record<string, unknown> = {}) {
+    // A platform administrator's home membership cannot reference another tenant.
+    // Keep the global actor identity using the same format as platform onboarding.
+    const platformActor = actor?.platformRole === "NIQ_ADMIN" && actor.organizationId !== organizationId;
     await executor.insert(auditEvents).values({
-      id: createEntityId(), organizationId, actorMembershipId: actor?.membershipId, actorType: actor ? "USER" : ("actorUserId" in metadata ? "NIQ_ADMIN" : "SYSTEM"),
+      id: createEntityId(), organizationId, actorMembershipId: platformActor ? undefined : actor?.membershipId,
+      actorType: platformActor ? "NIQ_ADMIN" : actor ? "USER" : ("actorUserId" in metadata ? "NIQ_ADMIN" : "SYSTEM"),
       action, resourceType, resourceId, requestId: context.requestId,
       ipAddressHash: context.ipAddress ? await keyedHash(context.ipAddress, this.config.SESSION_SECRET) : undefined,
-      metadata,
+      metadata: platformActor ? { ...metadata, actorUserId: actor.userId } : metadata,
     });
   }
 
@@ -1439,7 +1443,10 @@ export class PostgresApplicationService implements ApplicationService {
           const valid = await tx.select({ id: facilities.id }).from(facilities).where(and(eq(facilities.organizationId, organizationId), inArray(facilities.id, input.facilityIds)));
           if (valid.length !== input.facilityIds.length) throw new ServiceError("NOT_FOUND", "One or more facilities were not found.");
         }
-        const [created] = await tx.insert(invitations).values({ id: invitationId, organizationId, email: normalizeEmail(input.email), role: input.role, tokenHash: await keyedHash(token, this.config.SESSION_SECRET), expiresAt: new Date(Date.now() + this.config.INVITATION_TTL_HOURS * 3_600_000), invitedByMembershipId: actor.membershipId }).returning();
+        // Cross-organization platform invitations retain their inviter in the
+        // transactional USER_INVITED audit, not a foreign tenant membership.
+        const invitedByMembershipId = actor.platformRole === "NIQ_ADMIN" && actor.organizationId !== organizationId ? null : actor.membershipId;
+        const [created] = await tx.insert(invitations).values({ id: invitationId, organizationId, email: normalizeEmail(input.email), role: input.role, tokenHash: await keyedHash(token, this.config.SESSION_SECRET), expiresAt: new Date(Date.now() + this.config.INVITATION_TTL_HOURS * 3_600_000), invitedByMembershipId }).returning();
         if (input.facilityIds.length) await tx.insert(invitationFacilities).values(input.facilityIds.map((facilityId) => ({ id: createEntityId(), organizationId, invitationId, facilityId })));
         await this.audit(tx, organizationId, context, "USER_INVITED", "invitation", invitationId, actor, { role: input.role, facilityCount: input.facilityIds.length }); return created;
       });
