@@ -4,6 +4,7 @@ import { AuthenticatedShell } from "./components/AuthenticatedShell";
 import { BrandingProvider } from "./lib/branding-context";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { ByocSetupPage } from "./pages/ByocSetupPage";
 import { SignInPage } from "./pages/SignInPage";
 import { VerifyMfaPage } from "./pages/VerifyMfaPage";
 
@@ -28,6 +29,7 @@ export function App() {
   return (
     <BrandingProvider>
       <Routes>
+        <Route path="/setup" element={<ByocSetupPage />} />
         <Route path="/sign-in" element={<SignInPage />} />
         <Route path="/verify" element={<VerifyMfaPage />} />
         <Route path="/invite/:token" element={<AcceptInvitePage />} />
