@@ -125,6 +125,15 @@ export const scoringConnections = pgTable(
   ],
 );
 
+// One durable exchange owner per organization; raw activation tokens never enter this table.
+export const scoringActivationAttempts = pgTable("scoring_activation_attempts", {
+  organizationId: entityId("organization_id").primaryKey().references(() => organizations.id),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+  requestId: text("request_id").notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  ...timestamps,
+}, table => [check("scoring_activation_request_uuid_ck", sql`${table.requestId} ~ '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$'`)]);
+
 export const facilities = pgTable(
   "facilities",
   {
@@ -845,3 +854,11 @@ export const assessmentReviewedRisks = pgTable("assessment_reviewed_risks", {
  foreignKey({columns:[t.organizationId,t.assessmentId,t.submissionId],foreignColumns:[assessmentSubmissions.organizationId,assessmentSubmissions.assessmentId,assessmentSubmissions.id]}),
  check("assessment_reviewed_risks_status_ck",sql`${t.status} in ('PENDING','SUCCEEDED','UNAVAILABLE')`),
 ]);
+
+// The singleton survives setup token rotation and blocks subsequent first-user creation.
+export const byocInstallationSetups = pgTable("byoc_installation_setups", {
+  id: text("id").primaryKey(),
+  organizationId: entityId("organization_id").notNull().references(() => organizations.id),
+  adminUserId: entityId("admin_user_id").notNull().references(() => users.id),
+  completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [check("byoc_installation_setups_singleton_ck", sql`${t.id} = 'byoc'`)]);

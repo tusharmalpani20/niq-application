@@ -295,6 +295,20 @@
       "when": 1791792002000,
       "tag": "0041_automatic_report_generation",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1793059200000,
+      "tag": "0042_byoc_hospital_setup",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1793062800000,
+      "tag": "0043_scoring_activation_recovery",
+      "breakpoints": true
     }
   ]
 }

@@ -17,6 +17,8 @@ export async function isDatabaseSchemaReady(sql: postgres.Sql): Promise<boolean>
   const [result] = await sql<{ ready: boolean }[]>`
     select
       to_regclass('public.assessments') is not null
+      and to_regclass('public.byoc_installation_setups') is not null
+      and to_regclass('public.scoring_activation_attempts') is not null
       and to_regclass('public.assessment_initializations') is not null
       and to_regclass('public.assessment_face_scans') is not null
       and to_regclass('public.face_scan_consents') is not null
