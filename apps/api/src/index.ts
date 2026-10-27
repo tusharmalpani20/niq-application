@@ -1,3 +1,4 @@
+import { initializeMonitoring, captureOperationalFailure } from "./monitoring";
 import { AssessmentFaceScanService } from "./services/assessment-face-scan";
 import { loadApplicationConfig } from "@niq/application-config";
 import { createApp } from "./app";
@@ -8,6 +9,7 @@ import { AssessmentWorkflowService } from "./services/assessment-workflow";
 import { WebPushService } from "./services/web-push";
 import { GeneratedReportService } from "./services/generated-report";
 
+initializeMonitoring();
 const config = loadApplicationConfig(process.env);
 const { db, sql } = createDatabase(config);
 const otpDelivery = (config.DEV_OTP_DELIVERY || config.DEV_FIXED_OTP) ? new DevelopmentOtpDelivery() : new UnconfiguredOtpDelivery();
@@ -19,7 +21,7 @@ let deliveringPush = false;
 const pushWorker = setInterval(async () => {
   if (deliveringPush) return;
   deliveringPush = true;
-  try { await webPush.deliverDue(); } catch { console.warn("Push delivery temporarily unavailable"); }
+  try { await webPush.deliverDue(); } catch (error) { captureOperationalFailure("push_delivery", error); console.warn("Push delivery temporarily unavailable"); }
   finally { deliveringPush = false; }
 }, 10_000);
 pushWorker.unref();
@@ -29,7 +31,7 @@ let reconciling = false;
 const recovery = setInterval(async () => {
   if (reconciling) return;
   reconciling = true;
-  try { await faceScans.recoverPending(); } catch { console.warn("Face scan reconciliation unavailable"); }
+  try { await faceScans.recoverPending(); } catch (error) { captureOperationalFailure("face_scan_recovery", error); console.warn("Face scan reconciliation unavailable"); }
   finally { reconciling = false; }
 }, config.FACE_SCAN_RECONCILE_INTERVAL_MS);
 recovery.unref();
@@ -37,7 +39,7 @@ let preparingReports = false;
 const reportWorker = setInterval(async () => {
   if (preparingReports) return;
   preparingReports = true;
-  try { await automaticReports.processDue(); } catch { console.warn("Automatic report worker temporarily unavailable"); }
+  try { await automaticReports.processDue(); } catch (error) { captureOperationalFailure("report_worker", error); console.warn("Automatic report worker temporarily unavailable"); }
   finally { preparingReports = false; }
 }, 5_000);
 reportWorker.unref();

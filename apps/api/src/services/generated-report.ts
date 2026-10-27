@@ -1,3 +1,4 @@
+import { captureOperationalFailure } from "../monitoring";
 import { publishWorkspaceChange } from "./workspace-notifications";
 import { reportSourceFingerprint } from "./report-source-fingerprint";
 import { createHash } from "node:crypto";
@@ -659,6 +660,7 @@ export class GeneratedReportService {
           .where(and(eq(generatedReports.id,reportId),eq(generatedReports.status,"GENERATING"),eq(generatedReports.leaseToken,claim.leaseToken!)));
         throw error;
       }
+      captureOperationalFailure("report_generation", error);
       const retryable=internal && claim.attemptCount!<MAX_AUTOMATIC_REPORT_ATTEMPTS && (error instanceof ScoringReportContentError
         ? error.kind==="unavailable" && !error.terminal : !(error instanceof ServiceError && error.code==="CONFLICT"));
       await this.service.db.update(generatedReports).set({status:retryable?"QUEUED":"FAILED",failureCode:error instanceof ScoringReportContentError?error.code:"GENERATION_FAILED",leaseToken:null,
@@ -815,6 +817,7 @@ export class GeneratedReportService {
       });
     } catch(error) {
       const reviewRequired=error instanceof AutomaticReportReviewRequired;
+      if (!reviewRequired) captureOperationalFailure("pdf_render", error);
       const retryable=!reviewRequired && claimed.attemptCount<5 && !(error instanceof ServiceError && error.code==="NOT_FOUND");
       await this.service.db.update(generatedReports).set({status:retryable||reviewRequired?"DRAFT":"FAILED",failureCode:reviewRequired?REPORT_REVIEW_REQUIRED:"PDF_RENDER_FAILED",leaseToken:null,
         nextAttemptAt:retryable?new Date(Date.now()+automaticRetryDelay(claimed.attemptCount)):null,updatedAt:new Date()})

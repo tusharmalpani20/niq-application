@@ -1,3 +1,4 @@
+import { captureOperationalFailure } from "./monitoring";
 import { zValidator } from "@hono/zod-validator";
 import { acceptInvitationSchema, activateScoringSchema, assessmentPageQuerySchema, bootstrapAdminSchema, correctPatientDobSchema, correctPatientMrnSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, createPlatformAdministratorInvitationSchema, idSchema, onboardOrganizationSchema, organizationDetailQuerySchema, organizationInvitationPageQuerySchema, organizationPageQuerySchema, organizationSlugSchema, organizationUserPageQuerySchema, patientAssessmentPageQuerySchema, patientPageQuerySchema, patientReferenceSchema, platformAdministratorPageQuerySchema, registerPatientSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, updatePatientSchema, updateOrganizationUserSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
 import { Hono } from "hono";
@@ -298,6 +299,7 @@ export function createApp(dependencies: AppDependencies) {
       const status = error.code === "FORBIDDEN" ? 403 : error.code === "NOT_FOUND" ? 404 : error.code === "VALIDATION_ERROR" ? 400 : error.code === "USER_LIMIT_REACHED" ? 409 : error.code === "ACCOUNT_LOCKED" ? 423 : error.code === "RATE_LIMITED" ? 429 : error.code === "INVALID_CREDENTIALS" || error.code === "INVALID_OR_EXPIRED_TOKEN" ? 401 : 409;
       return context.json(errorBody(error.code, error.message, context.get("requestId"), error.details), error.code === "SCORING_UNAVAILABLE" || error.code === "SCORING_NOT_CONFIGURED" ? 503 : status);
     }
+    captureOperationalFailure("api_request", error);
     const cause = rootError(error);
     const databaseDetails = cause as Error & { code?: string; constraint_name?: string };
     console.error(JSON.stringify({
