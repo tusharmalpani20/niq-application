@@ -8,6 +8,7 @@ User=ghostpepper
 UMask=0077
 Environment=PATH=/home/ghostpepper/.bun/bin:/home/ghostpepper/.nvm/versions/node/v22.13.0/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/bin/python3 /home/ghostpepper/niq/niq-application/ops/backups/niq_backup.py backup --config /home/ghostpepper/.config/niq-backup/config.json
+ExecStopPost=/usr/bin/python3 /home/ghostpepper/niq/niq-application/ops/backups/pm2_writers.py resume --config /home/ghostpepper/.config/niq-backup/config.json
 TimeoutStartSec=3h
 NoNewPrivileges=true
 

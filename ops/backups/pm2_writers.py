@@ -51,7 +51,11 @@ def resume(config):
     if not isinstance(names, list) or any(name not in NAMES for name in names) or len(names) != len(set(names)):
         raise ValueError('Invalid writer recovery state')
     if names:
-        run(['pm2', 'start', *names])
+        current = json.loads(run(['pm2', 'jlist']))
+        online = {item['name'] for item in current if item['name'] in names and item['pm2_env']['status'] == 'online'}
+        pending = [name for name in names if name not in online]
+        if pending:
+            run(['pm2', 'start', *pending])
         processes = json.loads(run(['pm2', 'jlist']))
         if {item['name'] for item in processes if item['name'] in names and item['pm2_env']['status'] == 'online'} != set(names):
             raise ValueError('Writer recovery is incomplete')

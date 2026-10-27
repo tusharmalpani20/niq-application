@@ -49,3 +49,5 @@ Manual restore drills generate failure events but no cron monitor by default. If
 ## Live recovery
 
 This tool deliberately has **no live restore command**. Recovery must be reviewed separately: stop all writers, preserve the damaged state, verify archive integrity in isolation, restore matching databases/uploads/configuration together, check encryption keys and saved PDF hashes, then start the services and validate access. Never overwrite a live database from a routine drill. Preserve old patient-data encryption keys while any retained records or backups depend on them.
+
+The systemd service also runs the idempotent writer resume command in `ExecStopPost`, including when a backup is terminated. It restarts only previously running APIs which are currently stopped, and leaves already-online processes alone. A host outage still requires normal PM2 startup/recovery verification.

@@ -26,9 +26,9 @@ class WriterTests(unittest.TestCase):
             path = Path(directory)/'state'
             name = 'niq-application-api'
             path.write_text(json.dumps([name])); path.chmod(0o600)
-            with patch.object(writers, 'run', side_effect=[b'', json.dumps([{'name': name, 'pm2_env': {'status': 'online'}}]).encode()]) as command:
+            with patch.object(writers, 'run', side_effect=[json.dumps([{'name': name, 'pm2_env': {'status': 'stopped'}}]).encode(), b'', json.dumps([{'name': name, 'pm2_env': {'status': 'online'}}]).encode()]) as command:
                 writers.resume({'writer_state_file': str(path)})
-                self.assertEqual(command.call_args_list[0].args[0], ['pm2', 'start', name])
+                self.assertEqual(command.call_args_list[1].args[0], ['pm2', 'start', name])
                 self.assertFalse(path.exists())
 
     def test_partial_stop_failure_keeps_recovery_state(self):
@@ -39,5 +39,17 @@ class WriterTests(unittest.TestCase):
             with patch.object(writers, 'env_file', return_value={'NODE_ENV': 'production', 'DATABASE_URL': 'hidden'}), patch.object(writers, 'sql', return_value='0'), patch.object(writers, 'run', side_effect=[processes, RuntimeError('stop failed')]):
                 with self.assertRaises(RuntimeError): writers.pause(config)
                 self.assertEqual(sorted(json.loads(Path(config['writer_state_file']).read_text())), names)
+
+class ResumeRecoveryTests(unittest.TestCase):
+    def test_repeated_resume_never_restarts_an_online_api(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'state'
+            name = 'niq-application-api'
+            path.write_text(json.dumps([name])); path.chmod(0o600)
+            processes = json.dumps([{'name': name, 'pm2_env': {'status': 'online'}}]).encode()
+            with patch.object(writers, 'run', return_value=processes) as command:
+                writers.resume({'writer_state_file': str(path)})
+                self.assertTrue(all(call.args[0] == ['pm2', 'jlist'] for call in command.call_args_list))
+                self.assertFalse(path.exists())
 
 if __name__ == '__main__': unittest.main()
