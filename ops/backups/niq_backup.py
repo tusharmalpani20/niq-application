@@ -127,7 +127,13 @@ def retention_candidates(paths):
         if match and path.is_file() and not path.is_symlink():
             snapshots.append((dt.datetime.strptime(match[1], "%Y%m%dT%H%M%S"), path))
     snapshots.sort(reverse=True)
-    keep = {path for _, path in snapshots[:30]}
+    keep = set()
+    days = set()
+    for timestamp, path in snapshots:
+        day = timestamp.date()
+        if day not in days and len(days) < 30:
+            days.add(day)
+            keep.add(path)
     weeks = set()
     for timestamp, path in snapshots:
         week = timestamp.isocalendar()[:2]

@@ -168,3 +168,19 @@ class BackupSafetyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class DailyRetentionTests(unittest.TestCase):
+    def test_manual_snapshots_do_not_displace_daily_recovery_points(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            start = dt.datetime(2026, 10, 27, 2)
+            paths = []
+            for day in range(40):
+                for hour in [2, 8, 20]:
+                    moment = (start - dt.timedelta(days=day)).replace(hour=hour)
+                    path = root / moment.strftime("niq-%Y%m%dT%H%M%S.tar.gpg")
+                    path.touch(); paths.append(path)
+            retained = set(paths) - set(backup.retention_candidates(paths))
+            recent_days = {(start - dt.timedelta(days=day)).date() for day in range(30)}
+            retained_days = {dt.datetime.strptime(path.name[4:19], "%Y%m%dT%H%M%S").date() for path in retained}
+            self.assertTrue(recent_days <= retained_days)
