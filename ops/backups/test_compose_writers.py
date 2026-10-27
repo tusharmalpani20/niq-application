@@ -93,6 +93,27 @@ class ApplicationScopeTests(unittest.TestCase):
 
 
 class ConfigurationScaffoldingTests(unittest.TestCase):
+    def test_partial_recovery_key_is_validated_before_publishing_configuration(self):
+        import configure_byoc
+        for kind in ('short', 'public', 'symlink', 'valid'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as directory:
+                root=Path(directory); source=root/'release'; source.mkdir()
+                (source/'compose.byoc.yaml').write_text('services: {}')
+                env=root/'runtime.env'; env.write_text('POSTGRES_PASSWORD=fixture\nSESSION_SECRET=fixture\nPATIENT_DATA_ENCRYPTION_KEY=fixture\n'); env.chmod(0o600)
+                config_directory=root/'config'; config_directory.mkdir(mode=0o700)
+                key=config_directory/'recovery-passphrase'
+                if kind == 'symlink':
+                    target=root/'external-key'; target.write_text('x'*96); target.chmod(0o600); key.symlink_to(target)
+                else:
+                    key.write_text('short' if kind == 'short' else 'x'*96)
+                    key.chmod(0o644 if kind == 'public' else 0o600)
+                if kind == 'valid':
+                    configure_byoc.configure(source,env,config_directory,root/'backups')
+                    self.assertEqual(key.read_text(),'x'*96)
+                else:
+                    with self.assertRaises(ValueError): configure_byoc.configure(source,env,config_directory,root/'backups')
+                    self.assertFalse((config_directory/'config.json').exists())
+
     def test_private_configuration_uses_loopback_host_paths_and_never_overwrites_keys(self):
         import configure_byoc
         with tempfile.TemporaryDirectory() as directory:
@@ -114,6 +135,19 @@ class ConfigurationScaffoldingTests(unittest.TestCase):
 if __name__ == '__main__': unittest.main()
 
 class ReleaseRefreshTests(unittest.TestCase):
+    def test_interrupted_old_refresh_file_does_not_block_retry(self):
+        import configure_byoc
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); old=root/'old'; new=root/'new'; old.mkdir(); new.mkdir()
+            for source in (old,new): (source/'compose.byoc.yaml').write_text('services: {}')
+            env=root/'runtime.env'; env.write_text('POSTGRES_PASSWORD=fixture\nSESSION_SECRET=fixture\nPATIENT_DATA_ENCRYPTION_KEY=fixture\n'); env.chmod(0o600)
+            config_directory=root/'config'
+            path=configure_byoc.configure(old,env,config_directory,root/'backups')
+            stale=config_directory/'config.refresh.json'; stale.write_text('interrupted old refresh'); stale.chmod(0o600)
+            configure_byoc.refresh(new,config_directory)
+            self.assertEqual(backup.load_config(path)['compose']['file'],str(new/'compose.byoc.yaml'))
+            self.assertEqual(stale.read_text(),'interrupted old refresh')
+
     def test_release_refresh_preserves_secrets_and_refuses_active_recovery(self):
         import configure_byoc
         with tempfile.TemporaryDirectory() as directory:

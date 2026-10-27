@@ -6,8 +6,9 @@ import json
 import os
 from pathlib import Path
 import secrets
+import tempfile
 
-from niq_backup import env_file, load_config
+from niq_backup import env_file, load_config, private_file
 
 
 def private_write(path, content):
@@ -53,8 +54,11 @@ def configure(source, runtime_env, config_directory, backup_root):
     if settings.get('SENTRY_OPERATIONS_DSN'):
         config['sentry_dsn'] = settings['SENTRY_OPERATIONS_DSN']
     # Preserve an independent passphrase on partial retry, never rotate implicitly.
-    if not (directory/'recovery-passphrase').exists():
-        private_write(directory/'recovery-passphrase', secrets.token_hex(48)+'\n')
+    passphrase = directory/'recovery-passphrase'
+    if not passphrase.exists() and not passphrase.is_symlink():
+        private_write(passphrase, secrets.token_hex(48)+'\n')
+    if len(private_file(passphrase).read_bytes().rstrip(b'\r\n')) < 32:
+        raise ValueError('Existing recovery passphrase is invalid; review before continuing')
     if backup_env.exists() and env_file(backup_env) != content:
         raise ValueError('Existing partial backup environment differs from runtime; review before continuing')
     if not backup_env.exists():
@@ -89,13 +93,21 @@ def refresh(source, config_directory):
     config['compose']['file'] = str(source/'compose.byoc.yaml')
     config['server_files'] = [str(source/Path(path).relative_to(old_source)) if Path(path).is_relative_to(old_source) else path
                               for path in config.get('server_files', [])]
-    temporary = directory/'config.refresh.json'
     with (Path(config['backup_root'])/'.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX | fcntl.LOCK_NB)
         if state.exists() or state.is_symlink():
             raise ValueError('Recover paused writers before refreshing configuration')
-        private_write(temporary,json.dumps(config,indent=2)+'\n')
-        os.replace(temporary,config_path)
+        # A previous crash may leave a temporary file. Use a unique private file
+        # so retry can still publish atomically without trusting stale contents.
+        descriptor, temporary = tempfile.mkstemp(prefix='config.refresh-', suffix='.json', dir=directory)
+        try:
+            with os.fdopen(descriptor, 'w') as target:
+                target.write(json.dumps(config,indent=2)+'\n')
+                target.flush()
+                os.fsync(target.fileno())
+            os.replace(temporary,config_path)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
     return config_path
 
 
