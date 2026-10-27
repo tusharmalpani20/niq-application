@@ -51,6 +51,12 @@ def production(environments):
 
 
 def run(command, *, environment=None, data=None):
+    # Compose gives process variables precedence over --env-file. Never inherit
+    # shell overrides for release images, private secrets or Docker endpoints.
+    # Keep libpq/GPG environment handling unchanged for their explicit callers.
+    if Path(command[0]).name == "docker":
+        source = os.environ if environment is None else environment
+        environment = {key: source[key] for key in ("PATH", "HOME", "LANG", "LC_ALL") if key in source}
     # Child stderr can contain connection strings or clinical values. Never forward it.
     result = subprocess.run(command, env=environment, input=data, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, timeout=3600)
@@ -192,11 +198,15 @@ def safe_extract(archive, destination):
 
 def load_config(path):
     config = json.loads(private_file(path).read_text())
-    if set(config["environments"]) != {"application", "scoring"}:
-        raise ValueError("Both application and scoring environment files are required")
+    if set(config["environments"]) not in ({"application"}, {"application", "scoring"}):
+        raise ValueError("Configure application alone or application and scoring")
     for command in ("quiesce", "resume"):
         if not isinstance(config.get(command), list) or not config[command] or not all(isinstance(arg, str) for arg in config[command]):
             raise ValueError("Explicit quiesce and resume command arrays are required")
+    verifier = config.get("verify_pdf_command")
+    if verifier is not None and (not isinstance(verifier, list) or not verifier or
+                                 not all(isinstance(arg, str) and arg for arg in verifier)):
+        raise ValueError("PDF verifier must be a nonempty command array")
     return config
 
 
@@ -220,7 +230,7 @@ def backup(config):
         sentry_checkin.failure(config, "backup")
         raise
     if not production(environments.values()):
-        print("Backup skipped: both applications must use NODE_ENV=production")
+        print("Backup skipped: every configured application must use NODE_ENV=production")
         return
     return sentry_checkin.monitored(config, "backup", lambda: capture(config, environments), production=True)
 
@@ -250,7 +260,7 @@ def capture(config, environments):
         try:
             with tempfile.TemporaryDirectory(prefix=".capture-", dir=root) as temporary:
                 stage = Path(temporary)
-                # Quiesce must stop BOTH APIs/workers and drain writes. Resume even on failure.
+                # Quiesce all configured writers and drain writes. Resume even on failure.
                 try:
                     run(config["quiesce"])
                     manifest = {"format": 1, "timezone": "Asia/Kolkata", "counts": {}}
@@ -332,7 +342,9 @@ def restore_isolated(config, archive, verify_restored=None):
         stage = Path(temporary) / "contents"
         manifest = verify_archive(Path(archive), passphrase, stage)
         try:
-            for name in ("application", "scoring"):
+            if set(manifest["counts"]) != set(config["environments"]):
+                raise ValueError("Archive database scope differs from restore configuration")
+            for name in config["environments"]:
                 database = "niq_restore_test_" + uuid.uuid4().hex
                 # No caller-supplied target names or live URL accepted for restore.
                 run(["createdb", "--maintenance-db=postgres", "--template=template0", database], environment=db_env(admin))
@@ -350,7 +362,8 @@ def restore_isolated(config, archive, verify_restored=None):
                         value = json.loads(pdf)
                         settings = env_file(stage / "application.env")
                         value.update(key=settings.get("PATIENT_DATA_ENCRYPTION_KEY"), session=settings["SESSION_SECRET"])
-                        run(["bun", str(Path(__file__).with_name("verify_pdf.ts"))], data=json.dumps(value).encode())
+                        run(config.get("verify_pdf_command", ["bun", str(Path(__file__).with_name("verify_pdf.ts"))]),
+                            data=json.dumps(value).encode())
                         print("Restored PDF: decryption, PDF signature, size and SHA-256 verified")
                     else:
                         print("Restored PDF check skipped: backup contains no saved PDF artifact")
@@ -358,7 +371,7 @@ def restore_isolated(config, archive, verify_restored=None):
                 # the generated test databases are removed; the CLI exposes no target/hook.
                 if verify_restored:
                     verify_restored(name, target, stage)
-            print("Restore test passed: both isolated databases and captured file hashes verified")
+            print("Restore test passed: configured isolated databases and captured file hashes verified")
         finally:
             failed = False
             for database in reversed(created):

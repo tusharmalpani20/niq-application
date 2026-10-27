@@ -2,9 +2,9 @@
 
 ## Scope and retention
 
-`ops/backups/niq_backup.py` captures **both** application and scoring databases (including saved encrypted PDFs), the application's configured `REPORT_UPLOAD_ROOT`, both private environment files, and explicitly listed server-only configuration/scripts. Git supplies committed source code. List every intentional uncommitted server file under `server_files`; do not assume that a checkout backup is necessary or that unlisted local files are covered.
+`ops/backups/niq_backup.py` captures application and scoring databases together, or the Application database alone for BYOC (including saved encrypted PDFs), the application's configured `REPORT_UPLOAD_ROOT`, the configured private environment files, and explicitly listed server-only configuration/scripts. Git supplies committed source code. List every intentional uncommitted server file under `server_files`; do not assume that a checkout backup is necessary or that unlisted local files are covered.
 
-Backups run only when **both configured environment files say `NODE_ENV=production`**. Keep those files aligned with the running API processes. Development runs exit successfully without reading databases or stopping services. The timer is nightly at 02:00 Asia/Kolkata. Keep the latest 30 successful nightly snapshots and one snapshot in each of the latest 12 represented ISO weeks (weekly copies overlap daily copies). Failed capture, encryption or verification does not prune anything. This retention affects only completed backup archives, never live clinical records. Assessments, reports and valid uploads remain indefinitely. No application cleanup feature is introduced.
+Backups run only when **every configured environment file says `NODE_ENV=production`**. Keep those files aligned with the running API processes. Development runs exit successfully without reading databases or stopping services. The timer is nightly at 02:00 Asia/Kolkata. Keep the latest 30 successful nightly snapshots and one snapshot in each of the latest 12 represented ISO weeks (weekly copies overlap daily copies). Failed capture, encryption or verification does not prune anything. This retention affects only completed backup archives, never live clinical records. Assessments, reports and valid uploads remain indefinitely. No application cleanup feature is introduced.
 
 Backups on the same server do not protect against server or disk loss. That limitation is accepted for this initial setup; add an independent destination before relying on disaster recovery.
 
@@ -51,3 +51,27 @@ Manual restore drills generate failure events but no cron monitor by default. If
 This tool deliberately has **no live restore command**. Recovery must be reviewed separately: stop all writers, preserve the damaged state, verify archive integrity in isolation, restore matching databases/uploads/configuration together, check encryption keys and saved PDF hashes, then start the services and validate access. Never overwrite a live database from a routine drill. Preserve old patient-data encryption keys while any retained records or backups depend on them.
 
 The systemd service also runs the idempotent writer `recover` command in `ExecStopPost`, including when a backup is terminated. External recovery first obtains the same nonblocking capture lock and skips if another capture owns it, so one invocation cannot resume another invocation's paused writers. The capture's own finally block uses `resume` while it already owns that lock. It restarts only previously running APIs which are currently stopped, and leaves already-online processes alone. A host outage still requires normal PM2 startup/recovery verification.
+
+## Ubuntu BYOC: Application-only Docker installation
+
+Use `config.byoc.example.json` for the split deployment. `environments` must contain exactly `application`, or the existing combined `application` and `scoring` pair. Other scopes are rejected. No remote Scoring database credential belongs on a BYOC server. An Application-only archive restores only that database; the drill rejects an archive whose database scope differs from its configuration.
+
+The host runs Python, GnuPG and PostgreSQL client tools matching the Docker database major version. The database is reachable **only on loopback**, using `127.0.0.1:${DB_BACKUP_PORT:-5433}`. It must never be published on all network interfaces. API runtimes remain inside Docker. The Docker socket is never mounted in the application containers; the trusted root/operator backup service invokes the Docker CLI on the host.
+
+After installation, scaffold configuration once (all paths must be absolute; use the actual release directory rather than the `current` symlink):
+
+```sh
+python3 /opt/niq/releases/RELEASE/ops/backups/configure_byoc.py \
+  --source /opt/niq/releases/RELEASE --env /etc/niq/byoc.env \
+  --config-directory /etc/niq-backup --backup-root /var/backups/niq
+```
+
+This generates private configuration, a separate recovery passphrase and an Application backup environment. The backup environment uses the host loopback database endpoint and the host upload directory, rather than container-only names. The original runtime environment and Compose configuration are also encrypted into the archive, preserving Scoring credential and patient encryption keys. The passphrase lives outside the captured sources. Existing configuration is never overwritten; retain an independent protected recovery copy and review partial installation failures manually.
+
+The generated `verify_pdf_command` runs the API image's bundled `dist/verify-pdf.js` helper in a one-shot container without dependencies. Keys and ciphertext travel on stdin, never command arguments. It performs signature, length, decryption and SHA-256 checks without calling Scoring or OpenRouter. Provision `/etc/niq-backup/restore-test.env` separately with an isolated restricted CREATEDB login denied access to the live Application database before running a real restore drill. Scaffolding does not create that database login or claim a real restore has passed.
+
+`compose_writers.py` fences Application report, initialization, submission, scan and upload reservations, then checks that no work is pending/leased before stopping only the `api` service. Database and web containers are not stopped. If work is active, locks cannot be acquired, or the lock connection is lost, capture fails safely. Only an API that was running before capture is restarted; recovery records are tied to the exact Compose project and source file. Existing stopped services stay stopped. The recovery command uses the same nonblocking capture lock, preventing one failed timer invocation from resuming another active capture.
+
+For a BYOC systemd service use the generated config with `niq_backup.py backup`, and `compose_writers.py recover` in `ExecStopPost`. The existing nightly schedule, production gate and 30 daily/12 weekly retention remain unchanged. After a verified pre-upgrade backup, run `configure_byoc.py --source /opt/niq/releases/NEW_RELEASE --config-directory /etc/niq-backup --refresh` to advance generated release paths while preserving secrets, database configuration and storage. Custom commands and pending writer recovery require manual review; refresh also refuses an active backup capture. A release upgrade must update backup configuration paths/image version after its backup succeeds; do not run a backup while updating deployment files. The existing PM2 adapter remains for the joint online installation and is not used for BYOC.
+
+The synthetic integration drill now captures both scopes independently and verifies Application-only restore through normal patient/PDF/upload access, encrypted PDF checks, source isolation and scope-mismatch rejection. It uses only temporary databases and synthetic records. This is engineering evidence, not a fresh Ubuntu/Docker installation or the client's first production restore.

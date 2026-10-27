@@ -16,14 +16,14 @@ NAMES = {'niq-application-api', 'niq-scoring-api'}
 
 
 @contextmanager
-def admission_barrier(environments):
+def admission_barrier(environments, tables=None):
     """Hold table locks until PM2 stops, including synchronous generation runs.
 
     Every inference path commits an INSERT/UPDATE reservation before contacting
     its provider. SHARE prevents those writes while allowing our idle checks.
     Active reservations are detected after both databases have been fenced.
     """
-    tables = {'application': 'public.generated_reports',
+    tables = tables or {'application': 'public.generated_reports',
               'scoring': 'public.report_content_jobs, public.report_generation_runs'}
     with ExitStack() as stack:
         holders = []
@@ -61,7 +61,7 @@ def admission_barrier(environments):
         ensure_held()
 
 
-def recover(config):
+def recover(config, resume_writer=None):
     """External termination recovery must never resume another capture's writers."""
     root = Path(config['backup_root'])
     if not root.exists():
@@ -74,7 +74,7 @@ def recover(config):
         except BlockingIOError:
             print('Writer recovery skipped: another backup capture owns the lock')
             return
-        resume(config)
+        (resume_writer or resume)(config)
 
 
 def pause(config):

@@ -77,6 +77,17 @@ def main():
                     continue
                 raise RuntimeError('Restore account can access a source database')
             prove_admission_barrier(app, scoring)
+            from compose_writers import TABLES, IDLE
+            with admission_barrier({'application': {'DATABASE_URL': app}}, TABLES):
+                if backup.sql(app, IDLE) != '0':
+                    raise RuntimeError('Application-only fixture is not idle')
+                for table in TABLES['application'].split(', '):
+                    try:
+                        backup.sql(app, "SET statement_timeout='100ms'; BEGIN; INSERT INTO " + table + " SELECT * FROM " + table + " WHERE false; ROLLBACK;")
+                    except RuntimeError:
+                        continue
+                    raise RuntimeError('Application-only admission escaped backup fence')
+            print('Application-only admission fences verified on real schema')
             original_counts = {'application': backup.counts(app), 'scoring': backup.counts(scoring)}
             fixture_key = metadata['key']
             private_write(root / "application.env", f"NODE_ENV=production\nDATABASE_URL={app}\nREPORT_UPLOAD_ROOT={uploads}\n"
@@ -106,6 +117,20 @@ def main():
                 elif backup.sql(target, "SELECT name FROM clients;") != 'Synthetic rule tenant':
                     raise RuntimeError('Restored scoring tenant changed')
             backup.restore_isolated(config, archive, verify_restored=verify_restored)
+            # BYOC captures/restores Application alone; remote Scoring is neither
+            # configured nor contacted by this second archive path.
+            application_only = dict(config, environments={"application": config["environments"]["application"]},
+                                    backup_root=str(root / "application-archives"))
+            backup.backup(application_only)
+            application_archive = next((root / "application-archives").glob("*.tar.gpg"))
+            backup.restore_isolated(application_only, application_archive, verify_restored=verify_restored)
+            try:
+                backup.restore_isolated(application_only, archive)
+            except ValueError:
+                pass
+            else:
+                raise RuntimeError("Application-only restore accepted a combined archive")
+            print("Application-only backup and restore verified, including encrypted PDF and uploaded files")
             leftovers = backup.sql(admin, "SELECT count(*) FROM pg_database WHERE datname LIKE 'niq_restore_test_%';")
             if leftovers != "0":
                 raise RuntimeError("Isolated restored databases were not removed")
