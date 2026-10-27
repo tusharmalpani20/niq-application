@@ -2,6 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { loadApplicationConfig } from "./index";
 
 describe("configuration", () => {
+  test("BYOC setup is opt-in, paired and cannot enable platform bootstrap", () => {
+    const base={DATABASE_URL:"postgres://localhost/test",SESSION_SECRET:"a-session-secret-with-more-than-32-characters"};
+    expect(loadApplicationConfig(base).BYOC_SETUP_TOKEN).toBeUndefined();
+    const setup={...base,DEPLOYMENT_MODE:"client-cloud",AUTH_MODE:"local",BYOC_SETUP_TOKEN:"a-private-installation-token-at-least-32-characters",BYOC_SETUP_EXPIRES_AT:"2026-10-28T00:00:00.000Z"};
+    expect(loadApplicationConfig(setup).DEPLOYMENT_MODE).toBe("client-cloud");
+    expect(()=>loadApplicationConfig({...setup,BYOC_SETUP_EXPIRES_AT:""})).toThrow();
+    expect(()=>loadApplicationConfig({...setup,AUTH_MODE:"disabled"})).toThrow();
+    expect(()=>loadApplicationConfig({...setup,DEPLOYMENT_MODE:"niq-hosted"})).toThrow();
+    expect(()=>loadApplicationConfig({...setup,BOOTSTRAP_TOKEN:"a-different-bootstrap-token-at-least-32-characters"})).toThrow();
+  });
   test("production starts with bootstrap disabled after initial setup", () => {
     const production = {
       NODE_ENV: "production", AUTH_MODE: "local", DATABASE_URL: "postgres://localhost/niq",

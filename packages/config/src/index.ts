@@ -56,6 +56,9 @@ export const applicationConfigSchema = z.object({
   AUTH_LOCKOUT_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   INVITATION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(72),
   BOOTSTRAP_TOKEN: z.preprocess(value => value === "" ? undefined : value, z.string().min(32).optional()),
+  BYOC_SETUP_TOKEN: z.preprocess(value => value === "" ? undefined : value, z.string().min(32).max(256).optional()),
+  BYOC_SETUP_EXPIRES_AT: z.preprocess(value => value === "" ? undefined : value, z.iso.datetime().optional()),
+  BYOC_USER_LIMIT: z.coerce.number().int().min(1).default(100),
   DEV_OTP_DELIVERY: booleanFromString,
   DEV_FIXED_OTP: booleanFromString,
   REPORT_UPLOAD_ROOT: z.preprocess(value => value === "" ? undefined : value, z.string().startsWith("/").optional()),
@@ -65,6 +68,8 @@ export const applicationConfigSchema = z.object({
   REPORT_MAX_ASSESSMENT_BYTES: z.coerce.number().int().positive().default(100 * 1024 * 1024),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 }).superRefine((value, context) => {
+  if (Boolean(value.BYOC_SETUP_TOKEN) !== Boolean(value.BYOC_SETUP_EXPIRES_AT)) context.addIssue({ code: "custom", path: ["BYOC_SETUP_TOKEN"], message: "Configure both BYOC setup token and expiry" });
+  if (value.BYOC_SETUP_TOKEN && (value.DEPLOYMENT_MODE !== "client-cloud" || value.AUTH_MODE !== "local" || value.BOOTSTRAP_TOKEN)) context.addIssue({ code: "custom", path: ["BYOC_SETUP_TOKEN"], message: "BYOC setup requires client-cloud local authentication without platform bootstrap" });
   const vapidConfigured = [value.VAPID_PUBLIC_KEY, value.VAPID_PRIVATE_KEY, value.VAPID_SUBJECT].filter(Boolean).length;
   if (vapidConfigured !== 0 && vapidConfigured !== 3) context.addIssue({ code: "custom", path: ["VAPID_PUBLIC_KEY"], message: "Configure all VAPID values together" });
   if (value.DEV_FIXED_OTP && value.NODE_ENV !== "development") {
