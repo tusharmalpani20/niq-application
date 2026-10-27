@@ -20,9 +20,9 @@ if (testDatabaseUrl) {
 
 // Real table constraints and service transactions, without any external delivery.
 describe.skipIf(!testDatabaseUrl)("cross-organization administration PostgreSQL", () => {
-  const client = postgres(testDatabaseUrl!, { max: 4 });
+  const client = postgres(testDatabaseUrl ?? "postgres://fixture_user@127.0.0.1:55439/fixture_app", { max: 4 });
   const db = drizzle(client);
-  const config = loadApplicationConfig({ DATABASE_URL: testDatabaseUrl, SESSION_SECRET: "isolated-cross-organization-test-secret-at-least-32-characters" });
+  const config = loadApplicationConfig({ DATABASE_URL: testDatabaseUrl ?? "postgres://fixture_user@127.0.0.1:55439/fixture_app", SESSION_SECRET: "isolated-cross-organization-test-secret-at-least-32-characters" });
   const service = new PostgresApplicationService(db, config, { deliver: async () => {} });
   afterAll(async () => { await client.end(); });
   const context = () => ({ requestId: `cross-organization-test-${createEntityId()}` });

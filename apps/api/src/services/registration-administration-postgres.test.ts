@@ -22,9 +22,9 @@ if (testDatabaseUrl) {
 
 // Only use a migrated disposable database; delivery stays in memory.
 describe.skipIf(!testDatabaseUrl)("registration and account database acceptance", () => {
-  const client = postgres(testDatabaseUrl!, { max: 12 });
+  const client = postgres(testDatabaseUrl ?? "postgres://fixture_user@127.0.0.1:55439/fixture_app", { max: 12 });
   const db = drizzle(client);
-  const config = loadApplicationConfig({ DATABASE_URL: testDatabaseUrl, SESSION_SECRET: "isolated-registration-audit-secret-at-least-32-characters" });
+  const config = loadApplicationConfig({ DATABASE_URL: testDatabaseUrl ?? "postgres://fixture_user@127.0.0.1:55439/fixture_app", SESSION_SECRET: "isolated-registration-audit-secret-at-least-32-characters" });
   const delivered: Array<{ email: string; otp: string }> = [];
   const service = new PostgresApplicationService(db, config, { deliver: async item => { delivered.push(item); } });
   const context = { requestId: "isolated-registration-acceptance" };
