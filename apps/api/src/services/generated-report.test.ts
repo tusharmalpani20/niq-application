@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import * as Sentry from "@sentry/bun";
+import { initializeMonitoring } from "../monitoring";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { GeneratedReportService, REPORT_REVIEW_REQUIRED, assertGeneratedPdf, assertReadyPdfRefresh, assertReportPdfDownloadable, assertReportReadyForApproval, assertReviewedArtifact, automaticReportCanFinalize, automaticRetryDelay, cleanReportText, finishWeightHistory, reportWeightComparison, normalizeGuidance, normalizeNarrative, prepareNarrativeEdit, publicReportGeneration, reportPredecessorId, preserveReportPdfHold, reportDefersPdf, reportBrandingFingerprint, reportClinicalFacts, reportGenerationIssues, reportNeedsClinicalReview, reportObservations, reportProductCatalog, reportProductPlans, reportToxicityAnswers } from "./generated-report";
-import { requestScoringReportContent, requestScoringToxicityOptions, scoringReportContentSchema } from "./scoring-report-content";
+import { requestScoringReportContent, requestScoringToxicityOptions, ScoringReportContentPending, scoringReportContentSchema } from "./scoring-report-content";
 import { approveGeneratedReportSchema, editGeneratedNarrativeSchema } from "../../../../packages/contracts/src/generated-report";
 
 const narrative = { overview: "Overview", keyFindings: "Findings", actionSummary: "Actions", monitoringSummary: "Monitoring" };
@@ -592,4 +594,78 @@ test("historical Vital IQ report observations retain provenance without redating
   const metrics = reportObservations({ current_weight_kg: 62 } as any, { sections: [] } as any, new Date("2026-10-23T08:00:00Z"), { completedAt: source.capturedAt, historicalSource: source, result: { vitals: { heartRate: 66 } } });
   expect(metrics.find(metric => metric.id === "heart_rate")).toMatchObject({ measuredAt: source.capturedAt, historicalSource: source });
   expect(metrics.find(metric => metric.id === "current_weight_kg")).not.toHaveProperty("historicalSource");
+});
+
+
+test("automatic terminal source failures reach monitoring without private assessment details", async () => {
+  const envelopes: unknown[] = [];
+  const transport = () => ({ send: async (envelope: unknown) => { envelopes.push(envelope); return { statusCode: 200 }; }, flush: async () => true });
+  initializeMonitoring({ NODE_ENV: "development", SENTRY_DSN: "https://public@example.com/1" }, transport);
+  const updates: unknown[] = [];
+  const chain: any = {};
+  for (const method of ["from", "where", "orderBy"]) chain[method] = () => chain;
+  chain.limit = async () => [{ id: "PRIVATE_REPORT", organizationId: "PRIVATE_ORG", assessmentId: "PRIVATE_ASSESSMENT", status: "QUEUED", attemptCount: 0 }];
+  chain.then = (resolve: (value: unknown[]) => unknown) => Promise.resolve([]).then(resolve);
+  const update: any = { set: (values: unknown) => { updates.push(values); return update; }, where: async () => [] };
+  const service = new GeneratedReportService({ config: { REPORT_GENERATION_TIMEOUT_MS: 1000 }, db: { select: () => chain, update: () => update } } as any);
+  try {
+    await service.processDue();
+    await Sentry.flush(1000);
+    expect(updates).toContainEqual(expect.objectContaining({ status: "FAILED", failureCode: "APPROVAL_SOURCE_INVALID" }));
+    expect(envelopes).toHaveLength(1);
+    const sent = JSON.stringify(envelopes);
+    expect(sent).toContain("source_validation");
+    expect(sent).toContain("APPROVAL_SOURCE_INVALID");
+    expect(sent).not.toContain("PRIVATE_");
+    expect(sent).not.toContain("Assessment not found");
+  } finally { await Sentry.close(1000); }
+});
+
+
+test("automatic worker alerts for exhausted retries and swallowed failures, not normal pending jobs", async () => {
+  const envelopes: unknown[] = [];
+  const transport = () => ({ send: async (envelope: unknown) => { envelopes.push(envelope); return { statusCode: 200 }; }, flush: async () => true });
+  initializeMonitoring({ NODE_ENV: "development", SENTRY_DSN: "https://public@example.com/1" }, transport);
+  const run = async (attemptCount: number, error: Error) => {
+    const chain: any = {};
+    for (const method of ["from", "where", "orderBy"]) chain[method] = () => chain;
+    chain.limit = async () => [{ id: "PRIVATE_REPORT", organizationId: "PRIVATE_ORG", assessmentId: "PRIVATE_ASSESSMENT", status: "QUEUED", attemptCount }];
+    chain.then = (_resolve: unknown, reject: (error: Error) => unknown) => Promise.reject(error).catch(reject);
+    const update: any = { set: () => update, where: async () => [] };
+    const service = new GeneratedReportService({ config: { REPORT_GENERATION_TIMEOUT_MS: 1000 }, db: { select: () => chain, update: () => update } } as any);
+    await service.processDue();
+    await Sentry.flush(1000);
+  };
+  try {
+    await run(5, new Error("Unused"));
+    expect(envelopes).toHaveLength(1);
+    expect(JSON.stringify(envelopes)).toContain("AUTOMATIC_RETRIES_EXHAUSTED");
+    await run(0, new Error("PRIVATE_DATABASE_DETAIL"));
+    expect(envelopes).toHaveLength(2);
+    expect(JSON.stringify(envelopes)).toContain("report_worker");
+    expect(JSON.stringify(envelopes)).not.toContain("PRIVATE_DATABASE_DETAIL");
+    await run(0, new ScoringReportContentPending("PRIVATE_RUN", "PROCESSING"));
+    expect(envelopes).toHaveLength(2);
+  } finally { await Sentry.close(1000); }
+});
+
+
+test("an abandoned legacy generation emits one terminal alert when expiry wins the update", async () => {
+  const envelopes: unknown[] = [];
+  const transport = () => ({ send: async (envelope: unknown) => { envelopes.push(envelope); return { statusCode: 200 }; }, flush: async () => true });
+  initializeMonitoring({ NODE_ENV: "development", SENTRY_DSN: "https://public@example.com/1" }, transport);
+  let row: any = { id: "PRIVATE_REPORT", status: "GENERATING", requestKey: "manual-request", updatedAt: new Date(0), content: null };
+  const update: any = { set: (values: unknown) => { row = { ...row, ...(values as object) }; return update; }, where: () => update, returning: async () => [row] };
+  const service = new GeneratedReportService({ config: { REPORT_GENERATION_TIMEOUT_MS: 1000 }, db: { update: () => update } } as any);
+  (service as any).clinical = async () => ({});
+  (service as any).latest = async () => row;
+  try {
+    const result = await service.read({} as any, "PRIVATE_ORG", "PRIVATE_ASSESSMENT");
+    await service.read({} as any, "PRIVATE_ORG", "PRIVATE_ASSESSMENT");
+    await Sentry.flush(1000);
+    expect(result.generation).toEqual({ status: "FAILED", failureCode: "GENERATION_INTERRUPTED" });
+    expect(envelopes).toHaveLength(1);
+    expect(JSON.stringify(envelopes)).toContain("GENERATION_INTERRUPTED");
+    expect(JSON.stringify(envelopes)).not.toContain("PRIVATE_");
+  } finally { await Sentry.close(1000); }
 });

@@ -397,6 +397,7 @@ export class GeneratedReportService {
         failureCode:"GENERATION_INTERRUPTED",leaseToken:null,nextAttemptAt:null,updatedAt:new Date()})
         .where(and(eq(generatedReports.id,row.id),eq(generatedReports.organizationId,org),
           eq(generatedReports.status,row.status),eq(generatedReports.updatedAt,row.updatedAt))).returning();
+      if (expired) captureOperationalFailure("report_generation", {code:"GENERATION_INTERRUPTED"});
       row = expired ?? await this.latest(org,id);
       if (!row) return {report:null,generation:null};
     }
@@ -842,6 +843,7 @@ export class GeneratedReportService {
         await tx.update(generatedReports).set({status:"FAILED",failureCode:"AUTOMATIC_REVIEW_RECOVERY_EXHAUSTED",
           leaseToken:null,nextAttemptAt:null,updatedAt:new Date()})
           .where(and(eq(generatedReports.id,latest.id),eq(generatedReports.status,latest.status),eq(generatedReports.failureCode,REPORT_REVIEW_REQUIRED)));
+        captureOperationalFailure("report_retry_exhausted", {code:"AUTOMATIC_REVIEW_RECOVERY_EXHAUSTED"});
         return;
       }
       // Validate that the approved frozen source is still available and valid
@@ -851,6 +853,7 @@ export class GeneratedReportService {
       if(previousData && latest.sourceFingerprint && this.currentFingerprint(assessment,previousData.assessment.checksum,previousData.decision)!==latest.sourceFingerprint) {
         await tx.update(generatedReports).set({status:"FAILED",failureCode:"APPROVAL_SOURCE_INVALID",leaseToken:null,nextAttemptAt:null,updatedAt:new Date()})
           .where(and(eq(generatedReports.id,latest.id),eq(generatedReports.status,latest.status)));
+        captureOperationalFailure("source_validation", {code:"APPROVAL_SOURCE_INVALID"});
         return;
       }
       const requestKey=preserveReportPdfHold(`${AUTOMATIC_REPORT_KEY_PREFIX}${source.submissionId}:recovery:${latest.id}`,latest.requestKey);
@@ -890,6 +893,7 @@ export class GeneratedReportService {
           await this.service.db.update(generatedReports).set({status:"FAILED",failureCode:"AUTOMATIC_RETRIES_EXHAUSTED",
             leaseToken:null,nextAttemptAt:null,updatedAt:new Date()})
             .where(and(eq(generatedReports.id,row.id),eq(generatedReports.status,row.status),eq(generatedReports.attemptCount,row.attemptCount)));
+          captureOperationalFailure("report_retry_exhausted", {code:"AUTOMATIC_RETRIES_EXHAUSTED"});
           return;
         }
         const [assessment]=await this.service.db.select().from(assessments).where(and(eq(assessments.organizationId,row.organizationId),eq(assessments.id,row.assessmentId)));
@@ -911,18 +915,26 @@ export class GeneratedReportService {
         // also covers an expired generation lease after its source changed.
         const invalidSource=error instanceof ServiceError && (error.code==="NOT_FOUND" ||
           error.code==="CONFLICT" && !error.message.includes("in progress"));
-        if((row.status==="QUEUED" || row.status==="GENERATING" || row.failureCode===REPORT_REVIEW_REQUIRED) && invalidSource)
+        if((row.status==="QUEUED" || row.status==="GENERATING" || row.failureCode===REPORT_REVIEW_REQUIRED) && invalidSource) {
+          captureOperationalFailure("source_validation", {code:"APPROVAL_SOURCE_INVALID"});
           await this.service.db.update(generatedReports).set({status:"FAILED",failureCode:"APPROVAL_SOURCE_INVALID",leaseToken:null,nextAttemptAt:null,updatedAt:new Date()})
             .where(and(eq(generatedReports.id,row.id),eq(generatedReports.status,row.status),eq(generatedReports.attemptCount,row.attemptCount)));
+        }
         if(row.failureCode===REPORT_REVIEW_REQUIRED && !invalidSource) {
           const attempts=row.attemptCount+1;
+          if(attempts>=MAX_AUTOMATIC_REPORT_ATTEMPTS)
+            captureOperationalFailure("report_retry_exhausted", {code:"AUTOMATIC_REVIEW_RECOVERY_FAILED"});
           await this.service.db.update(generatedReports).set({attemptCount:attempts,
             status:attempts>=MAX_AUTOMATIC_REPORT_ATTEMPTS?"FAILED":row.status,
             failureCode:attempts>=MAX_AUTOMATIC_REPORT_ATTEMPTS?"AUTOMATIC_REVIEW_RECOVERY_FAILED":REPORT_REVIEW_REQUIRED,
             leaseToken:null,nextAttemptAt:attempts>=MAX_AUTOMATIC_REPORT_ATTEMPTS?null:new Date(Date.now()+automaticRetryDelay(attempts)),updatedAt:new Date()})
             .where(and(eq(generatedReports.id,row.id),eq(generatedReports.status,row.status),eq(generatedReports.failureCode,REPORT_REVIEW_REQUIRED),eq(generatedReports.attemptCount,row.attemptCount)));
         }
-        console.warn("Automatic report generation delayed",{reportId:row.id,error:error instanceof Error?error.message:String(error)});
+        // This catch is inside allSettled: the process-level worker handler cannot see it.
+        const expectedPending=error instanceof ScoringReportContentPending || error instanceof AutomaticReportReviewRequired ||
+          error instanceof ServiceError && error.code==="CONFLICT" && error.message.includes("in progress");
+        if(!invalidSource && !expectedPending) captureOperationalFailure("report_worker", error);
+        console.warn("Automatic report generation delayed",{reportId:row.id});
       }
     }));
   }
