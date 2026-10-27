@@ -1,0 +1,11 @@
+[Unit]
+Description=NIQ nightly backup at 02:00 India time (production gate in CLI)
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 Asia/Kolkata
+Persistent=true
+RandomizedDelaySec=120
+Unit=niq-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,30 @@
+{
+  "environments": {
+    "application": "/home/ghostpepper/niq/niq-application/.env",
+    "scoring": "/home/ghostpepper/niq/niq-scoring/.env"
+  },
+  "backup_root": "/home/ghostpepper/niq-private-backups",
+  "passphrase_file": "/home/ghostpepper/.config/niq-backup/recovery-passphrase",
+  "restore_test_env": "/home/ghostpepper/.config/niq-backup/restore-test.env",
+  "sentry_dsn": null,
+  "backup_monitor_slug": "niq-production-backup",
+  "quiesce": [
+    "/usr/bin/python3",
+    "/home/ghostpepper/niq/niq-application/ops/backups/pm2_writers.py",
+    "pause",
+    "--config",
+    "/home/ghostpepper/.config/niq-backup/config.json"
+  ],
+  "resume": [
+    "/usr/bin/python3",
+    "/home/ghostpepper/niq/niq-application/ops/backups/pm2_writers.py",
+    "resume",
+    "--config",
+    "/home/ghostpepper/.config/niq-backup/config.json"
+  ],
+  "server_files": [
+    "/home/ghostpepper/niq/niq-application/ecosystem.config.cjs",
+    "/home/ghostpepper/niq/niq-scoring/ecosystem.config.cjs"
+  ],
+  "writer_state_file": "/home/ghostpepper/.config/niq-backup/writers.json"
+}
