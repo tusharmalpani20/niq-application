@@ -8,9 +8,11 @@ snapshot. If there are no additional effects, the snapshot records an empty list
 The same database transaction marks the assessment complete and queues its report.
 The browser does not need to remain open. The API worker sends an allowlisted fact
 packet and the reviewed score to NIQ Scoring. Scoring matches the pinned rules,
-runs a GPT-6.1 Sol manager that assigns GPT-6 Luna workers for writing, independent
-review, source coverage, conditional-effect summaries and highlighting. Both models
-request medium reasoning where supported. The manager reviews the assembled report
+runs the configured manager and worker stages for writing, independent
+review, source coverage, conditional-effect summaries and highlighting. OpenRouter
+defaults to GPT-6 Luna Pro for manager stages and GPT-6 Luna for other stages;
+the development-only local proxy uses GPT-6 Luna for all stages. Reasoning settings
+come from Scoring provider configuration. The manager reviews the assembled report
 after bounded writer revisions and source audits. It does not restart the full
 workflow after its final decision. Deterministic evidence
 checks remain mandatory. If the model workflow cannot approve the report, the worker
@@ -71,11 +73,8 @@ Treatment Start Date is displayed only from an entered assessment date; future
 treatment remains planned. Older saved PDFs are not rewritten by this release.
 Regenerate a report from the app to apply the updated narrative and layout together.
 
-Apply Scoring migrations through `0030` before starting the manager workflow. This
-allows the manager, coverage and summarizer stages and reasoning effort to be stored.
-
-Apply Application database migrations through `0041` before starting the updated
-API. Existing approved PDFs remain available with their stored appearance. The
+Apply all Scoring and Application migrations shipped with the release before
+starting their APIs. Existing approved PDFs remain available with their stored appearance. The
 automatic job starts for assessments completed after this change. Previously
 completed assessments without an explicit treatment effect decision are not
 silently regenerated.
