@@ -11,7 +11,7 @@ test("availability checks the current scoring limit without creating a scan", as
   authorize: async (principal: unknown, org: string, assessment: string) => {
    expect([principal, org, assessment]).toEqual([actor, "org", "assessment"]);
   },
-  config: { FACE_SCAN_ENABLED: true, SCORING_TIMEOUT_MS: 1000 }
+  config: { FACE_SCAN_ENABLED: true, SCORING_TIMEOUT_MS: 1000, SCORING_API_URL: "https://scoring.invalid/api" }
  } as any;
  const scans = new AssessmentFaceScanService(workflow, async (input, init) => {
   requests.push(new Request(input, init));
@@ -20,7 +20,7 @@ test("availability checks the current scoring limit without creating a scan", as
  scans.transport = async () => ({ identity: { origin: "https://scoring.invalid" }, credential: "test-credential" }) as any;
  expect(await scans.availability(actor, "org", "assessment")).toEqual({ available: true, reason: null });
  expect(requests).toHaveLength(1);
- expect(requests[0]!.url).toBe("https://scoring.invalid/v1/face-scans/availability");
+ expect(requests[0]!.url).toBe("https://scoring.invalid/api/v1/face-scans/availability");
  expect(requests[0]!.method).toBe("GET");
  expect(requests[0]!.headers.get("authorization")).toBe("Bearer test-credential");
  expect(requests[0]!.body).toBeNull();
@@ -29,7 +29,7 @@ test("availability never reports success when authorization or scoring fails", a
  let calls = 0;
  const workflow = {
   authorize: async () => { throw new Error("not authorized"); },
-  config: { FACE_SCAN_ENABLED: true, SCORING_TIMEOUT_MS: 1000 }
+  config: { FACE_SCAN_ENABLED: true, SCORING_TIMEOUT_MS: 1000, SCORING_API_URL: "https://scoring.invalid/api" }
  } as any;
  const scans = new AssessmentFaceScanService(workflow, async () => { calls++; return Response.json({ available: true, reason: null }); });
  scans.transport = async () => ({ identity: { origin: "https://scoring.invalid" }, credential: "test-credential" }) as any;
