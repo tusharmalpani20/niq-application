@@ -6,3 +6,10 @@ coverage
 !.env.example
 .git
 *.log
+
+output
+ops/backups/output
+*.key
+*.pem
+*.dump
+*.sql.gz

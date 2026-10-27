@@ -7,18 +7,24 @@ COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/domain/package.json packages/domain/package.json
 COPY packages/report-pdf/package.json packages/report-pdf/package.json
+COPY packages/monitoring/package.json packages/monitoring/package.json
 RUN bun install --frozen-lockfile
 
 FROM dependencies AS build
 COPY apps/api apps/api
 COPY apps/web apps/web
 COPY packages packages
+COPY ops/backups ops/backups
 RUN bun run --filter @niq/application-api build
+RUN bun build ops/backups/verify_pdf.ts --outfile apps/api/dist/verify-pdf.js --target bun --external sharp --external playwright-core
 
 FROM dependencies AS migrations
 COPY apps/api apps/api
 COPY packages packages
 CMD ["bun", "run", "--cwd", "apps/api", "db:migrate"]
+
+FROM migrations AS byoc-migrations
+CMD ["sh", "-c", "bun run --cwd apps/api db:migrate && bun apps/api/src/provision-byoc-database.ts"]
 
 FROM oven/bun:1.4.0-alpine AS runtime
 WORKDIR /workspace/apps/api

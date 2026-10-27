@@ -1,0 +1,93 @@
+# Standalone file. Do not merge the development compose.yaml into this deployment.
+name: niq-byoc
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: niq_application
+      POSTGRES_USER: niq
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Required}
+    volumes: [application-postgres:/var/lib/postgresql/data]
+    ports: ["127.0.0.1:${DB_BACKUP_PORT:-5433}:5432"]
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U niq -d niq_application"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    logging: &logging
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  migrate:
+    image: niq-byoc-migrations:${NIQ_RELEASE:?Required}
+    build: {context: ., dockerfile: apps/api/Dockerfile, target: byoc-migrations}
+    environment:
+      DATABASE_URL: postgres://niq:${POSTGRES_PASSWORD:?Required}@postgres:5432/niq_application
+      DATABASE_SSL: "false"
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?Required}
+    networks: [database]
+    depends_on: {postgres: {condition: service_healthy}}
+    logging: *logging
+  api:
+    image: niq-byoc-api:${NIQ_RELEASE:?Required}
+    build: {context: ., dockerfile: apps/api/Dockerfile}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DEPLOYMENT_MODE: client-cloud
+      AUTH_MODE: local
+      SECURE_COOKIES: "true"
+      REPORT_DIAGNOSTICS_ENABLED: "false"
+      API_HOST: 0.0.0.0
+      API_PORT: "3000"
+      WEB_ORIGIN: https://${NIQ_DOMAIN:?Required}
+      DATABASE_URL: postgres://niq_app:${APP_DATABASE_PASSWORD:?Required}@postgres:5432/niq_application
+      DATABASE_SSL: "false"
+      SESSION_SECRET: ${SESSION_SECRET:?Required}
+      PATIENT_DATA_ENCRYPTION_KEY: ${PATIENT_DATA_ENCRYPTION_KEY:?Required}
+      PATIENT_DATA_KEY_VERSION: byoc-v1
+      SCORING_CREDENTIAL_ENCRYPTION_KEY: ${SCORING_CREDENTIAL_ENCRYPTION_KEY:?Required}
+      SCORING_CREDENTIAL_KEY_VERSION: byoc-v1
+      SCORING_API_URL: ${SCORING_API_URL:?Required}
+      BYOC_SETUP_TOKEN: ${BYOC_SETUP_TOKEN:-}
+      BYOC_SETUP_EXPIRES_AT: ${BYOC_SETUP_EXPIRES_AT:-}
+      BYOC_USER_LIMIT: ${BYOC_USER_LIMIT:-100}
+      FACE_SCAN_ENABLED: ${FACE_SCAN_ENABLED:-false}
+      REPORT_UPLOAD_ROOT: /var/lib/niq/report-uploads
+      REPORT_GENERATION_TIMEOUT_MS: "720000"
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_RELEASE: ${NIQ_RELEASE:?Required}
+    volumes: ["${BYOC_UPLOAD_ROOT:-/var/lib/niq/report-uploads}:/var/lib/niq/report-uploads"]
+    ports: ["127.0.0.1:3000:3000"]
+    networks: [database, outbound]
+    depends_on:
+      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, bun, -e, "const r = await fetch('http://127.0.0.1:3000/ready'); process.exit(r.ok ? 0 : 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    logging: *logging
+  web:
+    image: niq-byoc-web:${NIQ_RELEASE:?Required}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+        VITE_SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+        VITE_SENTRY_RELEASE: ${NIQ_RELEASE:?Required}
+    restart: unless-stopped
+    ports: ["127.0.0.1:8080:8080"]
+    networks: [outbound]
+    depends_on: {api: {condition: service_healthy}}
+    logging: *logging
+networks:
+  database: {internal: true}
+  outbound: {}
+volumes:
+  application-postgres: {}
