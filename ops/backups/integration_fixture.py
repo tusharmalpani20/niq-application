@@ -18,16 +18,11 @@ def private_write(path, content):
 def prove_admission_barrier(app, scoring):
     # Only synthetic tables in the temporary cluster. A timed-out write must
     # become valid immediately after release, proving lock rather than SQL failure.
-    backup.sql(app, "CREATE TABLE generated_reports(id integer, status text);")
-    backup.sql(scoring, "CREATE TABLE report_content_jobs(id integer, status text); "
-                       "CREATE TABLE report_generation_runs(id integer, status text);")
     environments = {'application': {'DATABASE_URL': app}, 'scoring': {'DATABASE_URL': scoring}}
-    statements = [(app, "INSERT INTO generated_reports VALUES (1,'GENERATING')"),
-                  (scoring, "INSERT INTO report_content_jobs VALUES (1,'QUEUED')"),
-                  (scoring, "INSERT INTO report_generation_runs VALUES (1,'PROCESSING')")]
-    # Claim UPDATEs as well as admissions must be fenced.
-    backup.sql(scoring, "INSERT INTO report_content_jobs VALUES (2,'QUEUED');")
-    statements.append((scoring, "UPDATE report_content_jobs SET status='PROCESSING' WHERE id=2"))
+    statements = [(app, "INSERT INTO generated_reports SELECT * FROM generated_reports WHERE false"),
+                  (scoring, "INSERT INTO report_content_jobs SELECT * FROM report_content_jobs WHERE false"),
+                  (scoring, "INSERT INTO report_generation_runs SELECT * FROM report_generation_runs WHERE false"),
+                  (scoring, "UPDATE report_content_jobs SET status='PROCESSING' WHERE false")]
     with admission_barrier(environments):
         for url, statement in statements:
             # Read-only queue checks remain available while writes wait.
@@ -39,7 +34,6 @@ def prove_admission_barrier(app, scoring):
             raise RuntimeError('Report admission escaped the backup barrier')
     for url, statement in statements:
         backup.sql(url, 'BEGIN; ' + statement + '; ROLLBACK;')
-    backup.sql(scoring, 'DELETE FROM report_content_jobs;')
     print('Synthetic admission barrier verified: queued/direct reservations and worker claims blocked; reads continue')
 
 
@@ -62,26 +56,31 @@ def main():
             backup.sql(admin, "CREATE DATABASE fixture_scoring OWNER fixture_scoring;")
             app = f"postgresql://fixture_app@127.0.0.1:{port}/fixture_app"
             scoring = f"postgresql://fixture_scoring@127.0.0.1:{port}/fixture_scoring"
-            # Only fake data: exercise the actual production AES-GCM helper.
-            helper = Path(__file__).resolve().parents[2] / "apps/api/src/security/patient-data.ts"
-            fixture = json.loads(backup.run(["bun", "-e", "import {encryptPatientBytes} from " + json.dumps(str(helper)) + ";"
-                "import {createHash} from 'node:crypto';const key=Buffer.alloc(32,7);"
-                "const pdf=Buffer.from('%PDF-1.7\\nSynthetic backup drill\\n%%EOF');"
-                "console.log(JSON.stringify({key:key.toString('base64'),ciphertext:encryptPatientBytes(pdf,key).toString('base64'),"
-                "size:pdf.length,sha256:createHash('sha256').update(pdf).digest('hex')}));"]))
-            backup.sql(app, "CREATE TABLE fixture_assessments(id integer PRIMARY KEY, note text); "
-                       "INSERT INTO fixture_assessments VALUES (1,'synthetic only'),(2,'synthetic only'); "
-                       "CREATE TABLE generated_report_artifacts(encrypted_pdf bytea,sha256 text,size integer); "
-                       f"INSERT INTO generated_report_artifacts VALUES (decode('{fixture['ciphertext']}','base64'),"
-                       f"'{fixture['sha256']}',{fixture['size']});")
-            backup.sql(scoring, "CREATE TABLE fixture_rules(id integer PRIMARY KEY, label text); "
-                       "INSERT INTO fixture_rules VALUES (1,'synthetic rule');")
-            prove_admission_barrier(app, scoring)
+            helper = Path(__file__).with_name('actual_schema_fixture.ts')
             uploads = root / "uploads"
             uploads.mkdir(mode=0o700)
-            private_write(uploads / "fixture.txt", "synthetic uploaded file")
+            def fixture(action, url, **extra):
+                value = {"action": action, "url": url, "uploads": str(uploads), **extra}
+                return json.loads(backup.run(['bun', str(helper)], data=json.dumps(value).encode()))
+            applied_app = fixture('migrate', app, kind='application')['migrations']
+            applied_scoring = fixture('migrate', scoring, kind='scoring')['migrations']
+            metadata = fixture('seed', app)
+            fixture('verify', app, metadata=metadata)
+            backup.sql(scoring, "INSERT INTO clients(id,name) VALUES ('00000000000000000000000001','Synthetic rule tenant');")
+            # Explicit grants: the restore account cannot connect to either source DB.
+            backup.sql(admin, "REVOKE CONNECT ON DATABASE fixture_app, fixture_scoring FROM PUBLIC;")
+            for database in ('fixture_app', 'fixture_scoring'):
+                forbidden = f"postgresql://fixture_restore@127.0.0.1:{port}/{database}"
+                try:
+                    backup.sql(forbidden, 'SELECT 1;')
+                except RuntimeError:
+                    continue
+                raise RuntimeError('Restore account can access a source database')
+            prove_admission_barrier(app, scoring)
+            original_counts = {'application': backup.counts(app), 'scoring': backup.counts(scoring)}
+            fixture_key = metadata['key']
             private_write(root / "application.env", f"NODE_ENV=production\nDATABASE_URL={app}\nREPORT_UPLOAD_ROOT={uploads}\n"
-                          f"PATIENT_DATA_ENCRYPTION_KEY={fixture['key']}\nSESSION_SECRET=synthetic-only\n")
+                          f"PATIENT_DATA_ENCRYPTION_KEY={fixture_key}\nSESSION_SECRET={metadata['secret']}\n")
             private_write(root / "scoring.env", f"NODE_ENV=production\nDATABASE_URL={scoring}\n")
             private_write(root / "restore.env", f"DATABASE_URL=postgresql://fixture_restore@127.0.0.1:{port}/postgres\n")
             private_write(root / "recovery", os.urandom(48).hex())
@@ -92,16 +91,28 @@ def main():
                       "server_files": [str(root / "server-config.txt")]}
             backup.backup(config)
             archive = next((root / "archives").glob("*.tar.gpg"))
-            backup.restore_test(config, archive)
+            def verify_restored(name, target, contents):
+                if name == 'application':
+                    settings = backup.env_file(contents / 'application.env')
+                    fixture('verify', target, metadata=metadata, uploads=str(contents / 'uploads'),
+                            key=settings['PATIENT_DATA_ENCRYPTION_KEY'], session=settings['SESSION_SECRET'])
+                    try:
+                        fixture('verify', target, metadata=metadata, uploads=str(contents / 'uploads'),
+                                key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', session=settings['SESSION_SECRET'])
+                    except RuntimeError:
+                        pass
+                    else:
+                        raise RuntimeError('An incorrect encryption key decrypted the restored PDF')
+                elif backup.sql(target, "SELECT name FROM clients;") != 'Synthetic rule tenant':
+                    raise RuntimeError('Restored scoring tenant changed')
+            backup.restore_isolated(config, archive, verify_restored=verify_restored)
             leftovers = backup.sql(admin, "SELECT count(*) FROM pg_database WHERE datname LIKE 'niq_restore_test_%';")
             if leftovers != "0":
                 raise RuntimeError("Isolated restored databases were not removed")
-            if backup.counts(app) != {'public.fixture_assessments': 2, 'public.generated_report_artifacts': 1, 'public.generated_reports': 0}:
-                raise RuntimeError("Original synthetic application data changed")
-            if backup.counts(scoring) != {'public.fixture_rules': 1, 'public.report_content_jobs': 0, 'public.report_generation_runs': 0}:
-                raise RuntimeError("Original synthetic scoring data changed")
-            print("Synthetic drill verified: application rows 2+1 PDF, scoring rows 1, upload/config hashes, "
-                  "saved-PDF decryption and zero leftover restored databases; original fixture databases unchanged")
+            if backup.counts(app) != original_counts['application'] or backup.counts(scoring) != original_counts['scoring']:
+                raise RuntimeError("Original synthetic database row counts changed")
+            print(f"Actual-schema drill verified: {applied_app} application + {applied_scoring} scoring migrations, encrypted patient/assessment/PDF and upload relationships, "
+                  "authorized download, wrong-key/hash rejection, tenant/facility denials, restore-login isolation and zero leftover test databases")
         finally:
             if (cluster / "postmaster.pid").exists():
                 backup.run(["pg_ctl", "-D", str(cluster), "-m", "immediate", "-w", "stop"])

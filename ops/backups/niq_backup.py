@@ -301,7 +301,7 @@ def restore_test(config, archive):
     return sentry_checkin.monitored(config, "restore-test", lambda: restore_isolated(config, archive), production=live)
 
 
-def restore_isolated(config, archive):
+def restore_isolated(config, archive, verify_restored=None):
     from urllib.parse import urlsplit, urlunsplit
     passphrase = private_file(config["passphrase_file"]).read_bytes().rstrip(b"\r\n")
     admin = env_file(config["restore_test_env"])["DATABASE_URL"]
@@ -341,6 +341,10 @@ def restore_isolated(config, archive):
                         print("Restored PDF: decryption, PDF signature, size and SHA-256 verified")
                     else:
                         print("Restored PDF check skipped: backup contains no saved PDF artifact")
+                # Acceptance fixtures can exercise restored service relationships before
+                # the generated test databases are removed; the CLI exposes no target/hook.
+                if verify_restored:
+                    verify_restored(name, target, stage)
             print("Restore test passed: both isolated databases and captured file hashes verified")
         finally:
             failed = False
