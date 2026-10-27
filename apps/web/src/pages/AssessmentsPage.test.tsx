@@ -465,7 +465,7 @@ test("assessment rows offer a status-aware action to open the assessment", async
 });
 
 test("completed assessment rows and mobile cards offer an enabled saved PDF download", async () => {
-  const completed = { ...records[0]!, status: "COMPLETED", completedAt: date };
+  const completed = { ...records[0]!, status: "COMPLETED", completedAt: date, pdfAvailable: true };
   await renderAssessments("/assessments?tab=completed", [completed], () => {
     const table = document.querySelector('[aria-label="Assessments"]');
     expect(table?.querySelector('a[aria-label="View result ASM-000001"]')?.textContent).toBe("View result");
