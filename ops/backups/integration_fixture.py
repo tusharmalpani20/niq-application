@@ -7,11 +7,40 @@ import socket
 import tempfile
 
 import niq_backup as backup
+from pm2_writers import admission_barrier
 
 
 def private_write(path, content):
     path.write_text(content)
     path.chmod(0o600)
+
+
+def prove_admission_barrier(app, scoring):
+    # Only synthetic tables in the temporary cluster. A timed-out write must
+    # become valid immediately after release, proving lock rather than SQL failure.
+    backup.sql(app, "CREATE TABLE generated_reports(id integer, status text);")
+    backup.sql(scoring, "CREATE TABLE report_content_jobs(id integer, status text); "
+                       "CREATE TABLE report_generation_runs(id integer, status text);")
+    environments = {'application': {'DATABASE_URL': app}, 'scoring': {'DATABASE_URL': scoring}}
+    statements = [(app, "INSERT INTO generated_reports VALUES (1,'GENERATING')"),
+                  (scoring, "INSERT INTO report_content_jobs VALUES (1,'QUEUED')"),
+                  (scoring, "INSERT INTO report_generation_runs VALUES (1,'PROCESSING')")]
+    # Claim UPDATEs as well as admissions must be fenced.
+    backup.sql(scoring, "INSERT INTO report_content_jobs VALUES (2,'QUEUED');")
+    statements.append((scoring, "UPDATE report_content_jobs SET status='PROCESSING' WHERE id=2"))
+    with admission_barrier(environments):
+        for url, statement in statements:
+            # Read-only queue checks remain available while writes wait.
+            backup.sql(url, 'SELECT 1;')
+            try:
+                backup.sql(url, "SET statement_timeout='150ms'; BEGIN; " + statement + '; ROLLBACK;')
+            except RuntimeError:
+                continue
+            raise RuntimeError('Report admission escaped the backup barrier')
+    for url, statement in statements:
+        backup.sql(url, 'BEGIN; ' + statement + '; ROLLBACK;')
+    backup.sql(scoring, 'DELETE FROM report_content_jobs;')
+    print('Synthetic admission barrier verified: queued/direct reservations and worker claims blocked; reads continue')
 
 
 def main():
@@ -47,6 +76,7 @@ def main():
                        f"'{fixture['sha256']}',{fixture['size']});")
             backup.sql(scoring, "CREATE TABLE fixture_rules(id integer PRIMARY KEY, label text); "
                        "INSERT INTO fixture_rules VALUES (1,'synthetic rule');")
+            prove_admission_barrier(app, scoring)
             uploads = root / "uploads"
             uploads.mkdir(mode=0o700)
             private_write(uploads / "fixture.txt", "synthetic uploaded file")
@@ -66,9 +96,9 @@ def main():
             leftovers = backup.sql(admin, "SELECT count(*) FROM pg_database WHERE datname LIKE 'niq_restore_test_%';")
             if leftovers != "0":
                 raise RuntimeError("Isolated restored databases were not removed")
-            if backup.counts(app) != {'public.fixture_assessments': 2, 'public.generated_report_artifacts': 1}:
+            if backup.counts(app) != {'public.fixture_assessments': 2, 'public.generated_report_artifacts': 1, 'public.generated_reports': 0}:
                 raise RuntimeError("Original synthetic application data changed")
-            if backup.counts(scoring) != {'public.fixture_rules': 1}:
+            if backup.counts(scoring) != {'public.fixture_rules': 1, 'public.report_content_jobs': 0, 'public.report_generation_runs': 0}:
                 raise RuntimeError("Original synthetic scoring data changed")
             print("Synthetic drill verified: application rows 2+1 PDF, scoring rows 1, upload/config hashes, "
                   "saved-PDF decryption and zero leftover restored databases; original fixture databases unchanged")
