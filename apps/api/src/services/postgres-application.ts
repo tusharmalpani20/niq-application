@@ -1,3 +1,4 @@
+import { activateScoringConnection, invalidateScoringActivation } from "./scoring-activation";
 import { loadReportPdfAvailability } from "./report-pdf-availability";
 import { correctPatientDob as correctDob, correctPatientMrn as correctMrn, editPatient, editOrganizationUser } from "./profile-edits";
 import { faceScanSessionSchema } from "../../../../packages/contracts/src/face-scan";
@@ -29,7 +30,7 @@ import {
   scoringConnections,
   users,
 } from "../db/schema";
-import { decryptCredential, encryptCredential } from "../security/credential-encryption";
+import { decryptCredential } from "../security/credential-encryption";
 import { decodeOrganizationLogo, InvalidOrganizationLogoError } from "../security/organization-logo";
 import { decryptPatientData, encryptPatientData, patientDataKey } from "../security/patient-data";
 import { createMfaOtp } from "../security/mfa-otp";
@@ -53,11 +54,6 @@ type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Executor = Database | Transaction;
 // Escape LIKE wildcards so a search term is treated as text, not a query pattern.
 function containsText(value: string): string { return `%${value.replace(/[\\%_]/g, "\\$&")}%`; }
-const scoringActivationResponseSchema = z.object({
-  deploymentId: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
-  clientId: z.string().regex(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
-  credential: z.string().min(32),
-});
 const patientProfileSchema = z.object({
   name: z.string(),
   phone: z.string().optional(),
@@ -767,47 +763,19 @@ export class PostgresApplicationService implements ApplicationService {
   }
   async activateScoring(actor: Principal, organizationId: string, input: ActivateScoring, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, "scoring.manage");
-    if (!this.config.SCORING_API_URL || !this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY) {
-      throw new ServiceError("SCORING_NOT_CONFIGURED", "NIQ Scoring is not configured for this application installation.");
-    }
-    const [organization] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
-    if (!organization) throw new ServiceError("NOT_FOUND", "Organization not found.");
-
-    let response: Response;
-    try {
-      response = await fetch(new URL("/v1/activate", this.config.SCORING_API_URL), {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-request-id": context.requestId },
-        body: JSON.stringify({ ...input, clientReference: organizationId }),
-        signal: AbortSignal.timeout(this.config.SCORING_TIMEOUT_MS),
-      });
-    } catch {
-      throw new ServiceError("SCORING_UNAVAILABLE", "The scoring service could not be reached.");
-    }
-    if (response.status === 401) throw new ServiceError("INVALID_OR_EXPIRED_TOKEN", "The scoring activation token is invalid or expired.");
-    if (!response.ok) throw new ServiceError("SCORING_UNAVAILABLE", "The scoring service could not complete activation.");
-    const parsed = scoringActivationResponseSchema.safeParse(await response.json().catch(() => null));
-    if (!parsed.success) throw new ServiceError("SCORING_UNAVAILABLE", "The scoring service returned an invalid activation response.");
-
-    const encrypted = encryptCredential(parsed.data.credential, this.config.SCORING_CREDENTIAL_ENCRYPTION_KEY);
-    const activatedAt = new Date();
-    const [connection] = await this.db.insert(scoringConnections).values({
-      id: createEntityId(), organizationId, deploymentId: parsed.data.deploymentId, scoringOrganizationId: parsed.data.clientId,
-      encryptedCredential: encrypted.ciphertext, credentialIv: encrypted.iv,
-      keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION, activatedAt,
-    }).onConflictDoUpdate({
-      target: scoringConnections.organizationId,
-      set: { deploymentId: parsed.data.deploymentId, scoringOrganizationId: parsed.data.clientId, encryptedCredential: encrypted.ciphertext, credentialIv: encrypted.iv, keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION, activatedAt, updatedAt: activatedAt },
-    }).returning({ deploymentId: scoringConnections.deploymentId, scoringOrganizationId: scoringConnections.scoringOrganizationId, keyVersion: scoringConnections.keyVersion, activatedAt: scoringConnections.activatedAt });
-    await this.audit(this.db, organizationId, context, "SCORING_CONNECTION_ACTIVATED", "scoring_connection", connection?.deploymentId, undefined, { actorUserId: actor.userId, keyVersion: this.config.SCORING_CREDENTIAL_KEY_VERSION });
-    return { connection };
+    return activateScoringConnection(this.db, this.config, actor, organizationId, input, context);
   }
   async disconnectScoring(actor: Principal, organizationId: string, context: RequestContext) {
     this.ensureOrganizationAccess(actor, organizationId, "scoring.manage");
     await this.db.transaction(async (tx) => {
+      const cancelledActivation = await invalidateScoringActivation(tx, organizationId);
       const [connection] = await tx.select({ deploymentId: scoringConnections.deploymentId })
         .from(scoringConnections).where(eq(scoringConnections.organizationId, organizationId)).limit(1);
-      if (!connection) throw new ServiceError("NOT_FOUND", "This organization is not connected to NIQ Scoring.");
+      if (!connection) {
+        if (!cancelledActivation) throw new ServiceError("NOT_FOUND", "This organization is not connected to NIQ Scoring.");
+        await this.audit(tx, organizationId, context, "SCORING_ACTIVATION_CANCELLED", "organization", organizationId, actor);
+        return;
+      }
       await tx.delete(scoringConnections).where(eq(scoringConnections.organizationId, organizationId));
       await this.audit(tx, organizationId, context, "SCORING_CONNECTION_DISCONNECTED", "scoring_connection", connection.deploymentId, undefined, { actorUserId: actor.userId });
     });
