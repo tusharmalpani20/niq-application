@@ -1,0 +1,16 @@
+{
+  "environments": {"application": "/etc/niq-backup/application.env"},
+  "backup_root": "/var/backups/niq",
+  "passphrase_file": "/etc/niq-backup/recovery-passphrase",
+  "restore_test_env": "/etc/niq-backup/restore-test.env",
+  "writer_state_file": "/etc/niq-backup/writers.json",
+  "compose": {
+    "project_name": "niq-byoc",
+    "file": "/opt/niq/releases/RELEASE/compose.byoc.yaml",
+    "env_file": "/etc/niq/byoc.env"
+  },
+  "quiesce": ["/usr/bin/python3", "/opt/niq/releases/RELEASE/ops/backups/compose_writers.py", "pause", "--config", "/etc/niq-backup/config.json"],
+  "resume": ["/usr/bin/python3", "/opt/niq/releases/RELEASE/ops/backups/compose_writers.py", "resume", "--config", "/etc/niq-backup/config.json"],
+  "verify_pdf_command": ["docker", "compose", "--project-name", "niq-byoc", "--env-file", "/etc/niq/byoc.env", "-f", "/opt/niq/releases/RELEASE/compose.byoc.yaml", "run", "--rm", "--no-deps", "-T", "api", "bun", "dist/verify-pdf.js"],
+  "server_files": ["/etc/niq/byoc.env", "/opt/niq/releases/RELEASE/compose.byoc.yaml"]
+}
