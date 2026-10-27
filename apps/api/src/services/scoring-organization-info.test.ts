@@ -56,3 +56,19 @@ describe("NIQ Scoring organization information client", () => {
     await expect(request(async () => Response.json({ ...snapshot, limits: {} }))).rejects.toBeInstanceOf(ScoringOrganizationInfoRequestError);
   });
 });
+
+test("gateway prefix is retained and credential redirects are disabled", async () => {
+  await expect(requestScoringOrganizationInfo({ baseUrl: "https://scoring.example.test/api/", credential: "secret", requestId: "gateway", timeoutMs: 1000, fetcher: async (url, init) => {
+    expect(String(url)).toBe("https://scoring.example.test/api/v1/integrations/organization-info");
+    expect(init?.redirect).toBe("error");
+    return Response.json(snapshot);
+  } })).resolves.toMatchObject({ deployment: snapshot.deployment });
+});
+
+
+test("a blocked redirect cannot forward the service credential", async () => {
+  await expect(request(async (_url, init) => {
+    expect(init?.redirect).toBe("error");
+    throw new TypeError("Redirect rejected by fetch policy");
+  })).rejects.toMatchObject({ reason: "unavailable" });
+});

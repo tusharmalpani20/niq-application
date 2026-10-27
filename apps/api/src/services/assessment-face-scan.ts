@@ -1,3 +1,4 @@
+import { scoringServiceUrl } from "./scoring-service-url";
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
 import type { AssessmentPatient } from "../../../../packages/contracts/src/assessment-workflow";
@@ -127,7 +128,7 @@ export class AssessmentFaceScanService {
       return { available: false, reason: "FACE_SCAN_DISABLED" };
     const transport = await this.transport(org);
     try {
-      const response = await this.fetcher(new URL("/v1/face-scans/availability", transport.identity.origin), {
+      const response = await this.fetcher(scoringServiceUrl(this.workflow.config.SCORING_API_URL!, "/v1/face-scans/availability"), {
         method: "GET",
         redirect: "error",
         headers: { authorization: `Bearer ${transport.credential}` },
@@ -210,7 +211,7 @@ export class AssessmentFaceScanService {
   }
   private async request(row: Row, action: "create" | "status" | "signal" | "cancel", body?: unknown, executor: WorkflowExecutor = this.db) {
     const transport = await this.transport(row.organizationId, row.connection as Identity, executor);
-    const url = new URL(action === "create" ? "/v1/face-scans" : `/v1/face-scans/${encodeURIComponent(row.remoteId!)}${action === "status" ? "" : `/${action}`}`, transport.identity.origin);
+    const url = scoringServiceUrl(this.workflow.config.SCORING_API_URL!, action === "create" ? "/v1/face-scans" : `/v1/face-scans/${encodeURIComponent(row.remoteId!)}${action === "status" ? "" : `/${action}`}`);
     url.searchParams.set("organizationReference", row.organizationId);
     const payload = action === "create" ? {
       schemaVersion: 1,

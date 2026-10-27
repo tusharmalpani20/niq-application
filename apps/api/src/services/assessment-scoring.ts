@@ -1,3 +1,4 @@
+import { scoringServiceUrl } from "./scoring-service-url";
 import { z } from "zod";
 import { assessmentRiskCategorySchema, assessmentRiskColorSchema } from "@niq/application-contracts";
 
@@ -60,7 +61,7 @@ function sameEvidence(actual: AssessmentScoringBinding, expected: AssessmentScor
 const blockedCodes = new Set(["UNAUTHORIZED", "PLATFORM_DISABLED", "CLIENT_DISABLED", "DEPLOYMENT_DISABLED", "CLIENT_NOT_ALLOWED", "CAPABILITY_DISABLED", "VERSION_UNAVAILABLE", "ASSESSMENT_NOT_FOUND", "MONTHLY_LIMIT_REACHED"]);
 async function post(input: AssessmentScoringTransport, action: "start" | "calculate" | "classify-reviewed" | "risk-categories", body: unknown) {
   try {
-    const response = await (input.fetcher ?? fetch)(new URL(`/v1/assessments/${action}`, input.baseUrl), {
+    const response = await (input.fetcher ?? fetch)(scoringServiceUrl(input.baseUrl, `/v1/assessments/${action}`), {
       method: "POST", redirect: "error", headers: { authorization: `Bearer ${input.credential}`, "content-type": "application/json", "x-request-id": input.requestId },
       body: JSON.stringify(body), signal: AbortSignal.timeout(input.timeoutMs),
     });

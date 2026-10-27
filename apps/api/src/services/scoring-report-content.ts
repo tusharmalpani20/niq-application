@@ -1,3 +1,4 @@
+import { scoringServiceUrl } from "./scoring-service-url";
 import { z } from "zod";
 import type { AssessmentScoringTransport } from "./assessment-scoring";
 
@@ -129,7 +130,7 @@ export async function requestScoringToxicityOptions(input: AssessmentScoringTran
 }): Promise<ScoringToxicityOptions> {
   let response: Response;
   try {
-    response = await (input.fetcher ?? fetch)(new URL("/v1/assessments/report-toxicity-options", input.baseUrl), {
+    response = await (input.fetcher ?? fetch)(scoringServiceUrl(input.baseUrl, "/v1/assessments/report-toxicity-options"), {
       method: "POST", redirect: "error", headers: { authorization: `Bearer ${input.credential}`, "content-type": "application/json", "x-request-id": input.requestId },
       body: JSON.stringify({ assessmentReference: input.assessmentReference, resultReference: input.resultReference,
         treatmentTypeIds: input.treatmentTypeIds, drugClassIds: input.drugClassIds }),
@@ -157,7 +158,7 @@ export async function requestScoringReportContent(input: AssessmentScoringTransp
   const request = async (path: string, init: RequestInit) => {
     let response: Response;
     try {
-      response = await (input.fetcher ?? fetch)(new URL(path, input.baseUrl), {
+      response = await (input.fetcher ?? fetch)(scoringServiceUrl(input.baseUrl, path), {
         ...init, redirect: "error", headers, signal: AbortSignal.timeout(timeoutMs),
       });
     } catch { throw new ScoringReportContentError("unavailable", "TRANSPORT_FAILURE"); }

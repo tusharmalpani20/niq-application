@@ -1,3 +1,4 @@
+import { scoringServiceUrl } from "./scoring-service-url";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
@@ -74,7 +75,7 @@ export class AssessmentFaceScanReuseService {
       const transport = await this.scans.transport(organizationId, sourceConnection, tx);
       if (!isDeepStrictEqual(state.connection, sourceRow.connection))
         throw new ServiceError("CONFLICT", "Both assessments must use the same scoring connection.");
-      const response = await this.fetcher(new URL(`/v1/face-scans/${encodeURIComponent(sourceRow.remoteId)}/reuse`, transport.identity.origin), {
+      const response = await this.fetcher(scoringServiceUrl(workflow.config.SCORING_API_URL!, `/v1/face-scans/${encodeURIComponent(sourceRow.remoteId)}/reuse`), {
         method: "POST", redirect: "error",
         headers: { authorization: `Bearer ${transport.credential}`, "content-type": "application/json", "x-request-id": context.requestId },
         body: JSON.stringify({ organizationReference: organizationId, sourceAssessmentReference: source.id, assessmentReference: assessmentId }),

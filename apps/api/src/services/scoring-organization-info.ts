@@ -1,3 +1,4 @@
+import { scoringServiceUrl } from "./scoring-service-url";
 import { scoringOrganizationInfoSchema, type ScoringOrganizationInfo } from "@niq/application-contracts";
 
 type RequestFailure = "unauthorized" | "disabled" | "incomplete" | "unavailable" | "invalid-response";
@@ -18,8 +19,9 @@ export async function requestScoringOrganizationInfo(input: {
 }): Promise<ScoringOrganizationInfo> {
   let response: Response;
   try {
-    response = await (input.fetcher ?? fetch)(new URL("/v1/integrations/organization-info", input.baseUrl), {
+    response = await (input.fetcher ?? fetch)(scoringServiceUrl(input.baseUrl, "/v1/integrations/organization-info"), {
       method: "GET",
+      redirect: "error",
       headers: {
         authorization: `Bearer ${input.credential}`,
         "x-request-id": input.requestId,
