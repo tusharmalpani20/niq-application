@@ -17,8 +17,8 @@ class BackupSafetyTests(unittest.TestCase):
     def test_real_encrypted_archive_roundtrip_and_wrong_passphrase(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            home = root / "gnupg"
-            home.mkdir(mode=0o700)
+            home = root / "unusable-operator-gnupg"
+            home.write_text("This file is intentionally not a GnuPG directory")
             source = root / "source"
             source.mkdir()
             (source / "upload.pdf").write_bytes(b"%PDF-fixture")
@@ -31,13 +31,33 @@ class BackupSafetyTests(unittest.TestCase):
             archive = root / "archive.gpg"
             passphrase = b"test-only-independent-backup-passphrase"
             with patch.dict(os.environ, {"GNUPGHOME": str(home)}):
-                backup.run(["gpg", "--no-options", "--batch", "--pinentry-mode", "loopback", "--passphrase-fd", "0",
-                            "--symmetric", "--cipher-algo", "AES256", "--output", str(archive), str(bundle)], data=passphrase + b"\n")
+                backup.gpg_operation(["--symmetric", "--cipher-algo", "AES256", "--output", str(archive), str(bundle)], passphrase)
                 restored = backup.verify_archive(archive, passphrase, root / "restored")
+                self.assertEqual(home.read_text(), "This file is intentionally not a GnuPG directory")
                 self.assertEqual(restored, manifest)
                 self.assertEqual((root / "restored/upload.pdf").read_bytes(), b"%PDF-fixture")
                 with self.assertRaises(RuntimeError):
                     backup.verify_archive(archive, b"wrong-recovery-passphrase", root / "rejected")
+
+    def test_isolated_agent_is_stopped_even_when_gpg_fails(self):
+        calls = []
+        def command(arguments, **options):
+            calls.append((arguments, options))
+            home = Path(arguments[arguments.index("--homedir") + 1])
+            self.assertEqual(home.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(options["environment"]["GNUPGHOME"], str(home))
+            self.assertNotIn("fixture-secret", arguments)
+            if arguments[0] == "gpg":
+                self.assertEqual(options["data"], b"fixture-secret\n")
+                raise RuntimeError("synthetic GPG failure")
+            return b""
+        with patch.object(backup, "run", side_effect=command):
+            with self.assertRaises(RuntimeError):
+                backup.gpg_operation(["--decrypt", "/synthetic/archive"], b"fixture-secret")
+        self.assertEqual([item[0][0] for item in calls], ["gpg", "gpgconf"])
+        home = calls[0][0][2]
+        self.assertEqual(calls[1][0], ["gpgconf", "--homedir", home, "--kill", "gpg-agent"])
+        self.assertFalse(Path(home).exists())
 
     def test_connection_secrets_are_environment_only_and_ssl_survives_database_override(self):
         result = backup.db_env("postgresql://operator:password%40example@db.example:5433/postgres?sslmode=verify-full")

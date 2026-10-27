@@ -59,6 +59,21 @@ def run(command, *, environment=None, data=None):
     return result.stdout
 
 
+def gpg_operation(arguments, passphrase):
+    # Symmetric loopback operations still contact gpg-agent. Isolate its home
+    # from operator profiles, first-use startup state and ambient GNUPGHOME.
+    # A short path also avoids Unix-domain socket length limits.
+    with tempfile.TemporaryDirectory(prefix="niq-gpg-", dir="/tmp") as home:
+        environment = dict(os.environ, GNUPGHOME=home)
+        try:
+            return run(["gpg", "--homedir", home, "--no-options", "--batch", "--no-symkey-cache",
+                        "--pinentry-mode", "loopback", "--passphrase-fd", "0", *arguments],
+                       environment=environment, data=passphrase + b"\n")
+        finally:
+            # Only stop this operation's agent; never affect the operator's agent.
+            run(["gpgconf", "--homedir", home, "--kill", "gpg-agent"], environment=environment)
+
+
 def db_env(url):
     from urllib.parse import urlsplit, unquote, parse_qsl
     parsed = urlsplit(url)
@@ -257,8 +272,7 @@ def capture(config, environments):
                     for entry in stage.iterdir():
                         if entry != bundle:
                             tar.add(entry, arcname=entry.name)
-                run(["gpg", "--no-options", "--batch", "--yes", "--no-symkey-cache", "--pinentry-mode", "loopback", "--passphrase-fd", "0",
-                     "--symmetric", "--cipher-algo", "AES256", "--output", str(partial), str(bundle)], data=passphrase + b"\n")
+                gpg_operation(["--yes", "--symmetric", "--cipher-algo", "AES256", "--output", str(partial), str(bundle)], passphrase)
                 # Authenticate and check all captured files before publishing or pruning.
                 verify_archive(partial, passphrase, stage / "verify")
                 with partial.open("rb") as stream:
@@ -279,8 +293,7 @@ def capture(config, environments):
 def verify_archive(archive, passphrase, destination):
     destination.mkdir(mode=0o700)
     bundle = destination / "snapshot.tar"
-    run(["gpg", "--no-options", "--batch", "--no-symkey-cache", "--pinentry-mode", "loopback", "--passphrase-fd", "0",
-         "--output", str(bundle), "--decrypt", str(archive)], data=passphrase + b"\n")
+    gpg_operation(["--output", str(bundle), "--decrypt", str(archive)], passphrase)
     safe_extract(bundle, destination)
     manifest = json.loads((destination / "manifest.json").read_text())
     for name, expected in manifest["hashes"].items():
