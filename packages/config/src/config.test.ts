@@ -2,6 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { loadApplicationConfig } from "./index";
 
 describe("configuration", () => {
+  test("production starts with bootstrap disabled after initial setup", () => {
+    const production = {
+      NODE_ENV: "production", AUTH_MODE: "local", DATABASE_URL: "postgres://localhost/niq",
+      SESSION_SECRET: "a-production-secret-with-32-chars",
+      PATIENT_DATA_ENCRYPTION_KEY: Buffer.alloc(32, 2).toString("base64"),
+    };
+    expect(loadApplicationConfig(production).BOOTSTRAP_TOKEN).toBeUndefined();
+    expect(loadApplicationConfig({ ...production, BOOTSTRAP_TOKEN: "" }).BOOTSTRAP_TOKEN).toBeUndefined();
+    expect(() => loadApplicationConfig({ ...production, BOOTSTRAP_TOKEN: "short" })).toThrow();
+  });
+
   test("secure cookies can be enabled for HTTPS development deployments", () => {
     const base = { DATABASE_URL: "postgres://localhost/niq", SESSION_SECRET: "a-development-secret-with-32-chars" };
     expect(loadApplicationConfig(base).SECURE_COOKIES).toBe(false);

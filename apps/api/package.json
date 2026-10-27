@@ -11,7 +11,8 @@
     "db:backfill-final-results": "bun src/backfill-assessment-final-results.ts",
     "dev": "bun run --filter @niq/application-web build && bun src/prepare-report-print.ts && bun --watch src/index.ts",
     "start": "bun dist/index.js",
-    "test": "bun run --filter @niq/application-web build && bun src/prepare-report-print.ts && bun test"
+    "test": "bun run --filter @niq/application-web build && bun src/prepare-report-print.ts && bun test",
+    "admin:bootstrap": "bun src/bootstrap-admin.ts"
   },
   "dependencies": {
     "@hono/zod-validator": "0.7.2",

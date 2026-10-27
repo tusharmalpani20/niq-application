@@ -558,6 +558,16 @@ describe("local authentication routes", () => {
     expect(response.status).toBe(403);
   });
 
+  test("keeps bootstrap closed when its runtime token has been removed", async () => {
+    let calls = 0;
+    const app = createApp({ allowedOrigin: "http://localhost:5173", authMode: "local", checkDatabase: async () => true,
+      service: fakeService({ bootstrap: async () => { calls++; return principal; } }) });
+    const response = await app.request("/v1/bootstrap", { method: "POST", headers: { "content-type": "application/json", "x-bootstrap-token": "b".repeat(32) },
+      body: JSON.stringify({ legalName: "NIQ Private Limited", displayName: "NIQ", slug: "niq", adminEmail: "admin@example.com", adminDisplayName: "NIQ Admin", adminPassword: "a very secure password", userLimit: null }) });
+    expect(response.status).toBe(403);
+    expect(calls).toBe(0);
+  });
+
   test("lists and invites NIQ administrators through the platform boundary", async () => {
     const niqAdmin = { ...principal, platformRole: "NIQ_ADMIN" as const };
     let invitedEmail = "";

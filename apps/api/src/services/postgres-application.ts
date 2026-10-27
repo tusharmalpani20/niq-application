@@ -367,6 +367,9 @@ export class PostgresApplicationService implements ApplicationService {
 
   async bootstrap(input: BootstrapAdmin, context: RequestContext): Promise<Principal> {
     return this.db.transaction(async (tx) => {
+      // Serialize the first-account check across API replicas, including requests
+      // with different organization slugs and administrator email addresses.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('niq-platform-bootstrap', 0))`);
       const existing = await tx.select({ id: users.id }).from(users).where(eq(users.platformRole, "NIQ_ADMIN")).limit(1);
       if (existing.length) throw new ServiceError("CONFLICT", "Bootstrap has already been completed.");
       const organizationId = createEntityId(); const userId = createEntityId(); const membershipId = createEntityId();

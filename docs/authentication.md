@@ -1,6 +1,6 @@
 # Authentication and tenant onboarding
 
-There is no public signup endpoint. The first NIQ administrator is created once through `POST /v1/bootstrap`, protected by the independent `BOOTSTRAP_TOKEN`. Remove that token from the runtime environment after bootstrap. Bootstrap activates the account but does not create an authenticated session; the administrator must complete normal password and OTP sign-in.
+There is no public signup endpoint. The first NIQ administrator is created once through `POST /v1/bootstrap`, protected by the independent `BOOTSTRAP_TOKEN`. The CLI below calls that endpoint; no setup frontend is needed. Production starts normally without this token, and the endpoint is closed when it is absent. Remove the token from the runtime environment and restart the API after bootstrap. The database refuses bootstrap once an NIQ administrator exists, including concurrent requests from multiple API replicas. Bootstrap activates the account but does not create an authenticated session; the administrator must complete normal password and OTP sign-in.
 
 NIQ administrators create customer organizations. Organization administrators create facilities and one-time invitations. Pending invitations reserve a user seat. Expired invitations are released before another invitation is created, deactivated memberships release seats, and reactivation is checked transactionally by the database trigger.
 
@@ -21,18 +21,23 @@ For local testing, set `NODE_ENV=development` and `DEV_FIXED_OTP=true`, then res
   cooldown-protected, capped per challenge, rotates both the challenge token and
   OTP, and invalidates the previous code.
 
-## Local bootstrap example
+## Initial administrator CLI
 
-Use values from your uncommitted `.env`; never paste real credentials into source control or shell history on a shared machine.
+Use values from your uncommitted `.env`; never paste real credentials into source control, command arguments or shell history on a shared machine. Configure an independent random `BOOTSTRAP_TOKEN` of at least 32 characters only for initial setup, then start the API. Use a restricted editor to create a mode-600 JSON file outside the repository containing these fields:
 
-```bash
-curl -X POST http://127.0.0.1:3000/v1/bootstrap \
-  -H 'content-type: application/json' \
-  -H 'x-bootstrap-token: YOUR_BOOTSTRAP_TOKEN' \
-  --data '{"legalName":"NIQ","displayName":"NIQ","slug":"niq","adminEmail":"admin@example.com","adminDisplayName":"NIQ Admin","adminPassword":"replace-with-a-strong-local-password","userLimit":null}'
+```json
+{"legalName":"NIQ","displayName":"NIQ","slug":"niq","adminEmail":"admin@example.com","adminDisplayName":"NIQ Admin","adminPassword":"replace-with-a-strong-password","userLimit":null}
 ```
 
-After it succeeds, sign in through the browser, read the development OTP from the API console, and complete the MFA screen. The frontend validates and performs the sign-in, MFA, invitation-acceptance, session-check and sign-out calls through the corresponding `/v1/auth/*` endpoints.
+From `apps/api`, submit that file through stdin:
+
+```bash
+bun --env-file=../../.env run admin:bootstrap < /secure/path/bootstrap.json
+```
+
+The default API address is `http://127.0.0.1:3000`. Set `BOOTSTRAP_API_URL` in the command environment for another port or host. Non-loopback addresses require HTTPS. Redirects are refused so credentials cannot be forwarded to another endpoint. The CLI prints only success or a generic error, never submitted credentials or server response bodies.
+
+After success, delete the temporary credential file, remove `BOOTSTRAP_TOKEN` from the API environment and restart the API. Sign in through the browser and complete normal MFA. In development only, the OTP can be read from the API console when development delivery is enabled. Production still requires a real OTP delivery adapter. The frontend validates and performs sign-in, MFA, invitation acceptance, session check and sign-out through `/v1/auth/*`.
 
 ## Security boundaries
 

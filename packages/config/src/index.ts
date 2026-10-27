@@ -55,7 +55,7 @@ export const applicationConfigSchema = z.object({
   AUTH_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(20).default(5),
   AUTH_LOCKOUT_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   INVITATION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(72),
-  BOOTSTRAP_TOKEN: z.string().min(32).optional(),
+  BOOTSTRAP_TOKEN: z.preprocess(value => value === "" ? undefined : value, z.string().min(32).optional()),
   DEV_OTP_DELIVERY: booleanFromString,
   DEV_FIXED_OTP: booleanFromString,
   REPORT_UPLOAD_ROOT: z.preprocess(value => value === "" ? undefined : value, z.string().startsWith("/").optional()),
@@ -75,9 +75,6 @@ export const applicationConfigSchema = z.object({
   }
   if (value.NODE_ENV === "production" && value.DEV_OTP_DELIVERY) {
     context.addIssue({ code: "custom", path: ["DEV_OTP_DELIVERY"], message: "Development OTP delivery is forbidden in production" });
-  }
-  if (value.NODE_ENV === "production" && value.AUTH_MODE === "local" && !value.BOOTSTRAP_TOKEN) {
-    context.addIssue({ code: "custom", path: ["BOOTSTRAP_TOKEN"], message: "A bootstrap token is required for initial production setup" });
   }
   if (value.NODE_ENV === "production" && value.SCORING_API_URL && !value.SCORING_CREDENTIAL_ENCRYPTION_KEY) {
     context.addIssue({ code: "custom", path: ["SCORING_CREDENTIAL_ENCRYPTION_KEY"], message: "A credential encryption key is required when scoring is configured" });
