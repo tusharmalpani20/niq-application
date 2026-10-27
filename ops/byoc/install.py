@@ -74,7 +74,15 @@ def check_ubuntu(path=Path('/etc/os-release')):
 
 
 def validate_scoring(value):
-    parsed = urlsplit(value)
+    # urlsplit silently strips some controls; never persist the original value
+    # as a dotenv line until they have been rejected explicitly.
+    if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in value):
+        raise Stop('Scoring URL cannot contain whitespace or control characters.')
+    try:
+        parsed = urlsplit(value)
+        parsed.port  # Validate the optional port before saving configuration.
+    except ValueError as error:
+        raise Stop('Scoring URL has an invalid host or port.') from error
     if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise Stop('Scoring URL must use HTTPS without credentials, query parameters or fragments.')
     validate_domain(parsed.hostname)
@@ -391,7 +399,8 @@ def install(args):
             state['active'] = args.release
         state.setdefault('schemas', {})[args.release] = schema_digest(source)
         state.pop('pending_migration', None)
-        state['ready'] = True
+        # Application readiness alone is insufficient: failed backup setup or
+        # scheduling must leave installation status incomplete for a safe retry.
         save_state(state)
         current = ROOT / 'current'
         temporary = ROOT / 'current.next'
@@ -415,6 +424,8 @@ def install(args):
             'Persistent=true\nRandomizedDelaySec=120\nUnit=niq-byoc-backup.service\n[Install]\nWantedBy=timers.target\n')
         run(['systemctl', 'daemon-reload'])
         run(['systemctl', 'enable', '--now', 'niq-byoc-backup.timer'])
+        state['ready'] = True
+        save_state(state)
         print('Infrastructure is ready. Complete account setup at https://'  + args.domain + '/setup')
         print('Production acceptance still requires real OTP delivery, an isolated restore drill and live provider checks.')
         print('Initial setup credential is in /etc/niq/setup-token (root only). Never put it in a URL.')
@@ -473,7 +484,7 @@ def rollback():
         persist_release(old)
         refresh_backup(source)
         run(['systemctl', 'start', 'niq-byoc-backup.timer'])
-        state.update(active=old, previous=active)
+        state.update(active=old, previous=active, ready=True)
         save_state(state)
         temporary = ROOT / 'current.next'
         temporary.unlink(missing_ok=True)

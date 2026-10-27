@@ -92,8 +92,8 @@ Local verification completed during implementation:
 
 - Application web: 397 tests passed; Application API: 328 passed, 114 optional database tests skipped in that suite. Setup, activation recovery and restricted database privileges were also exercised separately against disposable PostgreSQL databases.
 - Scoring API: 478 passed, 18 optional database tests skipped; activation and scoring recovery database checks passed separately.
-- Installer: 26 regression tests passed. Compose configuration validated without a running Docker daemon.
-- Backups: 38 unit tests passed. A real isolated restore drill applied 44 Application and 35 Scoring migrations and restored both combined and Application-only archives, encrypted uploads and saved PDFs.
+- Installer: 28 regression tests passed, including rejection of environment-line injection/invalid Scoring ports and incomplete backup setup status. Compose configuration validated without a running Docker daemon.
+- Backups: 40 unit tests passed, including validation of a recovery key left by partial setup and retry after an interrupted configuration refresh. A real isolated restore drill applied 44 Application and 35 Scoring migrations and restored both combined and Application-only archives, encrypted uploads and saved PDFs.
 - The setup interface was exercised in a browser with synthetic data. No paid provider calls or client data were used.
 
 Local stdlib tests replace DNS and privileged operations with doubles. They establish validation ordering, private-key preservation, command selection and rollback gates; they do not establish real installation success.

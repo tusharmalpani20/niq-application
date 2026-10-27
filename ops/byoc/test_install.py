@@ -50,6 +50,13 @@ class PreflightTests(unittest.TestCase):
                 installer.validate_scoring(url)
         self.assertEqual(installer.validate_scoring('https://scoring.example.com/'), 'https://scoring.example.com')
 
+    def test_scoring_url_cannot_inject_environment_lines_or_invalid_ports(self):
+        for url in ('https://scoring.example.com/api\nFACE_SCAN_ENABLED=true',
+                    'https://scoring.example.com/a\rpath', 'https://scoring.example.com/a\tpath',
+                    'https://scoring.example.com:invalid/api', 'https://scoring.example.com:99999/api'):
+            with self.subTest(url=url), self.assertRaises(installer.Stop):
+                installer.validate_scoring(url)
+
     def test_dns_failure_has_no_privileged_effects(self):
         args = argparse.Namespace(domain='niq.example.com', server_ip=['8.8.8.8'], scoring_url='https://scoring.example.com')
         with patch.object(installer, 'check_ubuntu'), patch.object(installer, 'check_dns', side_effect=installer.Stop('DNS')), patch.object(installer, 'run') as run:
@@ -143,6 +150,26 @@ class StateTests(unittest.TestCase):
                 installer.install(self.args)
         self.assertEqual(settings, (self.config / 'byoc.env').read_text())
         self.assertEqual(installer.load_state()['pending_migration'], 'next')
+
+    def test_failed_backup_setup_never_reports_installation_ready(self):
+        installer.init_config(self.args)
+        envfile = self.config / 'byoc.env'
+        installer.write_private(envfile, envfile.read_text().replace('/var/lib/niq/report-uploads', str(self.root / 'uploads')))
+        installer.save_state({'active': 'test123', 'domain': self.args.domain, 'packages': True, 'certificate': True})
+        self.args.command, self.args.backup_verified, self.args.release, self.args.source = 'upgrade', True, 'next', self.root
+        exists = Path.exists
+        def backup_exists(path):
+            return True if str(path) == '/etc/niq-backup/config.json' else exists(path)
+        with patch.object(installer, 'preflight'), patch.object(installer, 'check_dns'), \
+                patch.object(installer.os, 'geteuid', return_value=0), \
+                patch.object(installer, 'create_release', return_value=self.root), \
+                patch.object(installer, 'compose'), patch.object(installer, 'run'), \
+                patch.object(installer.subprocess, 'run', return_value=argparse.Namespace(stdout='100\n')), \
+                patch.object(installer.os, 'chown'), patch.object(Path, 'exists', backup_exists), \
+                patch.object(installer, 'refresh_backup', side_effect=installer.Stop('backup setup failed')):
+            with self.assertRaisesRegex(installer.Stop, 'backup setup failed'):
+                installer.install(self.args)
+        self.assertFalse(installer.load_state()['ready'])
 
     def test_renewal_changes_only_setup_keys_and_restarts_only_api(self):
         installer.init_config(self.args)
@@ -276,6 +303,7 @@ class StateTests(unittest.TestCase):
             self.assertIn('--no-build', arguments)
             self.assertNotIn('down', arguments)
             self.assertEqual(installer.load_state()['active'], 'old')
+            self.assertTrue(installer.load_state()['ready'])
             self.assertEqual((self.root / 'current').readlink(), self.root / 'releases' / 'old')
 
     def test_upgrade_requires_backup_confirmation_before_any_host_command(self):
