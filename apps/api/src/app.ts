@@ -1,4 +1,6 @@
 import { captureOperationalFailure } from "./monitoring";
+import { byocSetupRoutes } from "./byoc-setup-routes";
+import type { ByocSetupService } from "./services/byoc-setup";
 import { zValidator } from "@hono/zod-validator";
 import { acceptInvitationSchema, activateScoringSchema, assessmentPageQuerySchema, bootstrapAdminSchema, correctPatientDobSchema, correctPatientMrnSchema, createFacilitySchema, createInvitationSchema, createOrganizationSchema, createPlatformAdministratorInvitationSchema, idSchema, onboardOrganizationSchema, organizationDetailQuerySchema, organizationInvitationPageQuerySchema, organizationPageQuerySchema, organizationSlugSchema, organizationUserPageQuerySchema, patientAssessmentPageQuerySchema, patientPageQuerySchema, patientReferenceSchema, platformAdministratorPageQuerySchema, registerPatientSchema, resendMfaRequestSchema, signInRequestSchema, updateFacilitySchema, updateOrganizationSchema, updateUserStatusSchema, updatePatientSchema, updateOrganizationUserSchema, verifyMfaRequestSchema } from "@niq/application-contracts";
 import { Hono } from "hono";
@@ -35,6 +37,7 @@ export type AppDependencies = {
   reportDiagnosticsEnabled?: boolean;
   runtimeEnvironment?: "development" | "test" | "production";
   bootstrapToken?: string;
+  byocSetup?: ByocSetupService;
   exposeDevelopmentTokens?: boolean;
 };
 type AppEnvironment = { Variables: { requestId: string; principal: Principal } };
@@ -63,6 +66,7 @@ export function createApp(dependencies: AppDependencies) {
   app.use("*", requestId());
   app.use("*", secureHeaders());
   app.use("/v1/*", cors({ origin: dependencies.allowedOrigin, credentials: true }));
+  if (dependencies.byocSetup) app.route("/v1/setup", byocSetupRoutes(dependencies.byocSetup, dependencies.allowedOrigin));
   app.get("/health", (context) => context.json({ status: "ok", service: "niq-application-api", timestamp: new Date().toISOString() } as const));
   app.get("/ready", async (context) => {
     const ready = await dependencies.checkDatabase().catch(() => false);

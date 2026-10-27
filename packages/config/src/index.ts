@@ -68,6 +68,11 @@ export const applicationConfigSchema = z.object({
   REPORT_MAX_ASSESSMENT_BYTES: z.coerce.number().int().positive().default(100 * 1024 * 1024),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 }).superRefine((value, context) => {
+  if (value.DEPLOYMENT_MODE === "client-cloud" && value.NODE_ENV === "production") {
+    if (value.AUTH_MODE !== "local" || new URL(value.WEB_ORIGIN).protocol !== "https:") context.addIssue({ code: "custom", path: ["WEB_ORIGIN"], message: "Production client-cloud requires local authentication and an HTTPS application origin" });
+    if (value.SCORING_API_URL && new URL(value.SCORING_API_URL).protocol !== "https:") context.addIssue({ code: "custom", path: ["SCORING_API_URL"], message: "Production client-cloud requires HTTPS Scoring" });
+    if (value.BOOTSTRAP_TOKEN) context.addIssue({ code: "custom", path: ["BOOTSTRAP_TOKEN"], message: "Client-cloud uses Hospital Administrator setup, not platform bootstrap" });
+  }
   if (Boolean(value.BYOC_SETUP_TOKEN) !== Boolean(value.BYOC_SETUP_EXPIRES_AT)) context.addIssue({ code: "custom", path: ["BYOC_SETUP_TOKEN"], message: "Configure both BYOC setup token and expiry" });
   if (value.BYOC_SETUP_TOKEN && (value.DEPLOYMENT_MODE !== "client-cloud" || value.AUTH_MODE !== "local" || value.BOOTSTRAP_TOKEN)) context.addIssue({ code: "custom", path: ["BYOC_SETUP_TOKEN"], message: "BYOC setup requires client-cloud local authentication without platform bootstrap" });
   const vapidConfigured = [value.VAPID_PUBLIC_KEY, value.VAPID_PRIVATE_KEY, value.VAPID_SUBJECT].filter(Boolean).length;

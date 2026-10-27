@@ -8,6 +8,7 @@ import { PostgresApplicationService } from "./services/postgres-application";
 import { AssessmentWorkflowService } from "./services/assessment-workflow";
 import { WebPushService } from "./services/web-push";
 import { GeneratedReportService } from "./services/generated-report";
+import { ByocSetupService } from "./services/byoc-setup";
 
 initializeMonitoring();
 const config = loadApplicationConfig(process.env);
@@ -55,7 +56,8 @@ const app = createApp({
   webPush,
   sessionCookieName: config.SESSION_COOKIE_NAME,
   secureCookies: config.SECURE_COOKIES || config.NODE_ENV === "production",
-  bootstrapToken: config.BOOTSTRAP_TOKEN,
+  bootstrapToken: config.DEPLOYMENT_MODE === "client-cloud" ? undefined : config.BOOTSTRAP_TOKEN,
+  byocSetup: config.DEPLOYMENT_MODE === "client-cloud" ? new ByocSetupService(db, config) : undefined,
   exposeDevelopmentTokens: config.NODE_ENV !== "production",
 });
 

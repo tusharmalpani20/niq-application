@@ -22,6 +22,11 @@ describe("configuration", () => {
     expect(loadApplicationConfig({ ...production, BOOTSTRAP_TOKEN: "" }).BOOTSTRAP_TOKEN).toBeUndefined();
     expect(() => loadApplicationConfig({ ...production, BOOTSTRAP_TOKEN: "short" })).toThrow();
   });
+  test("production BYOC requires HTTPS and cannot enable platform bootstrap", () => {
+    const base={DATABASE_URL:"postgres://localhost/test",SESSION_SECRET:"a-session-secret-with-more-than-32-characters",NODE_ENV:"production",DEPLOYMENT_MODE:"client-cloud",AUTH_MODE:"local",WEB_ORIGIN:"https://hospital.example.test",PATIENT_DATA_ENCRYPTION_KEY:Buffer.alloc(32,1).toString("base64")};
+    expect(loadApplicationConfig(base).AUTH_MODE).toBe("local");
+    for(const change of [{WEB_ORIGIN:"http://hospital.example.test"},{AUTH_MODE:"disabled"},{BOOTSTRAP_TOKEN:"a-private-platform-token-with-more-than32characters"},{SCORING_API_URL:"http://scoring.example.test",SCORING_CREDENTIAL_ENCRYPTION_KEY:Buffer.alloc(32,2).toString("base64")}]) expect(()=>loadApplicationConfig({...base,...change})).toThrow();
+  });
 
   test("secure cookies can be enabled for HTTPS development deployments", () => {
     const base = { DATABASE_URL: "postgres://localhost/niq", SESSION_SECRET: "a-development-secret-with-32-chars" };
