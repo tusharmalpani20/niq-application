@@ -74,6 +74,7 @@ export function ByocSetupPage() {
       {message && <Alert variant="destructive" className="mt-4"><AlertDescription role="alert">{message}</AlertDescription></Alert>}
       {completed ? <div className="mt-5" role="status">
         <h2 className="font-semibold">Initial setup is complete</h2>
+        {status && !status.otpDeliveryConfigured && <p role="alert" className="my-3 font-medium">The workspace was created. Production sign-in remains blocked until OTP delivery is configured.</p>}
         <p>Sign in and complete the normal verification process. Then open Scoring connection settings to activate your deployment.</p>
         <div className="mt-4 flex gap-4"><Link to="/sign-in">Sign in</Link><Link to="/settings/scoring">Scoring connection settings</Link></div>
       </div> : !status ? <form className="mt-5 space-y-4" noValidate onSubmit={unlock}>

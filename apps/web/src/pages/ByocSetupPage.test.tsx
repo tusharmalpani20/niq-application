@@ -75,6 +75,7 @@ test("completion submits hospital/admin fields only, clears credentials and requ
     expect(JSON.parse(String(calls[1]!.init!.body))).toEqual(input);
     expect(calls[1]!.init!.method).toBe("POST");
     expect(body.textContent).toContain("Initial setup is complete");
+    expect(body.textContent).toContain("Production sign-in remains blocked until OTP delivery is configured");
     expect(body.textContent).toContain("normal verification process");
     expect(body.querySelector("input[type=password]")).toBeNull();
     expect(body.querySelector('a[href="/sign-in"]')).not.toBeNull();
