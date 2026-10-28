@@ -27,7 +27,15 @@ rejected reviewer feedback before requesting a repair, and the reviewer checks t
 repaired draft again. Calls are stateless; the application passes that context
 explicitly instead of relying on a persistent chat session.
 
-Application renders the returned content to PDF on the server. It uses the
+With `REPORT_DIAGNOSTICS_ENABLED=false` (the default), Application automatically
+renders the returned content to PDF on the server. With the setting `true`, new
+approvals generate report content but wait for manual PDF generation in the
+Clinical report workspace. The server setting determines this mode, regardless
+of the legacy `deferPdf` field sent by a browser. Explicit regeneration uses the
+current setting; automatic recovery preserves the mode of its existing job. Changing the setting requires an
+API restart and affects new approvals and explicit regenerations; it does not rewrite existing report jobs.
+
+Application renders the PDF on the server. It uses the
 organisation theme current at rendering time and stores the PDF bytes, hash,
 branding fingerprint, and report content together before marking the report
 ready. A theme change during rendering causes the worker to render again. Once

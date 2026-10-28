@@ -58,7 +58,7 @@ Use [`.env.example`](../../.env.example) and [the validation schema](../../packa
 | Patient encryption | Base64 32-byte `PATIENT_DATA_ENCRYPTION_KEY` plus key-version label |
 | Scoring connection | `SCORING_API_URL`, `SCORING_TIMEOUT_MS`, base64 32-byte `SCORING_CREDENTIAL_ENCRYPTION_KEY` and version label |
 | Files | Absolute dedicated `REPORT_UPLOAD_ROOT`, `REPORT_MAX_*` limits |
-| Reports | `REPORT_GENERATION_TIMEOUT_MS`; diagnostics separately gated by `REPORT_DIAGNOSTICS_ENABLED` |
+| Reports | `REPORT_GENERATION_TIMEOUT_MS`; `REPORT_DIAGNOSTICS_ENABLED=true` enables diagnostics and manual PDF generation for new approvals and explicit regenerations; false generates PDFs automatically |
 | PDF executable | `REPORT_CHROMIUM_PATH` optionally selects Chromium; the renderer otherwise uses `/usr/bin/chromium` |
 | Scans | `FACE_SCAN_ENABLED`, `FACE_SCAN_RECONCILE_INTERVAL_MS` |
 | Browser push | All three `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, or none |

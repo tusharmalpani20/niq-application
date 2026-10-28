@@ -110,7 +110,7 @@ An NIQ operator provisions the customer's central Scoring deployment and supplie
 | Files/reports | Absolute `REPORT_UPLOAD_ROOT`, `REPORT_MAX_*`, `REPORT_GENERATION_TIMEOUT_MS` |
 | Vital IQ | `FACE_SCAN_ENABLED`, `FACE_SCAN_RECONCILE_INTERVAL_MS`; disabling capture does not stop recovery |
 | Push | All of `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, or none |
-| Diagnostics | `REPORT_DIAGNOSTICS_ENABLED`, independent of `NODE_ENV`; keep false for clients |
+| Diagnostics | `REPORT_DIAGNOSTICS_ENABLED`, independent of `NODE_ENV`; true requires manual PDF generation for new approvals and explicit regenerations, false generates PDFs automatically; keep false for clients |
 | Monitoring | Server `SENTRY_*` and public browser `VITE_SENTRY_*` |
 | One-time setup | Hosted `BOOTSTRAP_TOKEN` or BYOC `BYOC_SETUP_TOKEN` + `BYOC_SETUP_EXPIRES_AT` |
 

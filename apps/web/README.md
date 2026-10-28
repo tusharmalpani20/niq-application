@@ -88,12 +88,12 @@ Vite's `envDir` points to the repository root, so its normal `.env` and mode-spe
 | `VITE_SENTRY_ENVIRONMENT` | Frontend build environment | Labels the Sentry environment |
 | `VITE_SENTRY_RELEASE` | Frontend build environment | Identifies the deployed release |
 | `WEB_ORIGIN` | Application API environment | Defines the permitted browser origin |
-| `REPORT_DIAGNOSTICS_ENABLED` | Application API environment | Controls access to report diagnostic tools independently of `NODE_ENV` |
+| `REPORT_DIAGNOSTICS_ENABLED` | Application API environment | Controls report diagnostic tools and manual PDF generation independently of `NODE_ENV` |
 | `FACE_SCAN_ENABLED` | Application API environment | Enables new Vital IQ scans |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Application API environment | Enables optional browser push delivery |
 | `BYOC_SETUP_TOKEN`, `BYOC_SETUP_EXPIRES_AT` | Application API environment | Authorizes the one-time client-cloud setup flow |
 
-The API exposes an authorized `developmentToolsEnabled` capability to the frontend. It controls the Clinical report link and diagnostic report route. Keep `REPORT_DIAGNOSTICS_ENABLED=false` on client installations. Automatic report generation and permitted PDF downloads remain available with diagnostics disabled. Restart the API after changing this setting.
+The API exposes an authorized `developmentToolsEnabled` capability to the frontend. It controls the Clinical report link and diagnostic report route. Keep `REPORT_DIAGNOSTICS_ENABLED=false` on client installations. For new approvals and explicit regenerations, `true` generates the report content and waits for manual PDF generation in the Clinical report workspace. With `false`, report content and PDFs are generated automatically. Permitted PDF downloads remain available in both modes. Changing the setting does not rewrite existing report jobs. Restart the API after changing this setting.
 
 Never create `VITE_` variants of private configuration such as database URLs, provider keys, setup tokens or Scoring activation credentials.
 
