@@ -211,9 +211,10 @@ export class ClinicalReviewService {
    const [updated]=await tx.update(assessments).set({status,cycle,currentSubmissionId,workflow,clinicalReview:this.service.seal(s),assignedToMembershipId:s.assignee?.membershipId??null,currentOwnerMembershipId,revision:row.revision+1,completedAt,finalScore,finalRiskCategory,updatedAt:now}).where(and(eq(assessments.id,id),eq(assessments.organizationId,org))).returning();
    if(input.action==="COMPLETE") {
     // The report job is committed with final clinical approval. A server worker
-    // can finish it even when the approving browser has closed.
+    // can finish it even when the approving browser has closed. Only the server
+    // diagnostics setting controls manual PDF review; stale clients cannot hold it.
     await tx.insert(generatedReports).values({id:createEntityId(),organizationId:org,assessmentId:id,patientId:row.patientId,
-     submissionId:row.currentSubmissionId!,requestKey:`${AUTOMATIC_REPORT_KEY_PREFIX}${row.currentSubmissionId}${input.deferPdf ? ":html-review" : ""}`,
+     submissionId:row.currentSubmissionId!,requestKey:`${AUTOMATIC_REPORT_KEY_PREFIX}${row.currentSubmissionId}${this.service.config.REPORT_DIAGNOSTICS_ENABLED ? ":html-review" : ""}`,
      sourceFingerprint:"",status:"QUEUED",nextAttemptAt:now});
    }
    await this.service.audit(tx,actor,context,id,`CLINICAL_REVIEW_${input.action}`,{cycle,revision:s.revision,assigneeId:s.assignee?.membershipId??null,correctionPersonId:s.correctionPerson?.membershipId??null,currentOwnerMembershipId});

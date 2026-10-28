@@ -60,6 +60,21 @@ describe.skipIf(!process.env.ASSESSMENT_TEST_DATABASE_URL)("clinical review Post
   expect(queued?.status).toBe("QUEUED");
   expect(queued!.submissionId).toBe(completed!.currentSubmissionId!);
  });
+ for (const diagnostics of [false, true]) {
+  for (const requestedHold of [undefined, false, true]) {
+   test(`PDF mode follows diagnostics=${diagnostics}, ignoring client hold=${requestedHold}`, async()=>{
+    const previous=config.REPORT_DIAGNOSTICS_ENABLED;
+    config.REPORT_DIAGNOSTICS_ENABLED=diagnostics;
+    try {
+     const id=await assessment();await command(creator,id,"SEND");await command(creator,id,"CLAIM");
+     await command(creator,id,"COMPLETE",{remark:"Reviewed",...(requestedHold===undefined?{}:{deferPdf:requestedHold})});
+     const [queued]=await db.select().from(t.generatedReports).where(eq(t.generatedReports.assessmentId,id));
+     expect(queued?.status).toBe("QUEUED");
+     expect(queued?.requestKey?.endsWith(":html-review")).toBe(diagnostics);
+    } finally {config.REPORT_DIAGNOSTICS_ENABLED=previous;}
+   });
+  }
+ }
  test("creator sends, concurrent claims have one winner, transfer revokes ownership and completion freezes score",async()=>{
   const id=await assessment();await expect(command(admin,id,"SEND")).rejects.toMatchObject({code:"FORBIDDEN"});
   await command(creator,id,"SEND");await expect(command(admin,id,"CLAIM")).rejects.toMatchObject({code:"FORBIDDEN"});
