@@ -457,8 +457,10 @@ export class GeneratedReportService {
         || latest.status === "DRAFT" && (latest.failureCode === REPORT_REVIEW_REQUIRED || reportDefersPdf(latest.requestKey)));
       if (!canRegenerate)
         throw new ServiceError("CONFLICT", "Wait for the current report attempt to finish before regenerating.");
+      // An explicit attempt uses current configuration; automatic recovery keeps
+      // the original job mode so it cannot silently bypass manual PDF review.
       await tx.insert(generatedReports).values({id:reportId, organizationId:org, assessmentId:id, patientId:current.patientId,
-        submissionId:currentSource.submissionId, requestKey:preserveReportPdfHold(`${AUTOMATIC_REPORT_KEY_PREFIX}${currentSource.submissionId}:retry:${reportId}:predecessor:${latest.id}`,latest.requestKey),
+        submissionId:currentSource.submissionId, requestKey:`${AUTOMATIC_REPORT_KEY_PREFIX}${currentSource.submissionId}:retry:${reportId}:predecessor:${latest.id}${this.service.config.REPORT_DIAGNOSTICS_ENABLED ? ":html-review" : ""}`,
         sourceFingerprint:"", status:"QUEUED", attemptCount:0});
       await this.service.audit(tx,actor,context,id,"GENERATED_REPORT_REGENERATE_REQUESTED",{reportId,previousReportId:latest.id,
         submissionId:currentSource.submissionId,scoreRevision:currentSource.scoreRevision});

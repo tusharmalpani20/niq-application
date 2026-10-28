@@ -482,7 +482,7 @@ test("selected product images survive the authenticated transport boundary and r
 });
 
 describe("explicit report regeneration", () => {
-  async function attempt(status: string, requestKey = "auto-final-v1:submission", failureCode: string | null = null) {
+  async function attempt(status: string, requestKey = "auto-final-v1:submission", failureCode: string | null = null, diagnostics = true) {
     const previous = { id: "01PREVIOUSREPORT", status, requestKey, failureCode, content: "saved-content", artifact: "saved-pdf" };
     const inserted: any[] = [];
     const audited: any[] = [];
@@ -491,7 +491,7 @@ describe("explicit report regeneration", () => {
     query.for = async () => [previous];
     const tx = { select: () => query, insert: () => ({ values: async (row: unknown) => { inserted.push(row); } }) };
     const assessment = { patientId: "patient" };
-    const backing = { db: { transaction: async (run: any) => run(tx) }, authorize: async () => assessment,
+    const backing = { config: { REPORT_DIAGNOSTICS_ENABLED: diagnostics }, db: { transaction: async (run: any) => run(tx) }, authorize: async () => assessment,
       audit: async (...args: any[]) => { audited.push(args); } };
     const service = new GeneratedReportService(backing as any);
     (service as any).clinical = async () => assessment;
@@ -512,6 +512,18 @@ describe("explicit report regeneration", () => {
       expect(reportPredecessorId(run.inserted[0].requestKey)).toBe("01PREVIOUSREPORT");
       expect(run.previous).toMatchObject({ status, content: "saved-content", artifact: "saved-pdf" });
       expect(run.audited[0]?.[5]).toMatchObject({ previousReportId: "01PREVIOUSREPORT", scoreRevision: 2 });
+    }
+  });
+
+  test("a new explicit attempt uses current diagnostics rather than inheriting the old PDF mode", async () => {
+    for (const diagnostics of [false, true]) {
+      for (const oldHold of [false, true]) {
+        const run = await attempt("READY", `auto-final-v1:submission${oldHold ? ":html-review" : ""}`, null, diagnostics);
+        await run.result;
+        expect(reportDefersPdf(run.inserted[0].requestKey)).toBe(diagnostics);
+        expect(reportPredecessorId(run.inserted[0].requestKey)).toBe("01PREVIOUSREPORT");
+        expect(run.previous.artifact).toBe("saved-pdf");
+      }
     }
   });
 
