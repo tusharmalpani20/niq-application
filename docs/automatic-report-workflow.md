@@ -1,9 +1,11 @@
 # Automatic clinical report workflow
 
 Final clinical review is the only approval step. The assigned clinician confirms
-the reviewed risk classification and any additional treatment effects, then
-completes the review. The confirmed effect IDs are stored with the final review
-snapshot. If there are no additional effects, the snapshot records an empty list.
+the reviewed risk classification and completes the review with a final note.
+Treatment effects are matched automatically from assessment answers. The approval
+form has no additional treatment-effect selector and records an empty list of
+manually confirmed effect IDs. Previously saved selections remain in their
+original review snapshots.
 
 The same database transaction marks the assessment complete and queues its report.
 The browser does not need to remain open. The API worker sends an allowlisted fact
