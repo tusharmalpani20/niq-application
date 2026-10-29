@@ -6,12 +6,12 @@ import type { AssessmentSubmissionAttestation, ClinicalReview, ClinicalReviewer 
 import { ClinicalReviewPanel } from "./ClinicalReviewPanel";
 
 const review: ClinicalReview = { assessmentId: "assessment", revision: 4, scoreRevision: 2, cycle: 1, state: "IN_REVIEW", assignee: { membershipId: "reviewer", displayName: "Reviewer", role: "DOCTOR" }, correctionPerson: null, previousReviewer: null, defaultCorrectionPersonId: null, returnReason: null, finalRemark: null, submittedAt: null, completedAt: null, history: [], allowedActions: ["COMPLETE", "TRANSFER", "RELEASE", "RETURN_TO_DRAFT"], canAdjustScores: true, canEditDraft: false };
-async function harness(run: (ctx: { click: (label: string) => Promise<void>; type: (value: string) => Promise<void>; posts: unknown[]; changed: () => number }) => Promise<void>, options: { developmentToolsEnabled?: boolean; review?: ClinicalReview; attestations?: AssessmentSubmissionAttestation[]; blocked?: boolean; conflict?: boolean; conflictMessage?: string; recipients?: () => ClinicalReviewer[]; toxicityOptions?: {id:string;classId:string;treatmentTypeId:string;expectedToxicity:string}[] } = {}) {
+async function harness(run: (ctx: { click: (label: string) => Promise<void>; type: (value: string) => Promise<void>; posts: unknown[]; requests: string[]; changed: () => number }) => Promise<void>, options: { developmentToolsEnabled?: boolean; review?: ClinicalReview; attestations?: AssessmentSubmissionAttestation[]; blocked?: boolean; conflict?: boolean; conflictMessage?: string; recipients?: () => ClinicalReviewer[]; toxicityOptions?: {id:string;classId:string;treatmentTypeId:string;expectedToxicity:string}[] } = {}) {
   const dom = new JSDOM("<html><body><div id='root'></div></body></html>", {url:"http://localhost", pretendToBeVisual:true});
   const values: Record<string,unknown> = { window:dom.window, document:dom.window.document, navigator:dom.window.navigator, IS_REACT_ACT_ENVIRONMENT:true, requestAnimationFrame:(fn:()=>void)=>setTimeout(fn,0), cancelAnimationFrame:clearTimeout, getComputedStyle:dom.window.getComputedStyle };
   for (const key of ["FocusEvent","HTMLElement","SVGElement","Element","Node","NodeFilter","DocumentFragment","HTMLButtonElement","HTMLInputElement","HTMLTextAreaElement","HTMLSelectElement","MutationObserver","CustomEvent","Event"]) values[key]=(dom.window as any)[key];
-  const posts: unknown[] = []; let changes = 0;
-  values.fetch = async (url: string, init?: RequestInit) => { if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return options.conflict ? Response.json({error:{message:options.conflictMessage ?? "Changed"}},{status:409}) : Response.json(options.review ?? review); } return Response.json(url.includes("toxicity-options") ? {options:options.toxicityOptions??[],submissionId:"submission",scoreRevision:(options.review??review).scoreRevision} : options.recipients?.() ?? []); };
+  const posts: unknown[] = []; const requests: string[] = []; let changes = 0;
+  values.fetch = async (url: string, init?: RequestInit) => { requests.push(String(url)); if (init?.method === "POST") { posts.push(JSON.parse(String(init.body))); return options.conflict ? Response.json({error:{message:options.conflictMessage ?? "Changed"}},{status:409}) : Response.json(options.review ?? review); } return Response.json(url.includes("toxicity-options") ? {options:options.toxicityOptions??[],submissionId:"submission",scoreRevision:(options.review??review).scoreRevision} : options.recipients?.() ?? []); };
   const previous = Object.fromEntries(Object.keys(values).map(key => [key,Object.getOwnPropertyDescriptor(globalThis,key)]));
   for (const [key,value] of Object.entries(values)) Object.defineProperty(globalThis,key,{value,configurable:true});
   Object.assign(dom.window.HTMLElement.prototype,{attachEvent(){},detachEvent(){}});
@@ -19,7 +19,7 @@ async function harness(run: (ctx: { click: (label: string) => Promise<void>; typ
   const flush = () => new Promise(resolve => setTimeout(resolve,0));
   try {
     await act(async () => {root.render(<ClinicalReviewPanel developmentToolsEnabled={options.developmentToolsEnabled} organizationId="org" assessmentId="assessment" review={options.review ?? review} attestations={options.attestations} error="" loading={false} blocked={options.blocked ?? false} onRefresh={async()=>review} onChanged={async()=>{changes++;}} onBusyChange={()=>{}}/>); await flush();});
-    await run({posts,changed:()=>changes,click:async label=>{ const button=[...document.querySelectorAll("button")].filter(item=>item.textContent?.trim()===label).at(-1); expect(button).toBeDefined(); await act(async()=>{button!.click();await flush();});},type:async value=>{const input=document.querySelector("textarea")!;await act(async()=>{input.focus();Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype,"value")!.set!.call(input,value); input.dispatchEvent(new dom.window.Event("input",{bubbles:true}));input.dispatchEvent(new dom.window.KeyboardEvent("keyup",{bubbles:true,key:"l"}));await flush();});}});
+    await run({posts,requests,changed:()=>changes,click:async label=>{ const button=[...document.querySelectorAll("button")].filter(item=>item.textContent?.trim()===label).at(-1); expect(button).toBeDefined(); await act(async()=>{button!.click();await flush();});},type:async value=>{const input=document.querySelector("textarea")!;await act(async()=>{input.focus();Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype,"value")!.set!.call(input,value); input.dispatchEvent(new dom.window.Event("input",{bubbles:true}));input.dispatchEvent(new dom.window.KeyboardEvent("keyup",{bubbles:true,key:"l"}));await flush();});}});
   } finally {await act(async()=>root.unmount()); dom.window.close();for(const [key,descriptor] of Object.entries(previous)) if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete (globalThis as any)[key];}
 }
 test("clinical actions follow server permissions and block while another edit is unfinished", async()=>harness(async()=>{
@@ -56,7 +56,7 @@ test("completed review has no mutation actions and displays final remark",async(
  expect(document.body.textContent).toContain("Final clinical remark");expect(document.body.textContent).toContain("Final remark");expect(document.body.textContent).not.toContain("cannot be reopened");expect(document.querySelectorAll("button").length).toBe(0);
 },{review:{...review,state:"COMPLETED",allowedActions:[],finalRemark:"Final clinical remark"}}));
 test("completion requires a final remark and confirms automatic report creation",async()=>harness(async({click})=>{
- await click("Complete review");expect(document.body.textContent).not.toContain("Review the HTML report before generating the PDF");expect(document.body.textContent).toContain("starts automatic report and PDF generation");expect(document.body.textContent).toContain("This does not mean the patient has no side effects");expect(document.querySelector("textarea")?.required).toBe(true);
+ await click("Complete review");expect(document.body.textContent).not.toContain("Review the HTML report before generating the PDF");expect(document.body.textContent).toContain("starts automatic report and PDF generation");expect(document.querySelector("textarea")?.required).toBe(true);
  expect([...document.querySelectorAll("button")].find(b=>b.textContent==="Approve and generate report")?.disabled).toBe(true);
 }));
 test("transfer does not silently select someone and needs an eligible recipient",async()=>harness(async({click,posts})=>{
@@ -66,13 +66,13 @@ test("completion sends both revisions and a replay key with the required remark"
  await click("Complete review");await type("Review finished");await click("Approve and generate report");
  expect(posts).toHaveLength(1);expect(posts[0]).toMatchObject({action:"COMPLETE",expectedRevision:4,expectedScoreRevision:2,remark:"Review finished",confirmedToxicityIds:[],deferPdf:false});expect((posts[0] as any).requestKey).toHaveLength(36);expect(changed()).toBe(1);
 }));
-test("completion sends only clinician-selected additional treatment effects",async()=>harness(async({click,type,posts})=>{
+test("approval has no additional treatment-effect selection or options request",async()=>harness(async({click,type,posts,requests})=>{
  await click("Complete review");
- const option=document.querySelector<HTMLInputElement>('.cr-toxicity-picker input[type="checkbox"]');
- expect(option).toBeDefined();
- await act(async()=>{option!.click();});
+ expect(document.querySelector('.cr-toxicity-picker')).toBeNull();
+ expect(document.body.textContent).not.toContain("Additional treatment effects");
+ expect(requests.some(url=>url.includes("toxicity-options"))).toBe(false);
  await type("Confirmed review");await click("Approve and generate report");
- expect(posts[0]).toMatchObject({action:"COMPLETE",confirmedToxicityIds:["toxicity_1"]});
+ expect(posts[0]).toMatchObject({action:"COMPLETE",confirmedToxicityIds:[]});
 },{toxicityOptions:[{id:"toxicity_1",classId:"class_1",treatmentTypeId:"therapy_1",expectedToxicity:"Confirmed symptom"}]}));
 test("a stale transition preserves the note and requires an explicit reload",async()=>harness(async({click,type,posts})=>{
  await click("Complete review");await type("Keep this remark");await click("Approve and generate report");
