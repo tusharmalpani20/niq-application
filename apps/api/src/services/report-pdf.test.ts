@@ -127,3 +127,15 @@ test("PDF omits historical reuse labels while retaining internal measurement pro
   expect(historical.metrics[0]!.historicalSource?.assessmentReference).toBe("ASM-003545");
   expect(html).toContain("66");
 });
+
+test("patient-facing print layout omits internal fallback and model metadata", async () => {
+  const internal = { ...report, model: "rule-fallback", generationMode: "RULE_FALLBACK",
+    promptVersion: "internal-fallback-prompt", runId: "INTERNAL_FALLBACK_RUN" } as GeneratedReport;
+  const html = await renderGeneratedReportHtml(internal, { name: "Example Clinic", primaryColor: "#138f94", secondaryColor: "#294e7d" });
+  expect(html).toContain("Example Clinic");
+  expect(html).toContain("Verified assessment overview.");
+  expect(html).not.toContain("rule-fallback");
+  expect(html).not.toContain("RULE_FALLBACK");
+  expect(html).not.toContain("internal-fallback-prompt");
+  expect(html).not.toContain("INTERNAL_FALLBACK_RUN");
+});
