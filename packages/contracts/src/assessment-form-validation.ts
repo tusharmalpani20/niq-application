@@ -5,6 +5,7 @@ export function isAssessmentFieldApplicable(field: FormField, answers: FormAnswe
   return (field.visibleWhen ?? []).every(test => {
     const value = answers[test.fieldId];
     if (test.nonEmpty) return typeof value === "string" ? value.trim().length > 0 : Array.isArray(value) ? value.length > 0 : false;
+    if (test.includes !== undefined) return Array.isArray(value) && value.includes(test.includes);
     return value === test.equals;
   });
 }

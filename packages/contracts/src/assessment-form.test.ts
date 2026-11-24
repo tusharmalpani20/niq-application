@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { isAssessmentFieldApplicable, getEffectiveAssessmentAnswers, validateAssessmentAnswers } from "./assessment-form-validation";
+import { clearInactiveAssessmentAnswers, getEffectiveAssessmentAnswers, getScoringAssessmentAnswers, isAssessmentFieldApplicable, validateAssessmentAnswers } from "./assessment-form-validation";
 import { OTHER_DRUG_CLASS_ID, assessmentFormDisplayLabels, buildAssessmentForm, upgradeDraftAssessmentForm } from "./assessment-form";
 function fixture() {
   const field = (id: string, type: string) => ({ id, type, label: id, options: type === "calculated" || type === "derived" ? [] : [{ id: `${id}_yes`, label: "Yes" }], dependencies: [] as string[] });
@@ -14,6 +14,8 @@ function fixture() {
   all.find(f => f.id === "stage")!.options = [{ id: "stage_metastatic", label: "Metastatic" }];
   all.find(f => f.id === "treatment_status")!.options = [{ id: "treatment_status_newly_diagnosed", label: "Newly Diagnosed" }, { id: "treatment_status_palliative_care", label: "Palliative" }];
   all.find(f => f.id === "cancer_surgical_status")!.options = ["done", "planned"].map(id => ({ id: `cancer_surgical_status_${id}`, label: id }));
+  all.find(f => f.id === "current_cancer_treatment")!.options = ["chemotherapy", "radiation", "other"].map(id => ({ id: `current_cancer_treatment_${id}`, label: id }));
+  all.find(f => f.id === "co_morbidities")!.options = ["kidney_disease", "diabetes"].map(id => ({ id: `co_morbidities_${id}`, label: id }));
   all.find(f => f.id === "treatment_status")!.dependencies = ["palliative_status", "palliative_timing"];
   all.find(f => f.id === "previous_surgeries")!.dependencies = ["previous_surgery_count"];
   all.find(f => f.id === "weight_loss")!.dependencies = ["previous_weight_kg", "current_weight_kg"];
@@ -66,7 +68,7 @@ test("published drug class configuration becomes an optional, versioned app fiel
     ...fixture(),
     drugClassConfig: {
       classes: [{ id: "platinum_agents", label: "Platinum agents" }],
-      suggestions: [{ cancerTypeId: "cancer_2", treatmentTypeId: "current_cancer_treatment_yes", classId: "platinum_agents" }],
+      suggestions: [{ cancerTypeId: "cancer_2", treatmentTypeId: "current_cancer_treatment_chemotherapy", classId: "platinum_agents" }],
     },
   };
   const form = buildAssessmentForm(questionnaire);
@@ -158,4 +160,40 @@ test("relative pre-conditioning guidance omits the treatment start date question
   const form = buildAssessmentForm(remote);
   expect(form.sections.flatMap(section => section.fields).some(field => field.id === "planned_treatment_start_date")).toBe(false);
   expect(form.preConditioningStartPolicy).toBe("relative_guidance");
+});
+
+test("new clinical inputs are conditional, persist as answers, and do not change the scoring payload", () => {
+  const questionnaire = fixture();
+  const form = buildAssessmentForm(questionnaire);
+  const fields = form.sections.flatMap(section => section.fields);
+  const treatment = fields.find(field => field.id === "current_cancer_treatment")!;
+  expect(treatment.options?.some(option => option.id === "current_cancer_treatment_other")).toBe(false);
+  expect(questionnaire.sections[1]!.fields.find(field => field.id === treatment.id)?.options.some(option => option.id === "current_cancer_treatment_other")).toBe(true);
+  expect(fields.find(field => field.id === "treatment_cycle_frequency")).toBeUndefined();
+  expect(fields.find(field => field.id === "chemotherapy_cycle_days")?.options?.map(option => option.id)).toEqual(["14", "21", "28"]);
+  const answers = {
+    current_cancer_treatment: ["current_cancer_treatment_radiation", "current_cancer_treatment_chemotherapy"],
+    co_morbidities: ["co_morbidities_diabetes", "co_morbidities_kidney_disease"],
+    chemotherapy_cycle_days: "21",
+    kidney_disease_type: "aki",
+    dialysis_status: "peritoneal_dialysis",
+    weight_six_months_kg: 64.5,
+  };
+  expect(validateAssessmentAnswers(form, answers)).toEqual({});
+  expect(validateAssessmentAnswers(form, { ...answers, weight_six_months_kg: 0 }).weight_six_months_kg).toBeDefined();
+  expect(getEffectiveAssessmentAnswers(form, answers)).toEqual(answers);
+  expect(getScoringAssessmentAnswers(form, answers)).toEqual({
+    current_cancer_treatment: answers.current_cancer_treatment,
+    co_morbidities: answers.co_morbidities,
+  });
+  expect(clearInactiveAssessmentAnswers(form, { ...answers, kidney_disease_type: null }).dialysis_status).toBeUndefined();
+  const cleared = clearInactiveAssessmentAnswers(form, {
+    ...answers,
+    current_cancer_treatment: ["current_cancer_treatment_radiation"],
+    co_morbidities: ["co_morbidities_diabetes"],
+  });
+  expect(cleared.chemotherapy_cycle_days).toBeUndefined();
+  expect(cleared.kidney_disease_type).toBeUndefined();
+  expect(cleared.dialysis_status).toBeUndefined();
+  expect(cleared.weight_six_months_kg).toBe(64.5);
 });

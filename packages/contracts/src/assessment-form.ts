@@ -2,14 +2,17 @@ import { z } from "zod";
 import { cancerTypeOptions } from "./assessment-form-options";
 
 export const ASSESSMENT_ANSWER_TEXT_LIMIT = 2000;
-export const ASSESSMENT_FORM_VERSION = "niq-final-overlay-v3";
+export const ASSESSMENT_FORM_VERSION = "niq-final-overlay-v4";
 export const OTHER_DRUG_CLASS_ID = "other";
+const chemotherapy = "current_cancer_treatment_chemotherapy";
+const otherTreatment = "current_cancer_treatment_other";
+const kidneyDisease = "co_morbidities_kidney_disease";
 export type FormAnswer = string | number | string[] | null;
 export type FormAnswers = Record<string, FormAnswer>;
 export type FormField = {
   id: string; label: string; kind: "text" | "number" | "date" | "select" | "multi_select" | "calculated";
   required: boolean; owner: "application" | "scoring" | "supporting" | "context"; source: string;
-  options?: Array<{ id: string; label: string }>; visibleWhen?: Array<{ fieldId: string; equals?: string; nonEmpty?: true }>;
+  options?: Array<{ id: string; label: string }>; visibleWhen?: Array<{ fieldId: string; equals?: string; includes?: string; nonEmpty?: true }>;
   min?: number; exclusiveMin?: boolean; integer?: boolean; readOnly?: boolean; unit?: string;
 };
 /** Display correction only: identifiers and scoring inputs remain unchanged. */
@@ -31,7 +34,7 @@ const withOtherDrugClass = (options: Array<{ id: string; label: string }>) =>
 export function suggestedDrugClassIds(manifest: AssessmentFormManifest, answers: FormAnswers): string[] | undefined {
   const cancer = answers.cancer_type;
   const treatments = answers.current_cancer_treatment;
-  if (cancer === "cancer_other" || !Array.isArray(treatments) || typeof cancer !== "string" || treatments.includes("current_cancer_treatment_other")) return undefined;
+  if (cancer === "cancer_other" || !Array.isArray(treatments) || typeof cancer !== "string" || treatments.includes(otherTreatment)) return undefined;
   const suggestions = manifest.drugClassSuggestions ?? [];
   const matched = [...new Set(treatments.flatMap(treatment => {
     const specific = suggestions.filter(item => item.treatmentTypeId === treatment && item.cancerTypeId === cancer);
@@ -63,6 +66,15 @@ const expected: Record<string, Record<string, [string, string]>> = {
 const when = (fieldId: string, equals: string) => ({ fieldId, equals });
 const app = (id: string, label: string, kind: FormField["kind"], source: string, extra: Partial<FormField> = {}): FormField => ({ id, label, kind, source, required: false, owner: "application", ...extra });
 const choices = (values: string[]) => values.map(label => ({ id: label.toLowerCase().replaceAll(/[^a-z0-9]+/g, "_"), label }));
+const applicationFieldPositions: Record<string, number> = {
+  planned_treatment_start_date: 53.5,
+  drug_classes: 63.5,
+  chemotherapy_cycle_days: 65,
+  kidney_disease_type: 89.1,
+  dialysis_status: 89.2,
+  weight_six_months_kg: 120.5,
+  diet_preference: 131.5,
+};
 
 /** Merge only the supported final profile with the application overlay. Never import scoring formulas or points. */
 export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
@@ -108,7 +120,11 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
     ...(remote.preConditioningStartPolicy === "relative_guidance" ? [] : [app("planned_treatment_start_date", "Planned treatment start date", "date", "APP_TREATMENT_START_DATE", { visibleWhen: [when("treatment_status", "treatment_status_newly_diagnosed")] })]),
     app("surgery_date", "Surgery date", "date", "H54", { required: true, visibleWhen: [when("cancer_surgical_status", "cancer_surgical_status_done")] }),
     app("planned_surgery_date", "Planned surgery date", "date", "H54", { required: true, visibleWhen: [when("cancer_surgical_status", "cancer_surgical_status_planned")] }),
-    app("treatment_cycle_number", "Cycle number", "text", "B64:F64"), app("treatment_cycle_frequency", "Cycle frequency", "text", "F65"));
+    app("treatment_cycle_number", "Cycle number", "text", "B64:F64"),
+    app("chemotherapy_cycle_days", "Chemotherapy cycle length", "select", "18 Nov NIQ meeting", {
+      options: ["14", "21", "28"].map(id => ({ id, label: `${id} days` })),
+      visibleWhen: [{ fieldId: "current_cancer_treatment", includes: chemotherapy }],
+    }));
   if (remote.drugClassConfig) {
     const { classes, suggestions } = remote.drugClassConfig;
     const treatments = section("treatment").fields.find(field => field.id === "current_cancer_treatment")?.options ?? [];
@@ -118,9 +134,32 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
       options: withOtherDrugClass(classes), visibleWhen: [{ fieldId: "cancer_type", nonEmpty: true }, { fieldId: "current_cancer_treatment", nonEmpty: true }],
     }));
   }
-  add("health_history", app("family_relationship", "Family relationship", "text", "H99", { required: true, visibleWhen: [when("family_history_cancer", "family_history_cancer_yes")] }));
+  const treatments = section("treatment").fields.find(field => field.id === "current_cancer_treatment")!;
+  treatments.options = treatments.options?.filter(option => option.id !== otherTreatment);
+  if (!treatments.options?.length) throw new Error("Questionnaire treatment options missing");
+  const kidneySelected = { fieldId: "co_morbidities", includes: kidneyDisease };
+  add("health_history",
+    app("kidney_disease_type", "Kidney disease type", "select", "NIQ assessment with changes added, B67", {
+      options: [
+        { id: "ckd", label: "Chronic Kidney Disease (CKD)" },
+        { id: "aki", label: "Acute Kidney Injury (AKI)" },
+        { id: "esrd", label: "End-Stage Renal Disease (ESRD)" },
+      ],
+      visibleWhen: [kidneySelected],
+    }),
+    app("dialysis_status", "Dialysis status", "select", "NIQ assessment with changes added, B67", {
+      options: [
+        { id: "haemodialysis", label: "On haemodialysis" },
+        { id: "peritoneal_dialysis", label: "On peritoneal dialysis" },
+        { id: "not_on_dialysis", label: "Not on dialysis" },
+      ],
+      visibleWhen: [{ fieldId: "kidney_disease_type", nonEmpty: true }, kidneySelected],
+    }),
+    app("family_relationship", "Family relationship", "text", "H99", { required: true, visibleWhen: [when("family_history_cancer", "family_history_cancer_yes")] }));
   add("clinical_gut_health", app("bowel_pattern", "Bowel pattern", "select", "F113:F116", { options: choices(["Normal", "Constipation", "Diarrhoea", "Alternating"]) }), app("stool_frequency", "Stool frequency", "select", "F117:F119", { options: [{ id: "daily", label: "Daily" }, { id: "below_3_week", label: "< 3 times/week" }, { id: "above_3_week", label: "> 3 times/week" }] }));
-  add("dietary_details", app("diet_preference", "Diet preference", "select", "APP_DIET_PREFERENCE", { options: choices(["Vegetarian", "Non-Vegetarian", "Eggetarian", "Jain"]) }));
+  add("dietary_details",
+    app("weight_six_months_kg", "Weight 6 months ago", "number", "NIQ assessment with changes added, B151", { min: 0, exclusiveMin: true, unit: "kg" }),
+    app("diet_preference", "Diet preference", "select", "APP_DIET_PREFERENCE", { options: choices(["Vegetarian", "Non-Vegetarian", "Eggetarian", "Jain"]) }));
   const support: Record<string, { section: string; kind: string; source: string; extra?: Partial<FormField> }> = {
     current_weight_kg: { section: "personal_details", kind: "number", source: "B9:C9", extra: { required: true, min: 0, exclusiveMin: true } },
     previous_weight_kg: { section: "dietary_details", kind: "number", source: "F120", extra: { min: 0, exclusiveMin: true } },
@@ -140,17 +179,20 @@ export function buildAssessmentForm(input: unknown): AssessmentFormManifest {
   // Conditions depend on stable IDs, so an incompatible configured option cannot silently hide required detail.
   for (const field of sections.flatMap(s => s.fields)) for (const condition of field.visibleWhen ?? []) {
     const parent = sections.flatMap(s => s.fields).find(f => f.id === condition.fieldId);
-    if (!parent || (condition.equals !== undefined && !parent.options?.some(o => o.id === condition.equals))) throw new Error("Unsupported conditional option");
+    if (!parent || (condition.equals !== undefined && !parent.options?.some(o => o.id === condition.equals)) ||
+      (condition.includes !== undefined && (parent.kind !== "multi_select" || !parent.options?.some(o => o.id === condition.includes)))) {
+      throw new Error("Unsupported conditional option");
+    }
   }
   // Preserve workbook reading order even when a configured projection reorders its sections.
   const order = ["personal_details", ...Object.keys(expected)];
   sections.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
   for (const section of sections) section.fields.sort((a, b) => {
     // App-only fields use semantic placement after their controlling question.
-    const position = (field: FormField) => field.id === "drug_classes" ? 63.5 : field.id === "diet_preference" ? 131.5 : field.id === "planned_treatment_start_date" ? 53.5 : Number(field.source.match(/\d+/)?.[0]);
+    const position = (field: FormField) => applicationFieldPositions[field.id] ?? Number(field.source.match(/\d+/)?.[0]);
     return position(a) - position(b);
   });
-  return { version: ASSESSMENT_FORM_VERSION, sections, ...(remote.preConditioningStartPolicy ? { preConditioningStartPolicy: remote.preConditioningStartPolicy } : {}), ...(remote.drugClassConfig ? { drugClassSuggestions: remote.drugClassConfig.suggestions } : {}) };
+  return { version: ASSESSMENT_FORM_VERSION, sections, ...(remote.preConditioningStartPolicy ? { preConditioningStartPolicy: remote.preConditioningStartPolicy } : {}), ...(remote.drugClassConfig ? { drugClassSuggestions: remote.drugClassConfig.suggestions.filter(item => item.treatmentTypeId !== otherTreatment) } : {}) };
 }
 
 /** Apply the new conditional requirement to open drafts without changing submitted snapshots. */
