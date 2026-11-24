@@ -8,6 +8,9 @@ import { ArrowRight, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Clipb
 import { assessmentSectionIcons } from "./AssessmentSectionNavigation";
 import { formatGenderAnswer } from "./formatGenderAnswer";
 import { assessmentOptionLabel } from "./assessmentOptionLabel";
+import { AssessmentVerificationAnswers } from "./AssessmentVerificationAnswers";
+import { formatAssessmentWeight } from "./AssessmentWeightComparison";
+import type { WeightUnit } from "./measurement-units";
 
 function ReviewSection({ id, title, summary, open, onToggle, children }: { id: string; title: string; summary: string; open: boolean; onToggle: () => void; children: ReactNode }) {
   const Icon = assessmentSectionIcons[id as keyof typeof assessmentSectionIcons] ?? ClipboardList;
@@ -20,7 +23,7 @@ function ReviewSection({ id, title, summary, open, onToggle, children }: { id: s
   </div>;
 }
 
-export function AssessmentReview({ record, answers, scanStatus, scanSession, scanRequired = false, organizationId, assessmentId, onSection }: { record: AssessmentWorkflow; answers: FormAnswers; scanStatus: string; scanSession: FaceScanSession | null; scanRequired?: boolean; organizationId: string; assessmentId: string; onSection: (id: string, fieldId?: string) => void }) {
+export function AssessmentReview({ record, answers, weightUnit = record.measurementUnits?.weight ?? "kg", scanStatus, scanSession, scanRequired = false, organizationId, assessmentId, onSection }: { record: AssessmentWorkflow; answers: FormAnswers; weightUnit?: WeightUnit; scanStatus: string; scanSession: FaceScanSession | null; scanRequired?: boolean; organizationId: string; assessmentId: string; onSection: (id: string, fieldId?: string) => void }) {
   const scored = assessmentResultView(record);
   const completion = getAssessmentAnswerCoverage(record.manifest, answers);
   const missing = record.manifest.sections.flatMap(section => section.fields.filter(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers) && assessmentFieldError(field, answers[field.id])).map(field => ({ sectionId: section.id, field, error: assessmentFieldError(field, answers[field.id]) })));
@@ -51,15 +54,19 @@ export function AssessmentReview({ record, answers, scanStatus, scanSession, sca
       const progress = completion.sections.find(item => item.id === section.id)!;
       const score = scored?.sections.find(item => item.id === section.id);
       const scoreLabel = score && sectionScoreLabel(score);
+      const showWeightComparison = section.id === "dietary_details" && section.fields.some(field => field.id === "weight_six_months_kg");
       return <Fragment key={section.id}><ReviewSection id={section.id} title={section.title} summary={`${progress.answered}/${progress.total} answered${scoreLabel ? ` · ${scoreLabel}` : ""}`} open={expanded === section.id} onToggle={() => setExpanded(expanded === section.id ? null : section.id)}>
         <div className="mb-3 flex justify-end"><Button className="min-h-10" variant="outline" onPress={() => onSection(section.id)} aria-label={`${record.status === "DRAFT" ? "Edit" : "View"} ${section.title}`}>{record.status === "DRAFT" ? "Edit answers" : "View answers"}</Button></div>
-        <dl className="grid min-w-0 gap-3">{section.fields.filter(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers)).map(field => {
+        {showWeightComparison ? <AssessmentVerificationAnswers sectionId={section.id} fields={section.fields} answers={answers} weightUnit={weightUnit} assessmentDate={record.createdAt} />
+          : <dl className="grid min-w-0 gap-3">{section.fields.filter(field => field.kind !== "calculated" && isAssessmentFieldApplicable(field, answers)).map(field => {
           const value = answers[field.id];
           const empty = value === null || value === undefined || value === "" || typeof value === "string" && !value.trim();
-          const display = empty ? "Not answered" : Array.isArray(value) ? value.length ? value.map(id => assessmentOptionLabel(field, id)).join(", ") : "None" : field.options?.some(option => option.id === value) ? assessmentOptionLabel(field, String(value)) : field.id === "gender" && typeof value === "string" ? formatGenderAnswer(value) : String(value);
+          const weightField = field.id === "current_weight_kg" || field.id === "previous_weight_kg";
+          const unit = weightField ? weightUnit : field.unit;
+          const display = empty ? "Not answered" : Array.isArray(value) ? value.length ? value.map(id => assessmentOptionLabel(field, id)).join(", ") : "None" : weightField && typeof value === "number" ? formatAssessmentWeight(value, weightUnit) : field.options?.some(option => option.id === value) ? assessmentOptionLabel(field, String(value)) : field.id === "gender" && typeof value === "string" ? formatGenderAnswer(value) : String(value);
           const error = assessmentFieldError(field, value);
-          return <div key={field.id} className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-1 border-b border-border pb-3 last:border-0"><dt className="break-words text-sm text-muted-foreground">{field.label}{field.required && " *"}</dt><dd className={`min-w-0 break-words ${error ? "text-destructive" : ""}`}>{display}{field.unit && !empty && ` ${field.unit}`}{error && error !== "Required" && <p className="mt-1 text-sm">{error}</p>}</dd></div>;
-        })}</dl>
+          return <div key={field.id} className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-1 border-b border-border pb-3 last:border-0"><dt className="break-words text-sm text-muted-foreground">{field.label}{field.required && " *"}</dt><dd className={`min-w-0 break-words ${error ? "text-destructive" : ""}`}>{display}{unit && !empty && ` ${unit}`}{error && error !== "Required" && <p className="mt-1 text-sm">{error}</p>}</dd></div>;
+        })}</dl>}
       </ReviewSection>
       {section.id === "personal_details" && <ReviewSection id="face_scan" title="Vital IQ" summary={scanStatus} open={expanded === "face_scan"} onToggle={() => setExpanded(expanded === "face_scan" ? null : "face_scan")}>
         <div className="space-y-4">
