@@ -16,7 +16,7 @@ export function assessmentOptionIcon(fieldId: string, optionId: string): ReactNo
   if (fieldId === "cancer_type") return <CancerTypeIcon type={optionId} />;
   if (["stage", "metastasis_site", "relapse_status"].includes(fieldId)) return <DiseaseChoiceIcon type={optionId} />;
   if (["treatment_status", "palliative_status", "palliative_timing", "cancer_surgical_status", "current_cancer_treatment"].includes(fieldId)) return <TreatmentChoiceIcon type={optionId} />;
-  if (["previous_surgeries", "family_history_cancer", "co_morbidities"].includes(fieldId)) return <HealthHistoryChoiceIcon type={optionId} />;
+  if (["previous_surgeries", "family_history_cancer", "co_morbidities", "kidney_disease_type", "dialysis_status"].includes(fieldId)) return <HealthHistoryChoiceIcon type={optionId} />;
   if (["current_medications", "supplements_intake"].includes(fieldId)) return <MedicationSupplementIcon type={optionId} />;
   if (["appetite_status", "bowel_pattern", "stool_frequency", "gastrointestinal_symptoms"].includes(fieldId)) return <ClinicalGutChoiceIcon type={optionId} />;
   if (fieldId === "dietary_intake") return <DietaryIntakeIcon type={optionId} />;

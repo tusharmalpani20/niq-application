@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Brain, CircleMinus, Heart, HeartPulse, Scissors, UsersRound, type LucideIcon } from "lucide-react";
+import { Activity, Brain, CalendarClock, CircleMinus, Droplet, Droplets, Heart, HeartPulse, Scissors, Stethoscope, UsersRound, type LucideIcon } from "lucide-react";
 import { CancerTypeIcon } from "./CancerTypeIcon";
 
 /** Decorative health-history cues; clinical meaning comes from each choice label. */
@@ -11,6 +11,12 @@ const icons: Record<string, LucideIcon> = {
   previous_surgeries_no: CircleMinus,
   family_history_cancer_yes: UsersRound,
   family_history_cancer_no: CircleMinus,
+  ckd: CalendarClock,
+  aki: Activity,
+  esrd: Stethoscope,
+  haemodialysis: Droplets,
+  peritoneal_dialysis: Droplet,
+  not_on_dialysis: CircleMinus,
   __none__: CircleMinus,
 };
 

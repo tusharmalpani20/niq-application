@@ -28,7 +28,7 @@ function answerIcon(fieldId: string, optionId: string): ReactNode {
   if (diseaseFields.has(fieldId)) return <DiseaseChoiceIcon type={optionId} />;
   if (treatmentFields.has(fieldId)) return <TreatmentChoiceIcon type={optionId} />;
   if (fieldId === "current_medications" || fieldId === "supplements_intake") return <MedicationSupplementIcon type={optionId} />;
-  if (fieldId === "co_morbidities" || fieldId === "previous_surgeries" || fieldId === "family_history_cancer") return <HealthHistoryChoiceIcon type={optionId} />;
+  if (["co_morbidities", "previous_surgeries", "family_history_cancer", "kidney_disease_type", "dialysis_status"].includes(fieldId)) return <HealthHistoryChoiceIcon type={optionId} />;
   if (clinicalGutFields.has(fieldId)) return <ClinicalGutChoiceIcon type={optionId} />;
   if (fieldId === "dietary_intake") return <DietaryIntakeIcon type={optionId} />;
   if (fieldId === "dietary_symptoms") return <DietarySymptomIcon type={optionId} />;
