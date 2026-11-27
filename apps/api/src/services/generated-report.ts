@@ -191,8 +191,6 @@ export function normalizeGuidance(content: ScoringReportContent, manifest: Asses
   const plan = content.guidance.carePlan;
   for (const row of plan.treatmentGuidance)
     add({ id: row.id, kind: "treatment", title: treatmentLabel(row.treatmentTypeId)+" guidance", text: row.guidance });
-  for (const row of plan.statusModifiers)
-    add({ id: row.id, kind: "treatment", title: "Treatment status guidance", text: [row.riskEmphasis, row.actions].filter(nonempty).join("\n") });
   for (const row of plan.coMorbidities)
     add({ id: row.id, kind: "comorbidity", title: row.label, text: row.guidance });
   const products = plan.products;

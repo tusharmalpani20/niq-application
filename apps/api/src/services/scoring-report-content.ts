@@ -17,7 +17,6 @@ const reportProductImage = z.string().max(Math.ceil(5 * 1024 * 1024 / 3) * 4 + 4
   .regex(/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/);
 const carePlan = z.object({
   nutritionalStatus: bounded.nullable(),
-  statusModifiers: z.array(z.object({ id, classId: id, treatmentTypeId: id, nutritionalStatus: bounded, riskEmphasis: guidanceText, actions: guidanceText })).max(200),
   treatmentGuidance: z.array(z.object({ id, treatmentTypeId: id, nutritionalStatus: bounded, guidance: guidanceText })).max(100),
   coMorbidities: z.array(z.object({ id, conditionId: id, label: bounded, guidance: guidanceText })).max(100),
   products: z.object({

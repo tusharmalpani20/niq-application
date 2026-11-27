@@ -16,7 +16,7 @@ const packet = {
     nutritionInterventions: [], toxicityInterventions: [], possibleToxicities: [
       { id: "nausea", classId: "taxanes", treatmentTypeId: "radiation", expectedToxicity: "Nausea", summary: "If nausea occurs, try small, frequent meals.", nutritionalInterventions: "Try small, frequent meals." },
     ], classGuidance: [],
-    carePlan: { nutritionalStatus: "severely_malnourished", statusModifiers: [], treatmentGuidance: [], coMorbidities: [],
+    carePlan: { nutritionalStatus: "severely_malnourished", treatmentGuidance: [], coMorbidities: [],
       products: { status: "clinician_choice_required", plans: [], choices: [
         { id: "surgical", stage: "surgical", nutritionalStatus: "severely_malnourished", products: "A", dose: "1", duration: "1 week" },
         { id: "treatment", stage: "during_treatment", nutritionalStatus: "severely_malnourished", products: "B", dose: "1", duration: "1 week" },
@@ -26,7 +26,7 @@ const packet = {
 
 test("reviewed target decisions cross the boundary without private conflict reasoning", () => {
   const targetResolutions = [
-    { nutrient: "protein", decision: "select_source", selectedSourceId: "rule:status:high", sourceIds: ["rule:nutrition:high", "rule:status:high"],
+    { nutrient: "protein", decision: "select_source", selectedSourceId: "rule:treatment:high", sourceIds: ["rule:nutrition:high", "rule:treatment:high"],
       rationale: "Internal clinical comparison", targetText: "1.2–1.5 g/kg/day" },
     { nutrient: "energy", decision: "withhold_numeric", selectedSourceId: null, sourceIds: ["rule:nutrition:high"],
       rationale: "Internal unresolved conflict", targetText: null },
@@ -267,19 +267,24 @@ test("possible drug-class effects are retained while an unresolved product stage
   expect(() => assertReportReadyForApproval(result.issues, 1, 1)).not.toThrow();
 });
 
-test("matched treatment, status, co-morbidity, and selected product guidance enter display sections", () => {
+test("matched treatment, co-morbidity and selected product guidance enter display sections", () => {
   const selected = structuredClone(packet) as any;
   selected.guidance.possibleToxicities = [];
   selected.guidance.carePlan.products = { status: "selected", plans: [
     { id: "plan", stage: "during_treatment", nutritionalStatus: "severely_malnourished", products: "Product A", dose: "One serving", duration: "Two weeks" },
   ], notes: [{ id: "exception", kind: "liver_nourish_once_daily", label: "Liver precaution", guidance: "Use once daily." }] };
-  selected.guidance.carePlan.statusModifiers = [{ id: "modifier", classId: "taxanes", treatmentTypeId: "radiation", nutritionalStatus: "severely_malnourished", riskEmphasis: "Higher nutrition risk", actions: "Monitor intake." }];
   selected.guidance.carePlan.treatmentGuidance = [{ id: "radiation-rule", treatmentTypeId: "radiation", nutritionalStatus: "severely_malnourished", guidance: "Add small meals." }];
   selected.guidance.carePlan.coMorbidities = [{ id: "co-morbidity", conditionId: "liver", label: "Liver support", guidance: "Ask the clinical team." }];
   const result = normalizeGuidance(scoringReportContentSchema.parse(selected), manifest);
   expect(result.issues).toEqual([]);
-  expect(result.sections.map(row => row.id)).toEqual(["radiation-rule", "modifier", "co-morbidity", "plan"]);
+  expect(result.sections.map(row => row.id)).toEqual(["radiation-rule", "co-morbidity", "plan"]);
   expect(result.sections.find(row => row.id === "radiation-rule")?.title).toBe("Radiotherapy guidance");
+
+  // Older in-flight reports can still return the retired field.
+  selected.guidance.carePlan.statusModifiers = [{ id: "modifier", classId: "taxanes", treatmentTypeId: "radiation", nutritionalStatus: "severely_malnourished", riskEmphasis: "Higher nutrition risk", actions: "Monitor intake." }];
+  const legacy = scoringReportContentSchema.parse(selected);
+  expect(legacy.guidance.carePlan).not.toHaveProperty("statusModifiers");
+  expect(normalizeGuidance(legacy, manifest)).toEqual(result);
 });
 
 test("structured product quantities appear once with preparation and duration", () => {
